@@ -1202,10 +1202,27 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 .ProseMirror .github-alert {
   border-left: 3px solid var(--alert-note-border);
   background: var(--alert-note-bg);
-  padding: 8px 16px;
+  padding: 12px 18px;
   border-radius: 0 4px 4px 0;
   margin-bottom: 16px;
 }
+.ProseMirror .alert-kind-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ProseMirror .alert-kind-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.ProseMirror .alert-body > :first-child,
+.ProseMirror .alert-body > [data-node-view-content-react] > :first-child { margin-top: 0; }
+.ProseMirror .alert-body > :last-child,
+.ProseMirror .alert-body > [data-node-view-content-react] > :last-child { margin-bottom: 0; }
 .ProseMirror .github-alert-note { border-left-color: var(--alert-note-border); background: var(--alert-note-bg); }
 .ProseMirror .github-alert-tip { border-left-color: var(--alert-tip-border); background: var(--alert-tip-bg); }
 .ProseMirror .github-alert-important { border-left-color: var(--alert-important-border); background: var(--alert-important-bg); }
