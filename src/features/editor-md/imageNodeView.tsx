@@ -22,7 +22,8 @@ import {
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
 import { useDocumentStore } from '../../stores/documentStore';
-import { useWindowStore } from '../../stores/windowStore';
+import { on, off } from '../../core/emitter';
+import { sameKey } from '../explorer/pathUtils';
 import { useExplorerStore } from '../explorer/explorerStore';
 import { resolveRelativeDocPath } from './linkHandler';
 import { openDocument } from '../editor-code/orchestration/openDocument';
@@ -239,7 +240,7 @@ const modalBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 图片 NodeView 组件 */
-export function ImageComponent({ node, updateAttributes, deleteNode }: NodeViewProps) {
+export function ImageComponent({ node, extension, updateAttributes, deleteNode }: NodeViewProps) {
   const [hovered, setHovered] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -247,6 +248,7 @@ export function ImageComponent({ node, updateAttributes, deleteNode }: NodeViewP
   const [resolvedAbsPath, setResolvedAbsPath] = useState<string | null>(null);
 
   const rawSrc: string = node.attrs.src || '';
+  const ownerKey = String(extension.options.docKey ?? '');
   const alt: string = node.attrs.alt || '';
   const align: 'left' | 'center' | 'right' = node.attrs.align || 'center';
   const width: string = node.attrs.width || '100%';
@@ -273,8 +275,7 @@ export function ImageComponent({ node, updateAttributes, deleteNode }: NodeViewP
     }
 
     // 2. 本地相对路径或绝对路径
-    const activeKey = useWindowStore.getState().activeKey;
-    const currentDoc = activeKey ? useDocumentStore.getState().getDocument(activeKey) : null;
+    const currentDoc = ownerKey ? useDocumentStore.getState().getDocument(ownerKey) : null;
     const baseDir = currentDoc?.dirPath || useExplorerStore.getState().root;
 
     if (baseDir) {
@@ -296,7 +297,17 @@ export function ImageComponent({ node, updateAttributes, deleteNode }: NodeViewP
       setResolvedDisplaySrc(rawSrc);
       setResolvedAbsPath(null);
     }
-  }, [rawSrc]);
+  }, [rawSrc, ownerKey]);
+
+  useEffect(() => {
+    const restored = ({ path }: { path: string }) => {
+      if (!sameKey(path, resolvedAbsPath)) return;
+      setLoadError(false);
+      setResolvedDisplaySrc(convertFileSrc(path) + '?restored=' + Date.now());
+    };
+    on('image-file-restored', restored);
+    return () => off('image-file-restored', restored);
+  }, [resolvedAbsPath]);
 
   // 处理对齐样式
   const alignContainerStyle: React.CSSProperties = {
@@ -641,8 +652,9 @@ const actionBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 增强版 Image 扩展定义 */
-export const EnhancedImageBlock = Node.create({
+export const EnhancedImageBlock = Node.create<{ docKey: string }>({
   name: 'image',
+  addOptions() { return { docKey: '' }; },
   group: 'block',
   inline: false,
   draggable: true,

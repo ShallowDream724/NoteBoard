@@ -121,6 +121,7 @@ export function initShortcuts(): () => void {
     }
 
     const key = eventToKey(e);
+    if ((e.target as HTMLElement | null)?.closest?.('[data-shortcuts-suspended]')) return;
     // 按作用域优先级查找：当前作用域 > global
     const entries = registry.filter(
       (entry) => entry.key === key && (entry.scope === activeScope || entry.scope === 'global'),

@@ -146,6 +146,7 @@ const UnifiedDocumentHistoryKeys = Extension.create<{ docKey: string }>({
 });
 
 import { EnhancedImageBlock } from '../imageNodeView';
+import { ImageAssetLifecycle } from '../imageAssetExtension';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -200,7 +201,8 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     }),
 
     // 本地图片增强扩展（支持 Base64、本地相对路径 Asset 解析、大图预览与排版调节）
-    EnhancedImageBlock,
+    EnhancedImageBlock.configure({ docKey }),
+    ImageAssetLifecycle.configure({ docKey }),
     // 文本高亮扩展（支持多色配置）
     Highlight.configure({
       multicolor: true,

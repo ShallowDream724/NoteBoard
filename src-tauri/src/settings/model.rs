@@ -218,12 +218,16 @@ pub struct FileSettings {
     pub restore_session: bool,
     #[serde(default = "default_image_dir")]
     pub image_dir_name: String,
+    #[serde(default = "default_image_deletion_policy")]
+    pub image_deletion_policy: String,
     #[serde(default = "default_large_file_mb")]
     pub large_file_confirm_mb: u32,
     // 暂存目录使用绝对路径；旧版设置缺失该字段时自动补为应用数据目录下的 staging。
     #[serde(default = "default_staging_directory")]
     pub staging_directory: String,
 }
+
+fn default_image_deletion_policy() -> String { "ask".to_string() }
 
 impl Default for FileSettings {
     fn default() -> Self {
@@ -235,6 +239,7 @@ impl Default for FileSettings {
             show_hidden_files: false,
             restore_session: true,
             image_dir_name: "img".to_string(),
+            image_deletion_policy: default_image_deletion_policy(),
             large_file_confirm_mb: 50,
             staging_directory: default_staging_directory(),
         }

@@ -305,6 +305,7 @@ export interface FileSettings {
   showHiddenFiles: boolean;
   restoreSession: boolean;
   imageDirName: string;
+  imageDeletionPolicy?: 'ask' | 'keep' | 'trash';
   largeFileConfirmMb: number;
   // 未保存文件的用户可见暂存目录（绝对路径）
   stagingDirectory: string;

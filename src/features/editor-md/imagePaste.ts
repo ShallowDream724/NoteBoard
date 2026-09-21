@@ -10,6 +10,7 @@ import { useExplorerStore } from '../explorer/explorerStore';
 import { showToast } from '../../stores/toastStore';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { refreshExplorerAfterWrite } from '../explorer/refreshAfterWrite';
 
 // Windows 文件名禁止字符与 ASCII 控制字符上限，用于生成可安全落盘的图片文件名。
 const WINDOWS_INVALID_FILENAME_CHARS = new Set('<>:"/\\|?*');
@@ -74,6 +75,7 @@ export async function handlePastedImageFile(
       const result = await ipc.saveBinaryFile(targetPath, bytes);
 
       if (result.ok) {
+        void refreshExplorerAfterWrite(targetPath);
         // 构建标准 Markdown 相对路径引用
         const relativePath = `./${imageDirName}/${fileName}`;
         editor.chain().focus().setImage({ src: relativePath, alt: safeName }).run();
@@ -146,9 +148,13 @@ export async function pickAndSaveLocalImage(
       try {
         // 读取本地文件二进制字节并写入目标位置
         const fileBytes = await readFile(filePath);
-        await ipc.saveBinaryFile(targetPath, fileBytes);
+        const result = await ipc.saveBinaryFile(targetPath, fileBytes);
+        if (!result.ok) throw new Error(String(result.error ?? '保存图片失败'));
+        void refreshExplorerAfterWrite(targetPath);
       } catch (e) {
         console.warn('复制本地图片失败，尝试以源文件路径插入:', e);
+        showToast('复制图片失败，已使用原文件路径', 'warning');
+        return { src: filePath, alt: safeBaseName };
       }
 
       const relativePath = `./${imageDirName}/${newFileName}`;

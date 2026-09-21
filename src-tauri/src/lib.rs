@@ -75,6 +75,8 @@ pub fn run() {
             fsio::commands::create_dir,
             fsio::commands::rename_path,
             fsio::commands::move_to_trash,
+            fsio::image_assets::recycle_document_image,
+            fsio::image_assets::restore_document_image,
             fsio::commands::path_exists,
             fsio::commands::reveal_in_explorer,
             fsio::commands::open_with_default_app,

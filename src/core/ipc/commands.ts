@@ -240,6 +240,13 @@ export function moveToTrash(path: string): Promise<void> {
   return invoke<void>('move_to_trash', { path });
 }
 
+export function recycleDocumentImage(documentPath: string, imagePath: string, imageDirectory: string, referenceRoot: string | null) {
+  return invoke<{ ticket: string; path: string }>('recycle_document_image', { documentPath, imagePath, imageDirectory, referenceRoot });
+}
+export function restoreDocumentImage(ticket: string): Promise<void> {
+  return invoke<void>('restore_document_image', { ticket });
+}
+
 export function pathExists(path: string): Promise<PathExistsResult> {
   return invoke<PathExistsResult>('path_exists', { path });
 }

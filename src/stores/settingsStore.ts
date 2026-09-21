@@ -74,6 +74,7 @@ const DEFAULT_SETTINGS: Settings = {
     showHiddenFiles: false,
     restoreSession: true,
     imageDirName: 'img',
+    imageDeletionPolicy: 'ask',
     largeFileConfirmMb: 50,
     // Rust 不可用时以空值降级；桌面端正常加载后会得到绝对默认路径。
     stagingDirectory: '',

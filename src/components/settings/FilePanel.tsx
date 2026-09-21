@@ -143,6 +143,20 @@ export function FilePanel() {
         />
       </div>
 
+      <div style={rowStyle}>
+        <label style={labelStyle} htmlFor="image-deletion-policy">移除图片时</label>
+        <select id="image-deletion-policy" value={settings.file.imageDeletionPolicy ?? 'ask'}
+          onChange={(event) => setFile({ imageDeletionPolicy: event.target.value as 'ask' | 'keep' | 'trash' })}
+          style={inputStyle}>
+          <option value="ask">询问是否同步删除文件</option>
+          <option value="keep">保留图片文件</option>
+          <option value="trash">保存文档并移入回收站</option>
+        </select>
+      </div>
+      <p style={{ margin: '-8px 0 16px 152px', fontSize: 11, color: 'var(--editor-text-muted)' }}>
+        仅处理文档图片目录中的未引用文件；撤销可恢复。外部图片保留在原位置。
+      </p>
+
       {/* 大文件阈值 */}
       <div style={rowStyle}>
         <span style={labelStyle}>大文件阈值 (MB)</span>
