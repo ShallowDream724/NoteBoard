@@ -1,189 +1,183 @@
-// NoteBoard 文件面板
-// forceManualSave、显示隐藏文件、恢复会话、图片目录名、大文件阈值
-// 详见 docs/09-开发路线图.md 12.7
-
+// Canonical settings panel; SettingsModal owns navigation and dismissal.
+import { Folder, Save, Image as ImageIcon } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { open } from '@tauri-apps/plugin-dialog';
 import * as ipc from '../../core/ipc/commands';
+import { open } from '@tauri-apps/plugin-dialog';
 import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../Tooltip';
+import { ImageDeletionSetting } from './ImageDeletionSetting';
+import { inputStyle } from './SettingsControls';
 
 export function FilePanel() {
-  const settings = useSettingsStore((s) => s.settings);
-  const setFile = useSettingsStore((s) => s.setFile);
-
-  const rowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-    fontSize: 13,
-  };
-
-  const labelStyle: React.CSSProperties = { width: 140, flexShrink: 0 };
-
-  /** 通过系统目录选择器更新暂存位置，取消选择时保持现有设置。 */
-  const chooseStagingDirectory = async () => {
+  const { settings, setFile } = useSettingsStore();
+  const handleChooseStagingDirectory = async () => {
     const selected = await open({ directory: true, multiple: false });
     if (typeof selected === 'string') await setFile({ stagingDirectory: selected });
   };
-
-  /** 恢复内置默认目录，避免在前端拼接平台相关路径。 */
-  const resetStagingDirectory = async () => {
+  const handleResetStagingDirectory = async () => {
     const defaultDirectory = await ipc.getDefaultStagingDirectory();
     await setFile({ stagingDirectory: defaultDirectory });
   };
-
-  /** 设置页中的“打开”使用系统文件管理器，便于直接复制或整理暂存文件。 */
-  const revealStagingDirectory = async () => {
+  const handleOpenStagingDirectory = async () => {
     try {
       await ipc.openStagingDirectory();
     } catch (error) {
-      showToast(`无法打开暂存区：${error instanceof Error ? error.message : String(error)}`, 'error');
+      showToast(`无法打开暂存区：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
     }
   };
-
-  return (
+  return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
     <div>
-      <h2 style={{ fontSize: 16, marginTop: 0 }}>文件</h2>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>文件与保存设置</h3>
+      <p style={{ fontSize: 12, color: 'var(--editor-text-muted)', margin: 0 }}>
+        独立配置 Markdown、自由画板与代码文本的自动保存策略，以及本地文件管理选项。
+      </p>
+    </div>
 
-      <div style={{ margin: '16px 0 8px', fontWeight: 600, fontSize: 13, color: 'var(--accent-strong)' }}>
-        自动保存设置（关闭时使用 Ctrl+S 手动保存，关闭未保存标签页时将提示确认）
+    {/* ── 4.1 自动保存设置 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+          <Save size={15} color="var(--accent-strong)" />
+          <span>自动保存设置 (分类型独立配置)</span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>默认关闭：使用 Ctrl+S 手动保存，关闭时自动拦截确认</span>
       </div>
 
       {/* Markdown 笔记自动保存 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>Markdown 自动保存</span>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+        <div>
+          <div>Markdown 笔记自动保存</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>停止输入 800ms 后自动写入磁盘；未开启时需手动保存</div>
+        </div>
         <input
           type="checkbox"
           checked={settings.file.autoSaveMarkdown ?? false}
           onChange={(e) => setFile({ autoSaveMarkdown: e.target.checked })}
         />
-      </div>
+      </label>
 
       {/* 自由画板自动保存 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>自由画板自动保存</span>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+        <div>
+          <div>自由画板 (.board) 自动保存</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>绘制操作停止 800ms 后自动写入磁盘；未开启时需手动保存</div>
+        </div>
         <input
           type="checkbox"
           checked={settings.file.autoSaveBoard ?? false}
           onChange={(e) => setFile({ autoSaveBoard: e.target.checked })}
         />
-      </div>
+      </label>
 
-      {/* 代码与文本文档自动保存 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>代码与文本自动保存</span>
+      {/* 代码与文本自动保存 */}
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+        <div>
+          <div>代码与文本 (.sql / .json / .txt 等) 自动保存</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>编辑停止 800ms 后自动写入磁盘；未开启时需手动保存</div>
+        </div>
         <input
           type="checkbox"
           checked={settings.file.autoSaveOther ?? false}
           onChange={(e) => setFile({ autoSaveOther: e.target.checked })}
         />
-      </div>
+      </label>
+    </div>
 
-      <div style={{ margin: '16px 0 8px', fontWeight: 600, fontSize: 13, color: 'var(--accent-strong)' }}>
-        通用文件设置
-      </div>
-
-      {/* 暂存目录：只读展示，使用目录选择器避免手工输入无效路径。 */}
-      <div style={{ ...rowStyle, alignItems: 'flex-start' }}>
-        <span style={{ ...labelStyle, paddingTop: 5 }}>暂存位置</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-          <Tooltip content={settings.file.stagingDirectory ?? ''} disabled={!settings.file.stagingDirectory} side="top" sideOffset={4}>
-            <input
-              type="text"
-              readOnly
-              value={settings.file.stagingDirectory ?? ''}
-              style={{ ...inputStyle, maxWidth: 360, width: '100%' }}
-            />
-          </Tooltip>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" className="nb-btn-secondary" onClick={chooseStagingDirectory}>选择位置</button>
-            <button type="button" className="nb-btn-secondary" onClick={resetStagingDirectory}>恢复默认</button>
-            <button type="button" className="nb-btn-secondary" onClick={revealStagingDirectory}>打开</button>
-          </div>
-          <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>
-            未保存内容以“时间-序号-文件名”写入；正常保存后自动清理本次恢复副本。
-          </span>
-        </div>
+    {/* ── 4.2 文件与目录管理 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+        <Folder size={15} color="var(--accent-strong)" />
+        <span>文件树与会话选项</span>
       </div>
 
       {/* 显示隐藏文件 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>显示隐藏文件</span>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+        <div>
+          <div>显示隐藏文件 / 文件夹</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>在左侧文件树中显示以点（.）开头的隐藏文件或系统文件</div>
+        </div>
         <input
           type="checkbox"
-          checked={settings.file.showHiddenFiles}
+          checked={settings.file.showHiddenFiles ?? false}
           onChange={(e) => setFile({ showHiddenFiles: e.target.checked })}
         />
-      </div>
+      </label>
 
-      {/* 最近文件恢复 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>保留最近文件</span>
+      {/* 保留最近文件：启动时恢复到 Tab 栏，但当前页面仍停留 Home。 */}
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+        <div>
+          <div>保留最近文件</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>默认开启；启动时自动恢复到 Tab 栏，当前页面仍显示 Home</div>
+        </div>
         <input
           type="checkbox"
-          checked={settings.file.restoreSession}
+          checked={settings.file.restoreSession ?? true}
           onChange={(e) => setFile({ restoreSession: e.target.checked })}
         />
+      </label>
+
+      {/* 大文件确认阈值 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+        <div>
+          <div>大文件打开确认阈值 (MB)</div>
+          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>超过此大小的文件在打开前将弹出性能提示</div>
+        </div>
+        <input
+          type="number"
+          min="1"
+          max="100"
+          value={settings.file.largeFileConfirmMb ?? 50}
+          onChange={(e) => setFile({ largeFileConfirmMb: parseInt(e.target.value, 10) || 50 })}
+          style={{ ...inputStyle, width: 60, textAlign: 'center' }}
+        />
       </div>
-      <div style={{ margin: '-10px 0 16px 152px', fontSize: 11, color: 'var(--editor-text-muted)' }}>
-        默认开启；启动时自动恢复到 Tab 栏，当前页面仍停留 Home。
+    </div>
+
+    {/* ── 4.3 暂存目录设置 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13, color: 'var(--editor-text)' }}>
+        <Folder size={15} color="var(--accent-strong)" />
+        <span>未保存文件暂存区</span>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>
+        新建文件和有修改的文件会另存为“时间-序号-文件名”。编辑期间持续覆盖同一副本，正常保存后自动清理；暂存关闭或异常退出时保留。
+      </div>
+      <Tooltip content={settings.file.stagingDirectory ?? ''} disabled={!settings.file.stagingDirectory} side="top" sideOffset={4}>
+        <input
+          type="text"
+          readOnly
+          value={settings.file.stagingDirectory ?? ''}
+          style={{ ...inputStyle, width: '100%', maxWidth: 'none', padding: '6px 10px' }}
+        />
+      </Tooltip>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" className="nb-btn-secondary" onClick={handleChooseStagingDirectory}>选择位置</button>
+        <button type="button" className="nb-btn-secondary" onClick={handleResetStagingDirectory}>恢复默认</button>
+        <button type="button" className="nb-btn-secondary" onClick={handleOpenStagingDirectory}>在资源管理器中打开</button>
+      </div>
+    </div>
+
+    {/* ── 4.4 图片目录设置 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13, color: 'var(--editor-text)' }}>
+        <ImageIcon size={15} color="var(--accent-strong)" />
+        <span>图片目录设置</span>
       </div>
 
-      {/* 图片目录名 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>图片目录名称</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--editor-text)' }}>图片目录名称</div>
+        <div style={{ fontSize: 11, color: 'var(--editor-text-muted)', marginBottom: 2 }}>
+          插入或粘贴本地图片时，自动在当前 Markdown 文档所在目录同一层创建的子文件夹名称（默认 <code>img</code>）
+        </div>
         <input
           type="text"
           value={settings.file.imageDirName ?? 'img'}
           onChange={(e) => setFile({ imageDirName: e.target.value })}
           placeholder="img"
-          style={inputStyle}
+          style={{ ...inputStyle, width: '100%', maxWidth: 280, padding: '6px 10px' }}
         />
       </div>
-
-      <div style={rowStyle}>
-        <label style={labelStyle} htmlFor="image-deletion-policy">移除图片时</label>
-        <select id="image-deletion-policy" value={settings.file.imageDeletionPolicy ?? 'ask'}
-          onChange={(event) => setFile({ imageDeletionPolicy: event.target.value as 'ask' | 'keep' | 'trash' })}
-          style={inputStyle}>
-          <option value="ask">询问是否同步删除文件</option>
-          <option value="keep">保留图片文件</option>
-          <option value="trash">保存文档并移入回收站</option>
-        </select>
-      </div>
-      <p style={{ margin: '-8px 0 16px 152px', fontSize: 11, color: 'var(--editor-text-muted)' }}>
-        仅处理文档图片目录中的未引用文件；撤销可恢复。外部图片保留在原位置。
-      </p>
-
-      {/* 大文件阈值 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>大文件阈值 (MB)</span>
-        <input
-          type="number"
-          min="1"
-          max="500"
-          value={Math.round(settings.file.largeFileConfirmMb)}
-          onChange={(e) => {
-            const mb = parseInt(e.target.value, 10) || 50;
-            setFile({ largeFileConfirmMb: mb });
-          }}
-          style={{ ...inputStyle, width: 60 }}
-        />
-      </div>
+      <ImageDeletionSetting />
     </div>
-  );
+  </div>);
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 13,
-  border: '1px solid var(--editor-border)',
-  borderRadius: 3,
-  background: 'var(--editor-surface)',
-  color: 'var(--editor-text)',
-  outline: 'none',
-  flex: 1,
-  maxWidth: 200,
-};

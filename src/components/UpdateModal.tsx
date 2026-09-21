@@ -302,9 +302,11 @@ export function UpdateModal({
               }}
             >
               <CheckCircle2 size={36} color="#10b981" />
-              <div style={{ fontWeight: 600, fontSize: 15 }}>已是最新版本</div>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{result.latestVersion ? '已是最新版本' : '尚未发布正式版本'}</div>
               <div style={{ fontSize: 13, color: 'var(--editor-text-secondary)' }}>
-                NoteBoard 当前版本 (v{result.currentVersion}) 已经是最新版本，无需更新。
+                {result.latestVersion
+                  ? `NoteBoard 当前版本 (v${result.currentVersion}) 已经是最新版本，无需更新。`
+                  : `当前仓库尚无正式发布，继续使用本地版本 v${result.currentVersion}。`}
               </div>
             </div>
           )}

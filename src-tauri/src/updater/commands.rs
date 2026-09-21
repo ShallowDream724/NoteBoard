@@ -46,8 +46,8 @@ const UPDATE_DOWNLOAD_PROGRESS_EVENT: &str = "noteboard-update-download-progress
 const UPDATE_DOWNLOAD_PROGRESS_THROTTLE: Duration = Duration::from_millis(100);
 
 // GitHub 仓库与 API 默认地址
-const GITHUB_REPO_URL: &str = "https://github.com/CrazyFigure/NoteBoard";
-const GITHUB_RELEASE_API_URL: &str = "https://api.github.com/repos/CrazyFigure/NoteBoard/releases/latest";
+const GITHUB_REPO_URL: &str = "https://github.com/ShallowDream724/NoteBoard";
+const GITHUB_RELEASE_API_URL: &str = "https://api.github.com/repos/ShallowDream724/NoteBoard/releases/latest";
 
 // 下载进度事件载荷
 #[derive(Debug, Clone, Serialize)]
@@ -155,10 +155,39 @@ fn sanitize_asset_file_name(asset_name: &str) -> String {
 
 /// 校验更新安装包下载地址合法性
 fn is_valid_update_download_url(url: &str) -> bool {
-    let normalized = url.trim().to_ascii_lowercase();
-    (normalized.starts_with("https://") || normalized.starts_with("http://"))
-        && (normalized.ends_with(".exe") || normalized.ends_with(".msi"))
-        && !normalized.chars().any(|character| character.is_control())
+    if url.chars().any(char::is_control) {
+        return false;
+    }
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    let path = parsed.path().to_ascii_lowercase();
+    let repository = url::Url::parse(GITHUB_REPO_URL).expect("valid repository URL");
+    parsed.scheme() == "https"
+        && parsed.host_str() == repository.host_str()
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.port().is_none()
+        && parsed.query().is_none()
+        && parsed.fragment().is_none()
+        && path.starts_with(&format!("{}/releases/download/", repository.path().to_ascii_lowercase()))
+        && (path.ends_with(".exe") || path.ends_with(".msi"))
+}
+
+/// An empty latest_version means this fork has not published a release yet.
+fn unpublished_release(current_version: String) -> UpdateCheckResult {
+    UpdateCheckResult {
+        current_version,
+        latest_version: String::new(),
+        release_name: None,
+        release_url: format!("{GITHUB_REPO_URL}/releases"),
+        published_at: None,
+        update_available: false,
+        installer_asset_name: None,
+        installer_download_url: None,
+        installer_size: None,
+        release_body: None,
+    }
 }
 
 /// 构建支持 Windows 系统代理的 HTTP 客户端
@@ -378,6 +407,10 @@ pub async fn check_for_updates() -> Result<UpdateCheckResult, String> {
         return Err("update_error:forbidden".to_string());
     }
 
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(unpublished_release(current_version));
+    }
+
     let release = response
         .error_for_status()
         .map_err(|err| format!("update_error:http_status:{err}"))?
@@ -533,4 +566,32 @@ pub fn open_external_url(url: String) -> Result<bool, String> {
     }
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unpublished_fork_has_no_download_or_fake_latest_version() {
+        let result = unpublished_release("0.3.5".into());
+        assert!(!result.update_available);
+        assert!(result.latest_version.is_empty());
+        assert!(result.installer_download_url.is_none());
+        assert_eq!(result.release_url, format!("{GITHUB_REPO_URL}/releases"));
+    }
+
+    #[test]
+    fn installer_download_stays_with_our_fork() {
+        assert!(is_valid_update_download_url(&format!("{GITHUB_REPO_URL}/releases/download/v1.0.0/NoteBoard-setup.exe")));
+        for url in [
+            "https://github.com/CrazyFigure/NoteBoard/releases/download/v1/NoteBoard.exe",
+            "https://example.com/NoteBoard.exe",
+            "http://github.com/ShallowDream724/NoteBoard/releases/download/v1/NoteBoard.exe",
+            "https://github.com/ShallowDream724/NoteBoard/releases/download/../../other.exe",
+            "https://github.com/ShallowDream724/NoteBoard/releases/download/v1/NoteBoard.exe?redirect=1",
+        ] {
+            assert!(!is_valid_update_download_url(url), "{url}");
+        }
+    }
 }

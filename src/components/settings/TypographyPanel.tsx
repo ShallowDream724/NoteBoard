@@ -1,185 +1,195 @@
-// NoteBoard 排版面板
-// 正文/代码/文件树中西双字体族、字号、行高、内容宽度
-// 实时预览 + CSS 变量注入
-// 详见 docs/09-开发路线图.md 12.3-12.5
-
+// Canonical settings panel; SettingsModal owns navigation and dismissal.
+import { FileText, FileCode, Folder, LayoutTemplate } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { applyTypography, contentWidthToPercent } from '../../core/theme/applyTheme';
+import { contentWidthToPercent, CONTENT_WIDTH_PERCENT_MAP } from '../../core/theme/applyTheme';
 import { FontSelect } from './FontSelect';
 import { FontPackSettingsCard } from './FontPackSettingsCard';
+import { formRowStyle, labelStyle } from './SettingsControls';
 
 export function TypographyPanel() {
-  const settings = useSettingsStore((s) => s.settings);
+  const { settings, setTypography } = useSettingsStore();
+  return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>排版参数自定义</h3>
+      <p style={{ fontSize: 12, color: 'var(--editor-text-muted)', margin: 0 }}>
+        独立配置软件界面、Markdown 正文、代码与纯文本以及文件树的排版与版心宽度参数。
+      </p>
+    </div>
 
-  const rowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-    fontSize: 'var(--ui-font-size, 13px)',
-  };
+    {/* 应用字体包独立于安装包，设置页提供下载、修复、导入和删除的长期入口。 */}
+    <FontPackSettingsCard />
 
-  const labelStyle: React.CSSProperties = { width: 140, flexShrink: 0, fontWeight: 500 };
-  const sectionTitleStyle: React.CSSProperties = { fontSize: 14, fontWeight: 600, margin: '16px 0 10px', color: 'var(--editor-heading)' };
+    {/* ── 2.1 软件界面 UI 排版 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+          <LayoutTemplate size={15} color="var(--accent-strong)" />
+          <span>软件界面 UI 排版 (全局界面 / 弹窗 / 提示 / 菜单)</span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>作用于标题栏、标签栏、设置中心、状态栏与全局 UI</span>
+      </div>
 
-  return (
-    <div style={{ paddingBottom: 20, fontFamily: 'var(--ui-font-family)', fontSize: 'var(--ui-font-size, 13px)' }}>
-      <h2 style={{ fontSize: 16, marginTop: 0, marginBottom: 16 }}>排版设置</h2>
-
-      {/* 独立设置窗口与主设置弹窗复用同一份字体包运行态和管理操作。 */}
-      <FontPackSettingsCard />
-
-      {/* ── 1. 软件界面 UI 排版 ── */}
-      <div style={sectionTitleStyle}>1. 软件界面 UI 排版 (全局界面 / 弹窗 / 提示 / 菜单)</div>
-
-      {/* 界面 UI 西文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>界面西文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+      {/* 界面 UI 中西双字体配置 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>界面西文字体 (英文/数字)</label>
           <FontSelect
             value={settings.typography.uiFontFamily ?? ''}
             filterType="en"
             placeholder="系统默认西文字体 (如: Segoe UI, Inter)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ uiFontFamily: font });
-              applyTypography({ ...settings.typography, uiFontFamily: font });
-            }}
+            onChange={(font) => setTypography({ uiFontFamily: font })}
           />
         </div>
-      </div>
-
-      {/* 界面 UI 中文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>界面中文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>界面中文字体 (汉字/全角)</label>
           <FontSelect
             value={settings.typography.uiFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统默认中文字体 (如: Microsoft YaHei UI, 苹方)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ uiFontFamilyZh: font });
-              applyTypography({ ...settings.typography, uiFontFamilyZh: font });
-            }}
+            onChange={(font) => setTypography({ uiFontFamilyZh: font })}
           />
         </div>
       </div>
 
       {/* 界面 UI 字号 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>界面 UI 基础字号</span>
-        <input
-          type="range"
-          min="12"
-          max="18"
-          step="1"
-          value={settings.typography.uiFontSize ?? 13}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10) || 13;
-            useSettingsStore.getState().setTypography({ uiFontSize: v });
-            applyTypography({ ...settings.typography, uiFontSize: v });
-          }}
-          style={{ flex: 1, maxWidth: 200 }}
-        />
-        <span style={{ width: 36 }}>{settings.typography.uiFontSize ?? 13}px</span>
+      <div style={formRowStyle}>
+        <label style={labelStyle}>界面 UI 基础字号 ({settings.typography.uiFontSize ?? 13}px)</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="range"
+            min="12"
+            max="18"
+            step="1"
+            value={settings.typography.uiFontSize ?? 13}
+            onChange={(e) => setTypography({ uiFontSize: parseInt(e.target.value, 10) })}
+            style={{ flex: 1, cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            {settings.typography.uiFontSize ?? 13}px
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {/* ── 2.2 Markdown 正文排版 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+        <FileText size={15} color="var(--accent-strong)" />
+        <span>Markdown 正文排版</span>
       </div>
 
-      {/* ── 2. Markdown 正文排版 ── */}
-      <div style={sectionTitleStyle}>2. Markdown 正文排版</div>
-
-      {/* 正文西文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>正文西文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+      {/* 正文中西双字体配置 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>正文西文字体 (英文/数字)</label>
           <FontSelect
             value={settings.typography.contentFontFamily}
             filterType="en"
             placeholder="系统默认西文字体 (如: Georgia, Inter, Segoe UI)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ contentFontFamily: font });
-              applyTypography({ ...settings.typography, contentFontFamily: font });
-            }}
+            onChange={(font) => setTypography({ contentFontFamily: font })}
           />
         </div>
-      </div>
-
-      {/* 正文中文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>正文中文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>正文中文字体 (汉字/全角)</label>
           <FontSelect
             value={settings.typography.contentFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统默认中文字体 (如: 微软雅黑, 霞鹜文楷, 楷体)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ contentFontFamilyZh: font });
-              applyTypography({ ...settings.typography, contentFontFamilyZh: font });
-            }}
+            onChange={(font) => setTypography({ contentFontFamilyZh: font })}
           />
         </div>
       </div>
 
-      {/* 正文字号 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>正文字号</span>
-        <input
-          type="number"
-          min="12"
-          max="26"
-          value={settings.typography.contentFontSize}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10) || 16;
-            useSettingsStore.getState().setTypography({ contentFontSize: v });
-            applyTypography({ ...settings.typography, contentFontSize: v });
-          }}
-          style={{ ...inputStyle, width: 70 }}
-        />
-        <span style={{ color: 'var(--editor-text-muted)' }}>px</span>
+      {/* 正文字号与行高 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>正文字号 ({settings.typography.contentFontSize}px)</label>
+          <input
+            type="range"
+            min="12"
+            max="26"
+            step="1"
+            value={settings.typography.contentFontSize}
+            onChange={(e) => setTypography({ contentFontSize: parseInt(e.target.value, 10) })}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>正文行高 ({settings.typography.contentLineHeight})</label>
+          <input
+            type="range"
+            min="1.3"
+            max="2.4"
+            step="0.1"
+            value={settings.typography.contentLineHeight}
+            onChange={(e) => setTypography({ contentLineHeight: parseFloat(e.target.value) })}
+            style={{ width: '100%' }}
+          />
+        </div>
       </div>
 
-      {/* 正文行高 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>正文行高</span>
-        <input
-          type="range"
-          min="1.3"
-          max="2.4"
-          step="0.1"
-          value={settings.typography.contentLineHeight}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            useSettingsStore.getState().setTypography({ contentLineHeight: v });
-            applyTypography({ ...settings.typography, contentLineHeight: v });
-          }}
-          style={{ flex: 1, maxWidth: 200 }}
-        />
-        <span style={{ width: 36 }}>{settings.typography.contentLineHeight.toFixed(1)}</span>
-      </div>
+      {/* Markdown 编辑区最大宽度 */}
+      <div style={formRowStyle}>
+        <label style={labelStyle}>Markdown 编辑区最大宽度 (默认宽屏 92%)</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+          {/* 预设档位按钮 */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            {(['narrow', 'standard', 'wide', 'full'] as const).map((w) => {
+              const labels: Record<string, string> = {
+                narrow: '窄 (65%)',
+                standard: '标准 (80%)',
+                wide: '宽屏 (92%)',
+                full: '全宽 (100%)',
+              };
+              const currentMdWidth = settings.typography.contentWidth ?? 'wide';
+              const isSelected =
+                currentMdWidth === w ||
+                contentWidthToPercent(currentMdWidth) === CONTENT_WIDTH_PERCENT_MAP[w];
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setTypography({ contentWidth: w })}
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    fontSize: 12,
+                    borderRadius: 'var(--radius-sm)',
+                    border: isSelected ? '1px solid var(--accent-strong)' : '1px solid var(--editor-border)',
+                    background: isSelected ? 'var(--editor-selection)' : 'var(--editor-bg)',
+                    color: 'var(--editor-text)',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'var(--toolbar-hover)';
+                      e.currentTarget.style.borderColor = 'var(--editor-border-focus)';
+                    }
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'var(--editor-bg)';
+                      e.currentTarget.style.borderColor = 'var(--editor-border)';
+                    }
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(0.96)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                >
+                  {labels[w]}
+                </button>
+              );
+            })}
+          </div>
 
-      {/* Markdown 版心最大宽度 */}
-      <div style={{ ...rowStyle, alignItems: 'flex-start' }}>
-        <span style={{ ...labelStyle, marginTop: 4 }}>Markdown 最大宽度</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, maxWidth: 360 }}>
-          <select
-            value={['narrow', 'standard', 'wide', 'full'].includes(settings.typography.contentWidth ?? 'wide') ? (settings.typography.contentWidth ?? 'wide') : 'custom'}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v !== 'custom') {
-                useSettingsStore.getState().setTypography({ contentWidth: v });
-                applyTypography({ ...settings.typography, contentWidth: v });
-              }
-            }}
-            style={selectStyle}
-          >
-            <option value="narrow">窄 (65%)</option>
-            <option value="standard">标准 (80%)</option>
-            <option value="wide">宽屏 (92% - 默认)</option>
-            <option value="full">全宽 (100%)</option>
-            {!['narrow', 'standard', 'wide', 'full'].includes(settings.typography.contentWidth ?? 'wide') && (
-              <option value="custom">自定义 ({contentWidthToPercent(settings.typography.contentWidth ?? 'wide')}%)</option>
-            )}
-          </select>
           {/* 滑动条自定义宽度调节 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
             <input
               type="range"
               min="40"
@@ -188,116 +198,141 @@ export function TypographyPanel() {
               value={contentWidthToPercent(settings.typography.contentWidth ?? 'wide')}
               onChange={(e) => {
                 const val = `${e.target.value}%`;
-                useSettingsStore.getState().setTypography({ contentWidth: val });
-                applyTypography({ ...settings.typography, contentWidth: val });
+                setTypography({ contentWidth: val });
               }}
               style={{ flex: 1, cursor: 'pointer' }}
             />
-            <span style={{ width: 42, fontSize: 12, color: 'var(--editor-text-muted)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {contentWidthToPercent(settings.typography.contentWidth ?? 'wide')}%
             </span>
           </div>
         </div>
       </div>
+    </div>
 
-      {/* ── 3. 代码与纯文本排版 ── */}
-      <div style={sectionTitleStyle}>3. 代码与纯文本排版 (.sql / .txt / .json 等)</div>
+    {/* ── 2.3 代码与纯文本排版 ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+          <FileCode size={15} color="var(--accent-strong)" />
+          <span>代码与纯文本排版 (.sql / .txt / .json / 代码块)</span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>支持 Ctrl + 滚轮 快速缩放</span>
+      </div>
 
-      {/* 代码西文等宽字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>代码西文等宽字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+      {/* 代码等宽中西双字体配置 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>代码西文等宽字体</label>
           <FontSelect
             value={settings.typography.monoFontFamily}
+            placeholder="Consolas, Cascadia Code, JetBrains Mono"
             filterType="mono"
             isMonospaceOnly={true}
-            placeholder="Consolas, Cascadia Code, JetBrains Mono"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ monoFontFamily: font });
-              applyTypography({ ...settings.typography, monoFontFamily: font });
-            }}
+            onChange={(font) => setTypography({ monoFontFamily: font })}
           />
         </div>
-      </div>
-
-      {/* 代码中文等宽/中文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>代码中文等宽/中文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>代码中文等宽/中文字体</label>
           <FontSelect
             value={settings.typography.monoFontFamilyZh ?? ''}
-            filterType="zh"
             placeholder="Microsoft YaHei UI, 微软雅黑, 等宽中文"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ monoFontFamilyZh: font });
-              applyTypography({ ...settings.typography, monoFontFamilyZh: font });
-            }}
+            filterType="zh"
+            onChange={(font) => setTypography({ monoFontFamilyZh: font })}
           />
         </div>
       </div>
 
-      {/* 等宽字号 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>代码字号</span>
-        <input
-          type="number"
-          min="10"
-          max="24"
-          value={settings.typography.monoFontSize ?? 14}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10) || 14;
-            useSettingsStore.getState().setTypography({ monoFontSize: v });
-            applyTypography({ ...settings.typography, monoFontSize: v });
-          }}
-          style={{ ...inputStyle, width: 70 }}
-        />
-        <span style={{ color: 'var(--editor-text-muted)' }}>px (支持 Ctrl+滚轮)</span>
+      {/* 代码字号与行高 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>代码字号 ({settings.typography.monoFontSize ?? 14}px)</label>
+          <input
+            type="range"
+            min="10"
+            max="24"
+            step="1"
+            value={settings.typography.monoFontSize ?? 14}
+            onChange={(e) => setTypography({ monoFontSize: parseInt(e.target.value, 10) })}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>代码行高 ({settings.typography.monoLineHeight ?? 1.5})</label>
+          <input
+            type="range"
+            min="1.2"
+            max="2.2"
+            step="0.1"
+            value={settings.typography.monoLineHeight ?? 1.5}
+            onChange={(e) => setTypography({ monoLineHeight: parseFloat(e.target.value) })}
+            style={{ width: '100%' }}
+          />
+        </div>
       </div>
 
-      {/* 代码行高 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>代码行高</span>
-        <input
-          type="range"
-          min="1.2"
-          max="2.2"
-          step="0.1"
-          value={settings.typography.monoLineHeight ?? 1.5}
-          onChange={(e) => {
-            const v = parseFloat(e.target.value);
-            useSettingsStore.getState().setTypography({ monoLineHeight: v });
-            applyTypography({ ...settings.typography, monoLineHeight: v });
-          }}
-          style={{ flex: 1, maxWidth: 200 }}
-        />
-        <span style={{ width: 36 }}>{(settings.typography.monoLineHeight ?? 1.5).toFixed(1)}</span>
-      </div>
+      {/* 代码与纯文本编辑区最大宽度 */}
+      <div style={formRowStyle}>
+        <label style={labelStyle}>代码 / 纯文本编辑区最大宽度 (默认全宽 100%)</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+          {/* 预设档位按钮 */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            {(['narrow', 'standard', 'wide', 'full'] as const).map((w) => {
+              const labels: Record<string, string> = {
+                narrow: '窄 (65%)',
+                standard: '标准 (80%)',
+                wide: '宽屏 (92%)',
+                full: '全宽 (100%)',
+              };
+              const currentMonoWidth = settings.typography.monoContentWidth ?? 'full';
+              const isSelected =
+                currentMonoWidth === w ||
+                contentWidthToPercent(currentMonoWidth) === CONTENT_WIDTH_PERCENT_MAP[w];
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setTypography({ monoContentWidth: w })}
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    fontSize: 12,
+                    borderRadius: 'var(--radius-sm)',
+                    border: isSelected ? '1px solid var(--accent-strong)' : '1px solid var(--editor-border)',
+                    background: isSelected ? 'var(--editor-selection)' : 'var(--editor-bg)',
+                    color: 'var(--editor-text)',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'var(--toolbar-hover)';
+                      e.currentTarget.style.borderColor = 'var(--editor-border-focus)';
+                    }
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = 'var(--editor-bg)';
+                      e.currentTarget.style.borderColor = 'var(--editor-border)';
+                    }
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(0.96)';
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                >
+                  {labels[w]}
+                </button>
+              );
+            })}
+          </div>
 
-      {/* 代码与纯文本版心最大宽度 */}
-      <div style={{ ...rowStyle, alignItems: 'flex-start' }}>
-        <span style={{ ...labelStyle, marginTop: 4 }}>代码/纯文本最大宽度</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, maxWidth: 360 }}>
-          <select
-            value={['narrow', 'standard', 'wide', 'full'].includes(settings.typography.monoContentWidth ?? 'full') ? (settings.typography.monoContentWidth ?? 'full') : 'custom'}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v !== 'custom') {
-                useSettingsStore.getState().setTypography({ monoContentWidth: v });
-                applyTypography({ ...settings.typography, monoContentWidth: v });
-              }
-            }}
-            style={selectStyle}
-          >
-            <option value="narrow">窄 (65%)</option>
-            <option value="standard">标准 (80%)</option>
-            <option value="wide">宽屏 (92%)</option>
-            <option value="full">全宽 (100% - 默认)</option>
-            {!['narrow', 'standard', 'wide', 'full'].includes(settings.typography.monoContentWidth ?? 'full') && (
-              <option value="custom">自定义 ({contentWidthToPercent(settings.typography.monoContentWidth ?? 'full')}%)</option>
-            )}
-          </select>
           {/* 滑动条自定义宽度调节 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
             <input
               type="range"
               min="40"
@@ -306,188 +341,221 @@ export function TypographyPanel() {
               value={contentWidthToPercent(settings.typography.monoContentWidth ?? 'full')}
               onChange={(e) => {
                 const val = `${e.target.value}%`;
-                useSettingsStore.getState().setTypography({ monoContentWidth: val });
-                applyTypography({ ...settings.typography, monoContentWidth: val });
+                setTypography({ monoContentWidth: val });
               }}
               style={{ flex: 1, cursor: 'pointer' }}
             />
-            <span style={{ width: 42, fontSize: 12, color: 'var(--editor-text-muted)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {contentWidthToPercent(settings.typography.monoContentWidth ?? 'full')}%
             </span>
           </div>
         </div>
       </div>
+    </div>
 
-      {/* ── 4. 文件树排版 ── */}
-      <div style={sectionTitleStyle}>4. 文件树排版 (左侧资源管理器)</div>
+    {/* ── 2.5 文件树排版（资源管理器） ── */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+          <Folder size={15} color="var(--accent-strong)" />
+          <span>文件树排版 (左侧资源管理器)</span>
+        </div>
+      </div>
 
-      {/* 文件树西文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>文件树西文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+      {/* 文件树中西双字体配置 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>文件树西文字体</label>
           <FontSelect
             value={settings.typography.explorerFontFamily ?? ''}
             filterType="en"
             placeholder="系统界面默认 (如: Segoe UI, Arial)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ explorerFontFamily: font });
-              applyTypography({ ...settings.typography, explorerFontFamily: font });
-            }}
+            onChange={(font) => setTypography({ explorerFontFamily: font })}
           />
         </div>
-      </div>
-
-      {/* 文件树中文字体 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>文件树中文字体</span>
-        <div style={{ flex: 1, maxWidth: 360 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>文件树中文字体</label>
           <FontSelect
             value={settings.typography.explorerFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统界面默认 (如: Microsoft YaHei UI, 苹方)"
-            onChange={(font) => {
-              useSettingsStore.getState().setTypography({ explorerFontFamilyZh: font });
-              applyTypography({ ...settings.typography, explorerFontFamilyZh: font });
-            }}
+            onChange={(font) => setTypography({ explorerFontFamilyZh: font })}
           />
         </div>
       </div>
 
-      {/* 文件树字号 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>文件树字号</span>
-        <input
-          type="number"
-          min="11"
-          max="18"
-          value={settings.typography.explorerFontSize ?? 13}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10) || 13;
-            useSettingsStore.getState().setTypography({ explorerFontSize: v });
-            applyTypography({ ...settings.typography, explorerFontSize: v });
-          }}
-          style={{ ...inputStyle, width: 70 }}
-        />
-        <span style={{ color: 'var(--editor-text-muted)' }}>px</span>
+      {/* 文件树字号与行高 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>文件树字号 ({settings.typography.explorerFontSize ?? 13}px)</label>
+          <input
+            type="range"
+            min="11"
+            max="18"
+            step="1"
+            value={settings.typography.explorerFontSize ?? 13}
+            onChange={(e) => setTypography({ explorerFontSize: parseInt(e.target.value, 10) })}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div style={formRowStyle}>
+          <label style={labelStyle}>目录条目行高 ({settings.typography.explorerLineHeight ?? 24}px)</label>
+          <input
+            type="range"
+            min="20"
+            max="36"
+            step="1"
+            value={settings.typography.explorerLineHeight ?? 24}
+            onChange={(e) => setTypography({ explorerLineHeight: parseInt(e.target.value, 10) })}
+            style={{ width: '100%' }}
+          />
+        </div>
       </div>
+    </div>
 
-      {/* 目录条目行高 */}
-      <div style={rowStyle}>
-        <span style={labelStyle}>目录条目高度</span>
-        <input
-          type="number"
-          min="20"
-          max="36"
-          value={settings.typography.explorerLineHeight ?? 24}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10) || 24;
-            useSettingsStore.getState().setTypography({ explorerLineHeight: v });
-            applyTypography({ ...settings.typography, explorerLineHeight: v });
-          }}
-          style={{ ...inputStyle, width: 70 }}
-        />
-        <span style={{ color: 'var(--editor-text-muted)' }}>px</span>
-      </div>
-
-      {/* 实时预览 */}
-      <div style={{ marginTop: 24 }}>
-        <h3 style={{ fontSize: 14, marginBottom: 8 }}>排版效果预览</h3>
-        <div
-          style={{
-            padding: '16px 20px',
-            background: 'var(--editor-surface)',
-            border: '1px solid var(--editor-border)',
-            borderRadius: 6,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}
-        >
-          {/* 界面 UI 预览 */}
+    {/* ── 2.6 实时排版效果预览 ── */}
+    <div>
+      <label style={{ ...labelStyle, marginBottom: 8, display: 'block' }}>实时排版预览</label>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '18px 20px',
+          background: 'var(--editor-surface)',
+          border: '1px solid var(--editor-border)',
+          borderRadius: 'var(--radius-md)',
+        }}
+      >
+        {/* 软件界面 UI 效果预览 */}
+        <div>
+          <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+            软件界面 UI 与提示效果 (中英文混合测试: NoteBoard 2026 Ready)：
+          </p>
           <div
             style={{
               fontFamily: 'var(--ui-font-family)',
               fontSize: settings.typography.uiFontSize ?? 13,
-              padding: '8px 12px',
+              padding: '12px 16px',
               background: 'var(--editor-bg)',
               border: '1px solid var(--editor-border)',
-              borderRadius: 4,
+              borderRadius: 'var(--radius-sm)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: 12,
             }}
           >
-            <span style={{ fontWeight: 600 }}>软件界面 UI 预览 · 中西混排 NoteBoard 2026</span>
-            <span style={{ padding: '2px 6px', background: 'var(--editor-selection)', color: 'var(--accent-strong)', borderRadius: 3, fontSize: '0.9em' }}>
-              按钮示例 (Button)
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 600 }}>NoteBoard 界面</span>
+              <span style={{ fontSize: '0.88em', color: 'var(--editor-text-muted)' }}>提示信息：文档已就绪 (File Ready)</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <span style={{ padding: '3px 8px', background: 'var(--editor-selection)', color: 'var(--accent-strong)', borderRadius: 'var(--radius-sm)', fontSize: '0.88em', fontWeight: 500 }}>
+                Active Tab 标签
+              </span>
+              <span style={{ padding: '3px 8px', background: 'var(--editor-surface)', border: '1px solid var(--editor-border)', borderRadius: 'var(--radius-sm)', fontSize: '0.88em' }}>
+                Action 按钮
+              </span>
+            </div>
           </div>
+        </div>
 
-          {/* 正文预览 */}
-          <div
-            style={{
-              fontFamily: 'var(--content-font-family)',
-              fontSize: settings.typography.contentFontSize,
-              lineHeight: settings.typography.contentLineHeight,
-            }}
-          >
-            <p style={{ margin: 0 }}>
-              Markdown 正文效果（Quick brown fox 123 中文测试），包含 <code style={{ fontFamily: 'var(--mono-font-family)', fontSize: '0.9em', background: 'var(--code-inline-bg)', padding: '2px 4px', borderRadius: 3 }}>code</code> 行内代码。
-            </p>
-          </div>
-
-          {/* 代码预览 */}
-          <pre
-            className="nb-typography-code-preview"
-            style={{
-              margin: 0,
+        {/* Markdown 正文预览 */}
+        <div
+          style={{
+            fontFamily: 'var(--content-font-family)',
+            fontSize: settings.typography.contentFontSize,
+            lineHeight: settings.typography.contentLineHeight,
+          }}
+        >
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: '0.9em', color: 'var(--editor-text-muted)' }}>
+            Markdown 正文效果：
+          </p>
+          <p style={{ margin: 0 }}>
+            这是中英文正文排版效果（Typography Test: Quick Brown Fox 123），包含 <strong>加粗文本 Bold</strong>、<em>斜体 Italic</em> 与 <code style={{
+              background: 'var(--code-inline-bg)',
+              color: 'var(--code-inline-text)',
+              padding: '2px 6px',
+              borderRadius: 'var(--radius-sm)',
               fontFamily: 'var(--mono-font-family)',
-              fontSize: settings.typography.monoFontSize ?? 14,
-              lineHeight: settings.typography.monoLineHeight ?? 1.5,
-              background: 'var(--cm-gutter-background)',
-              padding: '8px 12px',
-              borderRadius: 4,
-            }}
-          >
-            <code>{'-- SQL 查询测试 (Chinese & English Mixed)\nSELECT id, title FROM notes WHERE status = "ok";'}</code>
-          </pre>
+              fontSize: '0.88em',
+              border: '1px solid var(--editor-border)',
+            }}>const note = "NoteBoard 2026";</code> 行内代码。
+          </p>
+        </div>
 
-          {/* 文件树条目预览 */}
+        {/* 代码文件预览 */}
+        <div>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+            SQL / 代码 / 纯文本效果：
+          </p>
+          <pre className="nb-typography-code-preview" style={{
+            margin: 0,
+            padding: '10px 14px',
+            background: 'var(--code-block-bg)',
+            border: '1px solid var(--editor-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontFamily: 'var(--mono-font-family)',
+            fontSize: settings.typography.monoFontSize ?? 14,
+            lineHeight: settings.typography.monoLineHeight ?? 1.5,
+            color: 'var(--code-block-text)',
+          }}>
+            <code>{`-- 查询笔记表（中西文代码混排测试）\nSELECT id, title, created_at\nFROM notes\nWHERE status = 'active' -- 仅查询有效笔记;`}</code>
+          </pre>
+        </div>
+
+        {/* 文件树条目预览 */}
+        <div>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+            文件树目录条目效果：
+          </p>
           <div
             style={{
-              height: settings.typography.explorerLineHeight ?? 24,
-              fontSize: settings.typography.explorerFontSize ?? 13,
-              fontFamily: 'var(--explorer-font-family)',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '0 8px',
-              background: 'var(--explorer-active)',
-              borderLeft: '2px solid var(--accent-strong)',
-              borderRadius: 3,
+              background: 'var(--explorer-bg)',
+              border: '1px solid var(--editor-border)',
+              borderRadius: 'var(--radius-sm)',
+              overflow: 'hidden',
             }}
           >
-            📁 01_示例文档 (Guide.md)
+            <div
+              style={{
+                height: settings.typography.explorerLineHeight ?? 24,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                paddingLeft: 12,
+                paddingRight: 8,
+                background: 'var(--explorer-active)',
+                borderLeft: '2px solid var(--accent-strong)',
+                color: 'var(--explorer-text)',
+                fontSize: settings.typography.explorerFontSize ?? 13,
+                fontFamily: 'var(--explorer-font-family)',
+              }}
+            >
+              <FileText size={14} color="var(--editor-accent)" />
+              <span>01_快速入门指南 (Guide.md)</span>
+            </div>
+            <div
+              style={{
+                height: settings.typography.explorerLineHeight ?? 24,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                paddingLeft: 12,
+                paddingRight: 8,
+                color: 'var(--explorer-text)',
+                fontSize: settings.typography.explorerFontSize ?? 13,
+                fontFamily: 'var(--explorer-font-family)',
+              }}
+            >
+              <FileCode size={14} color="var(--editor-accent)" />
+              <span>query_report.sql</span>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  );
+  </div>);
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 'var(--ui-font-size, 13px)',
-  border: '1px solid var(--editor-border)',
-  borderRadius: 3,
-  background: 'var(--editor-surface)',
-  color: 'var(--editor-text)',
-  outline: 'none',
-  flex: 1,
-  maxWidth: 200,
-};
-
-const selectStyle: React.CSSProperties = {
-  ...inputStyle,
-  maxWidth: 160,
-};
 

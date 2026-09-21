@@ -1,190 +1,134 @@
-// NoteBoard 关于面板
-// 版本、GPL-3.0、第三方致谢、仓库链接、配置损坏告警位
-// 详见 docs/09-开发路线图.md 12.9
-
+// Canonical settings panel; SettingsModal owns navigation and dismissal.
 import { RefreshCw, ExternalLink } from 'lucide-react';
-import { getRegisteredShortcuts } from '../../core/shortcuts';
 import * as ipc from '../../core/ipc/commands';
 import { useUpdateStore } from '../../stores/updateStore';
 import { APP_VERSION } from '../../core/version';
 
 export function AboutPanel() {
-  const shortcuts = getRegisteredShortcuts();
-
-  // 使用全局更新状态 Store
   const { checking: checkingUpdate, checkForUpdates } = useUpdateStore();
-
-  // 执行检查更新逻辑（主动检查）
   const handleCheckForUpdates = () => {
     checkForUpdates(false);
   };
-
-  // 在系统默认浏览器打开 GitHub 仓库
   const handleOpenGithub = () => {
-    ipc.openExternalUrl('https://github.com/CrazyFigure/NoteBoard').catch((err) => {
+    ipc.openExternalUrl('https://github.com/ShallowDream724/NoteBoard').catch((err) => {
       console.error('无法打开 GitHub 链接:', err);
     });
   };
-
-  const sectionStyle: React.CSSProperties = {
-    marginBottom: 24,
-  fontSize: 13,
-    lineHeight: 1.8,
-  color: 'var(--editor-text)',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  overflowWrap: 'break-word',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  maxWidth: '100%',
-  width: '100%',
-  boxSizing: 'border-box',
-    padding: '0 8px',
-  };
-
-  const headingStyle: React.CSSProperties = {
-    fontSize: 14,
-    marginBottom: 8,
-    marginTop: 0,
-  };
-
-  const listStyle: React.CSSProperties = {
-    margin: 0,
-    padding: 0,
-    listStyle: 'none',
-    fontSize: 13,
-    lineHeight: 1.8,
-  };
-
-  return (
+  return (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 18, padding: '24px 0' }}>
+    <img src="/logo.ico" alt="NoteBoard Logo" width={56} height={56} />
     <div>
-      <h2 style={headingStyle}>关于 NoteBoard</h2>
-
-      <div style={sectionStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <span>版本: v{APP_VERSION}</span>
-          <button
-            type="button"
-            disabled={checkingUpdate}
-            onClick={handleCheckForUpdates}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '3px 10px',
-              fontSize: 12,
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--editor-border)',
-              background: 'var(--editor-surface)',
-              color: 'var(--accent-strong)',
-              cursor: checkingUpdate ? 'not-allowed' : 'pointer',
-              fontWeight: 500,
-              boxShadow: 'var(--shadow-sm)',
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseEnter={(e) => {
-              if (!checkingUpdate) {
-                e.currentTarget.style.background = 'var(--toolbar-hover)';
-                e.currentTarget.style.borderColor = 'var(--editor-border-focus)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!checkingUpdate) {
-                e.currentTarget.style.background = 'var(--editor-surface)';
-                e.currentTarget.style.borderColor = 'var(--editor-border)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-              }
-            }}
-            onMouseDown={(e) => {
-              if (!checkingUpdate) {
-                e.currentTarget.style.background = 'var(--toolbar-active)';
-                e.currentTarget.style.transform = 'translateY(0) scale(0.96)';
-              }
-            }}
-            onMouseUp={(e) => {
-              if (!checkingUpdate) {
-                e.currentTarget.style.background = 'var(--toolbar-hover)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }
-            }}
-          >
-            <RefreshCw size={12} className={checkingUpdate ? 'spin' : ''} style={checkingUpdate ? { animation: 'spin 1s linear infinite' } : undefined} />
-            <span>{checkingUpdate ? '正在检查' : '检测更新'}</span>
-          </button>
-        </div>
-        <p style={{ margin: '4px 0' }}>许可证: GPL-3.0</p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0' }}>
-          <span>开源仓库:</span>
-          <button
-            type="button"
-            onClick={handleOpenGithub}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--accent-strong)',
-              fontSize: 13,
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.03)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.transform = 'scale(0.96)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.transform = 'scale(1.03)';
-            }}
-          >
-            <span>CrazyFigure/NoteBoard</span>
-            <ExternalLink size={13} />
-          </button>
-        </div>
-      </div>
-
-      {/* 第三方致谢 */}
-      <div style={sectionStyle}>
-        <h3 style={headingStyle}>第三方致谢</h3>
-        <ul style={listStyle}>
-          <li>• Excalidraw — 画板组件</li>
-          <li>• TipTap — 富文本编辑框架</li>
-          <li>• CodeMirror 6 — 代码编辑器</li>
-          <li>• Tauri — 桌面应用框架</li>
-        </ul>
-      </div>
-
-      {/* 快捷键列表 */}
-      <div style={sectionStyle}>
-        <h3 style={headingStyle}>快捷键（只读）</h3>
-        <div style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>
-          {shortcuts.map((s: { key: string; description: string }) => (
-            <div key={s.key} style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-              <code style={{ minWidth: 120 }}>{s.key}</code>
-              <span>{s.description}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 配置损坏告警位 */}
-      <div style={sectionStyle}>
-        <h3 style={headingStyle}>配置</h3>
-        <p style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>
-          如果设置无法正常保存，可能是配置文件损坏。
-          删除 settings.json 后重启应用可恢复默认设置。
-        </p>
-      </div>
+      <h2 style={{ fontSize: 18, fontWeight: 600, margin: '4px 0' }}>NoteBoard</h2>
+      <span style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>Windows 优雅桌面笔记 + 自由画板</span>
     </div>
-  );
+    <p style={{ fontSize: 12, color: 'var(--editor-text-secondary)', maxWidth: 420, lineHeight: 1.6, margin: '4px 0' }}>
+      采用 Rust Tauri v2 原生高性能底座与 TipTap / CodeMirror 6 / Excalidraw 多核驱动。
+    </p>
+    <div style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>
+      版本 v{APP_VERSION} · GPL-3.0 License
+    </div>
+
+    {/* 快捷操作：检测更新与 GitHub 仓库 */}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+      <button
+        type="button"
+        className="nb-btn-secondary"
+        disabled={checkingUpdate}
+        onClick={handleCheckForUpdates}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 18px',
+          fontSize: 13,
+          fontWeight: 500,
+          borderRadius: 8,
+          border: '1px solid var(--editor-border)',
+          background: 'var(--editor-surface)',
+          color: 'var(--accent-strong)',
+          cursor: checkingUpdate ? 'not-allowed' : 'pointer',
+          boxShadow: 'var(--shadow-sm)',
+          transition: 'all var(--transition-fast)',
+        }}
+        onMouseEnter={(e) => {
+          if (!checkingUpdate) {
+            e.currentTarget.style.background = 'var(--toolbar-hover)';
+            e.currentTarget.style.borderColor = 'var(--editor-border-focus)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!checkingUpdate) {
+            e.currentTarget.style.background = 'var(--editor-surface)';
+            e.currentTarget.style.borderColor = 'var(--editor-border)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+          }
+        }}
+        onMouseDown={(e) => {
+          if (!checkingUpdate) {
+            e.currentTarget.style.background = 'var(--toolbar-active)';
+            e.currentTarget.style.transform = 'translateY(0) scale(0.97)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+          }
+        }}
+        onMouseUp={(e) => {
+          if (!checkingUpdate) {
+            e.currentTarget.style.background = 'var(--toolbar-hover)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+          }
+        }}
+      >
+        <RefreshCw size={15} className={checkingUpdate ? 'spin' : ''} style={checkingUpdate ? { animation: 'spin 1s linear infinite' } : undefined} />
+        <span>{checkingUpdate ? '正在检查' : '检测更新'}</span>
+      </button>
+
+      <button
+        type="button"
+        className="nb-btn-secondary"
+        onClick={handleOpenGithub}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 18px',
+          fontSize: 13,
+          fontWeight: 500,
+          borderRadius: 8,
+          border: '1px solid var(--editor-border)',
+          background: 'var(--editor-surface)',
+          color: 'var(--editor-text)',
+          cursor: 'pointer',
+          boxShadow: 'var(--shadow-sm)',
+          transition: 'all var(--transition-fast)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--toolbar-hover)';
+          e.currentTarget.style.borderColor = 'var(--editor-border-focus)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--editor-surface)';
+          e.currentTarget.style.borderColor = 'var(--editor-border)';
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+        }}
+        onMouseDown={(e) => {
+          e.currentTarget.style.background = 'var(--toolbar-active)';
+          e.currentTarget.style.transform = 'translateY(0) scale(0.97)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
+        }}
+        onMouseUp={(e) => {
+          e.currentTarget.style.background = 'var(--toolbar-hover)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+          e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+        }}
+      >
+        <ExternalLink size={15} />
+        <span>GitHub 仓库</span>
+      </button>
+    </div>
+  </div>);
 }
