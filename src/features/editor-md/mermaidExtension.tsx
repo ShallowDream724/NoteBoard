@@ -12,7 +12,7 @@
 // 7. 主题切换时重渲染
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { MermaidNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { observe } from './viewportActivation';
 import { scheduleTask, cancelTask } from './viewportWorkScheduler';
@@ -575,28 +575,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
 // ── TipTap 节点定义 ──
 
 /** Mermaid 块节点 */
-export const MermaidBlock = Node.create({
-  name: 'mermaidBlock',
-  group: 'block',
-  atom: true,
-  selectable: true,
-  isolating: true,
-  addAttributes() {
-    return {
-      code: {
-        default: '',
-      },
-    };
-  },
-  parseHTML() {
-    return [
-      { tag: 'div[data-mermaid]' },
-      { tag: 'pre[data-language="mermaid"]' },
-    ];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-mermaid': '' })];
-  },
+export const MermaidBlock = MermaidNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(MermaidComponent);
   },

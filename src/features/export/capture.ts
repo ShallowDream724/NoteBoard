@@ -3,17 +3,23 @@ import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useFontPackStore } from '../../stores/fontPackStore';
-import { renderDocument } from './renderDocument';
+import { prepareDocument } from './documentConversion';
+import { readMarkdownSnapshot } from '../editor-md/readDocumentSnapshot';
 
 export async function captureDocument(key: string, signal?: AbortSignal) {
-  const capability = getEditorCapabilities(key);
-  const snapshot = capability ? await capability.flush('export') : null;
+  // Give the dialog a paint before materializing the immutable document snapshot.
+  await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  signal?.throwIfAborted();
   const document = useDocumentStore.getState().getDocument(key);
   const tab = useWindowStore.getState().tabs.find(tab => tab.key === key);
-  if (!tab || !document || (capability && snapshot?.content == null)) throw new Error('当前文档暂时无法导出');
-  const markdown = snapshot?.content ?? document.content;
-  if (markdown == null) throw new Error('当前文档没有可导出的文本');
-  return renderDocument(markdown, tab.displayName, document.dirPath ?? '', signal);
+  if (!tab || !document) throw new Error('当前文档暂时无法导出');
+  const content = tab.kind === 'markdown' ? readMarkdownSnapshot(key) : null;
+  const capability = getEditorCapabilities(key);
+  const snapshot = content == null && capability ? await capability.flush('export') : null;
+  if (content == null && capability && snapshot?.content == null) throw new Error('当前文档暂时无法导出');
+  const captured = content ?? snapshot?.content ?? document.content;
+  if (captured == null) throw new Error('当前文档没有可导出的文本');
+  return prepareDocument(captured, tab.displayName, document.dirPath ?? '', signal);
 }
 export function exportFontCss() {
   const css = getComputedStyle(document.documentElement);

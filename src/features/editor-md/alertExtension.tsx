@@ -5,7 +5,7 @@
 // GitHub Alert 格式:
 // > [!NOTE] / > [!TIP] / > [!IMPORTANT] / > [!WARNING] / > [!CAUTION]
 
-import { Node, mergeAttributes } from '@tiptap/core';
+import { AlertNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
 import { useState } from 'react';
@@ -81,71 +81,8 @@ function AlertComponent({ node, updateAttributes, selected }: NodeViewProps) {
 }
 
 /** GitHub Alert 节点 */
-export const GitHubAlert = Node.create({
-  name: 'githubAlert',
-  group: 'block',
-  content: 'block+',
-  selectable: true,
-  defining: true,
-  addAttributes() {
-    return {
-      kind: {
-        default: 'note' as AlertKind,
-        parseHTML: (element) => alertKind(element.getAttribute('data-alert') || element.getAttribute('kind')),
-        renderHTML: (attributes) => ({ 'data-alert': alertKind(attributes.kind) }),
-      },
-    };
-  },
-  parseHTML() {
-    return [
-      { tag: 'div[data-alert]', contentElement: (element) => element.querySelector('.alert-body') ?? element },
-    ];
-  },
-  renderHTML({ HTMLAttributes }) {
-    const kind = alertKind(HTMLAttributes['data-alert']);
-    const meta = ALERT_META[kind];
-    return ['div', mergeAttributes(HTMLAttributes, { class: 'github-alert github-alert-' + kind }),
-      ['div', { class: 'alert-title' },
-        ['http://www.w3.org/2000/svg svg', {
-          width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-          'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true',
-        }, ['http://www.w3.org/2000/svg path', { d: meta.icon }]],
-        ['span', {}, meta.label]],
-      ['div', { class: 'alert-body' }, 0]];
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(AlertComponent);
-  },
-  markdownTokenName: 'githubAlert',
-  markdownTokenizer: {
-    name: 'githubAlert',
-    level: 'block',
-    start: (source) => /^ {0,3}>[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/im.exec(source)?.index ?? -1,
-    tokenize(source, _tokens, lexer) {
-      const header = /^ {0,3}>[ \t]*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i.exec(source);
-      if (!header) return undefined;
-      let end = header[0].length;
-      const lines: string[] = [];
-      while (end < source.length) {
-        const line = /^ {0,3}>[ \t]?([^\r\n]*)(?:\r?\n|$)/.exec(source.slice(end));
-        if (!line || /^\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i.test(line[1])) break;
-        lines.push(line[1]);
-        end += line[0].length;
-      }
-      return { type: 'githubAlert', raw: source.slice(0, end), kind: header[1].toLowerCase(),
-        tokens: lexer.blockTokens(lines.join('\n')) };
-    },
-  },
-  parseMarkdown(token, helpers) {
-    const children = (helpers.parseBlockChildren ?? helpers.parseChildren)(token.tokens ?? []);
-    return helpers.createNode('githubAlert', { kind: token.kind ?? 'note' },
-      children.length ? children : [{ type: 'paragraph' }]);
-  },
-  renderMarkdown(node, helpers) {
-    const kind = String(node.attrs?.kind ?? 'note').toUpperCase();
-    const body = helpers.renderChildren(node.content ?? [], '\n\n');
-    return '> [!' + kind + ']\n' + body.split('\n').map((line) => line ? '> ' + line : '>').join('\n');
-  },
+export const GitHubAlert = AlertNode.extend({
+  addNodeView() { return ReactNodeViewRenderer(AlertComponent); },
   addKeyboardShortcuts() {
     return {
       Enter: () => {

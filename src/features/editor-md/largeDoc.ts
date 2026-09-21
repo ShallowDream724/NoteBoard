@@ -4,15 +4,12 @@
 //
 // 阈值设置：
 // - VISUAL_MODE_LIMIT: 超过此值不进入 visual 模式
-// - SECTION_MODE_LIMIT: 超过此值进入分段模式（阶段11）
 // - LARGE_FILE_CONFIRM: 超过此值弹确认框（FR-113）
 
 /** 各阈值 */
 export const THRESHOLDS = {
   /** 超过此字符数 → 不进 visual 模式，用 source */
   VISUAL_MODE_LIMIT: 200_000,
-  /** 超过此字符数 → 分段模式（阶段11实现） */
-  SECTION_MODE_LIMIT: 500_000,
   /** 超过此字节数 → 读盘前弹确认框（FR-113） */
   LARGE_FILE_CONFIRM: 50 * 1024 * 1024, // 50MB
   /** 超过此字符数 → highlightAuto 跳过（代码块内） */
@@ -32,7 +29,7 @@ export interface LargeDocVerdict {
   /** 使用的阈值 */
   threshold: number;
   /** 建议的模式 */
-  suggestedMode: 'visual' | 'source' | 'section';
+  suggestedMode: 'visual' | 'source';
 }
 
 /**
@@ -43,18 +40,8 @@ export function judgeLargeDoc(content: string, byteSize?: number): LargeDocVerdi
   const charCount = content.length;
   const bytes = byteSize ?? new Blob([content]).size;
 
-  // 1. 检查是否超过分段模式阈值
-  if (charCount > THRESHOLDS.SECTION_MODE_LIMIT) {
-    return {
-      isLarge: true,
-      charCount,
-      byteSize: bytes,
-      threshold: THRESHOLDS.SECTION_MODE_LIMIT,
-      suggestedMode: 'section',
-    };
-  }
-
-  // 2. 检查是否超过 visual 模式阈值
+  // The current visual editor is not document-virtualized. Never route a large
+  // file into the obsolete section scaffold or an unbounded contenteditable.
   if (charCount > THRESHOLDS.VISUAL_MODE_LIMIT) {
     return {
       isLarge: true,
@@ -65,7 +52,7 @@ export function judgeLargeDoc(content: string, byteSize?: number): LargeDocVerdi
     };
   }
 
-  // 3. 正常文档
+  // 正常文档
   return {
     isLarge: false,
     charCount,

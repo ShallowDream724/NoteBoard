@@ -27,6 +27,7 @@ encoding_rs = "0.8"
 chardetng = "0.1"
 trash = "5"
 tempfile = "3"
+lopdf = { version = "0.45", default-features = false }
 dunce = "1"
 font-kit = "0.14"
 log = "0.4"

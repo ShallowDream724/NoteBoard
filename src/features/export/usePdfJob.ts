@@ -3,36 +3,52 @@ import { invoke } from '@tauri-apps/api/core';
 import { exportFontCss } from './capture';
 import type { ExportDocument, PdfOptions, PdfReceipt } from './model';
 
+/** One native session per document. Serialize revisions and coalesce newer
+ * settings while printing; never create overlapping full-document WebViews. */
 export function usePdfJob(document: ExportDocument | null, options: PdfOptions, enabled: boolean) {
   const [receipt, setReceipt] = useState<PdfReceipt | null>(null);
-  const [bytes, setBytes] = useState<Uint8Array | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const retained = useRef<string | null>(null);
-  const jobs = useRef(new Set<string>());
-  const release = (id: string) => { jobs.current.delete(id); void invoke('release_pdf', { id }).catch(() => {}); };
-  useEffect(() => () => { jobs.current.forEach(release); }, []);
+  const latest = useRef(options); latest.current = options;
+  const request = useRef<((options: PdfOptions) => void) | null>(null);
   useEffect(() => {
     if (!document || !enabled) return;
-    let disposed = false; let id: string | null = null;
-    setBusy(true); setError('');
-    const timer = setTimeout(async () => {
-      id = crypto.randomUUID(); jobs.current.add(id);
+    let id = crypto.randomUUID();
+    setReceipt(null); setError('');
+    let alive = true, created = false, running = false;
+    let displayedRevision: number | null = null;
+    let queued: PdfOptions | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const drain = async () => {
+      if (running || !alive) return;
+      running = true;
       try {
-        const result = await invoke<PdfReceipt>('create_pdf', { id, payload: {
-          title: document.title, html: document.html, options, fontCss: exportFontCss(),
-        } });
-        if (disposed) { release(id); return; }
-        const data = await invoke<ArrayBuffer>('read_pdf', { id });
-        if (disposed) { release(id); return; }
-        if (retained.current) release(retained.current);
-        retained.current = id; setReceipt(result); setBytes(new Uint8Array(data)); setBusy(false);
+        while (queued && alive) {
+          const current = queued; queued = null;
+          const result = created
+            ? await invoke<PdfReceipt>('update_pdf', { id, options: current, keepRevision: displayedRevision })
+            : await invoke<PdfReceipt>('create_pdf', { id, payload: { title: document.title, html: document.html, options: current, fontCss: exportFontCss() } });
+          created = true;
+          if (alive && current === latest.current) { displayedRevision = result.revision; setReceipt(result); setError(''); }
+        }
       } catch (error) {
-        if (id) release(id);
-        if (!disposed) { setError(String(error)); setBusy(false); }
-      }
-    }, 500);
-    return () => { disposed = true; clearTimeout(timer); if (id && id !== retained.current) release(id); };
-  }, [document, options, enabled]);
-  return { receipt, bytes, busy, error };
+        if (alive) {
+          void invoke('release_pdf', { id }).catch(() => {});
+          id = crypto.randomUUID(); created = false; displayedRevision = null;
+          setReceipt(null); setError(String(error)); queued = null;
+        }
+      } finally { running = false; if (alive && !timer && !queued) setBusy(false); }
+    };
+    const schedule = (options: PdfOptions) => {
+      setBusy(true); setError(''); clearTimeout(timer);
+      timer = setTimeout(() => { timer = undefined; queued = options; void drain(); }, created ? 250 : 0);
+    };
+    request.current = schedule; schedule(latest.current);
+    return () => {
+      alive = false; clearTimeout(timer); request.current = null;
+      void invoke('release_pdf', { id }).catch(() => {});
+    };
+  }, [document, enabled]);
+  useEffect(() => { request.current?.(options); }, [options]);
+  return { receipt, busy, error };
 }

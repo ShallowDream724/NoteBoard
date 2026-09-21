@@ -98,6 +98,7 @@ export function VisualKernel({
     //    泄漏一个完整 editor 圈（真机内存持续增长根因）
     extensions,
     content: '',
+    shouldRerenderOnTransaction: false,
     onUpdate: ({ editor, transaction }) => {
       // 🔴 程序事务识别：仅忽略初始化/程序化设置内容的事务（同步作用域锁）；
       //    显示即输入：界面宣布可输入后的第一笔真实按键必须立即进入保护队列
@@ -374,11 +375,14 @@ export function VisualKernel({
 
   return (
     <div
+      inert={!visible}
+      aria-hidden={!visible}
       style={{
         height: '100%',
         overflow: 'auto',
-        position: 'relative',
-        display: visible ? 'block' : 'none',
+        position: 'absolute',
+        inset: 0,
+        visibility: visible ? 'visible' : 'hidden',
       }}
       onContextMenu={(e) => {
         if (!editor) return;
@@ -399,7 +403,7 @@ export function VisualKernel({
         });
       }}
     >
-      {active && visible && editor && <EditorBubbleMenu editor={editor} onOpenLinkModal={handleOpenLinkModal} />}
+      {editor && <EditorBubbleMenu editor={editor} enabled={active && visible} onOpenLinkModal={handleOpenLinkModal} />}
       {active && visible && editor && <TableToolbar editor={editor} />}
       {active && visible && editor && <BlockDragHandle editor={editor} />}
       {active && visible && contextMenu && editor && (

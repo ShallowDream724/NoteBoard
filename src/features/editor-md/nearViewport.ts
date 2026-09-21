@@ -12,11 +12,14 @@ export function observeNearby(element: HTMLElement, callback: Callback): () => v
   if (!pool) {
     const callbacks = new Map<Element, Callback>();
     const create = () => new IntersectionObserver(entries => {
+      // Mode/tab hiding is not scrolling out of view. Keep the bounded nearby
+      // set intact instead of tearing down and rebuilding every node on a toggle.
+      if (!root.clientHeight) return;
       entries.forEach(entry => callbacks.get(entry.target)?.(entry.isIntersecting));
     }, { root, rootMargin: `${Math.max(400, root.clientHeight * 2)}px 0px`, threshold: 0 });
     let height = root.clientHeight;
     pool = { callbacks, observer: create(), resize: typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => {
-      if (root.clientHeight === height) return;
+      if (!root.clientHeight || root.clientHeight === height) return;
       height = root.clientHeight;
       const current = pools.get(root);
       if (!current) return;

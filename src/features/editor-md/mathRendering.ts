@@ -3,8 +3,30 @@ const cache = new Map<string, MathRendering>();
 let cacheBytes = 0;
 const MAX_CACHE_BYTES = 4 * 1024 * 1024;
 const entryBytes = (key: string, value: MathRendering) => 2 * (key.length + value.html.length + (value.error?.length ?? 0));
-let loading: Promise<typeof import('katex')> | undefined;
-let chemistry: Promise<unknown> | undefined;
+let worker: Worker | undefined;
+let sequence = 0;
+const pending = new Map<number, (result: MathRendering) => void>();
+const inFlight = new Map<string, Promise<MathRendering>>();
+
+async function requestMarkup(latex: string, displayMode: boolean): Promise<MathRendering> {
+  if (typeof Worker === 'undefined') return (await import('./mathEngine')).renderMathMarkup(latex, displayMode);
+  if (!worker) {
+    try { worker = new Worker(new URL('./mathWorker.ts', import.meta.url), { type: 'module' }); }
+    catch { return { html: '', error: '公式排版无法启动，请重试' }; }
+    worker.onmessage = ({ data }: MessageEvent<{ id: number; result: MathRendering }>) => {
+      pending.get(data.id)?.(data.result); pending.delete(data.id);
+    };
+    worker.onerror = () => {
+      worker?.terminate(); worker = undefined;
+      pending.forEach(resolve => resolve({ html: '', error: '公式排版失败，请重试' })); pending.clear();
+    };
+  }
+  return new Promise(resolve => {
+    const id = ++sequence; pending.set(id, resolve);
+    try { worker!.postMessage({ id, latex, displayMode }); }
+    catch { pending.delete(id); resolve({ html: '', error: '公式排版失败，请重试' }); }
+  });
+}
 
 /** Shared loading/cache, with fresh macro scope per expression. */
 export async function renderMath(latex: string, displayMode: boolean): Promise<MathRendering> {
@@ -15,28 +37,18 @@ export async function renderMath(latex: string, displayMode: boolean): Promise<M
     cache.set(key, cached);
     return cached;
   }
-  loading ??= import('katex').catch((error) => { loading = undefined; throw error; });
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const task = requestMarkup(latex, displayMode);
+  inFlight.set(key, task);
   let result: MathRendering;
-  try {
-    const katex = await loading;
-    if (/\\(?:ce|pu)\s*\{/.test(latex)) {
-      chemistry ??= import('katex/contrib/mhchem').catch((error) => { chemistry = undefined; throw error; });
-      await chemistry;
-    }
-    const html = katex.renderToString(latex, {
-      displayMode, throwOnError: true, trust: false, strict: false,
-      maxExpand: 1000, maxSize: 100,
-    });
-    result = { html };
-  } catch (error) {
-    result = { html: '', error: error instanceof Error ? error.message.replace(/^KaTeX parse error: /, '') : '公式暂时无法排版' };
-  }
-  if (latex.length < 16_384 && result.html.length < 262_144) {
+  try { result = await task; } finally { inFlight.delete(key); }
+  if (!result.error && latex.length < 16_384 && result.html.length < 262_144) {
     const previous = cache.get(key);
     if (previous) cacheBytes -= entryBytes(key, previous);
     cache.set(key, result);
     cacheBytes += entryBytes(key, result);
-    while (cache.size > 200 || cacheBytes > MAX_CACHE_BYTES) {
+    while (cache.size > 512 || cacheBytes > MAX_CACHE_BYTES) {
       const oldest = cache.keys().next().value!;
       cacheBytes -= entryBytes(oldest, cache.get(oldest)!);
       cache.delete(oldest);

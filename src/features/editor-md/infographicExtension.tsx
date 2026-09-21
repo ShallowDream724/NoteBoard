@@ -3,7 +3,7 @@
 // 信息图是纯 DOM 渲染，对外只产出图片：复制/导出 SVG 矢量图或 PNG 位图
 
 import { useState, useEffect, useRef } from 'react';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { InfographicNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
   Maximize2,
@@ -598,29 +598,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
 }
 
 /** Infographic 块节点定义 */
-export const InfographicBlock = Node.create({
-  name: 'infographicBlock',
-  group: 'block',
-  atom: true,
-  selectable: true,
-  isolating: true,
-  addAttributes() {
-    return {
-      code: {
-        default: '',
-      },
-    };
-  },
-  parseHTML() {
-    return [
-      { tag: 'div[data-infographic]' },
-      { tag: 'pre[data-language="infographic"]' },
-      { tag: 'pre[data-language="info"]' },
-    ];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-infographic': '' })];
-  },
+export const InfographicBlock = InfographicNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(InfographicComponent);
   },

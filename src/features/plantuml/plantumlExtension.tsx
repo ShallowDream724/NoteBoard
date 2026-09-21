@@ -3,7 +3,7 @@
 // 详见 docs/09-开发路线图.md
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { PlantUmlNode } from '../editor-md/documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { Maximize2, Edit2, X, AlertCircle } from 'lucide-react';
 import { renderPlantUmlToSvg } from './plantumlEncoder';
@@ -468,30 +468,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos }:
 }
 
 /** PlantUML 块级节点 */
-export const PlantUmlBlock = Node.create({
-  name: 'plantumlBlock',
-  group: 'block',
-  atom: true,
-  selectable: true,
-  isolating: true,
-  addAttributes() {
-    return {
-      code: {
-        default: '',
-      },
-    };
-  },
-  parseHTML() {
-    return [
-      { tag: 'div[data-plantuml]' },
-      { tag: 'pre[data-language="plantuml"]' },
-      { tag: 'pre[data-language="uml"]' },
-      { tag: 'pre[data-language="puml"]' },
-    ];
-  },
-  renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-plantuml': '' })];
-  },
+export const PlantUmlBlock = PlantUmlNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(PlantUmlComponent);
   },

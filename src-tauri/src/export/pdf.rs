@@ -18,10 +18,11 @@ pub fn print(window: &WebviewWindow, path: &Path, options: &PdfOptions, done: im
             settings.SetPageWidth(width / 25.4)?; settings.SetPageHeight(height / 25.4)?;
             settings.SetScaleFactor(1.0)?;
             let margin = options.margin_mm / 25.4;
-            settings.SetMarginTop(margin)?; settings.SetMarginBottom(margin)?;
+            let (top, bottom) = options.vertical_margins_mm();
+            settings.SetMarginTop(top / 25.4)?; settings.SetMarginBottom(bottom / 25.4)?;
             settings.SetMarginLeft(margin)?; settings.SetMarginRight(margin)?;
             settings.SetShouldPrintBackgrounds(true)?;
-            settings.SetShouldPrintHeaderAndFooter(options.page_numbers)?;
+            settings.SetShouldPrintHeaderAndFooter(false)?;
             settings.SetHeaderTitle(&HSTRING::from(""))?; settings.SetFooterUri(&HSTRING::from(""))?;
             let completed = complete.clone();
             let handler = PrintToPdfCompletedHandler::create(Box::new(move |result, success| {

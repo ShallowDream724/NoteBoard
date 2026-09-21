@@ -1,5 +1,5 @@
 import type { Node as DocumentNode } from '@tiptap/pm/model';
-import { parseMarkdownDocument } from '../editor-md/markdownDocument';
+import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { isDisplayMath, type MathDelimiter } from '../editor-md/mathSyntax';
 import { ALERT_META, alertKind } from '../editor-md/alertPresentation';
 

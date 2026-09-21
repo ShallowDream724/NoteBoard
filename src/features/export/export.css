@@ -15,3 +15,10 @@
 .export-primary { display:flex;align-items:center;gap:7px;padding:8px 18px;background:var(--editor-accent);color:white;border:0;border-radius:6px; }.export-primary:disabled { opacity:.45;cursor:default; }
 .export-issue { display:flex;text-align:left;gap:6px;align-items:flex-start;border:0;background:transparent;color:var(--editor-text);padding:8px 0;font-size:12px!important;line-height:1.5; }.export-issue svg { flex-shrink:0;margin-top:2px;color:#b87913; }
 .export-note { line-height:1.7;color:var(--editor-text-muted); }
+.export-item-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
+.export-item-list button { border: 0; padding: 7px 8px; border-radius: 5px; background: transparent; color: var(--editor-text); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-item-list button:hover { background: var(--toolbar-hover); }
+.export-item-list button.selected { background: var(--editor-selection-background); color: var(--editor-accent); }
+.export-item-region { cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 0; }
+.export-item-region:hover { border-color: #3b82f6; background: #3b82f60b; }
+.export-item-region.selected { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f622; }

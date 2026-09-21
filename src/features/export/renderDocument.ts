@@ -1,18 +1,22 @@
-import { DOMSerializer } from '@tiptap/pm/model';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { DOMSerializer, type Node } from '@tiptap/pm/model';
 import { resolveRelativeDocPath } from '../../core/documentPath';
-import { parseMarkdownDocument } from '../editor-md/markdownDocument';
+import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { renderMath } from '../editor-md/mathRendering';
+import type { MathRendering } from '../editor-md/mathRendering';
 import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
 import type { ExportDocument, ExportItem } from './model';
 
-export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal): Promise<ExportDocument> {
+export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
+  math = renderMath, assetUrl: (path: string) => string = path => path): Promise<ExportDocument> {
   signal?.throwIfAborted();
-  const doc = parseMarkdownDocument(markdown);
+  const doc = snapshot ?? parseMarkdownDocument(markdown);
   const container = document.createElement('article');
   container.append(DOMSerializer.fromSchema(doc.type.schema).serializeFragment(doc.content));
   const items: ExportItem[] = [];
   let mathIndex = 0;
+  // A short-lived export cache avoids repeated KaTeX work without retaining an atlas forever.
+  const mathCache = new Map<string, MathRendering>();
+  let mathBytes = 0;
   for (const element of container.querySelectorAll<HTMLElement>('[data-math-inline], [data-math-block]')) {
     signal?.throwIfAborted();
     const latex = element.getAttribute('latex') ?? '';
@@ -21,7 +25,19 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     element.dataset.exportItem = id;
     element.className = display ? 'export-math display' : 'export-math inline';
     element.dataset.latex = latex;
-    const rendered = await renderMath(latex, display);
+    const key = String(display) + ':' + latex;
+    let rendered = mathCache.get(key);
+    if (!rendered) {
+      rendered = await math(latex, display);
+      const bytes = 2 * (key.length + rendered.html.length);
+      if (bytes < 262144) {
+        while (mathCache.size && mathBytes + bytes > 4 * 1024 * 1024) {
+          const oldest = mathCache.keys().next().value!;
+          mathBytes -= 2 * (oldest.length + mathCache.get(oldest)!.html.length); mathCache.delete(oldest);
+        }
+        mathCache.set(key, rendered); mathBytes += bytes;
+      }
+    }
     if (rendered.error) { element.textContent = latex; element.dataset.renderError = rendered.error; }
     else element.innerHTML = rendered.html;
     items.push({ id, kind: 'formula', label: `公式 ${mathIndex} · ${latex.slice(0, 45)}` });
@@ -31,9 +47,9 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   for (const table of container.querySelectorAll('table')) {
     const id = `table-${++tableIndex}`; table.dataset.exportItem = id;
     // The schema emits rows directly. A real thead is required for repeated print headers.
-    const first = table.rows[0];
-    if (first && Array.from(first.cells).every(cell => cell.tagName === 'TH')) {
-      table.createTHead().append(first);
+    const first = table.querySelector('tr');
+    if (first && Array.from(first.children).every(cell => cell.tagName === 'TH') && first.parentElement?.tagName !== 'THEAD') {
+      const head = document.createElement('thead'); head.append(first); table.prepend(head);
     }
     const body = document.createElement('tbody');
     Array.from(table.children).filter(child => child.tagName === 'TR').forEach(row => body.append(row));
@@ -54,7 +70,7 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   for (const image of container.querySelectorAll('img')) {
     const source = image.getAttribute('src') ?? '';
     if (!/^(?:https?:|data:|asset:|blob:)/i.test(source) && (baseDirectory || /^(?:[A-Za-z]:|file:|\\\\)/i.test(source))) {
-      image.src = convertFileSrc(resolveRelativeDocPath(baseDirectory, source));
+      image.setAttribute('src', assetUrl(resolveRelativeDocPath(baseDirectory, source)));
     }
   }
   for (const item of container.querySelectorAll<HTMLElement>('li[data-type="taskItem"]')) {

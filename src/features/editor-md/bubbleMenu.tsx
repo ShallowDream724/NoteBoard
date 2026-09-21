@@ -2,7 +2,7 @@
 // 支持选中文本浮层菜单（粗体/斜体/多色高亮/代码/链接/清除格式等）与精美表格操作工具条
 // 详见 docs/09-开发路线图.md 8.8, 8.9
 
-import { useState, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { TextSelection } from '@tiptap/pm/state';
 import { isEmbeddedEditing } from './embeddedEditor';
@@ -246,10 +246,16 @@ function isCellSelection(selection: unknown): boolean {
 export function EditorBubbleMenu({
   editor,
   onOpenLinkModal,
+  enabled = true,
 }: {
   editor: Editor;
   onOpenLinkModal?: () => void;
+  enabled?: boolean;
 }) {
+  const enabledRef = useRef(enabled); enabledRef.current = enabled;
+  useEffect(() => {
+    if (!enabled && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
+  }, [editor, enabled]);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const preferredPosition = useSettingsStore(state => state.settings.editor.selectionToolbarPosition ?? 'below');
 
@@ -270,7 +276,7 @@ export function EditorBubbleMenu({
     state: { selection: { empty: boolean } };
   }) => {
     const { selection } = state;
-    if (selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
+    if (!enabledRef.current || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
     // 不在代码块中显示浮层菜单

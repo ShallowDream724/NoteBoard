@@ -606,13 +606,17 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       setTimeout(() => {
         if (selection) sourceViewRef.current?.dispatch({ selection, effects: EditorView.scrollIntoView(selection.head, { y: 'center' }) });
         sourceViewRef.current?.focus();
-        sourceViewRef.current?.requestMeasure();
       }, 20);
     } else {
       // 源码 → 可视化模式
       const md = sourceViewRef.current
         ? (getCurrentDocumentHistoryContent(docKey) ?? sourceViewRef.current.state.doc.toString())
         : (useDocumentStore.getState().getDocument(docKey)?.content ?? '');
+      const verdict = judgeLargeDoc(md);
+      if (verdict.isLarge) {
+        setLargeVerdict(verdict); setShowLargeBanner(true);
+        return;
+      }
       // 模式同步不产生历史节点；文件级时间线已经逐步记录了源码阶段的真实编辑
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
@@ -647,9 +651,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       // 不变式 I-14 检查：切回 visual 后内容是否与基线一致
       const baseline = getBaseline(docKey);
-      const serialized = serializeMarkdown(editor);
+      const serialized = hasCrossModeChanges ? serializeMarkdown(editor) : md;
       // Markdown 等价格式的规范化只更新当前节点表示，不得伪造成新的编辑步骤
-      synchronizeCurrentDocumentHistoryContent(docKey, serialized, 'visual');
+      if (hasCrossModeChanges) synchronizeCurrentDocumentHistoryContent(docKey, serialized, 'visual');
       if (baseline.isClean(serialized)) {
         // 内容未变，保持非脏态
         useDocumentStore.getState().setDirty(docKey, false);
@@ -733,94 +737,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     };
   }, [docKey]);
 
-  // 大文档横幅
-  if (showLargeBanner && largeVerdict) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div
-          style={{
-            padding: '12px 16px',
-            background: 'var(--warning-50)',
-            borderBottom: '1px solid var(--warning-200)',
-            fontSize: 13,
-            color: 'var(--editor-text)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexShrink: 0,
-          }}
-        >
-          <span>📄</span>
-          <span>
-            此文件较大（{(largeVerdict.charCount / 1000).toFixed(0)}k 字符），已切换到源码模式。
-            {largeVerdict.suggestedMode === 'section' && ' 可使用分段编辑模式。'}
-          </span>
-          <button
-            style={{
-              marginLeft: 'auto',
-              padding: '4px 12px',
-              border: '1px solid var(--editor-border)',
-              borderRadius: 3,
-              background: 'transparent',
-              color: 'inherit',
-              cursor: 'pointer',
-              fontSize: 12,
-            }}
-            onClick={() => {
-              setShowLargeBanner(false);
-              const content = getCurrentDocumentHistoryContent(docKey)
-                ?? useDocumentStore.getState().getDocument(docKey)?.content
-                ?? '';
-              // 用户显式确认大文件仍用可视化：内核惰性挂载时记录待填充内容
-              if (!editor) {
-                pendingVisualContentRef.current = content;
-                setHasVisualKernel(true);
-              } else {
-                isInitializingRef.current = true;
-                try {
-                  parseMarkdown(editor, content);
-                } finally {
-                  isInitializingRef.current = false;
-                }
-              }
-              markDocumentHistoryModeBoundary(docKey);
-              viewModeRef.current = 'visual';
-              setViewMode('visual');
-              useWindowStore.getState().setTabViewMode(docKey, 'visual');
-            }}
-          >
-            仍要使用可视化编辑
-          </button>
-        </div>
-        <div
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-            background: 'var(--editor-bg)',
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && sourceViewRef.current) {
-              sourceViewRef.current.focus();
-            }
-          }}
-        >
-          <div
-            ref={sourceDivRef}
-            style={{
-              width: '100%',
-              maxWidth: 'var(--content-max-width)',
-              height: '100%',
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ height: '100%', overflow: 'hidden', position: 'relative' }} ref={editorRef}>
+    <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} ref={editorRef}>
+      {showLargeBanner && largeVerdict && <div role="status" style={{ flexShrink: 0, padding: '8px 16px', fontSize: 13, background: 'var(--warning-50)', display: 'flex', gap: 12, alignItems: 'center' }}>
+        <span>此文件较大，使用源码模式编辑。</span>
+        <button className="nb-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setShowLargeBanner(false)}>知道了</button>
+      </div>}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       <ExternalChangeBanner docKey={docKey} />
       {/* 🔴 S08：visual 运行时（惰性挂载；TipTap 内核随本组件创建/销毁） */}
       {hasVisualKernel && (
@@ -837,11 +760,16 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       {/* 源码模式容器（常驻 DOM，确保 sourceDivRef.current 始终有效挂载） */}
       <div
+        inert={viewMode !== 'source'}
+        aria-hidden={viewMode !== 'source'}
         style={{
           height: '100%',
           overflow: 'hidden',
           background: 'var(--editor-bg)',
-          display: viewMode === 'source' ? 'flex' : 'none',
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          visibility: viewMode === 'source' ? 'visible' : 'hidden',
           justifyContent: 'center',
         }}
         onClick={(e) => {
@@ -862,6 +790,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       {/* 底部左侧模式切换器：可视化 / 源码模式，具备热区靠近唤出与 Hover、Active 状态反馈，仅对当前文档生效 */}
       <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
+      </div>
     </div>
   );
 }

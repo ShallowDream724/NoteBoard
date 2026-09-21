@@ -8,6 +8,20 @@ import { highlightCode, type CodeToken } from './codeHighlighting';
 
 const key = new PluginKey<DecorationSet>('code-token-colors');
 interface Update { position: number; node: Node; tokens: CodeToken[] }
+const batches = new WeakMap<Editor, Map<number, Update>>();
+
+function publishHighlight(editor: Editor, update: Update) {
+  if (!update.tokens.length && !key.getState(editor.state)?.find(update.position + 1, update.position + update.node.nodeSize - 1).length) return;
+  let batch = batches.get(editor);
+  if (!batch) {
+    batch = new Map(); batches.set(editor, batch);
+    requestAnimationFrame(() => {
+      const current = batches.get(editor); batches.delete(editor);
+      if (!editor.isDestroyed && current?.size) editor.view.dispatch(editor.state.tr.setMeta(key, [...current.values()]).setMeta('addToHistory', false));
+    });
+  }
+  batch.set(update.position, update);
+}
 
 export const CodeHighlight = Extension.create({
   name: 'codeHighlight',
@@ -17,11 +31,14 @@ export const CodeHighlight = Extension.create({
       init: () => DecorationSet.empty,
       apply(tr, previous) {
         let decorations = previous.map(tr.mapping, tr.doc);
-        const update = tr.getMeta(key) as Update | undefined;
-        if (!update || tr.doc.nodeAt(update.position) !== update.node) return decorations;
-        const start = update.position + 1, end = start + update.node.content.size;
-        decorations = decorations.remove(decorations.find(start, end));
-        return decorations.add(tr.doc, update.tokens.map(token => Decoration.inline(start + token.from, start + token.to, { class: token.className })));
+        const updates = tr.getMeta(key) as Update[] | undefined;
+        for (const update of updates ?? []) {
+          if (tr.doc.nodeAt(update.position) !== update.node) continue;
+          const start = update.position + 1, end = start + update.node.content.size;
+          decorations = decorations.remove(decorations.find(start, end));
+          decorations = decorations.add(tr.doc, update.tokens.map(token => Decoration.inline(start + token.from, start + token.to, { class: token.className })));
+        }
+        return decorations;
       },
     },
     props: { decorations: state => key.getState(state) },
@@ -37,7 +54,7 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
     const publish = (tokens: CodeToken[]) => {
       const position = getPos();
       if (cancelled || editor.isDestroyed || position === undefined || editor.state.doc.nodeAt(position) !== node) return;
-      editor.view.dispatch(editor.state.tr.setMeta(key, { position, node, tokens } satisfies Update).setMeta('addToHistory', false));
+      publishHighlight(editor, { position, node, tokens });
     };
     const timer = setTimeout(() => {
       if (near) void highlightCode(node.textContent, node.attrs.language ?? '').then(publish);

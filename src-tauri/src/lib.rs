@@ -49,6 +49,7 @@ pub fn run() {
             export::pdf_payload,
             export::pdf_ready,
             export::read_pdf,
+            export::update_pdf,
             export::save_pdf,
             export::release_pdf,
             export::pandoc::pandoc_status,

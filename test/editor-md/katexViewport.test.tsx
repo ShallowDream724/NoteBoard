@@ -3,7 +3,7 @@
 
 import React, { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -55,6 +55,7 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
   const originalObserver = globalThis.IntersectionObserver;
   const originalAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+  const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
   globalThis.IntersectionObserver = ManualIntersectionObserver as unknown as typeof IntersectionObserver;
   // jsdom 的 rAF 不保证在测试时间窗内推进；用零延迟定时器模拟下一帧调度。
   globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => (
@@ -101,6 +102,10 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     expect(host.querySelectorAll('.katex')).toHaveLength(2);
+    height.mockReturnValue(0);
+    await act(async () => observer!.deactivate(firstTarget));
+    expect(host.querySelectorAll('.katex')).toHaveLength(2);
+    height.mockReturnValue(800);
     await act(async () => observer!.deactivate(firstTarget));
     expect(host.querySelectorAll('.katex')).toHaveLength(1);
   } finally {
@@ -109,5 +114,6 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
     globalThis.IntersectionObserver = originalObserver;
     globalThis.requestAnimationFrame = originalAnimationFrame;
     globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    height.mockRestore();
   }
 }, 20_000);

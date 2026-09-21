@@ -5,21 +5,10 @@
 // 采用最小扩展集装配。
 // 不包含：AI 补全/建议/diff 预览、sync/、SQLite 层、全局单例 tab 状态。
 
-import StarterKit from '@tiptap/starter-kit';
-import { Code } from '@tiptap/extension-code';
-import Blockquote from '@tiptap/extension-blockquote';
-// 引入图片扩展的类型增强，使自定义图片节点的 setImage 命令在全局链式 API 中可见。
-import '@tiptap/extension-image';
+import { buildDocumentExtensions } from '../documentExtensions';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
-import { TaskList, TaskItem } from '@tiptap/extension-list';
-import { Table } from '@tiptap/extension-table';
-import { TableRow } from '@tiptap/extension-table';
-import { TableCell } from '@tiptap/extension-table';
-import { TableHeader } from '@tiptap/extension-table';
-import Highlight from '@tiptap/extension-highlight';
-import { Markdown } from '@tiptap/markdown';
-
+import '@tiptap/extension-image';
 import { CodeBlockView } from '../codeBlockView';
 import { CodeHighlight } from '../codeHighlightExtension';
 import { searchReplaceExtension } from '../searchReplace';
@@ -154,143 +143,21 @@ export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
 }
 
-// Markdown 允许粗体、斜体等标记包裹行内代码；默认 Code 的 excludes: '_'
-// 会让合法的 **文字 `code`** 在解析时生成非法 marks，并触发整篇纯文本降级。
-const MarkdownCompatibleCode = Code.extend({
-  excludes: '',
-  addKeyboardShortcuts() { return {}; },
-});
-
-// Ctrl+Shift+B belongs to the application layout. Keep ">" input and toolbar commands.
-const MarkdownBlockquote = Blockquote.extend({
-  addKeyboardShortcuts() { return {}; },
-});
-
-/**
- * 构建 TipTap 扩展列表
- * 这是唯一的扩展装配点，不分散到各组件
- */
+/** Document grammar stays independent from UI and session state. */
 export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): Extensions {
   return [
-    // StarterKit 包含：bold, italic, strike, code, heading, bulletList, orderedList,
-    // listItem, blockquote, horizontalRule, history, paragraph, text, document,
-    // 但不含 codeBlock（我们用自定义的）
-    StarterKit.configure({
-      // 改由允许 Markdown 标记嵌套的 Code 扩展注册，避免同名扩展和 schema 冲突
-      code: false,
-      codeBlock: false, // 用自定义的 CodeBlockView
-      blockquote: false,
-      // 缩短连续输入的合并窗口，并保留更多编辑步骤；保存操作不会重建该历史栈
-      undoRedo: {
-        depth: 200,
-        newGroupDelay: 300,
-      },
-      link: {
-        openOnClick: false,
-        HTMLAttributes: {
-          rel: 'noopener noreferrer',
-          target: null, // 🔴 必须为 null，绝不能设置 _blank，避免 WebView2 底层触发系统新窗口
-          title: 'Ctrl + 单击以访问链接',
-        },
-      },
-      dropcursor: {
-        width: 2,
-        color: 'var(--editor-accent)',
-        class: 'nb-dropcursor',
-      },
-    }),
-
-    // 行内代码需允许与粗体/斜体共存，才能无损承载合法 Markdown 的嵌套结构
-    MarkdownCompatibleCode,
-    MarkdownBlockquote,
-
-    // 撤销/重做由文件级时间线统一接管，原生历史仅用于判断输入分组边界
+    ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
+      mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
+      infographicBlock: InfographicBlock, githubAlert: GitHubAlert }),
     UnifiedDocumentHistoryKeys.configure({ docKey }),
-    LinkClickHandler.configure({
-      onOpenLinkModal: options?.onOpenLinkModal,
-    }),
-
-    // 本地图片增强扩展（支持 Base64、本地相对路径 Asset 解析、大图预览与排版调节）
-    EnhancedImageBlock.configure({ docKey }),
+    LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
-    // 文本高亮扩展（支持多色配置）
-    Highlight.configure({
-      multicolor: true,
-    }),
-
-    // 占位符
-    Placeholder.configure({
-      placeholder: '开始输入，或键入 / 插入内容',
-      emptyEditorClass: 'is-empty',
-    }),
-
-    // 字数统计
-    CharacterCount,
-
-    // 任务列表
-    TaskList,
-    TaskItem.configure({
-      nested: true,
-      HTMLAttributes: {
-        'data-type': 'taskItem',
-      },
-    }),
-
-    // 表格及表格剪贴板增强（支持标准 TSV 复制与二维矩阵粘贴）
-    TableClipboard,
-    Table.configure({
-      resizable: true,
-      HTMLAttributes: {
-        class: 'nb-table',
-      },
-    }),
-    TableRow,
-    TableCell,
-    TableHeader,
-
-    // 普通 CodeBlock + 自定义 NodeView 不消费 lowlight 选项；语言选择、复制及 Markdown 序列化保持原样。
-    // 高亮库仍由真正使用它的视图加载，不能为无效选项在首开注册全部语法。
-    CodeBlockView,
-    CodeHighlight,
-
-    // 查找/替换
-    searchReplaceExtension(),
-
-    // KaTeX 数学公式
-    MathInline,
-    MathBlock,
-
-    // Mermaid 图表
-    MermaidBlock,
-
-    // PlantUML / UML 图表
-    PlantUmlBlock,
-
-    // Infographic 现代化信息图
-    InfographicBlock,
-
-    // GitHub Alerts
-    GitHubAlert,
-
-    // 斜杠命令
+    Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
+    CharacterCount, TableClipboard, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
-      addOptions() {
-        return {
-          suggestion: slashSuggestion,
-        };
-      },
-      addProseMirrorPlugins() {
-        return [
-          Suggestion({
-            editor: this.editor,
-            ...this.options.suggestion,
-          }),
-        ];
-      },
+      addOptions() { return { suggestion: slashSuggestion }; },
+      addProseMirrorPlugins() { return [Suggestion({ editor: this.editor, ...this.options.suggestion })]; },
     }),
-
-    // Markdown 序列化/解析扩展
-    Markdown,
   ];
 }

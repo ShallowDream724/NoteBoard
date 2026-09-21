@@ -117,10 +117,10 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
         onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
       <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
         style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere',
-          ...(!rendered && !visible && !editing && size.current ? { width: size.current.width, height: size.current.height } : {}) }}>
+          ...(!rendered && !editing && size.current ? { width: size.current.width, height: size.current.height } : {}) }}>
         {rendered?.html && latex.trim()
           ? <span className="math-preview" dangerouslySetInnerHTML={{ __html: rendered.html }} />
-          : !visible && !editing && size.current ? null : <span style={{ color: 'var(--editor-text-muted)' }}>{latex || (editing ? '输入 LaTeX 公式' : '点击输入公式')}</span>}
+          : !editing && size.current ? null : <span style={{ color: 'var(--editor-text-muted)' }}>{latex || (editing ? '输入 LaTeX 公式' : '点击输入公式')}</span>}
         {rendered?.error && latex.trim() && (
           <span role="status" style={{ display: 'block', fontSize: 12, color: 'var(--error-500)', whiteSpace: 'pre-wrap' }}>
             {rendered.error}

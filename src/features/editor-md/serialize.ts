@@ -295,6 +295,18 @@ export interface MarkdownManagerLike {
   escapeMarkdownSyntax?: (text: string) => string;
 }
 
+// Keep only the latest immutable snapshot per editor grammar, not a history of
+// strings. Mode switching/export often request the same snapshot repeatedly.
+const lastSerialized = new WeakMap<MarkdownManagerLike, { doc: object; markdown: string }>();
+const lastParsed = new WeakMap<Editor, { doc: object; markdown: string }>();
+
+export function serializeMarkdownFragment(manager: MarkdownManagerLike, json: ReturnType<Editor['getJSON']>): string {
+  const previous = manager.escapeMarkdownSyntax;
+  if (previous) manager.escapeMarkdownSyntax = escapeMarkdownText;
+  try { return manager.serialize?.(json) ?? ''; }
+  finally { if (previous) manager.escapeMarkdownSyntax = previous; }
+}
+
 /** Entity cleanup is cosmetic: it must never rewrite opaque math/extension payloads. */
 function normalizeWithoutChangingDocument(
   raw: string,
@@ -336,6 +348,8 @@ export function serializeMarkdownFromDoc(
   if (typeof manager.serialize !== 'function') {
     throw new Error('[NoteBoard] MarkdownManager.serialize 不可用，无法按快照序列化');
   }
+  const cached = lastSerialized.get(manager);
+  if (cached?.doc === doc) return cached.markdown;
   const originalEscaper = manager.escapeMarkdownSyntax;
   if (typeof originalEscaper === 'function') {
     // TipTap 暂未开放文本转义策略配置；在同步序列化期间临时替换其内部转义器，
@@ -346,7 +360,9 @@ export function serializeMarkdownFromDoc(
   try {
     const raw = manager.serialize(doc.toJSON());
     const normalized = normalizeWithoutChangingDocument(raw, doc, schema.nodeFromJSON.bind(schema), manager);
-    return removeRedundantMarkdownEscapes(normalized, doc, schema.nodeFromJSON.bind(schema), manager);
+    const markdown = removeRedundantMarkdownEscapes(normalized, doc, schema.nodeFromJSON.bind(schema), manager);
+    lastSerialized.set(manager, { doc, markdown });
+    return markdown;
   } finally {
     if (manager && typeof originalEscaper === 'function') {
       manager.escapeMarkdownSyntax = originalEscaper;
@@ -368,6 +384,10 @@ export function serializeMarkdownFromDoc(
  * 这是配置错误，明确报错避免静默退化成纯文本导致格式丢失。
  */
 export function serializeMarkdown(editor: Editor): string {
+  const snapshotManager = getMarkdownManager(editor);
+  if (typeof snapshotManager?.serialize === 'function') {
+    return serializeMarkdownFromDoc(snapshotManager, editor.schema, editor.state.doc);
+  }
   const getMarkdown = (editor as unknown as { getMarkdown?: () => string }).getMarkdown;
   if (typeof getMarkdown === 'function') {
     const manager = getMarkdownManager(editor);
@@ -478,6 +498,7 @@ export function parseMarkdown(
       editor.chain().clearContent(false),
       origin,
     );
+    lastParsed.set(editor, { doc: editor.state.doc, markdown });
     return;
   }
   try {
@@ -493,6 +514,7 @@ export function parseMarkdown(
         editor.chain().setContent(parsed, { contentType: 'json' }),
         origin,
       );
+      lastParsed.set(editor, { doc: editor.state.doc, markdown });
       return;
     }
 
@@ -553,6 +575,8 @@ export function normalizeEol(text: string | null | undefined): string {
  * 返回 false 时调用方必须跳过整篇 setContent，否则即使事务不入栈也会重映射并破坏已有撤销/重做历史。
  */
 export function hasMarkdownContentChanged(editor: Editor, markdown: string): boolean {
+  const parsed = lastParsed.get(editor);
+  if (parsed?.doc === editor.state.doc && parsed.markdown === markdown) return false;
   return normalizeEol(markdown) !== normalizeEol(serializeMarkdown(editor));
 }
 

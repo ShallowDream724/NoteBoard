@@ -2,7 +2,7 @@
 // 支持本地相对路径动态解析、悬停工具栏、大图预览查看器、多级缩放与拖拽拉伸、居左/居中/居右对齐
 
 import React, { useState, useEffect } from 'react';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { ImageNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
   ZoomIn,
@@ -652,76 +652,7 @@ const actionBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 增强版 Image 扩展定义 */
-export const EnhancedImageBlock = Node.create<{ docKey: string }>({
-  name: 'image',
-  addOptions() { return { docKey: '' }; },
-  group: 'block',
-  inline: false,
-  draggable: true,
-  selectable: true,
-  isolating: true,
-
-  addAttributes() {
-    return {
-      src: {
-        default: null,
-      },
-      alt: {
-        default: null,
-      },
-      title: {
-        default: null,
-      },
-      width: {
-        default: '100%',
-      },
-      align: {
-        default: 'center',
-      },
-    };
-  },
-
-  parseHTML() {
-    return [
-      {
-        tag: 'img[src]',
-        getAttrs: (dom) => {
-          if (typeof dom === 'string') return {};
-          const el = dom as HTMLImageElement;
-          return {
-            src: el.getAttribute('data-raw-src') || el.getAttribute('src'),
-            alt: el.getAttribute('alt'),
-            title: el.getAttribute('title'),
-            width: el.getAttribute('data-width') || '100%',
-            align: el.getAttribute('data-align') || 'center',
-          };
-        },
-      },
-    ];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    // 渲染 HTML 时默认添加 referrerpolicy，确保导出或预览时不被防盗链拦截
-    return ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, HTMLAttributes)];
-  },
-
-  parseMarkdown: (token, helpers) => {
-    return helpers.createNode('image', {
-      src: token.href,
-      title: token.title,
-      alt: token.text,
-      width: '100%',
-      align: 'center',
-    });
-  },
-
-  renderMarkdown: (node) => {
-    const src = node.attrs?.src ?? '';
-    const alt = node.attrs?.alt ?? '';
-    const title = node.attrs?.title ?? '';
-    return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
-  },
-
+export const EnhancedImageBlock = ImageNode.extend({
   addNodeView() {
     return ReactNodeViewRenderer(ImageComponent);
   },

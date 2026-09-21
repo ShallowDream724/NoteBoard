@@ -38,13 +38,13 @@ describe('largeDoc 判定', () => {
       expect(verdict.threshold).toBe(THRESHOLDS.VISUAL_MODE_LIMIT);
     });
 
-    it('超过 section 阈值 → suggestedMode=section', () => {
-      const content = 'a'.repeat(THRESHOLDS.SECTION_MODE_LIMIT + 1);
+    it('十万行未闭合代码块保持源码模式', () => {
+      const content = '```text\n' + 'long code line\n'.repeat(100_000);
       const verdict = judgeLargeDoc(content);
 
       expect(verdict.isLarge).toBe(true);
-      expect(verdict.suggestedMode).toBe('section');
-      expect(verdict.threshold).toBe(THRESHOLDS.SECTION_MODE_LIMIT);
+      expect(verdict.suggestedMode).toBe('source');
+      expect(verdict.threshold).toBe(THRESHOLDS.VISUAL_MODE_LIMIT);
     });
 
     it('空文档 → isLarge=false', () => {
@@ -54,14 +54,6 @@ describe('largeDoc 判定', () => {
       expect(verdict.charCount).toBe(0);
     });
 
-    it('提前 return：大文档不需要完整扫描', () => {
-      // 超过 section 阈值的文档应该在第一次比较就 return
-      const content = 'a'.repeat(THRESHOLDS.SECTION_MODE_LIMIT + 1);
-      const verdict = judgeLargeDoc(content);
-
-      // 应该是 section 模式，而不是继续检查 visual
-      expect(verdict.suggestedMode).toBe('section');
-    });
   });
 
   describe('shouldSkipCodeBlockHighlight', () => {
