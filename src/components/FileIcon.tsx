@@ -42,27 +42,15 @@ export interface FileIconOptions {
   style?: React.CSSProperties;
 }
 
-// Vector lettering stays consistent across platforms and at different UI scales.
-// Match Lucide's 24px canvas, rounded strokes and folded-page outline.
-const documentGlyphs = {
-  pdf: 'M6 19v-7h1.5a1.75 1.75 0 0 1 0 3.5H6 M11 19v-7h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2z M16 19v-7h3 M16 15.5h2.5',
-  word: 'm6 12 2.5 7 3.5-7 3.5 7 2.5-7',
-  markdown: 'M5.5 18v-6l3 3 3-3v6 M16.5 12v6 m-2.25-2.25 2.25 2.25 2.25-2.25',
-} as const;
-
-function DocumentFormatIcon({
-  format, size, color, className, style,
-}: Pick<FileIconOptions, 'size' | 'className' | 'style'> & {
-  format: keyof typeof documentGlyphs;
-  color: string;
-}) {
+// Markdown is the primary editable format: a solid note silhouette remains
+// distinct from external-document outlines even at 14px and without colour.
+function MarkdownFileIcon({ size, className, style }: FileIconOptions) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+    <svg width={size} height={size} viewBox="0 0 24 24"
+      strokeLinecap="round" strokeLinejoin="round"
       className={className} style={style} aria-hidden="true" focusable="false">
-      <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z" />
-      <path d="M14 2v5a2 2 0 0 0 2 2h5" />
-      <path d={documentGlyphs[format]} strokeWidth={format === 'pdf' ? 1.35 : 1.75} />
+      <path fill="var(--editor-accent, #3b82f6)" d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z" />
+      <path fill="none" stroke="white" strokeWidth="1.8" d="M14 3v6h6 M7 13h10 M7 17h7" />
     </svg>
   );
 }
@@ -91,9 +79,9 @@ export function getFileIcon(
   // 2. 根据文件扩展名返回专属图标与调优配色
   switch (ext) {
     case 'pdf':
-      return <DocumentFormatIcon {...iconProps} format="pdf" color="#e05252" />;
+      return <FileText {...iconProps} color="#dc5252" />;
     case 'doc': case 'docx': case 'odt': case 'rtf':
-      return <DocumentFormatIcon {...iconProps} format="word" color="#3478d4" />;
+      return <FileText {...iconProps} color="var(--editor-text-secondary, #64748b)" />;
     case 'ppt': case 'pptx': case 'odp':
       return <Presentation {...iconProps} color="#d97745" />;
     case 'ods': case 'xlsm':
@@ -105,7 +93,7 @@ export function getFileIcon(
     // ── Markdown 笔记（NoteBoard 核心，品牌蓝）──
     case 'md':
     case 'markdown':
-      return <DocumentFormatIcon {...iconProps} format="markdown" color="var(--editor-accent, #3b82f6)" />;
+      return <MarkdownFileIcon {...iconProps} />;
 
     // ── 思维导图与大纲（XMind / MindMap，活力珊瑚橙）──
     case 'mindmap':

@@ -47,9 +47,10 @@ export const LANGUAGE_BY_EXT: Record<string, LanguageId> = {
 
 /** 从路径提取扩展名（小写，无点） */
 export function extFromPath(path: string): string {
-  const idx = path.lastIndexOf('.');
-  if (idx < 0 || idx === path.length - 1) return '';
-  return path.slice(idx + 1).toLowerCase();
+  const name = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+  const idx = name.lastIndexOf('.');
+  if (idx < 0 || idx === name.length - 1) return '';
+  return name.slice(idx + 1).toLowerCase();
 }
 
 /** 从路径推断 DocumentKind */

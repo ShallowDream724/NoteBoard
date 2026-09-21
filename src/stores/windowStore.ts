@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { DocumentKind } from '../core/ipc/types';
 import { normalizePath } from '../features/explorer/pathUtils';
+import { kindFromPath, languageFromPath } from '../core/docKind';
 // 🔴 R4-05/D05：disposeTabLifecycleAsync 独立入口需终结 documents 记录
 //    （documentStore 不依赖 windowStore——单向依赖无循环）
 import { useDocumentStore } from './documentStore';
@@ -403,11 +404,15 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   updateTabPath: (key, newPath, newDisplayName) => {
+    const document = useDocumentStore.getState().getDocument(newPath);
+    const kind = document?.kind ?? kindFromPath(newPath);
+    const language = document?.language ?? languageFromPath(newPath);
     set((state) => ({
       tabs: state.tabs.map((t) =>
         t.key === key
           // 另存为建立了新的有效磁盘路径，同时解除原文件删除/断开状态。
-          ? { ...t, path: newPath, displayName: newDisplayName, key: newPath, externalStatus: 'clean', isDetached: false }
+          ? { ...t, path: newPath, displayName: newDisplayName, key: newPath, kind, language,
+            viewMode: kind === t.kind ? t.viewMode : null, externalStatus: 'clean', isDetached: false }
           : t,
       ),
       activeKey: state.activeKey === key ? newPath : state.activeKey,

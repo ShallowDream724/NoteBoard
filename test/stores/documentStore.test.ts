@@ -3,6 +3,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useDocumentStore } from '../../src/stores/documentStore';
+import { useWindowStore } from '../../src/stores/windowStore';
 
 const DOCUMENT_KEY = 'C:\\notes\\history.md';
 
@@ -24,6 +25,16 @@ function openDocument(content: string): void {
 }
 
 describe('documentStore 保存基线', () => {
+  it('重命名补上 md 后缀时文档与标签切换类型，保留未保存正文', () => {
+    const old = 'C:\\notes.v1\\test', next = old + '.md';
+    useDocumentStore.getState().upsertFromPayload({ key: old, displayName: 'test', dirPath: 'C:\\notes.v1', kind: 'code', language: 'plaintext', content: '# Draft', encoding: 'utf8', eol: 'lf', size: 7, mtime: 0, readonly: false });
+    useDocumentStore.getState().setContent(old, '# Unsaved draft');
+    useWindowStore.getState().openTab({ key: old, path: old, displayName: 'test', kind: 'code', language: 'plaintext', isDirty: true, isPreview: false, viewMode: null, externalStatus: null, isDetached: false });
+    useDocumentStore.getState().renameDocument(old, next, 'test.md', 'C:\\notes.v1');
+    useWindowStore.getState().updateTabPath(old, next, 'test.md');
+    expect(useDocumentStore.getState().getDocument(next)).toMatchObject({ kind: 'markdown', language: 'markdown', content: '# Unsaved draft', isDirty: true });
+    expect(useWindowStore.getState().getTab(next)).toMatchObject({ kind: 'markdown', language: 'markdown', viewMode: null });
+  });
   beforeEach(() => {
     useDocumentStore.getState().clear();
   });

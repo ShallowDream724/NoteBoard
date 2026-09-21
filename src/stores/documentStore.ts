@@ -11,6 +11,7 @@ import {
   clearDocumentHistory,
 } from '../features/history/documentHistory';
 import { normalizePath } from '../features/explorer/pathUtils';
+import { kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
 
 export interface Document {
   /** 规范化路径 key */
@@ -233,8 +234,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (!doc) return {};
       const newMap = new Map(state.documents);
       newMap.delete(oldKey);
+      const changedExtension = extFromPath(oldKey) !== extFromPath(newKey);
+      const kind = changedExtension ? kindFromPath(newKey) : doc.kind;
       newMap.set(newKey, {
         ...doc,
+        kind,
+        language: changedExtension ? languageFromPath(newKey) : doc.language,
+        savePolicy: resolveSavePolicy(kind),
         key: newKey,
         displayName: newDisplayName,
         dirPath: newDirPath,

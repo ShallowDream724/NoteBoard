@@ -72,7 +72,7 @@ export function TitleBar() {
       <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
         <button aria-label="导出" disabled={!markdownActive} onClick={() => useExportStore.getState().open()}
           style={{ width: 36, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            border: 0, background: 'transparent', color: 'var(--editor-text-muted)', cursor: markdownActive ? 'pointer' : 'default', opacity: markdownActive ? 1 : .4 }}><FileOutput size={16}/></button>
+            border: 0, background: 'transparent', color: 'var(--editor-text-secondary)', cursor: markdownActive ? 'pointer' : 'default', opacity: markdownActive ? 1 : .4 }}><FileOutput size={16}/></button>
       </Tooltip>
       <Tooltip content={hasUpdate ? '发现新版本 NoteBoard (点击查看)' : '检测更新'} side="bottom" sideOffset={6}>
         <button
