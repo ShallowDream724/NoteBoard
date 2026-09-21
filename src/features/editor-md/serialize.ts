@@ -295,6 +295,23 @@ export interface MarkdownManagerLike {
   escapeMarkdownSyntax?: (text: string) => string;
 }
 
+/** Entity cleanup is cosmetic: it must never rewrite opaque math/extension payloads. */
+function normalizeWithoutChangingDocument(
+  raw: string,
+  doc: { eq(other: unknown): boolean },
+  nodeFromJSON: (json: unknown) => unknown,
+  manager: MarkdownManagerLike | null,
+): string {
+  const normalized = normalizeSerializedMarkdown(raw);
+  if (normalized === raw) return raw;
+  if (!manager?.parse) return raw;
+  try {
+    return doc.eq(nodeFromJSON(manager.parse(normalized))) ? normalized : raw;
+  } catch {
+    return raw;
+  }
+}
+
 /** 从 Editor 实例提取共享的 MarkdownManager（无扩展装配时为 null） */
 export function getMarkdownManager(editor: Editor): MarkdownManagerLike | null {
   const manager = (
@@ -328,7 +345,7 @@ export function serializeMarkdownFromDoc(
   }
   try {
     const raw = manager.serialize(doc.toJSON());
-    const normalized = normalizeSerializedMarkdown(raw);
+    const normalized = normalizeWithoutChangingDocument(raw, doc, schema.nodeFromJSON.bind(schema), manager);
     return removeRedundantMarkdownEscapes(normalized, doc, schema.nodeFromJSON.bind(schema), manager);
   } finally {
     if (manager && typeof originalEscaper === 'function') {
@@ -361,7 +378,9 @@ export function serializeMarkdown(editor: Editor): string {
       manager.escapeMarkdownSyntax = escapeMarkdownText;
     }
     try {
-      const normalized = normalizeSerializedMarkdown(getMarkdown.call(editor));
+      const normalized = normalizeWithoutChangingDocument(
+        getMarkdown.call(editor), editor.state.doc, (json) => editor.schema.nodeFromJSON(json), manager,
+      );
       return removeRedundantMarkdownEscapes(
         normalized,
         editor.state.doc,
@@ -401,11 +420,13 @@ export function serializeMarkdown(editor: Editor): string {
 function replaceEditorContent(
   editor: Editor,
   replace: ReturnType<Editor['chain']>,
+  origin: 'sync' | 'history',
 ): void {
   // 文件初始化、历史导航和模式同步属于程序行为，不允许污染用户的局部撤销栈
   replace
     .command(({ tr }) => {
       tr.setMeta('addToHistory', false);
+      tr.setMeta('noteboard-document-replacement', origin);
       return true;
     })
     .run();
@@ -448,12 +469,14 @@ function deduplicateParsedMarkdownMarks(root: ParsedMarkdownNode): void {
 export function parseMarkdown(
   editor: Editor,
   markdown: string,
+  origin: 'sync' | 'history' = 'sync',
 ): void {
   if (markdown.trim() === '') {
     // 空内容同样必须显式控制历史，否则初次打开空文件后可能出现伪撤销步骤
     replaceEditorContent(
       editor,
       editor.chain().clearContent(false),
+      origin,
     );
     return;
   }
@@ -468,6 +491,7 @@ export function parseMarkdown(
       replaceEditorContent(
         editor,
         editor.chain().setContent(parsed, { contentType: 'json' }),
+        origin,
       );
       return;
     }
@@ -482,6 +506,7 @@ export function parseMarkdown(
           preserveWhitespace: 'full',
         },
       }),
+      origin,
     );
   } catch (err) {
     console.error('[NoteBoard] Markdown 解析出现容错，执行安全降级加载:', err);
@@ -500,11 +525,13 @@ export function parseMarkdown(
           },
           { contentType: 'json' },
         ),
+        origin,
       );
     } catch {
       replaceEditorContent(
         editor,
         editor.chain().clearContent(false),
+        origin,
       );
     }
   }

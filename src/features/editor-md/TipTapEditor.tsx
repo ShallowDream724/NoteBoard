@@ -438,7 +438,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         const previousVisualDocument = editor.state.doc;
         if (hasMarkdownContentChanged(editor, entry.content)) {
           // 统一历史应用属于导航而非新编辑，整篇替换明确排除出 TipTap 原生历史
-          parseMarkdown(editor, entry.content);
+          parseMarkdown(editor, entry.content, 'history');
         }
         synchronizeCurrentDocumentHistoryContent(
           docKey,

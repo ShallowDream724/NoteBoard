@@ -73,7 +73,10 @@ describe('Markdown 数学公式', () => {
     const markdown = '价格为 $100，转义 \\$ 保持文本，代码 `$HOME` 与正文中的 $$not-block$$ 也保持原样。';
 
     parseMarkdown(editor, markdown);
-    expect(collectNodes(editor.getJSON(), 'mathInline')).toHaveLength(0);
+    // Paired display math within prose is supported; money/code stay literal.
+    const formulas = collectNodes(editor.getJSON(), 'mathInline');
+    expect(formulas.map((node) => node.attrs?.latex)).toEqual(['not-block']);
+    expect(formulas[0].attrs?.delimiter).toBe('$$');
     expect(editor.getText()).toContain('$100');
     expect(editor.getText()).toContain('$HOME');
     expect(editor.getText()).toContain('$$not-block$$');

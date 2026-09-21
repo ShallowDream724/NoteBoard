@@ -1,0 +1,986 @@
+[
+  {
+    "id": "M001",
+    "group": "基础",
+    "title": "能量关系",
+    "latex": "E=mc^2",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M002",
+    "group": "基础",
+    "title": "上下标",
+    "latex": "a_{ij}^{(n)}+x^{y^z}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M003",
+    "group": "基础",
+    "title": "分式嵌套",
+    "latex": "\\frac{1}{1+\\frac{1}{x}}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M004",
+    "group": "基础",
+    "title": "显示分式",
+    "latex": "\\dfrac{a+b}{c+d}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M005",
+    "group": "基础",
+    "title": "文本分式",
+    "latex": "\\tfrac{1}{2}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M006",
+    "group": "基础",
+    "title": "根式",
+    "latex": "\\sqrt{x^2+y^2}+\\sqrt[3]{z}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M007",
+    "group": "基础",
+    "title": "二项式",
+    "latex": "\\binom{n}{k}=\\frac{n!}{k!(n-k)!}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M008",
+    "group": "基础",
+    "title": "广义分式",
+    "latex": "\\genfrac{(}{)}{0pt}{}{n}{k}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M009",
+    "group": "基础",
+    "title": "循环小数",
+    "latex": "0.\\overline{142857}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M010",
+    "group": "基础",
+    "title": "上下括号",
+    "latex": "\\underbrace{x+\\cdots+x}_{n\\text{次}}+\\overbrace{a+b}^{c}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M011",
+    "group": "字体",
+    "title": "集合字体",
+    "latex": "\\mathbb{R}\\subset\\mathbb{C}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M012",
+    "group": "字体",
+    "title": "花体",
+    "latex": "\\mathcal{L}+\\mathscr{F}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M013",
+    "group": "字体",
+    "title": "哥特体",
+    "latex": "\\mathfrak{g}\\oplus\\mathfrak{h}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M014",
+    "group": "字体",
+    "title": "粗体",
+    "latex": "\\mathbf{A}\\boldsymbol{\\alpha}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M015",
+    "group": "字体",
+    "title": "无衬线打字机",
+    "latex": "\\mathsf{T}+\\mathtt{code}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M016",
+    "group": "字体",
+    "title": "罗马斜体",
+    "latex": "\\mathrm{e}^{\\mathrm{i}\\theta}+\\mathit{Re}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M017",
+    "group": "字体",
+    "title": "中文说明",
+    "latex": "\\text{当 }x>0\\text{ 时，函数连续}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M018",
+    "group": "字体",
+    "title": "文本格式",
+    "latex": "\\textbf{Bold}\\quad\\textit{Italic}\\quad\\textrm{Roman}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M019",
+    "group": "重音",
+    "title": "向量与帽子",
+    "latex": "\\vec{v}+\\hat{x}+\\widehat{ABC}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M020",
+    "group": "重音",
+    "title": "导数点",
+    "latex": "\\dot{x}+\\ddot{x}+\\dddot{x}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M021",
+    "group": "重音",
+    "title": "波浪与横线",
+    "latex": "\\widetilde{AB}+\\overline{AB}+\\underline{AB}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M022",
+    "group": "重音",
+    "title": "箭头标记",
+    "latex": "\\overrightarrow{AB}+\\overleftrightarrow{CD}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M023",
+    "group": "微积分",
+    "title": "积分",
+    "latex": "\\int_0^\\infty e^{-x^2}\\,\\mathrm{d}x=\\frac{\\sqrt{\\pi}}{2}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M024",
+    "group": "微积分",
+    "title": "双重三重积分",
+    "latex": "\\iint_D f\\,\\mathrm{d}A+\\iiint_V g\\,\\mathrm{d}V",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M025",
+    "group": "微积分",
+    "title": "环积分",
+    "latex": "\\oint_C \\mathbf{F}\\cdot\\mathrm{d}\\mathbf{r}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M026",
+    "group": "微积分",
+    "title": "极限",
+    "latex": "\\lim_{x\\to0}\\frac{\\sin x}{x}=1",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M027",
+    "group": "微积分",
+    "title": "上下限",
+    "latex": "\\sum\\limits_{i=1}^n i+\\prod_{j=1}^m j",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M028",
+    "group": "微积分",
+    "title": "偏导",
+    "latex": "\\frac{\\partial^2 f}{\\partial x\\,\\partial y}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M029",
+    "group": "微积分",
+    "title": "梯度",
+    "latex": "\\nabla\\cdot\\mathbf{E}=\\frac{\\rho}{\\varepsilon_0}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M030",
+    "group": "微积分",
+    "title": "拉普拉斯",
+    "latex": "\\nabla^2u=\\Delta u",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M031",
+    "group": "微积分",
+    "title": "评估竖线",
+    "latex": "\\left.\\frac{\\mathrm{d}f}{\\mathrm{d}x}\\right|_{x=0}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M032",
+    "group": "微积分",
+    "title": "微分算符",
+    "latex": "\\operatorname{div}\\mathbf{F}+\\operatorname{curl}\\mathbf{F}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M033",
+    "group": "概率",
+    "title": "概率期望",
+    "latex": "\\mathbb{P}(A\\mid B)=\\frac{\\mathbb{P}(A\\cap B)}{\\mathbb{P}(B)}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M034",
+    "group": "概率",
+    "title": "期望方差",
+    "latex": "\\mathbb{E}[X]+\\operatorname{Var}(X)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M035",
+    "group": "概率",
+    "title": "正态分布",
+    "latex": "X\\sim\\mathcal{N}(\\mu,\\sigma^2)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M036",
+    "group": "概率",
+    "title": "条件独立",
+    "latex": "X\\perp\\!\\!\\!\\perp Y\\mid Z",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M037",
+    "group": "概率",
+    "title": "渐近",
+    "latex": "\\hat{\\theta}_n\\xrightarrow{p}\\theta",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M038",
+    "group": "优化",
+    "title": "最小化",
+    "latex": "\\underset{x\\in\\mathbb{R}^n}{\\operatorname{argmin}}\\ f(x)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M039",
+    "group": "优化",
+    "title": "范数",
+    "latex": "\\lVert x\\rVert_2+\\lVert A\\rVert_F",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M040",
+    "group": "优化",
+    "title": "内积",
+    "latex": "\\langle x,y\\rangle=x^\\top y",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M041",
+    "group": "优化",
+    "title": "梯度下降",
+    "latex": "\\theta_{t+1}=\\theta_t-\\eta\\nabla_\\theta\\mathcal{L}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M042",
+    "group": "优化",
+    "title": "约束",
+    "latex": "\\min_x f(x)\\quad\\text{s.t.}\\quad g(x)\\le0",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M043",
+    "group": "优化",
+    "title": "损失函数",
+    "latex": "\\mathcal{L}=-\\sum_{i=1}^n y_i\\log p_i",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M044",
+    "group": "关系",
+    "title": "关系符",
+    "latex": "a\\le b\\ge c\\ne d\\approx e\\equiv f",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M045",
+    "group": "关系",
+    "title": "集合运算",
+    "latex": "A\\cup B\\cap C\\setminus D\\subseteq E",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M046",
+    "group": "关系",
+    "title": "逻辑",
+    "latex": "\\forall x\\ \\exists y:\\ P(x)\\implies Q(y)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M047",
+    "group": "关系",
+    "title": "否定",
+    "latex": "\\notin+\\nsubseteq+\\nparallel",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M048",
+    "group": "关系",
+    "title": "同构",
+    "latex": "\\cong+\\simeq+\\asymp+\\propto",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M049",
+    "group": "箭头",
+    "title": "长箭头",
+    "latex": "A\\xrightarrow{f}B\\xleftarrow[g]{h}C",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M050",
+    "group": "箭头",
+    "title": "可逆反应",
+    "latex": "A\\rightleftharpoons B",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M051",
+    "group": "箭头",
+    "title": "映射",
+    "latex": "x\\longmapsto f(x)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M052",
+    "group": "箭头",
+    "title": "上下说明",
+    "latex": "A\\overset{f}{\\longrightarrow}B\\underset{g}{\\longleftarrow}C",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M053",
+    "group": "括号",
+    "title": "自动括号",
+    "latex": "\\left(\\frac{a}{b}\\right)\\left[\\sqrt{x}\\right]",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M054",
+    "group": "括号",
+    "title": "不对称定界符",
+    "latex": "\\left\\{x\\in\\mathbb{R}\\,\\middle|\\,x>0\\right.",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M055",
+    "group": "括号",
+    "title": "绝对值",
+    "latex": "\\lvert x\\rvert+\\left|\\frac{a}{b}\\right|",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M056",
+    "group": "括号",
+    "title": "取整",
+    "latex": "\\lfloor x\\rfloor+\\lceil x\\rceil",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M057",
+    "group": "括号",
+    "title": "手动大小",
+    "latex": "\\Biggl(\\biggl[\\Bigl\\{x\\Bigr\\}\\biggr]\\Biggr)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M058",
+    "group": "矩阵",
+    "title": "无括号矩阵",
+    "latex": "\\begin{matrix}a&b\\\\c&d\\end{matrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M059",
+    "group": "矩阵",
+    "title": "圆括号矩阵",
+    "latex": "\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M060",
+    "group": "矩阵",
+    "title": "方括号矩阵",
+    "latex": "\\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M061",
+    "group": "矩阵",
+    "title": "花括号矩阵",
+    "latex": "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M062",
+    "group": "矩阵",
+    "title": "行列式",
+    "latex": "\\begin{vmatrix}a&b\\\\c&d\\end{vmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M063",
+    "group": "矩阵",
+    "title": "双竖线矩阵",
+    "latex": "\\begin{Vmatrix}a&b\\\\c&d\\end{Vmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M064",
+    "group": "矩阵",
+    "title": "小矩阵",
+    "latex": "\\left(\\begin{smallmatrix}a&b\\\\c&d\\end{smallmatrix}\\right)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M065",
+    "group": "矩阵",
+    "title": "矩阵行距",
+    "latex": "\\begin{pmatrix}1&2\\\\[2pt]3&4\\end{pmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M066",
+    "group": "矩阵",
+    "title": "负行距",
+    "latex": "\\begin{bmatrix}1&0\\\\[-1pt]0&1\\end{bmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M067",
+    "group": "矩阵",
+    "title": "增广矩阵",
+    "latex": "\\left[\\begin{array}{cc|c}1&0&a\\\\0&1&b\\end{array}\\right]",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M068",
+    "group": "矩阵",
+    "title": "水平分隔线",
+    "latex": "\\begin{array}{cc}a&b\\\\\\hline c&d\\end{array}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M069",
+    "group": "矩阵",
+    "title": "嵌套矩阵",
+    "latex": "\\begin{pmatrix}\\begin{matrix}a&b\\\\c&d\\end{matrix}&0\\\\0&I\\end{pmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M070",
+    "group": "矩阵",
+    "title": "省略号矩阵",
+    "latex": "\\begin{bmatrix}a_{11}&\\cdots&a_{1n}\\\\\\vdots&\\ddots&\\vdots\\\\a_{n1}&\\cdots&a_{nn}\\end{bmatrix}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M071",
+    "group": "多行",
+    "title": "对齐推导",
+    "latex": "\\begin{aligned}f(x)&=(x+1)^2\\\\&=x^2+2x+1\\end{aligned}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M072",
+    "group": "多行",
+    "title": "带行距对齐",
+    "latex": "\\begin{aligned}a&=b+c\\\\[6pt]d&=e+f\\end{aligned}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M073",
+    "group": "多行",
+    "title": "分段函数",
+    "latex": "f(x)=\\begin{cases}x^2,&x\\ge0\\\\-x,&x<0\\end{cases}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M074",
+    "group": "多行",
+    "title": "显示分段",
+    "latex": "f(x)=\\begin{dcases}\\frac1x,&x>0\\\\0,&x=0\\end{dcases}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M075",
+    "group": "多行",
+    "title": "右侧分段",
+    "latex": "\\begin{rcases}a\\\\b\\end{rcases}=c",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M076",
+    "group": "多行",
+    "title": "居中多行",
+    "latex": "\\begin{gathered}a=b+c\\\\d=e+f\\end{gathered}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M077",
+    "group": "多行",
+    "title": "多列对齐",
+    "latex": "\\begin{alignedat}{2}a&=b&\\qquad c&=d\\\\e&=f&g&=h\\end{alignedat}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M078",
+    "group": "多行",
+    "title": "堆叠条件",
+    "latex": "\\sum_{\\substack{0<i<n\\\\i\\text{为偶数}}}i",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M079",
+    "group": "颜色框",
+    "title": "结果方框",
+    "latex": "\\boxed{\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M080",
+    "group": "颜色框",
+    "title": "局部颜色",
+    "latex": "\\textcolor{red}{x}+\\textcolor{blue}{y}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M081",
+    "group": "颜色框",
+    "title": "声明式颜色",
+    "latex": "{\\color{red}x^2}+y^2",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M082",
+    "group": "颜色框",
+    "title": "十六进制颜色",
+    "latex": "\\color{#0077cc}{E=mc^2}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M083",
+    "group": "颜色框",
+    "title": "文本底色",
+    "latex": "\\colorbox{yellow}{Important}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M084",
+    "group": "颜色框",
+    "title": "有色边框",
+    "latex": "\\fcolorbox{red}{aqua}{Result}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M085",
+    "group": "颜色框",
+    "title": "嵌套颜色方框",
+    "latex": "\\boxed{\\textcolor{blue}{\\frac{a}{b}}}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M086",
+    "group": "颜色框",
+    "title": "取消划线",
+    "latex": "\\cancel{x}+\\bcancel{y}+\\xcancel{z}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M087",
+    "group": "颜色框",
+    "title": "不支持取消至新值",
+    "latex": "\\cancelto{0}{x}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M088",
+    "group": "排版",
+    "title": "间距",
+    "latex": "a\\,b\\:c\\;d\\quad e\\qquad f\\!g",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M089",
+    "group": "排版",
+    "title": "水平间距",
+    "latex": "a\\hspace{1em}b\\kern{2pt}c",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M090",
+    "group": "排版",
+    "title": "占位",
+    "latex": "\\phantom{x^2}+\\hphantom{abc}+\\vphantom{\\frac12}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M091",
+    "group": "排版",
+    "title": "压缩高度",
+    "latex": "\\smash{\\frac{a}{b}}+x",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M092",
+    "group": "排版",
+    "title": "左右叠加",
+    "latex": "\\mathllap{A}B+\\mathrlap{C}D+\\mathclap{E}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M093",
+    "group": "排版",
+    "title": "行内大算符",
+    "latex": "\\displaystyle\\sum_{i=1}^n\\frac1i",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M094",
+    "group": "排版",
+    "title": "小字号",
+    "latex": "\\scriptstyle x+\\scriptscriptstyle y",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M095",
+    "group": "宏",
+    "title": "局部新宏",
+    "latex": "\\newcommand{\\myR}{\\mathbb{R}}\\myR^n",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M096",
+    "group": "宏",
+    "title": "带参数宏",
+    "latex": "\\newcommand{\\norm}[1]{\\left\\lVert#1\\right\\rVert}\\norm{x}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M097",
+    "group": "宏",
+    "title": "定义宏",
+    "latex": "\\def\\foo#1{#1^2}\\foo{x}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M098",
+    "group": "宏",
+    "title": "局部组宏",
+    "latex": "{\\def\\foo{x}\\foo}+y",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M099",
+    "group": "算子",
+    "title": "自定义算子",
+    "latex": "\\operatorname{rank}(A)+\\operatorname{tr}(A)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M100",
+    "group": "算子",
+    "title": "带上下限算子",
+    "latex": "\\operatorname*{argmax}_{x} f(x)",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M101",
+    "group": "算子",
+    "title": "模运算",
+    "latex": "a\\equiv b\\pmod n",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M102",
+    "group": "算子",
+    "title": "三角双曲",
+    "latex": "\\sin x+\\cos x+\\tanh x+\\arcsin x",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M103",
+    "group": "物理",
+    "title": "狄拉克符号",
+    "latex": "\\bra{\\psi}\\ket{\\phi}+\\braket{\\psi|\\phi}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M104",
+    "group": "物理",
+    "title": "带矢量方程",
+    "latex": "\\mathbf{F}=q(\\mathbf{E}+\\mathbf{v}\\times\\mathbf{B})",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M105",
+    "group": "物理",
+    "title": "量纲单位",
+    "latex": "9.81\\,\\mathrm{m\\,s^{-2}}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M106",
+    "group": "物理",
+    "title": "普朗克常数",
+    "latex": "\\hbar\\omega=E",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M107",
+    "group": "边界",
+    "title": "百分号",
+    "latex": "\\text{准确率}=99\\%",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M108",
+    "group": "边界",
+    "title": "文本美元",
+    "latex": "\\text{价格：}\\$100",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M109",
+    "group": "边界",
+    "title": "特殊字符",
+    "latex": "\\#\\quad\\&\\quad\\_\\quad\\{\\quad\\}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M110",
+    "group": "边界",
+    "title": "原文字面实体",
+    "latex": "\\text{a\\&amp;b}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M111",
+    "group": "编号",
+    "title": "公式编号",
+    "latex": "E=mc^2\\tag{1}",
+    "displayOnly": true,
+    "supported": true
+  },
+  {
+    "id": "M112",
+    "group": "编号",
+    "title": "自定义编号",
+    "latex": "a^2+b^2=c^2\\tag{A.1}",
+    "displayOnly": true,
+    "supported": true
+  },
+  {
+    "id": "M113",
+    "group": "编号",
+    "title": "无括号编号",
+    "latex": "x=y\\tag*{★}",
+    "displayOnly": true,
+    "supported": true
+  },
+  {
+    "id": "M114",
+    "group": "边界",
+    "title": "不支持跨公式标签",
+    "latex": "\\label{eq:a}x",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M115",
+    "group": "边界",
+    "title": "不支持跨公式引用",
+    "latex": "\\ref{eq:a}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M116",
+    "group": "边界",
+    "title": "不支持宏包加载",
+    "latex": "\\require{physics}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M117",
+    "group": "边界",
+    "title": "不支持环境定义",
+    "latex": "\\newenvironment{foo}{}{}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M118",
+    "group": "边界",
+    "title": "不支持physics宏",
+    "latex": "\\dv{f}{x}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M119",
+    "group": "边界",
+    "title": "未闭合分式",
+    "latex": "\\frac{a}{",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M120",
+    "group": "边界",
+    "title": "未知宏",
+    "latex": "\\notARealCommand{x}",
+    "displayOnly": false,
+    "supported": false
+  },
+  {
+    "id": "M121",
+    "group": "化学与单位",
+    "title": "化学反应与电荷",
+    "latex": "\\ce{2H2 + O2 -> 2H2O}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M122",
+    "group": "化学与单位",
+    "title": "离子与同位素",
+    "latex": "\\ce{^{14}_{6}C -> ^{14}_{7}N + e-}",
+    "displayOnly": false,
+    "supported": true
+  },
+  {
+    "id": "M123",
+    "group": "化学与单位",
+    "title": "科学计数单位",
+    "latex": "\\pu{1.23e-4 mol L-1}",
+    "displayOnly": false,
+    "supported": true
+  }
+]
