@@ -22,6 +22,7 @@ import { getBaseline } from '@/features/editor-md/serialize';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import * as ipc from '@/core/ipc/commands';
+import { on, off } from '@/core/emitter';
 
 vi.mock('@/core/ipc/commands', () => ({
   writeDocument: vi.fn(),
@@ -113,6 +114,24 @@ describe('S09 保存竞态与版本屏障（H 节时序）', () => {
     } finally {
       fake.dispose();
     }
+  });
+
+  it('清理订阅者只在写盘成功且基线更新后收到保存通知', async () => {
+    seedDocument('旧正文');
+    const fake = installFakeCaps(KEY, '新正文');
+    const notify = vi.fn(() => {
+      expect(useDocumentStore.getState().getDocument(KEY)?.baselineContent).toBe('新正文');
+    });
+    on('document-saved', notify);
+    try {
+      vi.mocked(ipc.writeDocument).mockResolvedValueOnce({ ok: false, mtime: 0, size: 0, error: null });
+      expect(await writeDocumentWithBarrier(KEY, '新正文')).toBe(false);
+      expect(notify).not.toHaveBeenCalled();
+      vi.mocked(ipc.writeDocument).mockResolvedValueOnce({ ok: true, mtime: 1, size: 9, error: null });
+      expect(await writeDocumentWithBarrier(KEY, '新正文')).toBe(true);
+      expect(notify).toHaveBeenCalledOnce();
+      expect(notify).toHaveBeenCalledWith({ key: KEY, generation: expect.any(Number) });
+    } finally { off('document-saved', notify); fake.dispose(); }
   });
 
   it('时序 2：保存 r10 期间输入到 r11 → 磁盘 r10、编辑区 r11、dirty 保持', async () => {

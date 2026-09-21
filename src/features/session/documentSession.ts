@@ -26,6 +26,7 @@ import { getBaseline, normalizeEol } from '../editor-md/serialize';
 import { onDocumentSaved } from '../staging/stagingManager';
 // 🔴 S14：写盘后登记自身写入（目录 watcher 忽略自身原子替换事件，防自触发循环）
 import { noteSelfWrite } from '../explorer/directoryWatcher';
+import { emit } from '../../core/emitter';
 
 // ── 🔴 N04：会话代际（独立于路径的生命周期身份） ──
 //
@@ -112,6 +113,7 @@ export function getSavedRevision(docKey: string): number {
 
 /** 文档身份迁移（另存为）/最终关闭时清理会话记录 */
 export function migrateDocumentSession(fromKey: string, toKey: string): void {
+  emit('document-session-ended', { key: fromKey });
   const mirrored = mirroredRevisions.get(fromKey);
   const saved = savedRevisions.get(fromKey);
   if (mirrored !== undefined) mirroredRevisions.set(toKey, mirrored);
@@ -133,6 +135,7 @@ export function migrateDocumentSession(fromKey: string, toKey: string): void {
  *    串接在旧队列之后（不越过未完成的旧磁盘写入），队尾自清理防泄漏。
  */
 export function disposeDocumentSession(docKey: string): void {
+  emit('document-session-ended', { key: docKey });
   clearDocumentRevision(docKey);
   mirroredRevisions.delete(docKey);
   savedRevisions.delete(docKey);
@@ -417,6 +420,7 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
       await refreshDirtyAfterWrite(docKey);
       // 携带内容证明的暂存清理：只删被覆盖的副本
       await onDocumentSaved(docKey, content);
+      if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     }
   }).catch((e) => {
     console.error('自动保存失败:', e);
@@ -468,6 +472,7 @@ export async function writeDocumentWithBarrier(
     savedRevisions.set(docKey, revision);
     await refreshDirtyAfterWrite(docKey);
     await onDocumentSaved(docKey, content);
+    if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     return true;
   });
 }

@@ -24,6 +24,9 @@ export type AppEvents = {
   // 请求关闭标题栏所有弹出菜单（新建菜单、保存菜单、主题菜单及标签页右键菜单）
   'close-titlebar-menus': void;
   'image-file-restored': { path: string };
+  // Only emitted after a successful write in the same document session.
+  'document-saved': { key: string; generation: number };
+  'document-session-ended': { key: string };
   // mitt 要求的索引签名
   [key: string]: unknown;
 };

@@ -4,7 +4,7 @@ import { DialogShell, showTransientDialog } from '../../components/TransientDial
 interface Choice { action: 'keep' | 'trash'; remember: boolean }
 function ImageRemovalChoice({ filename, finish }: { filename: string; finish: (choice: Choice) => void }) {
   const [remember, setRemember] = useState(false);
-  return <DialogShell title="同时删除图片文件？" description="图片已从正文移除。同步删除会先保存文档，再将未被引用的图片移入系统回收站；撤销时可以恢复。"
+  return <DialogShell title="同时删除图片文件？" description="图片已从正文移除。选择同步删除后，会在文档下次保存成功时将未被引用的图片移入回收站，不会替你保存正文；撤销可恢复图片。"
     onDismiss={() => finish({ action: 'keep', remember: false })}>
     <p style={{ overflowWrap: 'anywhere', fontSize: 13 }}>{filename}</p>
     <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, margin: '18px 0' }}>
