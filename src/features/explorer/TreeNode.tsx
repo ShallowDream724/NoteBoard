@@ -154,21 +154,16 @@ export const TreeNode = memo(function TreeNode({
     }
   };
 
-  // 单击条目：文件则仅选中高亮（不打开文件）；文件夹则选中并展开/收起目录
+  // 单击文件即打开；双击产生的第二个 click 不重复打开或折叠目录。
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isRenaming || e.detail > 1) return;
     // 用户手动点击条目本身已在可视区域内，仅设置高亮不触发额外滚动
     setRevealed(node.path, false);
     if (node.isDir) {
       toggle(node.path);
-    }
-  };
-
-  // 双击条目：文件则打开文档并激活 Tab
-  const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!node.isDir) {
-      openDocument(node.path);
+    } else {
+      void openDocument(node.path);
     }
   };
 
@@ -193,6 +188,14 @@ export const TreeNode = memo(function TreeNode({
 
   // 按键响应：支持 F2 快捷键直接进入重命名
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget || isRenaming) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (node.isDir) toggle(node.path);
+      else void openDocument(node.path);
+      return;
+    }
     if (e.key === 'F2') {
       e.preventDefault();
       e.stopPropagation();
@@ -311,7 +314,6 @@ export const TreeNode = memo(function TreeNode({
           onMouseEnter={handleHover}
           onMouseLeave={handleLeave}
           onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
           onContextMenu={handleContextMenu}
           onKeyDown={handleKeyDown}
         >

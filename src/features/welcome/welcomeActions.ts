@@ -30,7 +30,8 @@ function nextUntitledKey(prefix: string): string {
  * 选中后逐个打开为 tab
  */
 export async function openFileDialog(): Promise<void> {
-  const paths = await open({
+  const { requestFilePaths } = await import('./FileOpenDialog');
+  const paths = await requestFilePaths(async () => open({
     multiple: true,
     filters: [
       { name: '全部文件', extensions: ['*'] },
@@ -40,7 +41,7 @@ export async function openFileDialog(): Promise<void> {
       { name: '画板与绘图', extensions: ['excalidraw', 'drawio', 'dio', 'board'] },
       { name: '图表与信息图脚本', extensions: ['mmd', 'mermaid', 'puml', 'plantuml', 'uml', 'infographic', 'ig'] },
     ],
-  });
+  }));
   if (!paths || paths.length === 0) return;
 
   for (const path of paths) {
