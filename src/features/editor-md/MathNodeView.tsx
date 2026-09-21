@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type FocusEvent } from 'react';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
-import { TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { isDisplayMath, type MathDelimiter } from './mathSyntax';
 import { renderMath, type MathRendering } from './mathRendering';
 import { observe } from './viewportActivation';
@@ -28,7 +28,12 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     if (!element) return;
     return observe(element, () => setVisible(true), { once: true });
   }, []);
-  useEffect(() => { if (selected) setEditing(true); }, [selected]);
+  useEffect(() => {
+    const selection = editor.state.selection;
+    // TipTap also marks atoms selected when a text/all-document selection covers
+    // them. Only an explicit node selection may move focus into formula source.
+    if (selected && selection instanceof NodeSelection && selection.from === getPos()) setEditing(true);
+  }, [selected, editor, getPos]);
   useEffect(() => {
     if (editing) {
       const input = inputRef.current;

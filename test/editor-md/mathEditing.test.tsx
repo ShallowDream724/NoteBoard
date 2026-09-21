@@ -9,6 +9,27 @@ import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensi
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 
 describe('公式源码输入', () => {
+  it('Ctrl+A selects the document without opening or focusing its formulas', async () => {
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    const editor = new Editor({ extensions: [StarterKit, MathInline, MathBlock, Markdown],
+      content: { type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Before ' }, { type: 'mathInline', attrs: { latex: 'x' } }] },
+        { type: 'mathBlock', attrs: { latex: 'y' } },
+        { type: 'paragraph', content: [{ type: 'text', text: 'After' }] },
+      ] } });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => root.render(<EditorContent editor={editor}/>));
+      await act(async () => { editor.view.focus(); editor.commands.selectAll(); });
+      expect(editor.state.selection.from).toBeLessThanOrEqual(1);
+      expect(editor.state.selection.to).toBeGreaterThanOrEqual(editor.state.doc.content.size - 1);
+      expect(host.querySelector('textarea')).toBeNull();
+      expect(document.activeElement?.tagName).not.toBe('TEXTAREA');
+      await act(async () => { host.querySelector('.math-node-display')!.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+      expect(host.querySelector('textarea')?.value).toBe('y');
+    } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
+  });
   for (const key of ['Backspace', 'Delete']) {
     it('空公式 ' + key + ' 删除节点后正文可继续输入，撤销可恢复', async () => {
       (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
