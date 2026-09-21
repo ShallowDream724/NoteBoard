@@ -1,6 +1,4 @@
-// NoteBoard 文件格式优雅图标体系
-// 集中管理资源管理器树、标签页及其他视图中的文件图标与精致色彩
-// 支持常见/特殊图片、画板、Markdown、代码、数据文件及各类配置等
+// Shared file-type icons for the tree, tabs, favorites and file detail view.
 
 import type { ReactNode } from 'react';
 import {
@@ -29,13 +27,12 @@ import {
   GitMerge,
   Layout,
   ChartColumn,
-  FileType2,
   Presentation,
   BookOpen,
   FunctionSquare,
   FileSpreadsheet,
 } from 'lucide-react';
-import { extFromPath } from '../../core/docKind';
+import { extFromPath } from '../core/docKind';
 
 export interface FileIconOptions {
   size?: number;
@@ -45,10 +42,32 @@ export interface FileIconOptions {
   style?: React.CSSProperties;
 }
 
-/**
- * 根据文件路径与状态获取优雅的文件/文件夹图标
- */
-export function getExplorerFileIcon(
+// Vector lettering stays consistent across platforms and at different UI scales.
+// Match Lucide's 24px canvas, rounded strokes and folded-page outline.
+const documentGlyphs = {
+  pdf: 'M6 19v-7h1.5a1.75 1.75 0 0 1 0 3.5H6 M11 19v-7h1a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2z M16 19v-7h3 M16 15.5h2.5',
+  word: 'm6 12 2.5 7 3.5-7 3.5 7 2.5-7',
+  markdown: 'M5.5 18v-6l3 3 3-3v6 M16.5 12v6 m-2.25-2.25 2.25 2.25 2.25-2.25',
+} as const;
+
+function DocumentFormatIcon({
+  format, size, color, className, style,
+}: Pick<FileIconOptions, 'size' | 'className' | 'style'> & {
+  format: keyof typeof documentGlyphs;
+  color: string;
+}) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+      className={className} style={style} aria-hidden="true" focusable="false">
+      <path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z" />
+      <path d="M14 2v5a2 2 0 0 0 2 2h5" />
+      <path d={documentGlyphs[format]} strokeWidth={format === 'pdf' ? 1.35 : 1.75} />
+    </svg>
+  );
+}
+
+export function getFileIcon(
   fileNameOrPath: string,
   options: FileIconOptions = {},
 ): ReactNode {
@@ -72,9 +91,9 @@ export function getExplorerFileIcon(
   // 2. 根据文件扩展名返回专属图标与调优配色
   switch (ext) {
     case 'pdf':
-      return <FileType2 {...iconProps} color="#e05252" />;
+      return <DocumentFormatIcon {...iconProps} format="pdf" color="#e05252" />;
     case 'doc': case 'docx': case 'odt': case 'rtf':
-      return <FileText {...iconProps} color="#3478d4" />;
+      return <DocumentFormatIcon {...iconProps} format="word" color="#3478d4" />;
     case 'ppt': case 'pptx': case 'odp':
       return <Presentation {...iconProps} color="#d97745" />;
     case 'ods': case 'xlsm':
@@ -86,7 +105,7 @@ export function getExplorerFileIcon(
     // ── Markdown 笔记（NoteBoard 核心，品牌蓝）──
     case 'md':
     case 'markdown':
-      return <FileText {...iconProps} color="var(--editor-accent, #3b82f6)" />;
+      return <DocumentFormatIcon {...iconProps} format="markdown" color="var(--editor-accent, #3b82f6)" />;
 
     // ── 思维导图与大纲（XMind / MindMap，活力珊瑚橙）──
     case 'mindmap':

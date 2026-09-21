@@ -19,7 +19,7 @@ import { useExplorerStore } from './explorerStore';
 import { useTreeData } from './useTreeData';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { markOpenDocumentDeleted } from '../external/missingFileGuard';
-import { getExplorerFileIcon } from './fileIcons';
+import { getFileIcon } from '../../components/FileIcon';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { showToast } from '../../stores/toastStore';
@@ -339,7 +339,7 @@ export const TreeNode = memo(function TreeNode({
           )}
 
           {/* 文件/目录优雅图标 */}
-          {getExplorerFileIcon(node.path, {
+          {getFileIcon(node.path, {
             isDir: node.isDir,
             isOpen: expanded,
             size: 14,

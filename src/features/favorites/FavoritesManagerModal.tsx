@@ -29,7 +29,7 @@ import type {
   FavoriteFolderItem,
   FavoriteFileItem,
 } from '../../core/ipc/types';
-import { getExplorerFileIcon } from '../explorer/fileIcons';
+import { getFileIcon } from '../../components/FileIcon';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import * as ipc from '../../core/ipc/commands';
 import { showToast } from '../../stores/toastStore';
@@ -1282,7 +1282,7 @@ function FavoriteFileRow({
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
         {/* 文件类型图标 */}
-        {getExplorerFileIcon(item.path || item.name, { size: 16 })}
+        {getFileIcon(item.path || item.name, { size: 16 })}
 
         {isEditing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }} onClick={(e) => e.stopPropagation()}>

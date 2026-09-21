@@ -77,7 +77,7 @@ import {
   openStagingArea,
 } from '../../features/welcome/welcomeActions';
 import * as ipc from '../../core/ipc/commands';
-import { getExplorerFileIcon } from '../../features/explorer/fileIcons';
+import { getFileIcon } from '../FileIcon';
 import { checkOpenDocumentStillExists } from '../../features/external/missingFileGuard';
 
 // ── 类型图标映射 ──
@@ -100,7 +100,7 @@ function getTabIcon(tab: Tab) {
 
   // 统一调用优雅文件格式图标体系
   const targetPathOrName = tab.path || tab.displayName;
-  return getExplorerFileIcon(targetPathOrName, { size: 14 });
+  return getFileIcon(targetPathOrName, { size: 14 });
 }
 
 // ── 单个 Tab ──

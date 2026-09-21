@@ -3,7 +3,8 @@
 // 提供系统默认打开与文件定位等快捷操作
 
 import { useState } from 'react';
-import { FileQuestion, ExternalLink, FolderOpen, Copy, Check } from 'lucide-react';
+import { ExternalLink, FolderOpen, Copy, Check } from 'lucide-react';
+import { getFileIcon } from './FileIcon';
 import * as ipc from '../core/ipc/commands';
 import { extFromPath } from '../core/docKind';
 import { useDocumentStore } from '../stores/documentStore';
@@ -99,7 +100,7 @@ export function UnsupportedView({ filePath, fileName }: Omit<UnsupportedViewProp
             justifyContent: 'center',
           }}
         >
-          <FileQuestion size={32} color="var(--editor-text-muted)" />
+          {getFileIcon(filePath, { size: 32 })}
         </div>
 
         {/* 文件名与类型标签 */}
