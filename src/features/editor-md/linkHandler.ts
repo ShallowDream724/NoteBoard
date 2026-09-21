@@ -7,39 +7,8 @@ import { useExplorerStore } from '../explorer/explorerStore';
 import { showToast } from '../../stores/toastStore';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 
-/** 规范化相对路径并基于基准目录计算绝对路径 */
-export function resolveRelativeDocPath(baseDir: string, relativePath: string): string {
-  // 去除可能的 file:/// 协议头与 URL 编码
-  let cleanRel = decodeURIComponent(relativePath.replace(/^file:[\\/]+/, '')).replace(/\//g, '\\');
-
-  // 若已经是 Windows 绝对路径直接返回
-  if (/^[a-zA-Z]:\\/.test(cleanRel)) {
-    return cleanRel;
-  }
-
-  // 去除开头的 .\ 或 \
-  cleanRel = cleanRel.replace(/^(\.\\|\\)+/, '');
-
-  const parts = baseDir.replace(/\//g, '\\').split('\\').filter(Boolean);
-  const relParts = cleanRel.split('\\').filter(Boolean);
-
-  for (const part of relParts) {
-    if (part === '.') {
-      continue;
-    } else if (part === '..') {
-      if (parts.length > 1) {
-        parts.pop();
-      }
-    } else {
-      parts.push(part);
-    }
-  }
-
-  if (parts.length === 0) return relativePath;
-  const drive = parts[0];
-  const rest = parts.slice(1).join('\\');
-  return rest ? `${drive}\\${rest}` : drive;
-}
+import { resolveRelativeDocPath } from '../../core/documentPath';
+export { resolveRelativeDocPath } from '../../core/documentPath';
 
 // 记录上一次点击时间与链接，用于短时防抖（防止连击触发多次打开）
 let lastClickTime = 0;

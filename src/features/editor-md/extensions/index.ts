@@ -21,6 +21,7 @@ import Highlight from '@tiptap/extension-highlight';
 import { Markdown } from '@tiptap/markdown';
 
 import { CodeBlockView } from '../codeBlockView';
+import { CodeHighlight } from '../codeHighlightExtension';
 import { searchReplaceExtension } from '../searchReplace';
 import { MathInline, MathBlock } from '../katexExtensions';
 import { MermaidBlock } from '../mermaidExtension';
@@ -157,6 +158,7 @@ export interface BuildExtensionsOptions {
 // 会让合法的 **文字 `code`** 在解析时生成非法 marks，并触发整篇纯文本降级。
 const MarkdownCompatibleCode = Code.extend({
   excludes: '',
+  addKeyboardShortcuts() { return {}; },
 });
 
 // Ctrl+Shift+B belongs to the application layout. Keep ">" input and toolbar commands.
@@ -249,6 +251,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     // 普通 CodeBlock + 自定义 NodeView 不消费 lowlight 选项；语言选择、复制及 Markdown 序列化保持原样。
     // 高亮库仍由真正使用它的视图加载，不能为无效选项在首开注册全部语法。
     CodeBlockView,
+    CodeHighlight,
 
     // 查找/替换
     searchReplaceExtension(),

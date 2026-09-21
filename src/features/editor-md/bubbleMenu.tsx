@@ -4,6 +4,10 @@
 
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { TextSelection } from '@tiptap/pm/state';
+import { isEmbeddedEditing } from './embeddedEditor';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { type Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
 import {
@@ -227,17 +231,6 @@ function HighlightPalette({
 }
 
 /** 从编辑器向外查找真正承载滚动的容器 */
-function findScrollParent(editorDom: HTMLElement): HTMLElement {
-  let current = editorDom.parentElement;
-  while (current) {
-    const { overflowY } = window.getComputedStyle(current);
-    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
-      return current;
-    }
-    current = current.parentElement;
-  }
-  return editorDom.parentElement ?? editorDom;
-}
 
 /** 判断当前选区是否为表格跨单元格多选（CellSelection） */
 function isCellSelection(selection: unknown): boolean {
@@ -258,6 +251,7 @@ export function EditorBubbleMenu({
   onOpenLinkModal?: () => void;
 }) {
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const preferredPosition = useSettingsStore(state => state.settings.editor.selectionToolbarPosition ?? 'below');
 
   // TipTap 3.30 的 BubbleMenu 会在 shouldShow/options 引用变化时派发更新事务。
   // 选区变化期间若每次渲染都创建新对象，会形成 React → TipTap 事务 → React 的
@@ -266,7 +260,7 @@ export function EditorBubbleMenu({
   // render can permanently cache its detached bootstrap parent as the boundary.
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    setScrollParent(findScrollParent(editor.view.dom));
+    setScrollParent(findScrollContainer(editor.view.dom));
   }, [editor]);
   const shouldShow = useCallback(({
     editor: currentEditor,
@@ -276,7 +270,9 @@ export function EditorBubbleMenu({
     state: { selection: { empty: boolean } };
   }) => {
     const { selection } = state;
-    if (selection.empty) return false;
+    if (selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
+    if (!currentEditor.view.hasFocus()) return false;
+    if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
     // 不在代码块中显示浮层菜单
     if (currentEditor.isActive('codeBlock')) return false;
     // 跨单元格多选时不弹出行内文本气泡菜单，交由表格工具栏处理
@@ -285,7 +281,7 @@ export function EditorBubbleMenu({
   }, []);
   const bubbleMenuOptions = useMemo(() => ({
     strategy: 'fixed' as const,
-    placement: 'top' as const,
+    placement: preferredPosition === 'above' ? 'top-end' as const : 'bottom-end' as const,
     offset: 8,
     flip: {
       // 以编辑器滚动容器为边界约束，顶部空间不足时翻转到文本下方。
@@ -303,7 +299,7 @@ export function EditorBubbleMenu({
     },
     // 监听编辑器真实滚动容器，滚动时即时更新定位与翻转。
     scrollTarget: scrollParent ?? undefined,
-  }), [scrollParent]);
+  }), [scrollParent, preferredPosition]);
 
   if (!scrollParent) return null;
 
@@ -561,7 +557,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     if (!editor) return;
 
     const editorDom = editor.view.dom;
-    const scrollParent = findScrollParent(editorDom);
+    const scrollParent = findScrollContainer(editorDom);
 
     const updateToolbar = () => {
       const isInTable = editor.isActive('table');

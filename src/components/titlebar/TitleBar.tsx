@@ -3,7 +3,7 @@
 // 详见 docs/07-UI布局与交互规范.md §2
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Settings as SettingsIcon, RefreshCw } from 'lucide-react';
+import { Settings as SettingsIcon, RefreshCw, FileOutput } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
 import { ThemeMenu } from './ThemeMenu';
@@ -12,11 +12,16 @@ import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useUpdateStore } from '../../stores/updateStore';
 import { SidebarToggle } from '../SidebarToggle';
+import { useWindowStore } from '../../stores/windowStore';
+import { useExportStore } from '../../features/export/exportStore';
 
 export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
+  const outlineVisible = useLayoutStore((s) => s.outlineVisible);
+  const toggleOutline = useLayoutStore((s) => s.toggleOutline);
+  const markdownActive = useWindowStore((s) => s.tabs.find(tab => tab.key === s.activeKey)?.kind === 'markdown');
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
@@ -64,6 +69,11 @@ export function TitleBar() {
       />
 
       {/* 检测更新按钮（主动检测更新，有新版本时标上小红点） */}
+      <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
+        <button aria-label="导出" disabled={!markdownActive} onClick={() => useExportStore.getState().open()}
+          style={{ width: 36, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            border: 0, background: 'transparent', color: 'var(--editor-text-muted)', cursor: markdownActive ? 'pointer' : 'default', opacity: markdownActive ? 1 : .4 }}><FileOutput size={16}/></button>
+      </Tooltip>
       <Tooltip content={hasUpdate ? '发现新版本 NoteBoard (点击查看)' : '检测更新'} side="bottom" sideOffset={6}>
         <button
           type="button"
@@ -182,6 +192,9 @@ export function TitleBar() {
       </Tooltip>
 
       {/* 窗口控制按钮 */}
+      {markdownActive && <div style={{ width: 36, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <SidebarToggle side="right" visible={outlineVisible} onToggle={toggleOutline} />
+      </div>}
       <WindowControls />
     </div>
   );

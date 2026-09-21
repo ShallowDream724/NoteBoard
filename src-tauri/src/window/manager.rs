@@ -173,6 +173,10 @@ pub fn unregister_window(state: &State<'_, Mutex<AppState>>, label: &str) -> Opt
 
 /// 窗口事件处理
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
+    if window.label().starts_with("nb-export-") { return; }
+    if matches!(event, WindowEvent::Destroyed) {
+        crate::export::release_owner(window.app_handle(), window.label());
+    }
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             let label = window.label().to_string();

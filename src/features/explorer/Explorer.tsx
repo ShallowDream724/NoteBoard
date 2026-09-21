@@ -18,6 +18,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { ExplorerBreadcrumb } from './ExplorerBreadcrumb';
 import { Tooltip } from '../../components/Tooltip';
+import { ExplorerHeader } from './ExplorerHeader';
 
 // ── Explorer 组件 ──
 
@@ -170,26 +171,7 @@ export function Explorer() {
   return (
     <div style={containerStyle} role="tree">
       {/* 标题行 */}
-      <div
-        style={{
-          height: 30,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 8px',
-          borderBottom: '1px solid var(--explorer-border)',
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 'calc(var(--explorer-font-size, 13px) - 1px)',
-            fontWeight: 600,
-            color: 'var(--explorer-text)',
-          }}
-        >
-          资源管理器
-        </span>
+      <ExplorerHeader>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {/* 定位当前激活的文件与目录 */}
           <Tooltip content="定位当前打开的文件与目录">
@@ -268,7 +250,7 @@ export function Explorer() {
             </button>
           </Tooltip>
         </div>
-      </div>
+      </ExplorerHeader>
 
       {/* 面包屑型路径导航栏 */}
       <ExplorerBreadcrumb root={root} onRefresh={handleRefresh} />

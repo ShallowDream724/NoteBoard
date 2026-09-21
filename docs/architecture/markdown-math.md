@@ -24,6 +24,11 @@
 2. `katexExtensions.tsx`：Markdown、ProseMirror 节点和输入行为的适配。
 3. `MathNodeView.tsx`：焦点、输入和预览；不持有独立的正文草稿副本。
 4. `mathRendering.ts`：惰性加载 KaTeX、受限缓存及渲染错误。缓存最多 200 项，按 UTF-16 字符存储估算最多 4 MiB，不含引擎对象开销。化学命令按需加载 mhchem。
+5. `embeddedEditor.ts`：在公式所在段落前创建临时 ProseMirror widget，通过 React portal 放置源码输入；不插入正文节点。事务只映射活动公式位置，属性更新不会关闭输入。`FormulaSourceEditor` 负责自适应高度和手动纵向调整。行内预览仍保留在原段落。
+6. `nearViewport.ts`：每个实际滚动容器共用一个 IntersectionObserver，预加载上下约两屏。离开范围后释放 KaTeX DOM，保留测量尺寸占位；不是滚动到哪里就永久累计到哪里。首次尚未测量的公式暂用源码占位。
+7. `mathRenderQueue.ts`：仅调度附近节点，每个约 6 ms 时间片后让出主线程；同一公式更新替换旧请求，离开范围或卸载取消请求，不静默丢弃其它节点任务。
+
+公式源码编辑占用所在正文块的可用宽度，初始至少三行（块公式四行），自动增长上限约 40vh，可手动拉到 75vh。长公式预览继续扩展整个编辑区的横向滚动空间，不新增公式内部滚动条。纸张适配仅在导出副本执行。
 
 每个公式的宏定义相互隔离；不启用可信 HTML/URL 命令。错误公式保留源码并给出提示，不用空内容替代。
 

@@ -9,6 +9,7 @@ import { Copy, Check, ChevronDown, Search, X } from 'lucide-react';
 // 语言标签是纯元数据，不让普通 Markdown 首开加载全部高亮语法。
 import { normalizeLanguage } from './codeLanguages';
 import { Tooltip } from '../../components/Tooltip';
+import { useCodeHighlight } from './codeHighlightExtension';
 
 /** 语言配置结构定义 */
 interface LanguageItem {
@@ -39,7 +40,9 @@ const LANGUAGES: LanguageItem[] = [
   { value: 'shell', label: 'Shell', aliases: ['sh', 'bash', 'zsh'] },
 ];
 
-function CodeBlockComponent({ node, updateAttributes }: NodeViewProps) {
+function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeViewProps) {
+  const contentRef = useRef<HTMLPreElement>(null);
+  useCodeHighlight(editor, node, getPos, contentRef);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -378,6 +381,7 @@ function CodeBlockComponent({ node, updateAttributes }: NodeViewProps) {
 
       {/* 代码内容区域（TipTap 可直接输入） */}
       <pre
+        ref={contentRef}
         style={{
           margin: 0,
           padding: '12px 16px',
@@ -399,14 +403,6 @@ function CodeBlockComponent({ node, updateAttributes }: NodeViewProps) {
 
 // 导出扩展：基于 @tiptap/extension-code-block + ReactNodeViewRenderer
 export const CodeBlockView = CodeBlock.extend({
-  addOptions() {
-    const parent = (this.parent?.() ?? {}) as Record<string, unknown>;
-    return {
-      ...parent,
-      lowlight: null,
-    } as unknown as ReturnType<NonNullable<typeof this.parent>>;
-  },
-
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockComponent);
   },

@@ -11,6 +11,7 @@ import type {
   EditorSettings,
   FileSettings,
   LayoutSettings,
+  ExportSettings,
 } from '../core/ipc/types';
 import * as ipc from '../core/ipc/commands';
 import { onSettingsChanged } from '../core/ipc/events';
@@ -114,6 +115,7 @@ interface SettingsStore {
 
   // ── 布局 ──
   setLayout: (patch: Partial<LayoutSettings>) => Promise<void>;
+  setExport: (patch: Partial<ExportSettings>) => Promise<void>;
 
   // ── 内部：从广播更新 ──
   _applyRemoteUpdate: (s: Settings) => void;
@@ -302,6 +304,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     } catch (e) {
       console.error('保存设置失败:', e);
     }
+  },
+
+  setExport: async (patch) => {
+    const current = get().settings;
+    const updated = { ...current, export: { pandocPath: '', ...current.export, ...patch } };
+    set({ settings: updated });
+    await ipc.saveSettings(updated);
   },
 
   _applyRemoteUpdate: async (remote) => {

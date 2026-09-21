@@ -237,7 +237,10 @@ export interface Settings {
   editor: EditorSettings;
   file: FileSettings;
   layout: LayoutSettings;
+  export?: ExportSettings;
 }
+
+export interface ExportSettings { pandocPath: string }
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;
@@ -280,6 +283,7 @@ export interface TypographySettings {
 }
 
 export interface EditorSettings {
+  selectionToolbarPosition?: 'below' | 'above';
   defaultViewMode: ViewMode;
   softWrap: boolean;
   showLineNumbers: boolean;

@@ -244,6 +244,7 @@ export default defineConfig({
     //    来源追踪禁止库（不依赖 chunk 文件名；改名/合并仍能检出）
     manifest: true,
     rollupOptions: {
+      input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), export: fileURLToPath(new URL('./export.html', import.meta.url)) },
       output: {
         // 🔴 S05：函数式 manualChunks，切断「入口为拿 React 归宿而静态 import 重 chunk」的回边。
         //   之前的对象形式把 react/react-dom 卷进 excalidraw chunk（因为该包体积最大），

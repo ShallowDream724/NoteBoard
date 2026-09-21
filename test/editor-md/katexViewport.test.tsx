@@ -46,6 +46,9 @@ class ManualIntersectionObserver {
       } as IntersectionObserverEntry,
     ], this as unknown as IntersectionObserver);
   }
+  public deactivate(target: Element): void {
+    this.callback([{ target, isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+  }
 }
 
 it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
@@ -98,6 +101,8 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     expect(host.querySelectorAll('.katex')).toHaveLength(2);
+    await act(async () => observer!.deactivate(firstTarget));
+    expect(host.querySelectorAll('.katex')).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());
     host.remove();

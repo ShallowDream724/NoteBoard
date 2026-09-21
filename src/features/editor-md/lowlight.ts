@@ -3,9 +3,7 @@
 // 详见 docs/09-开发路线图.md 7.9/7.10
 //
 // 参数限制：
-// - highlightAuto 上限 5k 字符
-// - 单块 >20k 跳过高亮
-// - ±2000 position 裁剪
+// 调用方负责可见范围和输入大小限制；实例仅在实际分词时创建。
 
 import { createLowlight } from 'lowlight';
 import type { LanguageFn } from 'lowlight';
@@ -86,9 +84,6 @@ export function getLowlight() {
   }
   return _lowlight;
 }
-
-/** 导出供 CodeBlockView 使用的实例 */
-export const lowlight = getLowlight();
 
 // 保留既有导出接口；仅实际高亮消费者才需要加载本模块。
 export { normalizeLanguage, HIGHLIGHT_AUTO_LIMIT, SINGLE_BLOCK_LIMIT } from './codeLanguages';

@@ -17,6 +17,7 @@ pub mod updater;
 pub mod staging;
 pub mod favorites;
 pub mod perf;
+pub mod export;
 
 use state::AppState;
 use std::sync::Mutex;
@@ -32,8 +33,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::new().with_filter(|label| !label.starts_with("nb-export-")).build())
         .manage(Mutex::new(AppState::default()))
+        .manage(export::ExportJobs::default())
         .setup(|app| {
             // 🔴 诊断 span：setup 钩子的真实执行区间（不含 WebView 创建提前量）
             perf::mark("setup_start");
@@ -43,6 +45,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            export::create_pdf,
+            export::pdf_payload,
+            export::pdf_ready,
+            export::read_pdf,
+            export::save_pdf,
+            export::release_pdf,
+            export::pandoc::pandoc_status,
+            export::pandoc::pandoc_export,
             // window（S04 打开队列 + 迁移协议）
             window::commands::window_listeners_ready,
             window::commands::window_shell_ready,

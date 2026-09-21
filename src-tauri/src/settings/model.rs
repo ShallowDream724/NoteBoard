@@ -34,6 +34,8 @@ pub struct Settings {
     pub file: FileSettings,
     #[serde(default)]
     pub layout: LayoutSettings,
+    #[serde(default)]
+    pub export: ExportSettings,
 }
 
 impl Default for Settings {
@@ -46,9 +48,14 @@ impl Default for Settings {
             editor: EditorSettings::default(),
             file: FileSettings::default(),
             layout: LayoutSettings::default(),
+            export: ExportSettings::default(),
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSettings { #[serde(default)] pub pandoc_path: String }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -153,6 +160,8 @@ impl Default for TypographySettings {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorSettings {
+    #[serde(default = "default_selection_toolbar_position")]
+    pub selection_toolbar_position: String,
     #[serde(default = "default_view_mode")]
     pub default_view_mode: String,
     #[serde(default = "default_true")]
@@ -184,6 +193,7 @@ pub struct EditorSettings {
 impl Default for EditorSettings {
     fn default() -> Self {
         Self {
+            selection_toolbar_position: default_selection_toolbar_position(),
             default_view_mode: "visual".to_string(),
             soft_wrap: true,
             show_line_numbers: true,
@@ -265,6 +275,7 @@ impl Default for LayoutSettings {
 }
 
 // 默认值函数
+fn default_selection_toolbar_position() -> String { "below".to_string() }
 fn default_schema_version() -> u32 { 1 }
 fn default_theme_mode() -> String { "system".to_string() }
 fn default_light_theme() -> String { "chen-guang".to_string() }

@@ -5,7 +5,7 @@
 import React, { useMemo } from 'react';
 import MarkdownIt from 'markdown-it';
 import { toHtml } from 'hast-util-to-html';
-import { lowlight, normalizeLanguage, SINGLE_BLOCK_LIMIT } from '../editor-md/lowlight';
+import { getLowlight, normalizeLanguage, SINGLE_BLOCK_LIMIT } from '../editor-md/lowlight';
 
 /** 单元格/卡片内的紧凑模式与侧栏的常规模式，仅影响排版密度 */
 export type MarkdownDensity = 'compact' | 'normal';
@@ -101,6 +101,7 @@ function getParser(): MarkdownIt {
       // 超长文本跳过语法高亮，避免高亮计算卡住滚动
       if (code.length > SINGLE_BLOCK_LIMIT) return '';
       const name = normalizeLanguage(lang);
+      const lowlight = getLowlight();
       try {
         // lowlight 未注册的语言会抛错，回退到自动识别
         const tree = lowlight.registered(name)

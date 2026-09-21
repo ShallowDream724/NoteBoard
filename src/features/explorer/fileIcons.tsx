@@ -29,6 +29,11 @@ import {
   GitMerge,
   Layout,
   ChartColumn,
+  FileType2,
+  Presentation,
+  BookOpen,
+  FunctionSquare,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { extFromPath } from '../../core/docKind';
 
@@ -66,6 +71,18 @@ export function getExplorerFileIcon(
 
   // 2. 根据文件扩展名返回专属图标与调优配色
   switch (ext) {
+    case 'pdf':
+      return <FileType2 {...iconProps} color="#e05252" />;
+    case 'doc': case 'docx': case 'odt': case 'rtf':
+      return <FileText {...iconProps} color="#3478d4" />;
+    case 'ppt': case 'pptx': case 'odp':
+      return <Presentation {...iconProps} color="#d97745" />;
+    case 'ods': case 'xlsm':
+      return <FileSpreadsheet {...iconProps} color="#26956d" />;
+    case 'tex': case 'sty': case 'bib':
+      return <FunctionSquare {...iconProps} color="#528a80" />;
+    case 'epub': case 'mobi':
+      return <BookOpen {...iconProps} color="#9470c5" />;
     // ── Markdown 笔记（NoteBoard 核心，品牌蓝）──
     case 'md':
     case 'markdown':

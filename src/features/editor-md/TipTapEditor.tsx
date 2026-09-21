@@ -12,6 +12,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/core';
+import { mapModeSelection } from './sourcePosition';
+import { embeddedEditingPosition } from './embeddedEditor';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
@@ -115,6 +117,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   const visualSyncedRef = useRef(false);
   // 惰性挂载 visual 时待填充的内容（首次切换 visual 的源码内容）
   const pendingVisualContentRef = useRef<string | null>(null);
+  const pendingSourceSelectionRef = useRef<{ anchor: number; head: number } | null>(null);
   // TipTap 原生历史仅用来识别连续输入是否属于同一分组，快捷键由文档级历史接管
   const visualUndoDepthRef = useRef(0);
   // 初始化锁：在初次加载和程序化设置内容期间以同步作用域阻止 onUpdate 误标为脏
@@ -573,6 +576,11 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     visualUndoDepthRef.current = prosemirrorUndoDepth(editor.state);
     // 🔴 S12：visual 内核重挂载（回收后）——恢复捕获的选区/滚动视图状态
     restoreMarkdownViewState();
+    if (pendingSourceSelectionRef.current) {
+      const selection = mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
+      pendingSourceSelectionRef.current = null;
+      requestAnimationFrame(() => { if (!editor.isDestroyed) editor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run(); });
+    }
   }, [editor, docKey, restoreMarkdownViewState]);
 
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
@@ -588,12 +596,15 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
       initSourceEditor(md);
+      const embedded = editor ? embeddedEditingPosition(editor) : null;
+      const selection = editor ? mapModeSelection(editor, md, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
       setViewMode('source');
       useWindowStore.getState().setTabViewMode(docKey, 'source');
       emit('view-mode-changed', { key: docKey, mode: 'source' });
       setTimeout(() => {
+        if (selection) sourceViewRef.current?.dispatch({ selection, effects: EditorView.scrollIntoView(selection.head, { y: 'center' }) });
         sourceViewRef.current?.focus();
         sourceViewRef.current?.requestMeasure();
       }, 20);
@@ -606,10 +617,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
 
+      const sourceSelection = sourceViewRef.current?.state.selection.main ?? { anchor: 0, head: 0 };
+
       if (!editor) {
         // 🔴 S08：内核尚未创建（source 初始模式）——惰性挂载 VisualKernel，
         //    内容填充由「visual 填充 effect」在内核 ready 后执行
         pendingVisualContentRef.current = md;
+        pendingSourceSelectionRef.current = { anchor: sourceSelection.anchor, head: sourceSelection.head };
         setHasVisualKernel(true);
         markDocumentHistoryModeBoundary(docKey);
         viewModeRef.current = 'visual';
@@ -648,8 +662,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       setViewMode('visual');
       useWindowStore.getState().setTabViewMode(docKey, 'visual');
       emit('view-mode-changed', { key: docKey, mode: 'visual' });
+      const visualSelection = mapModeSelection(editor, md, 'visual', sourceSelection);
       setTimeout(() => {
-        editor.commands.focus();
+        if (!editor.isDestroyed) editor.chain().setTextSelection({ from: visualSelection.anchor, to: visualSelection.head }).focus().scrollIntoView().run();
       }, 20);
     }
   }, [editor, viewMode, docKey, initSourceEditor]);

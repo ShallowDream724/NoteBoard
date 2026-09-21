@@ -142,6 +142,15 @@ export function EditorPanel() {
         Markdown 增强功能
       </div>
 
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+        <span>选区工具栏位置</span>
+        <select value={settings.editor.selectionToolbarPosition ?? 'below'}
+          onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })}
+          style={{ ...inputStyle, width: 110 }}>
+          <option value="below">选区下方</option><option value="above">选区上方</option>
+        </select>
+      </label>
+
       <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '2px 0' }}>
         <span>LaTeX 数学公式渲染 (KaTeX)</span>
         <input

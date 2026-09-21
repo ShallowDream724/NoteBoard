@@ -5,7 +5,7 @@
 //    也不得出现 EditorView/Editor 等内核类型的逃逸（含 any 透传）。
 
 /** flush 的调用场景；编辑器侧按场景区分必须精确等待的工作（如 Drawio 需真实回包） */
-export type FlushReason = 'save' | 'stage' | 'switch-mode' | 'evict' | 'transfer' | 'close';
+export type FlushReason = 'save' | 'stage' | 'switch-mode' | 'evict' | 'transfer' | 'close' | 'export';
 
 /**
  * flush 捕获的快照（判别联合，docs §D：图片/只读查看能力标记不可写，

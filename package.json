@@ -87,6 +87,7 @@
     "markdown-it": "^14.1.0",
     "mermaid": "^11.12.2",
     "mitt": "^3.0.1",
+    "pdfjs-dist": "6.3.289",
     "plantuml-encoder": "^1.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

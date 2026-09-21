@@ -48,6 +48,8 @@ export function ShortcutsPanel() {
       <ShortcutItem keyCombo="Ctrl + Shift + N" label="新建空窗口" />
       <ShortcutItem keyCombo="Ctrl + S" label="保存当前文档" />
       <ShortcutItem keyCombo="Ctrl + Shift + S" label="文档另存为" />
+      <ShortcutItem keyCombo="Ctrl + E" label="导出文档" />
+      <ShortcutItem keyCombo="Ctrl + P" label="PDF 排版预览" />
       <ShortcutItem keyCombo="Ctrl + W" label="关闭当前标签页" />
       <ShortcutItem keyCombo="Ctrl + Shift + B" label="展开/收起左侧栏" />
       <ShortcutItem keyCombo="Ctrl + Alt + B" label="展开/收起右侧栏（Markdown）" />

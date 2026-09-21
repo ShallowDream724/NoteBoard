@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef, type FocusEvent } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { isDisplayMath, type MathDelimiter } from './mathSyntax';
-import { renderMath, type MathRendering } from './mathRendering';
-import { observe } from './viewportActivation';
-import { cancelTask, scheduleTask } from './viewportWorkScheduler';
+import type { MathRendering } from './mathRendering';
+import { observeNearby } from './nearViewport';
+import { openEmbeddedEditor } from './embeddedEditor';
+import { FormulaSourceEditor } from './FormulaSourceEditor';
+import { queueMath } from './mathRenderQueue';
 
 let nextTaskId = 0;
 
@@ -18,7 +21,8 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const [rendered, setRendered] = useState<MathRendering | null>(null);
   const [visible, setVisible] = useState(false);
   const viewportRef = useRef<HTMLSpanElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
+  const size = useRef<{ width: number; height: number } | null>(null);
   const versionRef = useRef(0);
   const identity = useRef<string | null>(null);
   identity.current ??= 'math:' + (++nextTaskId);
@@ -26,7 +30,13 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   useEffect(() => {
     const element = viewportRef.current;
     if (!element) return;
-    return observe(element, () => setVisible(true), { once: true });
+    return observeNearby(element, near => {
+      if (!near && element.querySelector('.math-preview')) {
+        const bounds = element.getBoundingClientRect();
+        size.current = { width: bounds.width, height: bounds.height };
+      }
+      setVisible(near);
+    });
   }, []);
   useEffect(() => {
     const selection = editor.state.selection;
@@ -34,24 +44,23 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     // them. Only an explicit node selection may move focus into formula source.
     if (selected && selection instanceof NodeSelection && selection.from === getPos()) setEditing(true);
   }, [selected, editor, getPos]);
+  useLayoutEffect(() => {
+    if (!editing) { setInputHost(null); return; }
+    const pos = getPos();
+    if (typeof pos !== 'number') return;
+    const { host, close } = openEmbeddedEditor(editor, pos);
+    setInputHost(host);
+    return close;
+  }, [editing, editor]);
   useEffect(() => {
-    if (editing) {
-      const input = inputRef.current;
-      input?.focus();
-      if (input) input.setSelectionRange(input.value.length, input.value.length);
-    }
-  }, [editing]);
-  useEffect(() => {
-    if (!visible && !editing) return;
+    if (!visible && !editing) { setRendered(null); return; }
     const version = ++versionRef.current;
     const id = identity.current!;
-    scheduleTask(id, () => {
-      if (!latex.trim()) { setRendered(null); return; }
-      void renderMath(latex, display).then((result) => {
+    if (!latex.trim()) { setRendered(null); return; }
+    const cancel = queueMath(id, { latex, display, done: result => {
         if (version === versionRef.current) setRendered(result);
-      });
-    });
-    return () => { versionRef.current++; cancelTask(id); };
+    } });
+    return () => { versionRef.current++; cancel(); };
   }, [latex, display, visible, editing]);
 
   const exit = () => {
@@ -66,6 +75,31 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     }).run();
   };
 
+  const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !latex.trim()) {
+      event.preventDefault(); event.stopPropagation();
+      const pos = getPos();
+      if (typeof pos !== 'number') return;
+      setEditing(false);
+      editor.chain().focus().command(({ tr }) => {
+        tr.delete(pos, pos + node.nodeSize);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos, tr.doc.content.size)), -1));
+        return true;
+      }).run();
+      return;
+    }
+    const control = event.ctrlKey || event.metaKey;
+    if (control && ['z', 'y'].includes(event.key.toLowerCase())) {
+      event.preventDefault(); event.stopPropagation();
+      editor.commands.keyboardShortcut(event.shiftKey || event.key.toLowerCase() === 'y' ? 'Mod-Shift-z' : 'Mod-z');
+      return;
+    }
+    if (event.key === 'Escape' || (event.key === 'Enter' && (control || (!display && !event.shiftKey)))) {
+      event.preventDefault(); event.stopPropagation(); exit();
+    }
+  };
+
   return (
     <NodeViewWrapper
       as={block ? 'div' : 'span'}
@@ -78,59 +112,15 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
         background: selected && !editing ? 'var(--editor-selection-background)' : undefined,
       }}
       onClick={() => { setVisible(true); setEditing(true); }}
-      onBlur={(event: FocusEvent<HTMLElement>) => {
-        if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) setEditing(false);
-      }}
     >
-      {editing && (
-        <span style={{ display: 'block', minWidth: display ? undefined : 180, maxWidth: '100%' }}>
-          <textarea
-            ref={inputRef} aria-label={display ? '块公式源码' : '行内公式源码'}
-            value={latex} rows={display ? Math.max(2, Math.min(12, latex.split('\n').length)) : 1}
-            spellCheck={false}
-            onChange={(event) => updateAttributes({ latex: event.target.value })}
-            onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing || event.keyCode === 229) return;
-              if ((event.key === 'Backspace' || event.key === 'Delete') && !latex.trim()) {
-                event.preventDefault(); event.stopPropagation();
-                const pos = getPos();
-                if (typeof pos !== 'number') return;
-                editor.chain().focus().command(({ tr }) => {
-                  tr.delete(pos, pos + node.nodeSize);
-                  tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos, tr.doc.content.size)), -1));
-                  return true;
-                }).run();
-                return;
-              }
-              const control = event.ctrlKey || event.metaKey;
-              if (control && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
-                event.preventDefault(); event.stopPropagation();
-                // Respect the host's unified source/visual document history.
-                editor.commands.keyboardShortcut(event.shiftKey || event.key.toLowerCase() === 'y' ? 'Mod-Shift-z' : 'Mod-z');
-                return;
-              }
-              if (event.key === 'Escape' || (event.key === 'Enter' && (control || !display))) {
-                event.preventDefault(); event.stopPropagation(); exit();
-              }
-            }}
-            style={{
-              display: 'block', boxSizing: 'border-box', width: '100%', padding: '8px 10px',
-              fontFamily: 'var(--mono-font-family)', fontSize: 'var(--mono-font-size)', lineHeight: 1.5,
-              border: '1px solid var(--editor-accent)', borderRadius: 'var(--radius-sm)',
-              background: 'var(--editor-surface)', color: 'var(--editor-text)',
-              resize: display ? 'vertical' : 'none', outline: 'none',
-            }}
-          />
-          <span style={{ display: 'block', fontSize: 11, color: 'var(--editor-text-muted)', padding: '2px 0' }}>
-            {display ? 'Enter 换行 · Ctrl+Enter 继续正文' : 'Enter 继续正文'}
-          </span>
-        </span>
-      )}
+      {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display}
+        onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
       <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
-        style={{ display: display ? 'block' : 'inline', overflowWrap: 'anywhere' }}>
+        style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere',
+          ...(!rendered && !visible && !editing && size.current ? { width: size.current.width, height: size.current.height } : {}) }}>
         {rendered?.html && latex.trim()
           ? <span className="math-preview" dangerouslySetInnerHTML={{ __html: rendered.html }} />
-          : <span style={{ color: 'var(--editor-text-muted)' }}>{latex || (editing ? '输入 LaTeX 公式' : '点击输入公式')}</span>}
+          : !visible && !editing && size.current ? null : <span style={{ color: 'var(--editor-text-muted)' }}>{latex || (editing ? '输入 LaTeX 公式' : '点击输入公式')}</span>}
         {rendered?.error && latex.trim() && (
           <span role="status" style={{ display: 'block', fontSize: 12, color: 'var(--error-500)', whiteSpace: 'pre-wrap' }}>
             {rendered.error}

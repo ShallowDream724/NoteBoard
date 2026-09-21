@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Palette, Type, Keyboard, Info, FileCode, Folder } from 'lucide-react';
+import { X, Palette, Type, Keyboard, Info, FileCode, Folder, FileOutput } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { NavBtn } from './SettingsControls';
 import { AppearancePanel } from './AppearancePanel';
@@ -8,12 +8,14 @@ import { EditorPanel } from './EditorPanel';
 import { FilePanel } from './FilePanel';
 import { ShortcutsPanel } from './ShortcutsPanel';
 import { AboutPanel } from './AboutPanel';
+import { ExportPanel } from './ExportPanel';
 
 const PANELS = [
   { key: 'appearance', label: '外观主题', icon: Palette, content: AppearancePanel },
   { key: 'typography', label: '排版与字体', icon: Type, content: TypographyPanel },
   { key: 'editor', label: '编辑器', icon: FileCode, content: EditorPanel },
   { key: 'file', label: '文件与保存', icon: Folder, content: FilePanel },
+  { key: 'export', label: '导出', icon: FileOutput, content: ExportPanel },
   { key: 'shortcuts', label: '快捷键', icon: Keyboard, content: ShortcutsPanel },
   { key: 'about', label: '关于', icon: Info, content: AboutPanel },
 ] as const;

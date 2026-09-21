@@ -9,6 +9,7 @@ import { useWindowStore } from './stores/windowStore';
 import { useUpdateStore } from './stores/updateStore';
 import { useFontPackStore } from './stores/fontPackStore';
 import { useFavoritesStore } from './features/favorites/favoritesStore';
+import { useExportStore } from './features/export/exportStore';
 import * as ipc from './core/ipc/commands';
 import {
   resolveSystemFontFallbackPatch,
@@ -43,6 +44,7 @@ import {
 const SettingsModal = lazy(() =>
   import('./components/settings/SettingsModal').then((m) => ({ default: m.SettingsModal })),
 );
+const ExportModal = lazy(() => import('./features/export/ExportModal').then(m => ({ default: m.ExportModal })));
 const UpdateModal = lazy(() =>
   import('./components/UpdateModal').then((m) => ({ default: m.UpdateModal })),
 );
@@ -79,6 +81,8 @@ export default function App() {
   const [bootRetryAttempt, setBootRetryAttempt] = useState(0);
   const { settingsModalVisible, setSettingsModalVisible } = useLayoutStore();
   const activeKey = useWindowStore((s) => s.activeKey);
+  const exportKey = useExportStore(s => s.docKey);
+  const closeExport = useExportStore(s => s.close);
   const {
     modalOpen: updateModalOpen,
     closeModal: closeUpdateModal,
@@ -194,6 +198,9 @@ export default function App() {
       description: '打开文件夹',
     });
 
+    const unregExport = registerShortcut({ key: 'Ctrl+E', action: () => useExportStore.getState().open(), scope: 'global', stopPropagation: true, description: '导出文档' });
+    const unregPrint = registerShortcut({ key: 'Ctrl+P', action: () => useExportStore.getState().open(), scope: 'global', stopPropagation: true, description: 'PDF 排版预览' });
+
     return () => {
       disposed = true;
       stopAutoUpdate();
@@ -208,6 +215,7 @@ export default function App() {
       unregNewWindow();
       unregOpenFile();
       unregOpenFolder();
+      unregExport(); unregPrint();
     };
   }, [init, initAutoUpdateTimer, bootRetryAttempt]);
 
@@ -377,6 +385,7 @@ export default function App() {
       <TooltipProvider delayDuration={100} skipDelayDuration={300}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
           <AppShell />
+          {exportKey && <Suspense fallback={null}><ExportModal docKey={exportKey} onClose={closeExport}/></Suspense>}
           {/* 🔴 S05：全局弹窗按需装载；首开前不进入首屏闭包 */}
           {settingsEverOpened && (
             <Suspense fallback={null}>
