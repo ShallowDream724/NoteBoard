@@ -1,5 +1,5 @@
 // NoteBoard 快捷键框架
-// 注册表 + 作用域（编辑器聚焦 vs 全局）+ Ctrl+B 冲突解决
+// 注册表 + 作用域（编辑器聚焦 vs 全局）
 // 详见 docs/07-UI布局与交互规范.md §9
 
 type ShortcutScope = 'global' | 'editor' | 'explorer' | 'outline';
@@ -13,6 +13,8 @@ interface ShortcutEntry {
   description: string;
   /** 是否阻止默认行为 */
   preventDefault?: boolean;
+  /** 布局等应用级组合键不能继续触发编辑器命令。 */
+  stopPropagation?: boolean;
 }
 
 const registry: ShortcutEntry[] = [];
@@ -132,6 +134,7 @@ export function initShortcuts(): () => void {
     const match = scoped ?? global;
     if (match) {
       if (match.preventDefault !== false) e.preventDefault();
+      if (match.stopPropagation) e.stopPropagation();
       match.action();
     }
   };

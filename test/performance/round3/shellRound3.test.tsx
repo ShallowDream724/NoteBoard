@@ -33,7 +33,6 @@ vi.mock('@/components/WelcomeScreen', () => ({
 }));
 vi.mock('@/components/UnsupportedView', () => ({ UnsupportedView: () => null }));
 vi.mock('@/components/Toast', () => ({ ToastContainer: () => null }));
-vi.mock('@/components/rail/RailToggle', () => ({ RailToggle: () => null }));
 vi.mock('@/components/FileDropOverlay', () => ({ FileDropOverlay: () => null }));
 vi.mock('@/features/outline/OutlinePanel', () => ({ OutlinePanel: () => null }));
 vi.mock('@/features/editor-code/UnsavedGuardDialog', () => ({ UnsavedGuardDialog: () => null }));

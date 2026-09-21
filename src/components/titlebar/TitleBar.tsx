@@ -1,5 +1,5 @@
 // NoteBoard TitleBar
-// 自绘标题栏：应用图标 + tab 栏 + 拖拽区 + 窗口控制 + 设置入口
+// 自绘标题栏：左侧栏开关 + tab 栏 + 拖拽区 + 窗口控制 + 设置入口
 // 详见 docs/07-UI布局与交互规范.md §2
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -11,9 +11,12 @@ import { Tooltip } from '../Tooltip';
 import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useUpdateStore } from '../../stores/updateStore';
+import { SidebarToggle } from '../SidebarToggle';
 
 export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
+  const explorerVisible = useLayoutStore((s) => s.explorerVisible);
+  const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
@@ -33,47 +36,9 @@ export function TitleBar() {
 
   return (
     <div style={titleBarStyle} role="banner">
-      {/* 应用图标 16px，点击可打开设置中心 */}
-      <Tooltip content="NoteBoard (点击打开设置)" side="bottom" sideOffset={6}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            cursor: 'pointer',
-            transition: 'all var(--transition-fast)',
-          }}
-          onClick={toggleSettingsModal}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-hover)';
-            e.currentTarget.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-          onMouseDown={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-active)';
-            e.currentTarget.style.transform = 'scale(0.92)';
-          }}
-          onMouseUp={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-hover)';
-            e.currentTarget.style.transform = 'scale(1.05)';
-          }}
-          aria-label="NoteBoard"
-        >
-          <img
-            src="/logo.ico"
-            alt="NoteBoard"
-            width={16}
-            height={16}
-            style={{ pointerEvents: 'none' }}
-          />
-        </div>
-      </Tooltip>
+      <div style={{ width: 36, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+        <SidebarToggle side="left" visible={explorerVisible} onToggle={toggleExplorer} />
+      </div>
 
       {/* Tab 栏 */}
       <TabBar />

@@ -1,0 +1,22 @@
+.nb-sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--editor-text-secondary);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.nb-sidebar-toggle[data-open="true"] { color: var(--editor-text); }
+.nb-sidebar-toggle:hover { background: var(--toolbar-hover); color: var(--editor-text); }
+.nb-sidebar-toggle:active { background: var(--toolbar-active); }
+.nb-sidebar-toggle:focus-visible { outline: 2px solid var(--editor-border-focus); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .nb-sidebar-toggle { transition: none; }
+}

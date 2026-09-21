@@ -1222,6 +1222,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   <ShortcutItem keyCombo="Ctrl + S" label="保存当前文档" />
                   <ShortcutItem keyCombo="Ctrl + Shift + S" label="文档另存为" />
                   <ShortcutItem keyCombo="Ctrl + W" label="关闭当前标签页" />
+                  <ShortcutItem keyCombo="Ctrl + Shift + B" label="展开/收起左侧栏" />
+                  <ShortcutItem keyCombo="Ctrl + Alt + B" label="展开/收起右侧栏（Markdown）" />
                 </div>
 
                 {/* Markdown 编辑 */}
@@ -1230,6 +1232,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     Markdown 编辑
                   </div>
                   <ShortcutItem keyCombo="/" label="Markdown 中触发斜杠快捷插入" />
+                  <ShortcutItem keyCombo="Ctrl + B" label="加粗" />
                 </div>
               </div>
             )}

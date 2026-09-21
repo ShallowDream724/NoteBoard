@@ -11,6 +11,7 @@ import { MarkdownToolbar } from './MarkdownToolbar';
 import { CodeToolbar } from './CodeToolbar';
 import { FloatingExpandHandle } from './FloatingExpandHandle';
 import { ToolbarButton } from './ToolbarComponents';
+import { SidebarToggle } from '../../components/SidebarToggle';
 
 interface EditorToolbarProps {
   activeTab: Tab | null;
@@ -18,7 +19,7 @@ interface EditorToolbarProps {
 }
 
 export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
-  const { editorToolbarVisible, setEditorToolbarVisible } = useLayoutStore();
+  const { editorToolbarVisible, setEditorToolbarVisible, outlineVisible, toggleOutline } = useLayoutStore();
 
   // 若当前无激活标签页、非文本格式或为纯前端工具视图（如文本对比），不渲染操作栏
   if (
@@ -31,7 +32,16 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
 
   // 1. 操作栏处于收起状态：渲染顶部感应热区与悬浮展开胶囊
   if (!editorToolbarVisible) {
-    return <FloatingExpandHandle onExpand={() => setEditorToolbarVisible(true)} />;
+    return (
+      <>
+        <FloatingExpandHandle onExpand={() => setEditorToolbarVisible(true)} />
+        {activeTab.kind === 'markdown' && (
+          <div style={{ position: 'absolute', top: 4, right: 8, zIndex: 25 }}>
+            <SidebarToggle side="right" visible={outlineVisible} onToggle={toggleOutline} />
+          </div>
+        )}
+      </>
+    );
   }
 
   // 2. 操作栏处于展开状态：渲染顶层工具栏容器
@@ -69,6 +79,9 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
 
       {/* 右侧收起按钮 */}
       <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+        {activeTab.kind === 'markdown' && (
+          <SidebarToggle side="right" visible={outlineVisible} onToggle={toggleOutline} />
+        )}
         <ToolbarButton
           icon={<ChevronUp size={15} strokeWidth={2.2} />}
           title="收起操作栏"

@@ -1,6 +1,6 @@
 // NoteBoard MarkdownModeToggle
 // Markdown 编辑器左下角模式切换悬浮胶囊：可视化 / 源码模式
-// 交互规范：与左右把手 (RailToggle) 一致，默认隐藏 (opacity: 0)，鼠标靠近左下角热区 (0.75) 与悬停 (1) 时平滑显现
+// 交互规范：默认隐藏 (opacity: 0)，鼠标靠近左下角热区 (0.75) 与悬停 (1) 时平滑显现
 
 import { useEffect, useRef, useState } from 'react';
 import { Eye, Code } from 'lucide-react';

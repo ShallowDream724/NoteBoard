@@ -7,6 +7,7 @@
 
 import StarterKit from '@tiptap/starter-kit';
 import { Code } from '@tiptap/extension-code';
+import Blockquote from '@tiptap/extension-blockquote';
 // 引入图片扩展的类型增强，使自定义图片节点的 setImage 命令在全局链式 API 中可见。
 import '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -158,6 +159,11 @@ const MarkdownCompatibleCode = Code.extend({
   excludes: '',
 });
 
+// Ctrl+Shift+B belongs to the application layout. Keep ">" input and toolbar commands.
+const MarkdownBlockquote = Blockquote.extend({
+  addKeyboardShortcuts() { return {}; },
+});
+
 /**
  * 构建 TipTap 扩展列表
  * 这是唯一的扩展装配点，不分散到各组件
@@ -171,6 +177,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
       // 改由允许 Markdown 标记嵌套的 Code 扩展注册，避免同名扩展和 schema 冲突
       code: false,
       codeBlock: false, // 用自定义的 CodeBlockView
+      blockquote: false,
       // 缩短连续输入的合并窗口，并保留更多编辑步骤；保存操作不会重建该历史栈
       undoRedo: {
         depth: 200,
@@ -193,6 +200,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
 
     // 行内代码需允许与粗体/斜体共存，才能无损承载合法 Markdown 的嵌套结构
     MarkdownCompatibleCode,
+    MarkdownBlockquote,
 
     // 撤销/重做由文件级时间线统一接管，原生历史仅用于判断输入分组边界
     UnifiedDocumentHistoryKeys.configure({ docKey }),

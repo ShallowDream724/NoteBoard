@@ -11,7 +11,6 @@ import { StatusBar } from './statusbar/StatusBar';
 import { WelcomeScreen } from './WelcomeScreen';
 import { UnsupportedView } from './UnsupportedView';
 import { ToastContainer } from './Toast';
-import { RailToggle } from './rail/RailToggle';
 import { FileDropOverlay } from './FileDropOverlay';
 import { useWindowStore } from '../stores/windowStore';
 import {
@@ -105,8 +104,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     outlineWidth,
     statusBarVisible,
     boardPresentationMode,
-    toggleExplorer,
-    toggleOutline,
   } = useLayoutStore();
 
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
@@ -284,6 +281,25 @@ export function AppShell(_props: { children?: React.ReactNode }) {
       description: '保存当前文档',
     });
 
+    const unregExplorer = registerShortcut({
+      key: 'Ctrl+Shift+B',
+      action: () => useLayoutStore.getState().toggleExplorer(),
+      scope: 'global',
+      description: '展开/收起左侧栏',
+      stopPropagation: true,
+    });
+    const unregOutline = registerShortcut({
+      key: 'Ctrl+Alt+B',
+      action: () => {
+        if (useWindowStore.getState().activeTab()?.kind === 'markdown') {
+          useLayoutStore.getState().toggleOutline();
+        }
+      },
+      scope: 'global',
+      description: '展开/收起右侧栏',
+      stopPropagation: true,
+    });
+
     // Ctrl+F 查找
     const unregCtrlF = registerShortcut({
       key: 'Ctrl+F',
@@ -396,6 +412,8 @@ export function AppShell(_props: { children?: React.ReactNode }) {
 
     return () => {
       unregCtrlS();
+      unregExplorer();
+      unregOutline();
       unregCtrlF();
       unregCtrlH();
       unregCtrlW();
@@ -513,16 +531,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 background: 'var(--editor-bg)',
               }}
             >
-              {/* 左折叠把手 */}
-              {!isBoardPresentationMode && (
-                <RailToggle
-                  side="left"
-                  visible={explorerVisible}
-                  onToggle={toggleExplorer}
-                  ariaLabel="展开/收起资源管理器"
-                />
-              )}
-
               {/* 编辑器内容 */}
               <div
                 style={{
@@ -647,17 +655,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                     })}
                   </div>
                 ) : null}
-
-                {/* 右折叠把手（仅 Markdown） */}
-                {!isBoardPresentationMode && tabs.length > 0 && (
-                  <RailToggle
-                    side="right"
-                    visible={outlineVisible}
-                    onToggle={toggleOutline}
-                    show={showOutline}
-                    ariaLabel="展开/收起大纲"
-                  />
-                )}
 
                 {/* 自研现代搜索与替换栏 */}
                 {!isBoardPresentationMode && <SearchReplaceBar />}

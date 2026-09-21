@@ -30,7 +30,6 @@ vi.mock('@/components/WelcomeScreen', () => ({
 }));
 vi.mock('@/components/UnsupportedView', () => ({ UnsupportedView: () => null }));
 vi.mock('@/components/Toast', () => ({ ToastContainer: () => null }));
-vi.mock('@/components/rail/RailToggle', () => ({ RailToggle: () => null }));
 vi.mock('@/components/FileDropOverlay', () => ({ FileDropOverlay: () => null }));
 vi.mock('@/features/outline/OutlinePanel', () => ({ OutlinePanel: () => null }));
 vi.mock('@/features/editor-code/UnsavedGuardDialog', () => ({ UnsavedGuardDialog: () => null }));
@@ -69,6 +68,7 @@ vi.mock('@/features/session/editorSuspension', () => ({
 import { AppShell } from '@/components/AppShell';
 import { useWindowStore, type Tab } from '@/stores/windowStore';
 import { useLayoutStore } from '@/stores/layoutStore';
+import { initShortcuts } from '@/core/shortcuts';
 
 // react-resizable-panels 在挂载时使用 ResizeObserver（jsdom 缺失，补最小 stub）
 class ResizeObserverStub {
@@ -165,5 +165,31 @@ describe('🔴 N08 Home 不卸载已打开编辑器（宿主级断言）', () =>
     act(() => {
       root.unmount();
     });
+  });
+
+  it('侧栏组合键不传入正文，Ctrl+B 保持可由编辑器处理，切换不重建内核', async () => {
+    useWindowStore.setState({ tabs: [mockTab('doc-a')], activeKey: 'doc-a' });
+    const dispose = initShortcuts();
+    try {
+      await act(async () => root.render(<AppShell />));
+      const editorSurface = container.querySelector<HTMLElement>('[data-host="doc-a"]')!;
+      const received = vi.fn();
+      editorSurface.addEventListener('keydown', received);
+      await act(async () => {
+        editorSurface.dispatchEvent(new KeyboardEvent('keydown', { key: 'B', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+      });
+      expect(useLayoutStore.getState().explorerVisible).toBe(true);
+      expect(received).not.toHaveBeenCalled();
+      await act(async () => {
+        editorSurface.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+      });
+      expect(useLayoutStore.getState().outlineVisible).toBe(true);
+      expect(received).not.toHaveBeenCalled();
+      const bold = new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true, cancelable: true });
+      editorSurface.dispatchEvent(bold);
+      expect(received).toHaveBeenCalledTimes(1);
+      expect(bold.defaultPrevented).toBe(false);
+      expect(hostLog).toEqual(['mount:doc-a']);
+    } finally { dispose(); await act(async () => root.unmount()); container.remove(); }
   });
 });
