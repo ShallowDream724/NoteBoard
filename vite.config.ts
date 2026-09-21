@@ -233,6 +233,8 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
+    // Rust owns native rebuilds; watching its build artifacts can lock DLLs on Windows.
+    watch: { ignored: ['**/src-tauri/**'] },
     port: devPort,
     strictPort: hasAllocatedDevPort,
   },

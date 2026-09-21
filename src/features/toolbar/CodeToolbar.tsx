@@ -35,6 +35,7 @@ import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSearchStore } from '../../stores/searchStore';
 import type { LanguageId } from '../../core/ipc/types';
+import { ResponsiveToolbar } from './ResponsiveToolbar';
 
 interface CodeToolbarProps {
   docKey: string;
@@ -87,9 +88,10 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, overflow: 'visible', flex: 1 }}>
+    <ResponsiveToolbar onLayoutChange={() => { setJsonDropdownOpen(false); setTextDropdownOpen(false); }}>
       {/* ── 历史操作组 ── */}
       <ToolbarButton
+        collapsePriority={90}
         icon={<Undo2 size={15} strokeWidth={2.2} />}
         title="撤销"
         shortcut="Ctrl+Z"
@@ -97,6 +99,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
         onClick={() => undoDocumentHistory(docKey)}
       />
       <ToolbarButton
+        collapsePriority={80}
         icon={<Redo2 size={15} strokeWidth={2.2} />}
         title="重做"
         shortcut="Ctrl+Y"
@@ -108,12 +111,14 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
 
       {/* ── JSON 工具组（二级菜单） ── */}
       <ToolbarDropdown
+        collapsePriority={100}
         isOpen={jsonDropdownOpen}
         onOpenChange={setJsonDropdownOpen}
         trigger={
           <ToolbarButton
             icon={<Braces size={15} />}
             label="JSON 工具"
+            compactLabel
             hasDropdown
             title="JSON 展开格式化、单行压缩与格式校验"
             active={isJson}
@@ -184,12 +189,14 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
 
       {/* ── 文本与代码增强工具组（二级菜单） ── */}
       <ToolbarDropdown
+        collapsePriority={110}
         isOpen={textDropdownOpen}
         onOpenChange={setTextDropdownOpen}
         trigger={
           <ToolbarButton
             icon={<Sparkles size={15} />}
             label="文本工具"
+            compactLabel
             hasDropdown
             title="大小写转换与代码格式化"
           />
@@ -240,18 +247,21 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
 
       {/* ── 编辑器视图设置辅助组 ── */}
       <ToolbarButton
+        collapsePriority={30}
         icon={<WrapText size={15} />}
         title="自动换行 (Soft Wrap)"
         active={editorSettings.softWrap}
         onClick={() => setEditor({ softWrap: !editorSettings.softWrap })}
       />
       <ToolbarButton
+        collapsePriority={20}
         icon={<ListOrdered size={15} />}
         title="显示行号 (Line Numbers)"
         active={editorSettings.showLineNumbers !== false}
         onClick={() => setEditor({ showLineNumbers: !(editorSettings.showLineNumbers !== false) })}
       />
       <ToolbarButton
+        collapsePriority={10}
         icon={<Eye size={15} />}
         title="显示空白字符与换行符"
         active={editorSettings.showWhitespace}
@@ -262,17 +272,19 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
 
       {/* ── 快速查找与替换 ── */}
       <ToolbarButton
+        collapsePriority={50}
         icon={<Search size={15} />}
         title="查找文本"
         shortcut="Ctrl+F"
         onClick={() => openSearch(undefined, 'search')}
       />
       <ToolbarButton
+        collapsePriority={40}
         icon={<Replace size={15} />}
         title="替换文本"
         shortcut="Ctrl+H"
         onClick={() => openSearch(undefined, 'replace')}
       />
-    </div>
+    </ResponsiveToolbar>
   );
 }

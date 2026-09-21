@@ -2,7 +2,8 @@
 // 支持选中文本浮层菜单（粗体/斜体/多色高亮/代码/链接/清除格式等）与精美表格操作工具条
 // 详见 docs/09-开发路线图.md 8.8, 8.9
 
-import { useState, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, type ReactNode } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { type Editor } from '@tiptap/core';
 import { BubbleMenu } from '@tiptap/react/menus';
 import {
@@ -139,27 +140,10 @@ function HighlightPalette({
   editor: Editor;
   onClose: () => void;
 }) {
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, [onClose]);
-
   return (
     <div
-      ref={popoverRef}
       onMouseDown={(e) => e.stopPropagation()}
       style={{
-        position: 'absolute',
-        top: 'calc(100% + 6px)',
-        left: '50%',
-        transform: 'translateX(-50%)',
         background: 'var(--editor-surface, #ffffff)',
         border: '1px solid var(--editor-border, rgba(0,0,0,0.12))',
         borderRadius: 8,
@@ -168,8 +152,9 @@ function HighlightPalette({
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
-        zIndex: 1010,
         minWidth: 180,
+        maxWidth: 'calc(100vw - 16px)',
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--editor-text-secondary, #64748b)', paddingLeft: 2 }}>
@@ -277,7 +262,12 @@ export function EditorBubbleMenu({
   // TipTap 3.30 的 BubbleMenu 会在 shouldShow/options 引用变化时派发更新事务。
   // 选区变化期间若每次渲染都创建新对象，会形成 React → TipTap 事务 → React 的
   // 无限更新闭环（React #185）；按 editor 身份稳定所有配置引用。
-  const scrollParent = useMemo(() => findScrollParent(editor.view.dom), [editor]);
+  // EditorContent attaches the ProseMirror DOM during commit. Measuring during
+  // render can permanently cache its detached bootstrap parent as the boundary.
+  const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setScrollParent(findScrollParent(editor.view.dom));
+  }, [editor]);
   const shouldShow = useCallback(({
     editor: currentEditor,
     state,
@@ -299,27 +289,38 @@ export function EditorBubbleMenu({
     offset: 8,
     flip: {
       // 以编辑器滚动容器为边界约束，顶部空间不足时翻转到文本下方。
-      boundary: scrollParent,
+      boundary: scrollParent ?? undefined,
+      crossAxis: false,
       padding: 8,
     },
     shift: {
-      // 左右与上下边缘预留安全间距，防止浮层超出编辑器视口。
-      boundary: scrollParent,
+      // A narrow editor may be smaller than the menu; constrain to the app
+      // viewport, while flip still keeps it above/below the selected text.
+      rootBoundary: 'viewport' as const,
+      boundary: [] as HTMLElement[],
       padding: 8,
+      crossAxis: true,
     },
     // 监听编辑器真实滚动容器，滚动时即时更新定位与翻转。
-    scrollTarget: scrollParent,
+    scrollTarget: scrollParent ?? undefined,
   }), [scrollParent]);
+
+  if (!scrollParent) return null;
 
   return (
     <BubbleMenu
       editor={editor}
+      appendTo={editor.view.dom.ownerDocument.body}
       shouldShow={shouldShow}
       options={bubbleMenuOptions}
+      style={{ zIndex: 1000 }}
     >
       <div
         style={{
           display: 'flex',
+          flexWrap: 'wrap',
+          maxWidth: 'calc(100vw - 16px)',
+          boxSizing: 'border-box',
           alignItems: 'center',
           padding: '4px 6px',
           background: 'var(--editor-surface, #ffffff)',
@@ -366,12 +367,11 @@ export function EditorBubbleMenu({
         />
 
         {/* 多色高亮按钮与调色盘 */}
-        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-          <Tooltip content="文本多色高亮" side="top" sideOffset={6} disabled={showColorPicker}>
+        <DropdownMenu.Root open={showColorPicker} onOpenChange={setShowColorPicker} modal={false}>
+          <DropdownMenu.Trigger asChild>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setShowColorPicker((v) => !v)}
               style={{
                 height: 32,
                 padding: '0 6px',
@@ -390,16 +390,20 @@ export function EditorBubbleMenu({
                 transition: 'all 120ms ease',
               }}
               aria-label="文本多色高亮"
+              title="文本多色高亮"
             >
               <Highlighter size={16} />
               <ChevronDown size={12} style={{ opacity: 0.7 }} />
             </button>
-          </Tooltip>
-
-          {showColorPicker && (
-            <HighlightPalette editor={editor} onClose={() => setShowColorPicker(false)} />
-          )}
-        </div>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content side="bottom" align="center" sideOffset={6} collisionPadding={8}
+              onCloseAutoFocus={(event) => event.preventDefault()}
+              style={{ zIndex: 1010, maxHeight: 'var(--radix-dropdown-menu-content-available-height)', overflowY: 'auto', outline: 'none' }}>
+              <HighlightPalette editor={editor} onClose={() => setShowColorPicker(false)} />
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
 
         <MenuDivider />
 

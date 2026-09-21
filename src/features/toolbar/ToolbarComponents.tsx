@@ -20,6 +20,9 @@ export interface ToolbarButtonProps {
   hasDropdown?: boolean;
   className?: string;
   style?: React.CSSProperties;
+  /** Lower numbers hide first when hosted in ResponsiveToolbar. */
+  collapsePriority?: number;
+  compactLabel?: boolean;
 }
 
 /**
@@ -37,6 +40,7 @@ export function ToolbarButton({
   danger,
   hasDropdown,
   style,
+  compactLabel,
 }: ToolbarButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
@@ -111,7 +115,7 @@ export function ToolbarButton({
         }}
       >
         {icon && <span style={{ display: 'flex', alignItems: 'center', fontSize: 14 }}>{icon}</span>}
-        {label && <span style={{ fontWeight: active ? 600 : 450, whiteSpace: 'nowrap' }}>{label}</span>}
+        {label && <span data-toolbar-compact-label={compactLabel || undefined} style={{ fontWeight: active ? 600 : 450, whiteSpace: 'nowrap' }}>{label}</span>}
         {hasDropdown && (
           <ChevronDown
             size={12}
@@ -148,6 +152,7 @@ export function ToolbarDivider() {
 // ── 下拉菜单容器 ──
 
 export interface ToolbarDropdownProps {
+  collapsePriority?: number;
   trigger: ReactNode;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;

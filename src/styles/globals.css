@@ -42,22 +42,7 @@ body {
   -webkit-user-select: none;
 }
 
-/* 滚动条 */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 5px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb);
-  opacity: 0.8;
-}
+/* Scrollbar geometry and interaction live in scrollbar.css. */
 
 /* ═════════════════════════════════════════════════════════
  * 现代通用复选框控件 (Checkbox)

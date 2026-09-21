@@ -51,6 +51,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
         height: 36,
         minHeight: 36,
         display: 'flex',
+        minWidth: 0,
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 8px 0 10px',
@@ -78,7 +79,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
       ) : null}
 
       {/* 右侧收起按钮 */}
-      <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }} data-toolbar-layout-controls>
         {activeTab.kind === 'markdown' && (
           <SidebarToggle side="right" visible={outlineVisible} onToggle={toggleOutline} />
         )}

@@ -1,28 +1,48 @@
 /* NoteBoard 滚动条主题化
  * 详见 docs/07-UI布局与交互规范.md
- * 消费 --scrollbar-track / --scrollbar-thumb Token
+ * One native scrollbar implementation for editor and side panels.
  */
 
-/* WebKit / WebView2 */
+/* Animate the inherited color itself: scrollbar pseudo-elements do not
+ * consistently support transitions. Geometry stays stable throughout fading. */
+@property --nb-scrollbar-thumb {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: transparent;
+}
+
+:root { --nb-scrollbar-thumb: var(--scrollbar-thumb); }
+
+#nb-explorer, #nb-outline {
+  --nb-scrollbar-thumb: transparent;
+  transition: --nb-scrollbar-thumb 220ms ease;
+}
+
+#nb-explorer:hover, #nb-outline:hover {
+  --nb-scrollbar-thumb: var(--scrollbar-thumb);
+}
+
+/* WebView2: leave scrollbar-width/color at auto so the native pseudo-element
+ * styling and arrow buttons also work in newer Chromium versions. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
   border: none;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
+  background: var(--nb-scrollbar-thumb);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb);
+  background: var(--nb-scrollbar-thumb);
   border: 1px solid transparent;
   background-clip: padding-box;
   filter: brightness(1.15);
@@ -33,7 +53,25 @@
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--scrollbar-track);
+  background: transparent;
+}
+
+::-webkit-scrollbar-button:vertical {
+  height: 10px;
+  background: transparent;
+  border: 5px solid transparent;
+}
+::-webkit-scrollbar-button:vertical:decrement:start {
+  border-top-width: 0;
+  border-bottom-color: var(--nb-scrollbar-thumb);
+}
+::-webkit-scrollbar-button:vertical:increment:end {
+  border-bottom-width: 0;
+  border-top-color: var(--nb-scrollbar-thumb);
+}
+::-webkit-scrollbar-button:vertical:increment:start,
+::-webkit-scrollbar-button:vertical:decrement:end {
+  display: none;
 }
 
 /* 隐藏的水平滚动条，仅在 tab 栏需要时显示 */
@@ -47,8 +85,14 @@
   height: 0;
 }
 
-/* Firefox (备用，WebView2 不走这条） */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+/* Firefox fallback only; Chromium now supports these properties too. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nb-scrollbar-thumb) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #nb-explorer, #nb-outline { transition: none; }
 }

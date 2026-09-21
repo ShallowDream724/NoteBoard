@@ -2,7 +2,7 @@
 // 适用于 Markdown 可视化与源码模式
 // 支持多级下拉菜单、实时 Active/Hover 状态同步、撤销/重做与丰富排版格式化工具
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Editor } from '@tiptap/core';
 import {
   Undo2,
@@ -60,6 +60,7 @@ import { insertLocalImageWithDialog, pickAndSaveLocalImage } from '../editor-md/
 import { getMdTipTapEditor as getActiveTipTapEditor, getMdSourceView as getActiveSourceView } from '../editor-md/editorInstances';
 import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
+import { ResponsiveToolbar } from './ResponsiveToolbar';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -97,7 +98,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const [highlightDropdownOpen, setHighlightDropdownOpen] = useState(false);
 
   // ── 获取当前标题状态 ──
-  const currentHeadingLabel = useMemo(() => {
+  const currentHeadingLabel = (() => {
     if (!editor || isSourceMode) return '正文';
     for (let level = 1; level <= 6; level++) {
       if (editor.isActive('heading', { level })) {
@@ -105,7 +106,9 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       }
     }
     return '正文';
-  }, [editor, isSourceMode]);
+  })();
+  const HeadingIcon = ({ H1: Heading1, H2: Heading2, H3: Heading3,
+    H4: Heading4, H5: Heading5, H6: Heading6 } as Record<string, typeof Heading>)[currentHeadingLabel] ?? Heading;
 
   // ── 源码模式辅助文本插入 ──
   const executeSourceAction = useCallback((action: (view: EditorView) => void) => {
@@ -502,11 +505,16 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 2, overflow: 'visible', flex: 1 }}>
+    <ResponsiveToolbar onLayoutChange={() => {
+      setHeadingDropdownOpen(false);
+      setHighlightDropdownOpen(false);
+      setInsertDropdownOpen(false);
+    }}>
       {/* ── 历史操作组 ── */}
       <ToolbarButton
         icon={<Undo2 size={15} strokeWidth={2.2} />}
         title="撤销"
+        collapsePriority={130}
         shortcut="Ctrl+Z"
         disabled={!canUndo}
         onClick={() => undoDocumentHistory(docKey)}
@@ -514,6 +522,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Redo2 size={15} strokeWidth={2.2} />}
         title="重做"
+        collapsePriority={120}
         shortcut="Ctrl+Y"
         disabled={!canRedo}
         onClick={() => redoDocumentHistory(docKey)}
@@ -523,12 +532,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
       {/* ── 标题与段落下拉菜单（二级菜单） ── */}
       <ToolbarDropdown
+        collapsePriority={150}
         isOpen={headingDropdownOpen}
         onOpenChange={setHeadingDropdownOpen}
         trigger={
           <ToolbarButton
-            icon={<Heading size={15} />}
-            label={currentHeadingLabel}
+            icon={<HeadingIcon size={15} />}
+            label={currentHeadingLabel === '正文' ? '正文' : undefined}
+            compactLabel
             hasDropdown
             title="标题等级"
             active={currentHeadingLabel !== '正文'}
@@ -592,6 +603,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Bold size={15} strokeWidth={2.4} />}
         title="加粗"
+        collapsePriority={140}
         shortcut="Ctrl+B"
         active={!isSourceMode && Boolean(editor?.isActive('bold'))}
         onClick={() => toggleMark('bold')}
@@ -599,6 +611,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Italic size={15} strokeWidth={2.4} />}
         title="斜体"
+        collapsePriority={110}
         shortcut="Ctrl+I"
         active={!isSourceMode && Boolean(editor?.isActive('italic'))}
         onClick={() => toggleMark('italic')}
@@ -606,6 +619,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Underline size={15} strokeWidth={2.4} />}
         title="下划线"
+        collapsePriority={100}
         shortcut="Ctrl+U"
         active={!isSourceMode && Boolean(editor?.isActive('underline'))}
         onClick={() => toggleMark('underline')}
@@ -613,12 +627,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Strikethrough size={15} strokeWidth={2.4} />}
         title="删除线"
+        collapsePriority={90}
         active={!isSourceMode && Boolean(editor?.isActive('strike'))}
         onClick={() => toggleMark('strike')}
       />
       <ToolbarButton
         icon={<Code size={15} strokeWidth={2.4} />}
         title="行内代码"
+        collapsePriority={50}
         shortcut="`"
         active={!isSourceMode && Boolean(editor?.isActive('code'))}
         onClick={() => toggleMark('code')}
@@ -626,6 +642,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
       {/* ── 文本高亮与调色盘下拉（二级调色盘） ── */}
       <ToolbarDropdown
+        collapsePriority={40}
         isOpen={highlightDropdownOpen}
         onOpenChange={setHighlightDropdownOpen}
         trigger={
@@ -649,6 +666,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<List size={15} strokeWidth={2.2} />}
         title="无序列表"
+        collapsePriority={10}
         shortcut="Ctrl+Shift+8"
         active={!isSourceMode && Boolean(editor?.isActive('bulletList'))}
         onClick={() => toggleList('bullet')}
@@ -656,6 +674,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<ListOrdered size={15} strokeWidth={2.2} />}
         title="有序列表"
+        collapsePriority={20}
         shortcut="Ctrl+Shift+7"
         active={!isSourceMode && Boolean(editor?.isActive('orderedList'))}
         onClick={() => toggleList('ordered')}
@@ -663,6 +682,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<CheckSquare size={15} strokeWidth={2.2} />}
         title="任务列表"
+        collapsePriority={80}
         shortcut="Ctrl+Shift+9"
         active={!isSourceMode && Boolean(editor?.isActive('taskList'))}
         onClick={() => toggleList('task')}
@@ -672,12 +692,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
       {/* ── 插入块级与丰富元素下拉菜单（二级/三级菜单集大成） ── */}
       <ToolbarDropdown
+        collapsePriority={160}
         isOpen={insertDropdownOpen}
         onOpenChange={setInsertDropdownOpen}
         trigger={
           <ToolbarButton
             icon={<PlusSquare size={15} />}
             label="插入"
+            compactLabel
             hasDropdown
             title="插入超链接、图片、表格、公式、图表、提示块、日期时间等"
           />
@@ -849,6 +871,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Link2 size={15} />}
         title="插入/编辑超链接"
+        collapsePriority={30}
         shortcut="Ctrl+K"
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
@@ -856,6 +879,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<ImageIcon size={15} />}
         title="插入本地图片"
+        collapsePriority={70}
         onClick={handleInsertLocalImage}
       />
 
@@ -865,8 +889,9 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<RemoveFormatting size={15} color="#ef4444" />}
         title="清除选中文本格式"
+        collapsePriority={60}
         onClick={handleClearFormat}
       />
-    </div>
+    </ResponsiveToolbar>
   );
 }
