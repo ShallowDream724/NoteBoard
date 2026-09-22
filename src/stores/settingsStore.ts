@@ -1,10 +1,11 @@
 // NoteBoard settingsStore
 // 跨窗口同步的唯一 store
-// 详见 docs/05-ADR/ADR-010-状态管理与跨窗口同步.md §1/§8
+// 详见 docs/architecture/settings-and-updates.md
 
 import { create } from 'zustand';
 import type {
   Settings,
+  SettingsPatch,
   ThemeId,
   ThemeMode,
   TypographySettings,
@@ -95,6 +96,8 @@ interface SettingsStore {
   resolvedTheme: ThemeId;
   /** 是否已初始化 */
   initialized: boolean;
+  /** Failed writes are rolled back; this remains until the next explicit edit. */
+  saveError: string | null;
 
   // ── 初始化 ──
   init: () => Promise<void>;
@@ -121,206 +124,115 @@ interface SettingsStore {
   _applyRemoteUpdate: (s: Settings) => void;
 }
 
-// ── 辅助：解析主题并应用 ──
-
-function resolveAndApply(s: Settings): ThemeId {
-  const resolved = resolveTheme(
-    s.appearance.themeMode,
-    s.appearance.systemLightTheme,
-    s.appearance.systemDarkTheme,
-  );
-  applyTheme(resolved);
-  applyTypography(s.typography);
-  return resolved;
-}
-
 // ── 创建 store ──
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
-  settings: DEFAULT_SETTINGS,
-  resolvedTheme: 'chen-guang',
-  initialized: false,
+function applyPatch(settings: Settings, patch: SettingsPatch): Settings {
+  return {
+    ...settings,
+    ...(patch.appearance && { appearance: { ...settings.appearance, ...patch.appearance } }),
+    ...(patch.typography && { typography: { ...settings.typography, ...patch.typography } }),
+    ...(patch.editor && { editor: { ...settings.editor, ...patch.editor } }),
+    ...(patch.file && { file: { ...settings.file, ...patch.file } }),
+    ...(patch.layout && { layout: { ...settings.layout, ...patch.layout } }),
+    ...(patch.export && { export: { pandocPath: '', ...settings.export, ...patch.export } }),
+  };
+}
 
-  init: async () => {
-    if (get().initialized) return;
-
-    try {
-      // 🔴 R11：设置读取与字体服务完全解耦——不再 Promise.all 等待字体 init；
-      // 字体服务由 App 独立启动（fire-and-forget），verifying/激活不阻塞设置与渲染。
-      const loaded = await ipc.loadSettings();
-      // 字体服务独立启动（失败不影响设置加载）
-      void useFontPackStore.getState().init().catch((e) => {
-        console.error('字体服务初始化失败:', e);
-      });
-      const resolved = resolveAndApply(loaded);
-      set({ settings: loaded, resolvedTheme: resolved, initialized: true });
-
-      // 系统主题跟随监听
-      startSystemThemeListener(
-        () => get().settings.appearance.themeMode === 'system',
-        loaded.appearance.systemLightTheme,
-        loaded.appearance.systemDarkTheme,
-        (newResolved) => set({ resolvedTheme: newResolved }),
-      );
-
-      // 跨窗口同步：监听 nb://settings-changed
-      onSettingsChanged((remote) => {
-        const current = get().settings.revision;
-        // revision 去重：只有更大的 revision 才应用
-        if (remote.revision > current) {
-          get()._applyRemoteUpdate(remote);
-        }
-      });
-    } catch (e) {
-      // Rust 不可用时用默认值
-      console.error('加载设置失败:', e);
-      const resolved = resolveAndApply(DEFAULT_SETTINGS);
-      set({ settings: DEFAULT_SETTINGS, resolvedTheme: resolved, initialized: true });
+/** Confirmed server state plus local intent, independent of arrival order. */
+export class SettingsReplica {
+  private confirmed: Settings;
+  private received = false;
+  private sequence = 0;
+  private pending: Array<{ id: number; patch: SettingsPatch }> = [];
+  constructor(initial: Settings) { this.confirmed = initial; }
+  enqueue(patch: SettingsPatch) { const id = ++this.sequence; this.pending.push({ id, patch }); return id; }
+  receive(snapshot: Settings) {
+    if (snapshot.revision > this.confirmed.revision || (!this.received && snapshot.revision === this.confirmed.revision)) {
+      this.confirmed = snapshot; this.received = true;
     }
-  },
+  }
+  settle(id: number, snapshot?: Settings) {
+    if (snapshot) this.receive(snapshot);
+    this.pending = this.pending.filter(entry => entry.id !== id);
+  }
+  view() { return this.pending.reduce((settings, entry) => applyPatch(settings, entry.patch), this.confirmed); }
+}
 
-  setThemeMode: async (mode) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      appearance: { ...current.appearance, themeMode: mode },
-    };
-    // 乐观更新
-    const resolved = resolveAndApply(updated);
-    set({ settings: updated, resolvedTheme: resolved });
-
-    // 重启系统监听（因为 isSystem 回调可能变了）
-    stopSystemThemeListener();
-    if (mode === 'system') {
-      startSystemThemeListener(
-        () => get().settings.appearance.themeMode === 'system',
-        updated.appearance.systemLightTheme,
-        updated.appearance.systemDarkTheme,
-        (newResolved) => set({ resolvedTheme: newResolved }),
+export const useSettingsStore = create<SettingsStore>((set, get) => {
+  const replica = new SettingsReplica(DEFAULT_SETTINGS);
+  let initialization: Promise<void> | undefined;
+  let tail: Promise<void> = Promise.resolve();
+  let themeBinding = '';
+  const publish = (force = false) => {
+    const settings = replica.view(), previous = get().settings;
+    const appearanceChanged = settings.appearance !== previous.appearance;
+    let resolvedTheme = get().resolvedTheme;
+    if (force || appearanceChanged) {
+      resolvedTheme = resolveTheme(settings.appearance.themeMode, settings.appearance.systemLightTheme, settings.appearance.systemDarkTheme);
+      applyTheme(resolvedTheme);
+    }
+    if (force || settings.typography !== previous.typography) applyTypography(settings.typography);
+    set({ settings, resolvedTheme });
+    const { themeMode, systemLightTheme, systemDarkTheme } = settings.appearance;
+    const binding = `${themeMode}:${systemLightTheme}:${systemDarkTheme}`;
+    if ((force || appearanceChanged) && binding !== themeBinding) {
+      themeBinding = binding; stopSystemThemeListener();
+      if (themeMode === 'system') startSystemThemeListener(
+        () => get().settings.appearance.themeMode === 'system', systemLightTheme, systemDarkTheme,
+        resolvedTheme => set({ resolvedTheme }),
       );
     }
-
-    // 落盘 + 广播
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setSystemLightTheme: async (theme) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      appearance: { ...current.appearance, systemLightTheme: theme },
-    };
-    const resolved = resolveAndApply(updated);
-    set({ settings: updated, resolvedTheme: resolved });
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setSystemDarkTheme: async (theme) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      appearance: { ...current.appearance, systemDarkTheme: theme },
-    };
-    const resolved = resolveAndApply(updated);
-    set({ settings: updated, resolvedTheme: resolved });
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setTypography: async (patch) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      typography: { ...current.typography, ...patch },
-    };
-    applyTypography(updated.typography);
-    set({ settings: updated });
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setEditor: async (patch) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      editor: { ...current.editor, ...patch },
-    };
-    set({ settings: updated });
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setFile: async (patch) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      file: { ...current.file, ...patch },
-    };
-    set({ settings: updated });
-    // 动态同步所有已打开文档的保存策略
-    try {
-      const { useDocumentStore } = await import('./documentStore');
+    if (settings.file !== previous.file) void import('./documentStore').then(({ useDocumentStore }) => {
       useDocumentStore.getState().syncSavePolicies();
-    } catch {
-      // ignore
-    }
-    try {
-      await ipc.saveSettings(updated);
-      // 关闭最近窗口恢复功能时同步清理旧快照，重新开启不会意外恢复过期标签。
-      if (patch.restoreSession === false) {
-        await ipc.clearSession();
+    }).catch(() => {});
+  };
+  const submit = (input: SettingsPatch): Promise<string | null> => {
+    // Snapshot caller intent once; later UI mutations cannot change queued IPC.
+    const patch = JSON.parse(JSON.stringify(input)) as SettingsPatch;
+    const id = replica.enqueue(patch); set({ saveError: null }); publish();
+    const saved = tail.then(async () => {
+      try {
+        const snapshot = await ipc.patchSettings(patch);
+        replica.settle(id, snapshot); publish();
+      } catch (error) {
+        const message = String(error);
+        replica.settle(id); publish(); set({ saveError: message });
+        return message;
       }
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setLayout: async (patch) => {
-    const current = get().settings;
-    const updated: Settings = {
-      ...current,
-      layout: { ...current.layout, ...patch },
-    };
-    set({ settings: updated });
-    try {
-      await ipc.saveSettings(updated);
-    } catch (e) {
-      console.error('保存设置失败:', e);
-    }
-  },
-
-  setExport: async (patch) => {
-    const current = get().settings;
-    const updated = { ...current, export: { pandocPath: '', ...current.export, ...patch } };
-    set({ settings: updated });
-    await ipc.saveSettings(updated);
-  },
-
-  _applyRemoteUpdate: async (remote) => {
-    const resolved = resolveAndApply(remote);
-    set({ settings: remote, resolvedTheme: resolved });
-    try {
-      const { useDocumentStore } = await import('./documentStore');
-      useDocumentStore.getState().syncSavePolicies();
-    } catch {
-      // ignore
-    }
-  },
-}));
+      if (patch.file?.restoreSession === false) {
+        try { await ipc.clearSession(); }
+        catch (error) { const message = `设置已保存，但清理旧窗口记录失败：${String(error)}`; set({ saveError: message }); return message; }
+      }
+      return null;
+    });
+    tail = saved.then(() => {});
+    return saved;
+  };
+  const update = async (patch: SettingsPatch) => { await submit(patch); };
+  return {
+    settings: DEFAULT_SETTINGS, resolvedTheme: 'chen-guang', initialized: false, saveError: null,
+    init: () => {
+      if (initialization) return initialization;
+      initialization = (async () => {
+        // Register first: a broadcast during load is merged before its snapshot,
+        // and an older load response can never replace a newer revision.
+        try { await onSettingsChanged(remote => get()._applyRemoteUpdate(remote)); }
+        catch (error) { set({ saveError: `设置同步监听失败：${String(error)}` }); }
+        try { replica.receive(await ipc.loadSettings()); }
+        catch (error) { set({ saveError: `加载设置失败：${String(error)}` }); }
+        publish(true); set({ initialized: true });
+        void useFontPackStore.getState().init().catch(error => console.error('字体服务初始化失败:', error));
+      })();
+      return initialization;
+    },
+    setThemeMode: mode => update({ appearance: { themeMode: mode } }),
+    setSystemLightTheme: theme => update({ appearance: { systemLightTheme: theme } }),
+    setSystemDarkTheme: theme => update({ appearance: { systemDarkTheme: theme } }),
+    setTypography: typography => update({ typography }),
+    setEditor: editor => update({ editor }),
+    setFile: file => update({ file }),
+    setLayout: layout => update({ layout }),
+    setExport: async patch => { const error = await submit({ export: patch }); if (error) throw new Error(error); },
+    _applyRemoteUpdate: remote => { replica.receive(remote); publish(); },
+  };
+});

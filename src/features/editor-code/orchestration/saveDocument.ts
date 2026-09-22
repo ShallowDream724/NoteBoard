@@ -10,7 +10,6 @@ import { useWindowStore } from '../../../stores/windowStore';
 import { getBaseline } from '../../editor-md/serialize';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import type { WriteError } from '../../../core/ipc/types';
-import { moveDocumentHistory } from '../../history/documentHistory';
 import { DEFAULT_DRAWIO_XML } from './syncDocumentContent';
 import { onDocumentSaved } from '../../staging/stagingManager';
 import { showToast } from '../../../stores/toastStore';
@@ -22,12 +21,11 @@ import { ensureWritableContent } from '../../session/closedWindowSession';
 import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../editor-md/visualSnapshot';
 // 🔴 R3-04：另存为事务的会话身份校验（对话框/授权/写盘每个 await 后验证）
 import { getSessionGeneration } from '../../session/documentSession';
+import { assertDocumentIdentity, commitDocumentIdentity, materializeIdentityPending, prepareDocumentIdentity, protectDocumentIdentity, refreshDocumentIdentity, type DocumentIdentityLease } from '../../session/documentIdentity';
 // 🔴 S09：统一异步屏障 + 每文档串行写队列 + 身份迁移（H 节）
 import {
   flushDocument,
   writeDocumentWithBarrier,
-  migrateDocumentSession,
-  drainDocumentWrites,
   enqueueDocumentWrite,
 } from '../../session/documentSession';
 
@@ -294,6 +292,8 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
     }
     // 后端返回 ok：目标此前无归属——本次新取得授权（失败时按 finally 释放）
     newlyOwned = true;
+    let identityLease: DocumentIdentityLease | undefined;
+    let sourceOwnershipReleased = false;
 
     try {
       // 🔴 R3-04：授权 await 后会话身份再校验
@@ -301,6 +301,9 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         showToast('文档已发生变更，另存为已取消', 'warning');
         return false;
       }
+
+      identityLease = protectDocumentIdentity(originalKey);
+      await prepareDocumentIdentity(identityLease);
 
       // 第 2 步：对话框返回后重新捕获快照——对话框期间的合法编辑（含清空为 ''）
       //    必须随另存为写入，不得使用打开对话框前的旧正文
@@ -317,6 +320,13 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
       //    防止旧内容迟到覆盖）。失败时保留权威内容、dirty、历史和原身份——不迁移。
       //    🔴 R3-04：失败释放本次新取得的目标归属（finally 统一处理）
       const result = await enqueueDocumentWrite(selectedPath, async () => {
+        if (doc?.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(originalKey)) {
+          const { restoreImageAssetsForContent } = await import('../../editor-md/imageAssetLifecycle');
+          await restoreImageAssetsForContent(originalKey, saveContent);
+        }
+        if (getSessionGeneration(originalKey) !== originalGeneration) {
+          throw new Error('文档会话已结束，另存为已取消');
+        }
         const writeResult = await ipc.writeDocument(selectedPath, saveContent, encoding, eol);
         noteSelfWrite(selectedPath);
         return writeResult;
@@ -331,88 +341,68 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         return false;
       }
 
-      // 第 4 步：🔴 R3-04 身份切换临界区——先捕获最终状态再进入切换（C07）：
-      //    迁移期间（drain/unregister await）的新输入会进入“权威 store 镜像”，
-      //    临界区结束时再次读取——期间输入成为新会话的最终内容（不丢）
-      const lateCaptured = await flushDocument(originalKey, 'save');
-      const lateDoc = useDocumentStore.getState().getDocument(originalKey);
-      let finalContent = lateCaptured?.content ?? lateDoc?.content ?? null;
-      if (finalContent === null || finalContent === saveContent) finalContent = saveContent;
+      // The final barriers precede generation migration. Pending input arriving
+      // during any await is materialized while its source generation is valid.
+      await prepareDocumentIdentity(identityLease);
+      await refreshDocumentIdentity(identityLease);
+      try {
+        await ipc.unregisterDocument(label, originalKey);
+        sourceOwnershipReleased = true;
+      } catch { /* native reconciliation releases a stale original registration */ }
+      assertDocumentIdentity(identityLease);
+      // Keep the original generation valid through the final await. Consuming
+      // source/visual pending after migrateSession would discard this input.
+      materializeIdentityPending(originalKey);
+      const finalContent = useDocumentStore.getState().getDocument(originalKey)?.content ?? saveContent;
 
       const displayName = selectedPath.split(/[\\/]/).pop() ?? selectedPath;
       const dirPath = selectedPath.substring(0, selectedPath.lastIndexOf('\\')) || selectedPath;
 
-      if (originalKey !== selectedPath) {
-        // 🔴 S09：文档身份迁移——会话版本/写队列随新 key 接管；旧 key 在途任务先排空，
-        //    迟到的旧回调不能再以旧 key 创建文档/覆盖新内容
-        await drainDocumentWrites(originalKey);
-        migrateDocumentSession(originalKey, selectedPath);
-        try {
-          await ipc.unregisterDocument(label, originalKey);
-        } catch {
-          // 非关键：reconcile 兜底
-        }
-        // 🔴 R3-04（C07）：注销 await 期间的新输入——remove 前重新读取权威镜像
-        //    （flush/mirror 均可能被期间输入更新），期间输入成为新会话的最终内容
-        // 🔴 R4-06（D06）：镜像读取**不足以覆盖 J2 暂存的未物化输入**——注销等待
-        //    期间 source/visual 的新输入先进 pending（500ms 防抖前镜像仍是旧值）。
-        //    交接必须显式物化 pending（同一会话代际校验由 flushPending 内部执行；
-        //    migrate 已推进原 key 代际，pending 捕获的也是推进后的代际——一致），
-        //    物化结果作为期间输入进入新会话最终内容，不丢失。
-        const materializedDuringSource = flushPendingSourceSnapshot(originalKey);
-        const materializedDuringVisual = materializedDuringSource === null
-          ? flushPendingVisualSnapshot(originalKey)
-          : null;
-        const materializedDuring = materializedDuringSource ?? materializedDuringVisual;
-        if (materializedDuring !== null && materializedDuring !== finalContent) {
-          finalContent = materializedDuring;
-        } else {
-          const duringContent = useDocumentStore.getState().getDocument(originalKey)?.content ?? null;
-          if (duringContent !== null && duringContent !== finalContent) {
-            finalContent = duringContent;
-          }
-        }
-        // 身份提交前才迁移历史：等待期间的新输入已物化到旧 key 的时间线。
-        // 若在 await 注销前提前迁移，正文虽补上，最后一笔编辑却会遗留在旧历史中。
-        moveDocumentHistory(originalKey, selectedPath);
+      commitDocumentIdentity(originalKey, selectedPath, () => {
         useDocumentStore.getState().remove(originalKey);
-      }
-
-      useDocumentStore.getState().upsertFromPayload({
-        key: selectedPath,
-        displayName,
-        dirPath,
-        kind,
-        language,
-        content: finalContent,
-        encoding,
-        eol,
-        size: result.size,
-        mtime: result.mtime,
-        readonly: false,
+        useDocumentStore.getState().upsertFromPayload({
+          key: selectedPath,
+          displayName,
+          dirPath,
+          kind,
+          language,
+          content: finalContent,
+          encoding,
+          eol,
+          size: result.size,
+          mtime: result.mtime,
+          readonly: false,
+        });
+        // Baseline is the actual write; later input stays dirty in the new session.
+        useDocumentStore.getState().updateBaseline(selectedPath, saveContent, result.mtime, result.size);
+        getBaseline(selectedPath).updateBaseline(saveContent);
+        useWindowStore.getState().updateTabPath(originalKey, selectedPath, displayName);
+        useWindowStore.getState().setTabDirty(selectedPath, finalContent !== saveContent);
       });
-      // 🔴 N03：基线以实际写盘内容更新——写盘期间的新输入（finalContent≠saveContent）
-      //    由 updateBaseline 的 flush-and-compare 自动保持 dirty（新编辑保留在会话内受保护）
-      useDocumentStore.getState().updateBaseline(selectedPath, saveContent, result.mtime, result.size);
-      // 同步更新 Markdown 基线管理器
-      getBaseline(selectedPath).updateBaseline(saveContent);
-
-      // 更新 WindowStore（标签 key 与 activeKey 随身份迁移；解除断开/外部状态）
-      useWindowStore.getState().updateTabPath(originalKey, selectedPath, displayName);
-      useWindowStore.getState().setTabDirty(selectedPath, finalContent !== saveContent);
 
       // 🔴 N03：记录身份迁移——“保存并关闭”等调用方用实际新 key 继续后续流程
       lastSaveIdentityMove = { from: originalKey, to: selectedPath };
 
-      // 另存为会迁移文档 key，因此按原 key 清理先前的未命名暂存副本（内容证明）。
-      await onDocumentSaved(originalKey, saveContent);
-
       // 事务成功：身份已提交给新 key——授权随迁移兑现（不再释放）
       newlyOwned = false;
+      await onDocumentSaved(selectedPath, saveContent);
       return true;
     } finally {
+      identityLease?.release();
       // 🔴 R3-04：未提交成功的目标授权按 token 释放（写盘/迁移/快照失败均覆盖）
       if (newlyOwned) {
+        if (sourceOwnershipReleased && getSessionGeneration(originalKey) === originalGeneration && useDocumentStore.getState().hasDocument(originalKey)) {
+          try {
+            const restored = await ipc.registerDocument(label, originalKey, doc?.kind ?? kindFromPath(originalKey));
+            if (restored.type === 'already-open' && restored.ownerLabel !== label) {
+              useWindowStore.getState().setTabDetached(originalKey, true);
+              showToast('原路径已由其它窗口打开，未保存内容已保留，请另存为新文件', 'warning');
+            }
+          } catch (error) {
+            useWindowStore.getState().setTabDetached(originalKey, true);
+            console.error('另存为失败后恢复原文档归属失败:', error);
+          }
+        }
         try {
           await ipc.unregisterDocument(label, selectedPath);
         } catch {

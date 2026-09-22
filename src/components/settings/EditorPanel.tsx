@@ -103,7 +103,7 @@ export function EditorPanel() {
           min="1"
           max="8"
           value={settings.editor.tabSize}
-          onChange={(e) => setEditor({ tabSize: parseInt(e.target.value, 10) || 2 })}
+          onChange={(e) => setEditor({ tabSize: Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 2)) })}
           style={{ ...inputStyle, width: 60, textAlign: 'center' }}
         />
       </div>

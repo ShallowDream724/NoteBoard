@@ -69,8 +69,14 @@ function itemLinks(elements: Iterable<HTMLElement>, adjustable: Set<string>) {
     };
     if (element.tagName === 'TABLE') {
       for (const row of Array.from((element as HTMLTableElement).rows)) {
-        if (row.cells[0]) wrap(row.cells[0]);
-        if (row.cells.length > 1) wrap(row.cells[row.cells.length - 1]);
+        // Separate, non-nested link geometry survives cells containing only
+        // formulas, document links, images, or no text at all.
+        for (const cell of [row.cells[0], ...(row.cells.length > 1 ? [row.cells[row.cells.length - 1]] : [])]) {
+          if (!cell || cell.querySelector(':scope > .export-table-location')) continue;
+          const link = document.createElement('a'); link.href = ITEM_URI + id;
+          link.className = 'export-item-link export-table-location'; link.setAttribute('aria-hidden', 'true');
+          link.textContent = '\u00a0'; cell.append(link);
+        }
       }
     } else wrap(element);
   }
@@ -111,7 +117,9 @@ export function createLayoutSession(root: HTMLElement) {
       if (element.classList.contains('export-math') && formulaOriginals.has(id)) { element.innerHTML = formulaOriginals.get(id)!; delete element.dataset.mathContinued; }
       element.style.removeProperty('zoom'); element.classList.remove('wrap', 'table-wrap');
       element.querySelector<HTMLElement>('.katex-html')?.style.removeProperty('zoom');
-      element.querySelectorAll('a.export-item-link').forEach(link => link.replaceWith(...link.childNodes));
+      element.querySelectorAll('a.export-item-link').forEach(link => {
+        if (link.classList.contains('export-table-location')) link.remove(); else link.replaceWith(...link.childNodes);
+      });
     });
     issues.delete(id);
   };
@@ -235,6 +243,17 @@ export function createLayoutSession(root: HTMLElement) {
     if (global) {
       for (const image of root.querySelectorAll('img')) { image.style.maxHeight = `${pageHeight}px`; image.style.objectFit = 'contain'; if (!image.complete || !image.naturalWidth) issue('', '有图片未能加载，请检查图片路径'); }
       if (root.querySelector('[data-export-source-only]')) issue('', '此图表暂按源码导出', false);
+    }
+    // Final geometry includes prose, headings, code, and imported block markup.
+    // A clipping boundary is never itself evidence that a document fits.
+    issues.delete('document-overflow');
+    const boundary = root.getBoundingClientRect();
+    for (const element of root.querySelectorAll<HTMLElement>('p,h1,h2,h3,h4,h5,h6,pre,li,blockquote,.github-alert')) {
+      if (element.closest('[data-export-item]')) continue;
+      const box = element.getBoundingClientRect();
+      if (box.right > boundary.right + 1 || box.left < boundary.left - 1 || element.scrollWidth * renderedScale(element) > box.width + 1) {
+        issues.set('document-overflow', [{ id: '', message: '有正文或代码超出页面边界，请调整内容或页面设置。', blocking: true }]); break;
+      }
     }
     itemLinks([...changed].flatMap(elements), adjustable);
     previous = options;

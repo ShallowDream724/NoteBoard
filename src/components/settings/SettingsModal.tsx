@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { X, Palette, Type, Keyboard, Info, FileCode, Folder, FileOutput } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { NavBtn } from './SettingsControls';
@@ -9,6 +10,7 @@ import { FilePanel } from './FilePanel';
 import { ShortcutsPanel } from './ShortcutsPanel';
 import { AboutPanel } from './AboutPanel';
 import { ExportPanel } from './ExportPanel';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const PANELS = [
   { key: 'appearance', label: '外观主题', icon: Palette, content: AppearancePanel },
@@ -22,28 +24,34 @@ const PANELS = [
 
 /** The single settings entry: this shell owns navigation and dismissal only. */
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const saveError = useSettingsStore(state => state.saveError);
   const [activeTab, setActiveTab] = useState<(typeof PANELS)[number]['key']>('appearance');
   const contentRef = useRef<HTMLDivElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const background = useRef<{ element: HTMLElement; inert: boolean } | null>(null);
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [activeTab, isOpen]);
-  useEffect(() => {
-    if (!isOpen) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !event.defaultPrevented) onClose();
-    };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [isOpen, onClose]);
   if (!isOpen) return null;
   const Panel = PANELS.find(panel => panel.key === activeTab)!.content;
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9990, display: 'flex',
-      alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(4px)'
-    }}>
-      <div role="dialog" aria-modal="true" aria-label="NoteBoard 设置"
+    <Dialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(4px)' }} />
+      <Dialog.Content data-shortcuts-suspended aria-describedby={undefined}
+        onKeyDown={event => event.stopPropagation()}
+        onOpenAutoFocus={() => {
+          previousFocus.current = document.activeElement as HTMLElement | null;
+          const root = document.getElementById('root');
+          if (root) { background.current = { element: root, inert: root.inert }; root.inert = true; }
+        }}
+        onCloseAutoFocus={event => {
+          event.preventDefault();
+          if (background.current) { background.current.element.inert = background.current.inert; background.current = null; }
+          if (previousFocus.current?.isConnected) previousFocus.current.focus();
+        }}
         style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 9991,
           width: 880, maxWidth: '92vw', height: 660, maxHeight: '88vh',
           background: 'var(--editor-bg)', border: '1px solid var(--editor-border)', borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-lg)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -55,7 +63,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <img src="/logo.ico" alt="" width={18} height={18} />
-            <span style={{ fontWeight: 600, fontSize: 14 }}>NoteBoard 设置</span>
+            <Dialog.Title asChild><span style={{ fontWeight: 600, fontSize: 14 }}>NoteBoard 设置</span></Dialog.Title>
           </div>
           <Tooltip content="关闭设置" shortcut="Esc" side="bottom" sideOffset={4}>
             <button type="button" aria-label="关闭设置" onClick={onClose}
@@ -67,6 +75,9 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             </button>
           </Tooltip>
         </div>
+        {saveError && <div role="alert" style={{ padding: '9px 20px', flexShrink: 0, borderBottom: '1px solid var(--editor-border)', color: 'var(--error-500)', fontSize: 12, overflowWrap: 'anywhere', userSelect: 'text' }}>
+          设置未能保存：{saveError}
+        </div>}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
           <nav aria-label="设置分类" style={{
             width: 165, flexShrink: 0, borderRight: '1px solid var(--editor-border)',
@@ -80,7 +91,8 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             <Panel />
           </div>
         </div>
-      </div>
-    </div>
+      </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

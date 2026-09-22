@@ -200,8 +200,78 @@ pub fn create_dir(dir: String, name: String) -> Result<(), String> {
 
 /// 重命名
 #[tauri::command]
-pub fn rename_path(from: String, to: String) -> Result<(), String> {
-    std::fs::rename(&from, &to).map_err(|e| format!("重命名失败: {}", e))
+pub fn rename_path(
+    state: tauri::State<'_, std::sync::Mutex<crate::state::AppState>>,
+    label: String,
+    from: String,
+    to: String,
+    expected_keys: Vec<String>,
+) -> Result<(), String> {
+    let mut state = state.lock().map_err(|_| "文档归属状态不可用".to_string())?;
+    rename_registered_path(&mut state, &label, &from, &to, &expected_keys)
+}
+
+/// The filesystem rename and native identity commit share the registry lock.
+/// Other windows and in-flight opens must finish first: their editor authority
+/// has not been captured by this caller and cannot be moved on their behalf.
+fn rename_registered_path(
+    state: &mut crate::state::AppState,
+    label: &str,
+    from: &str,
+    to: &str,
+    expected_keys: &[String],
+) -> Result<(), String> {
+    let from_key = nbpath::normalize_key(from);
+    // Preserve the requested filename's spelling for case-only renames.
+    let to_key = to.replace('/', "\\");
+    let from_lower = from_key.trim_end_matches('\\').to_lowercase();
+    let to_lower = nbpath::normalize_key(to).trim_end_matches('\\').to_lowercase();
+    let within = |key: &str, root: &str| key == root || key.strip_prefix(root).is_some_and(|tail| tail.starts_with('\\'));
+    let expected: std::collections::HashSet<String> = expected_keys.iter()
+        .map(|key| key.replace('/', "\\").to_lowercase()).collect();
+    let mut moved = Vec::new();
+    let prefix_parts = from_key.trim_end_matches('\\').split('\\').count();
+    for (key, record) in &state.documents {
+        if within(key, &from_lower) {
+            if record.owner_window != label {
+                return Err(format!("目录或文件仍在其它窗口打开（{}），请先关闭后重试", record.owner_window));
+            }
+            if !expected.contains(key) {
+                return Err("重命名期间有文档刚被打开，请稍后重试".into());
+            }
+            let suffix = record.key.replace('/', "\\").split('\\').skip(prefix_parts).collect::<Vec<_>>().join("\\");
+            let next = if suffix.is_empty() { to_key.clone() } else { format!("{}\\{}", to_key.trim_end_matches('\\'), suffix) };
+            let mut migrated = record.clone();
+            migrated.key = next.clone();
+            migrated.lower_key = next.to_lowercase();
+            if nbpath::extension(&record.key) != nbpath::extension(&next) {
+                migrated.kind = crate::dto::kind_from_path(&next).0;
+            }
+            moved.push((key.clone(), migrated));
+        } else if within(key, &to_lower) {
+            return Err("目标路径已有打开的文档，请先关闭后重试".into());
+        }
+    }
+    let pending_keys: Vec<_> = state.pending_prepares.keys().cloned().collect();
+    for key in pending_keys {
+        if (within(&key, &from_lower) || within(&key, &to_lower)) && state.live_pending_prepare(&key).is_some() {
+            return Err("目录或文件正在打开，请稍后重试".into());
+        }
+    }
+    if state.transfers.values().any(|transfer| {
+        transfer.payload.is_some() && (within(&transfer.key.to_lowercase(), &from_lower) || within(&transfer.key.to_lowercase(), &to_lower))
+    }) {
+        return Err("目录或文件正在跨窗口迁移，请稍后重试".into());
+    }
+    if from_lower != to_lower && Path::new(to).exists() {
+        return Err("目标路径已存在，未执行重命名".into());
+    }
+    std::fs::rename(from, to).map_err(|error| format!("重命名失败: {}", error))?;
+    for (old, record) in moved {
+        state.documents.remove(&old);
+        state.documents.insert(record.lower_key.clone(), record);
+    }
+    Ok(())
 }
 
 /// 移到回收站
@@ -257,4 +327,63 @@ pub fn open_with_default_app(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn unwatch_dir(_path: String) -> Result<(), String> {
     Ok(())
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::*;
+    use crate::{dto::DocumentKind, registry::documents::DocumentRegistry, state::AppState};
+
+    #[test]
+    fn rename_preserves_disk_body_and_native_dirty_owner() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("before.md");
+        let target = directory.path().join("after.sql");
+        std::fs::write(&source, "disk baseline").unwrap();
+        let from = source.to_string_lossy().to_string();
+        let to = target.to_string_lossy().to_string();
+        let key = nbpath::normalize_key(&from);
+        let mut state = AppState::default();
+        DocumentRegistry::register(&mut state.documents, "window", &key, DocumentKind::Markdown);
+        DocumentRegistry::set_dirty(&mut state.documents, &key, true);
+        rename_registered_path(&mut state, "window", &from, &to, &[key.clone()]).unwrap();
+        assert!(!source.exists());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "disk baseline");
+        assert!(!state.documents.contains_key(&key.to_lowercase()));
+        let moved = state.documents.get(&to.replace('/', "\\").to_lowercase()).unwrap();
+        assert_eq!(moved.owner_window, "window");
+        assert!(moved.is_dirty);
+        assert_eq!(moved.kind, DocumentKind::Code);
+    }
+
+    #[test]
+    fn rename_directory_refuses_foreign_or_uncaptured_open_children() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("before");
+        let target = directory.path().join("after");
+        std::fs::create_dir(&source).unwrap();
+        let child = source.join("child.md");
+        std::fs::write(&child, "body").unwrap();
+        let key = nbpath::normalize_key(&child.to_string_lossy());
+        let mut state = AppState::default();
+        DocumentRegistry::register(&mut state.documents, "other", &key, DocumentKind::Markdown);
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[key.clone()]).is_err());
+        state.documents.get_mut(&key.to_lowercase()).unwrap().owner_window = "window".into();
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[]).is_err());
+        assert!(child.exists());
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn rename_refuses_existing_destination_without_overwriting_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.md");
+        let target = directory.path().join("target.md");
+        std::fs::write(&source, "source").unwrap();
+        std::fs::write(&target, "target").unwrap();
+        let mut state = AppState::default();
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[]).is_err());
+        assert_eq!(std::fs::read_to_string(source).unwrap(), "source");
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "target");
+    }
 }

@@ -58,7 +58,7 @@ import {
 } from '../features/welcome/welcomeActions';
 import { useFavoritesStore } from '../features/favorites/favoritesStore';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { discardStagedDocuments, stashPendingDocuments } from '../features/staging/stagingManager';
+import { discardStagedDocuments, stashPendingDocuments, assertStagedDocumentsCurrent } from '../features/staging/stagingManager';
 import { showToast } from '../stores/toastStore';
 import { hasUnsavedWork } from '../features/staging/stagingPolicy';
 import {
@@ -182,7 +182,12 @@ export function AppShell(_props: { children?: React.ReactNode }) {
       }
       closeKeys.push(effectiveKey);
     }
-    const targetKeys = closeKeys;
+    const pending = useWindowStore.getState().pendingCloseKeys;
+    const targetKeys = pending.length ? [...pending] : closeKeys;
+    if (targetKeys.some(key => hasUnsavedWork(key))) {
+      showToast('保存期间有新的修改，请再次保存后关闭', 'warning');
+      return;
+    }
     const willCloseWindow = useWindowStore.getState().isWindowClosing;
     if (willCloseWindow) {
       // 窗口级关闭必须在技术性移除标签前记录，否则会把仍打开的标签误判成已独立关闭。
@@ -191,6 +196,10 @@ export function AppShell(_props: { children?: React.ReactNode }) {
       } catch (error) {
         console.error('保存最近文件快照失败:', error);
         showToast('最近文件记录失败，但文件已经保存', 'warning');
+      }
+      if (targetKeys.some(key => hasUnsavedWork(key))) {
+        showToast('保存期间有新的修改，请再次保存后关闭', 'warning');
+        return;
       }
       await performWindowClose(getCurrentWindow().label, true);
     } else {
@@ -203,7 +212,11 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     const targetKeys = [...useWindowStore.getState().pendingCloseKeys];
     const willCloseWindow = useWindowStore.getState().isWindowClosing;
     // “不保存”保持彻底丢弃语义，清理由自动关闭保护产生的副本。
-    await discardStagedDocuments(keys);
+    try { await discardStagedDocuments(keys); }
+    catch (error) {
+      showToast(`未能清理暂存副本，窗口尚未关闭：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
+      return;
+    }
     if (willCloseWindow) {
       try {
         // 明确丢弃的标签不进入最近文件，其余仍打开标签继续记录。
@@ -222,22 +235,23 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   const handleStashAndClose = async (keys: string[]) => {
     try {
       await stashPendingDocuments({ keys, retain: true });
+      const targetKeys = [...useWindowStore.getState().pendingCloseKeys];
+      const willCloseWindow = useWindowStore.getState().isWindowClosing;
+      if (willCloseWindow) {
+        try {
+          await saveCurrentWindowSnapshot();
+        } catch (error) {
+          console.error('保存最近文件快照失败:', error);
+          showToast('最近文件记录失败，但暂存文件已经保留', 'warning');
+        }
+        assertStagedDocumentsCurrent(targetKeys);
+        await performWindowClose(getCurrentWindow().label, true);
+      } else {
+        assertStagedDocumentsCurrent(targetKeys);
+        confirmCloseBatch(targetKeys);
+      }
     } catch (error) {
       showToast(`暂存失败，窗口尚未关闭：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
-      return;
-    }
-    const targetKeys = [...useWindowStore.getState().pendingCloseKeys];
-    const willCloseWindow = useWindowStore.getState().isWindowClosing;
-    if (willCloseWindow) {
-      try {
-        await saveCurrentWindowSnapshot();
-      } catch (error) {
-        console.error('保存最近文件快照失败:', error);
-        showToast('最近文件记录失败，但暂存文件已经保留', 'warning');
-      }
-      await performWindowClose(getCurrentWindow().label, true);
-    } else {
-      confirmCloseBatch(targetKeys);
     }
   };
 

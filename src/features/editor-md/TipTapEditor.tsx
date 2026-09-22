@@ -15,7 +15,7 @@ import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
 import { EditorView, keymap } from '@codemirror/view';
-import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
+import { Annotation, EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
@@ -30,6 +30,7 @@ import { judgeLargeDoc } from './largeDoc';
 import { nbEditorTheme } from '../editor-code/theme';
 import { nbSyntaxHighlighting } from '../editor-code/highlightStyle';
 import { createBaseExtensions, typographyCompartment } from '../editor-code/setup';
+import { liveEditorSettings } from '../editor-code/editorSettingsBinding';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -77,12 +78,19 @@ import { createMarkdownEditorCapabilities } from './editorCapabilities';
 import { takeViewState } from '../session/editorSuspension';
 // 🔴 N10.2：实例就绪终点标记（requestId 与打开请求对齐）
 import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
+import { restoreImageAssetsForContent } from './imageAssetLifecycle';
+
+// Mode/history synchronization is not an input event. It must never leave a
+// delayed source snapshot that can overwrite a subsequent undo/redo branch.
+const sourceReplacement = Annotation.define<boolean>();
 
 /** 回收恢复的 Markdown 视图状态形态（captureViewState 捕获） */
 type RestoredMarkdownViewState = {
   kind: 'markdown';
   selection: { anchor: number; head: number } | null;
   scrollTop: number;
+  scrollLeft?: number;
   mode: 'visual' | 'source';
 };
 
@@ -118,6 +126,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 惰性挂载 visual 时待填充的内容（首次切换 visual 的源码内容）
   const pendingVisualContentRef = useRef<string | null>(null);
   const pendingSourceSelectionRef = useRef<{ anchor: number; head: number } | null>(null);
+  const pendingRestoredStateRef = useRef<RestoredMarkdownViewState | null>(null);
+  const focusFrameRef = useRef<number | null>(null);
   // TipTap 原生历史仅用来识别连续输入是否属于同一分组，快捷键由文档级历史接管
   const visualUndoDepthRef = useRef(0);
   // 初始化锁：在初次加载和程序化设置内容期间以同步作用域阻止 onUpdate 误标为脏
@@ -133,35 +143,56 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
    * visual 内核重挂载在填充 effect 末尾调用；source 内核在 initSourceEditor 后调用。
    */
   const restoreMarkdownViewState = useCallback(() => {
-    const restored = takeViewState(docKey) as RestoredMarkdownViewState | null;
-    if (!restored || restored.kind !== 'markdown' || !restored.selection) return;
-    const { anchor, head } = restored.selection;
+    const restored = pendingRestoredStateRef.current ?? takeViewState(docKey) as RestoredMarkdownViewState | null;
+    if (!restored || restored.kind !== 'markdown') return;
+    pendingRestoredStateRef.current = restored;
+    if (restored.mode !== viewModeRef.current) return;
     const scrollTop = restored.scrollTop ?? 0;
+    const scrollLeft = restored.scrollLeft ?? 0;
 
     if (restored.mode === 'source') {
       const view = sourceViewRef.current;
       if (!view) return;
-      const docLength = view.state.doc.length;
-      const clampedAnchor = Math.max(0, Math.min(anchor, docLength));
-      const clampedHead = Math.max(0, Math.min(head, docLength));
-      view.dispatch({ selection: { anchor: clampedAnchor, head: clampedHead } });
+      if (restored.selection) {
+        const docLength = view.state.doc.length;
+        const { anchor, head } = restored.selection;
+        view.dispatch({ selection: { anchor: Math.max(0, Math.min(anchor, docLength)), head: Math.max(0, Math.min(head, docLength)) } });
+      }
       view.scrollDOM.scrollTop = scrollTop;
+      view.scrollDOM.scrollLeft = scrollLeft;
+      pendingRestoredStateRef.current = null;
       return;
     }
 
     const editor = tipTapEditorRef.current;
     if (!editor) return;
-    const maxPosition = editor.state.doc.content.size;
-    const clampedAnchor = Math.max(1, Math.min(anchor, maxPosition));
-    const clampedHead = Math.max(1, Math.min(head, maxPosition));
-    editor
-      .chain()
-      .setTextSelection({ from: clampedAnchor, to: clampedHead })
-      .scrollIntoView()
-      .run();
-    // TipTap 的 contenteditable 不自身滚动，滚动发生在 EditorContent 容器
-    const container = editor.view.dom.parentElement as HTMLElement | null;
-    if (container) container.scrollTop = scrollTop;
+    if (restored.selection) {
+      const maxPosition = editor.state.doc.content.size;
+      const { anchor, head } = restored.selection;
+      editor.commands.setTextSelection({ from: Math.max(1, Math.min(anchor, maxPosition)), to: Math.max(1, Math.min(head, maxPosition)) });
+    }
+    const container = findScrollContainer(editor.view.dom);
+    container.scrollTop = scrollTop;
+    container.scrollLeft = scrollLeft;
+    pendingRestoredStateRef.current = null;
+  }, [docKey]);
+
+  const scheduleModeSelection = useCallback((mode: 'source' | 'visual', selection: { anchor: number; head: number } | null) => {
+    if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+    focusFrameRef.current = requestAnimationFrame(() => {
+      focusFrameRef.current = null;
+      if (viewModeRef.current !== mode || useWindowStore.getState().activeKey !== docKey) return;
+      if (mode === 'source') {
+        const view = sourceViewRef.current;
+        if (selection) view?.dispatch({ selection, effects: EditorView.scrollIntoView(selection.head, { y: 'center' }) });
+        view?.focus();
+      } else {
+        const currentEditor = tipTapEditorRef.current;
+        if (selection && currentEditor && !currentEditor.isDestroyed) {
+          currentEditor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run();
+        }
+      }
+    });
   }, [docKey]);
 
   // 🔴 J2：注册 source 快照的历史导航/读取前物化钩子（visual 钩子由 VisualKernel 注册；
@@ -282,7 +313,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
             to: sourceViewRef.current.state.doc.length,
             insert: content,
           },
-          annotations: CodeMirrorTransaction.addToHistory.of(false),
+          annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
         });
       }
       registerMdSourceView(docKey, sourceViewRef.current);
@@ -291,7 +322,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
     // 源码模式输入监听与自动标脏
     const updateListener = EditorView.updateListener.of((update) => {
-      if (!update.docChanged) return;
+      if (!update.docChanged || update.transactions.some(transaction => transaction.annotation(sourceReplacement))) return;
       // 🔴 内容版本递增：源码模式真实修改同样推进 revision
       bumpDocumentRevision(docKey);
 
@@ -364,13 +395,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
             },
           },
         ])),
-        ...createBaseExtensions(),
+        ...createBaseExtensions(useSettingsStore.getState().settings.editor),
+        liveEditorSettings,
         markdown(),
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
         markdownPlainBracketExtension,
         nbSyntaxHighlighting,
         nbEditorTheme,
-        EditorView.lineWrapping,
         updateListener,
       ],
     });
@@ -410,44 +441,54 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
   // 当前可见模式负责呈现统一历史节点，另一内核会在下次切换时无历史地同步到同一内容
   useEffect(() => {
-    if (!editor) return;
     return registerDocumentHistoryAdapter(docKey, {
       applyEntry: (entry, navigation) => {
+        const publish = (content: string) => {
+          bumpDocumentRevision(docKey);
+          useDocumentStore.getState().setContent(docKey, content);
+          useWindowStore.getState().setTabDirty(docKey, useDocumentStore.getState().getDocument(docKey)?.isDirty ?? true);
+          void restoreImageAssetsForContent(docKey, content).catch(error => console.error('恢复图片失败:', error));
+          if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
+          diskTimerRef.current = setTimeout(() => { void autoSaveDocument(docKey, content); }, 800);
+        };
         if (viewModeRef.current === 'source') {
           if (!sourceViewRef.current) {
             initSourceEditor(entry.content);
           }
           const view = sourceViewRef.current;
-          if (!view) return;
+          if (!view) throw new Error('源码编辑器尚未就绪');
+          const content = entry.content.replace(/\r\n?/g, '\n');
           const preferredSelection = navigation.selectionMode === 'source'
             ? navigation.selection
             : undefined;
           // 可视化历史切到源码呈现时，用 Markdown 文本首差异位置作为可靠落点
-          const fallbackPosition = Math.min(navigation.changeOffset, entry.content.length);
-          const anchor = Math.max(0, Math.min(preferredSelection?.anchor ?? fallbackPosition, entry.content.length));
-          const head = Math.max(0, Math.min(preferredSelection?.head ?? anchor, entry.content.length));
+          const fallbackPosition = entry.content.slice(0, navigation.changeOffset).replace(/\r\n?/g, '\n').length;
+          const anchor = Math.max(0, Math.min(preferredSelection?.anchor ?? fallbackPosition, content.length));
+          const head = Math.max(0, Math.min(preferredSelection?.head ?? anchor, content.length));
           view.dispatch({
-            changes: view.state.doc.toString() === entry.content
+            changes: view.state.doc.toString() === content
               ? undefined
-              : { from: 0, to: view.state.doc.length, insert: entry.content },
+              : { from: 0, to: view.state.doc.length, insert: content },
             selection: { anchor, head },
-            annotations: CodeMirrorTransaction.addToHistory.of(false),
+            annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
             scrollIntoView: true,
           });
+          synchronizeCurrentDocumentHistoryContent(docKey, content, 'source');
+          publish(content);
           view.focus();
           return;
         }
 
+        const editor = tipTapEditorRef.current;
+        if (!editor || editor.isDestroyed) throw new Error('编辑器尚未就绪');
         const previousVisualDocument = editor.state.doc;
         if (hasMarkdownContentChanged(editor, entry.content)) {
           // 统一历史应用属于导航而非新编辑，整篇替换明确排除出 TipTap 原生历史
           parseMarkdown(editor, entry.content, 'history');
         }
-        synchronizeCurrentDocumentHistoryContent(
-          docKey,
-          serializeMarkdown(editor),
-          'visual',
-        );
+        const content = serializeMarkdown(editor);
+        synchronizeCurrentDocumentHistoryContent(docKey, content, 'visual');
+        publish(content);
         const preferredSelection = navigation.selectionMode === 'visual'
           ? navigation.selection
           : undefined;
@@ -465,7 +506,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           .run();
       },
     });
-  }, [docKey, editor, initSourceEditor]);
+  }, [docKey, initSourceEditor]);
 
   // ── S08 文档级初始化（不依赖 TipTap 实例；source 初始模式无需创建内核）──
   // 仅在 docKey 变更或初次加载时执行，不可随 doc.content 变化重复 parse
@@ -514,8 +555,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         if (!currentDoc.isDirty) {
           baseline.setBaseline(content);
           useDocumentStore.getState().setBaselineContent(docKey, content);
-        } else if (!baseline.getBaseline()) {
-          baseline.setBaseline(content);
+        } else if (baseline.getBaseline() === null) {
+          baseline.setBaseline(currentDoc.baselineContent ?? content);
         }
       }
     }
@@ -526,12 +567,15 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     setViewMode(resolvedMode);
     initializeDocumentHistory(docKey, historyInitialContent, resolvedMode);
     if (resolvedMode === 'source') {
-      // 延迟确保源码容器完成挂载；历史本身已独立于编辑器模式初始化
-      setTimeout(() => {
-        initSourceEditor(historyInitialContent);
-        // 🔴 S12：source 内核重挂载（回收后）——恢复捕获的选区/滚动视图状态
-        restoreMarkdownViewState();
-      }, 0);
+      const baseline = getBaseline(docKey);
+      if (!currentDoc.isDirty) {
+        baseline.setBaseline(content);
+        useDocumentStore.getState().setBaselineContent(docKey, content);
+      } else if (baseline.getBaseline() === null) baseline.setBaseline(currentDoc.baselineContent ?? content);
+      // The source host is permanent and is mounted before this effect.
+      initSourceEditor(historyInitialContent);
+      restoreMarkdownViewState();
+      isInitializingRef.current = false;
     }
   }, [docKey, settings.editor.defaultViewMode, initSourceEditor]);
 
@@ -566,8 +610,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         useDocumentStore.getState().setBaselineContent(docKey, initialSerialized);
         useDocumentStore.getState().setDirty(docKey, false);
         useWindowStore.getState().setTabDirty(docKey, false);
-      } else if (!baseline.getBaseline()) {
-        baseline.setBaseline(content);
+      } else if (baseline.getBaseline() === null) {
+        baseline.setBaseline(currentDoc.baselineContent ?? content);
       }
     } finally {
       // 同步作用域结束即解锁：真实输入立即生效
@@ -579,14 +623,14 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     if (pendingSourceSelectionRef.current) {
       const selection = mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
       pendingSourceSelectionRef.current = null;
-      requestAnimationFrame(() => { if (!editor.isDestroyed) editor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run(); });
+      scheduleModeSelection('visual', selection);
     }
   }, [editor, docKey, restoreMarkdownViewState]);
 
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
   const toggleViewMode = useCallback((targetMode?: 'visual' | 'source') => {
-    const nextMode = targetMode ?? (viewMode === 'visual' ? 'source' : 'visual');
-    if (nextMode === viewMode) return;
+    const nextMode = targetMode ?? (viewModeRef.current === 'visual' ? 'source' : 'visual');
+    if (nextMode === viewModeRef.current) return;
 
     if (nextMode === 'source') {
       // 可视化 → 源码模式
@@ -597,21 +641,21 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       useDocumentStore.getState().setContent(docKey, md);
       initSourceEditor(md);
       const embedded = editor ? embeddedEditingPosition(editor) : null;
-      const selection = editor ? mapModeSelection(editor, md, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
+      const sourceText = sourceViewRef.current?.state.doc.toString() ?? md;
+      const selection = editor ? mapModeSelection(editor, sourceText, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
       setViewMode('source');
       useWindowStore.getState().setTabViewMode(docKey, 'source');
       emit('view-mode-changed', { key: docKey, mode: 'source' });
-      setTimeout(() => {
-        if (selection) sourceViewRef.current?.dispatch({ selection, effects: EditorView.scrollIntoView(selection.head, { y: 'center' }) });
-        sourceViewRef.current?.focus();
-      }, 20);
+      scheduleModeSelection('source', selection);
     } else {
       // 源码 → 可视化模式
-      const md = sourceViewRef.current
-        ? (getCurrentDocumentHistoryContent(docKey) ?? sourceViewRef.current.state.doc.toString())
-        : (useDocumentStore.getState().getDocument(docKey)?.content ?? '');
+      // CM positions count its LF-normalized Text. A pristine history entry may
+      // still contain CRLF, so its offsets cannot be used with a CM selection.
+      const historyContent = getCurrentDocumentHistoryContent(docKey);
+      const md = sourceViewRef.current?.state.doc.toString()
+        ?? historyContent ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '';
       const verdict = judgeLargeDoc(md);
       if (verdict.isLarge) {
         setLargeVerdict(verdict); setShowLargeBanner(true);
@@ -667,16 +711,14 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       useWindowStore.getState().setTabViewMode(docKey, 'visual');
       emit('view-mode-changed', { key: docKey, mode: 'visual' });
       const visualSelection = mapModeSelection(editor, md, 'visual', sourceSelection);
-      setTimeout(() => {
-        if (!editor.isDestroyed) editor.chain().setTextSelection({ from: visualSelection.anchor, to: visualSelection.head }).focus().scrollIntoView().run();
-      }, 20);
+      scheduleModeSelection('visual', visualSelection);
     }
-  }, [editor, viewMode, docKey, initSourceEditor]);
+  }, [editor, docKey, initSourceEditor, scheduleModeSelection]);
 
   // 监听来自状态栏或外部的模式切换请求
   useEffect(() => {
     const handleToggle = (payload: { key?: string; mode?: 'visual' | 'source' }) => {
-      if (!payload.key || payload.key === docKey) {
+      if (payload.key === docKey || (!payload.key && useWindowStore.getState().activeKey === docKey)) {
         toggleViewMode(payload.mode);
       }
     };
@@ -720,6 +762,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         useDocumentStore.getState().setContent(docKey, latestContent);
       }
       initializedDocKeyRef.current = null;
+      if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+      pendingRestoredStateRef.current = null;
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
       if (sourceViewRef.current) {

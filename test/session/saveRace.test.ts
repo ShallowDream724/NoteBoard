@@ -13,6 +13,7 @@ import {
   flushDocument,
   enqueueDocumentWrite,
   writeDocumentWithBarrier,
+  queuedAutoSave,
   migrateDocumentSession,
   disposeDocumentSession,
 } from '@/features/session/documentSession';
@@ -23,6 +24,9 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import * as ipc from '@/core/ipc/commands';
 import { on, off } from '@/core/emitter';
+
+const images = vi.hoisted(() => ({ restore: vi.fn() }));
+vi.mock('@/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: images.restore }));
 
 vi.mock('@/core/ipc/commands', () => ({
   writeDocument: vi.fn(),
@@ -92,6 +96,7 @@ function seedDocument(content: string, savePolicy: 'auto' | 'manual' = 'manual')
 describe('S09 保存竞态与版本屏障（H 节时序）', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    images.restore.mockReset().mockResolvedValue(undefined);
     useWindowStore.setState({ tabs: [], activeKey: null });
     useDocumentStore.setState({ documents: new Map() });
     resetEditorRegistryForTest();
@@ -114,6 +119,30 @@ describe('S09 保存竞态与版本屏障（H 节时序）', () => {
     } finally {
       fake.dispose();
     }
+  });
+
+  it.each(['manual', 'auto'])('图片恢复完成之前%s保存不得写入引用', async mode => {
+    seedDocument('旧正文', 'auto');
+    const content = '![恢复](img/picture.png)';
+    const fake = installFakeCaps(KEY, content);
+    let restored!: () => void;
+    images.restore.mockImplementationOnce(() => new Promise<void>(resolve => { restored = resolve; }));
+    vi.mocked(ipc.writeDocument).mockResolvedValue({ ok: true, mtime: 1, size: content.length, error: null });
+    try {
+      const saving = mode === 'manual' ? writeDocumentWithBarrier(KEY, content) : queuedAutoSave(KEY, content);
+      await vi.waitFor(() => expect(images.restore).toHaveBeenCalledWith(KEY, content));
+      expect(ipc.writeDocument).not.toHaveBeenCalled();
+      restored(); await saving;
+      expect(ipc.writeDocument).toHaveBeenCalledWith(KEY, content, 'utf8', 'lf');
+    } finally { fake.dispose(); }
+  });
+
+  it('图片恢复失败时保存保持旧基线并拒绝写盘', async () => {
+    seedDocument('旧正文');
+    images.restore.mockRejectedValueOnce(new Error('恢复失败'));
+    await expect(writeDocumentWithBarrier(KEY, '![恢复](img/picture.png)')).rejects.toThrow('恢复失败');
+    expect(ipc.writeDocument).not.toHaveBeenCalled();
+    expect(useDocumentStore.getState().getDocument(KEY)?.baselineContent).toBe('旧正文');
   });
 
   it('清理订阅者只在写盘成功且基线更新后收到保存通知', async () => {

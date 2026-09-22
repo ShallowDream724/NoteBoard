@@ -16,7 +16,7 @@ import { getBaseline } from '@/features/editor-md/serialize';
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'nb-secondary' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
 vi.mock('@/features/editor-code/orchestration/openDocument', () => ({ openDocument: vi.fn() }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), stashPendingDocuments: vi.fn(), getStagedPath: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), stashPendingDocuments: vi.fn(), getStagedPath: vi.fn(), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({
   writeDocument: vi.fn().mockResolvedValue({ ok: true, mtime: 1, size: 10 }),

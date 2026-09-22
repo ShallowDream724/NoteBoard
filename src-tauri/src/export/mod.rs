@@ -3,9 +3,10 @@
 pub mod pandoc;
 mod pdf;
 mod pdf_document;
+mod output;
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io::{Read, Seek, SeekFrom}, sync::{Arc, Mutex, mpsc}, time::Duration};
+use std::{collections::HashMap, io::{Read, Seek, SeekFrom}, sync::{Arc, Mutex, mpsc, atomic::{AtomicBool, Ordering}}, time::Duration};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder, WebviewUrl};
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -44,7 +45,7 @@ struct Run {
     completion: Option<Completion>, printing: bool,
     raw_revision: Option<u64>, report: Option<LayoutReport>,
 }
-struct Job { owner: String, payload: Mutex<Option<PdfPayload>>, directory: tempfile::TempDir, run: Mutex<Run>, files: Mutex<Vec<u64>> }
+struct Job { owner: String, cancelled: AtomicBool, payload: Mutex<Option<PdfPayload>>, directory: tempfile::TempDir, run: Mutex<Run>, files: Mutex<Vec<u64>> }
 impl Job {
     fn path(&self, revision: u64) -> std::path::PathBuf { self.directory.path().join(format!("document-{revision}.pdf")) }
     fn raw_path(&self, revision: u64) -> std::path::PathBuf { self.directory.path().join(format!("raw-{revision}.pdf")) }
@@ -62,10 +63,13 @@ fn finish(job: &Job, result: Result<PdfReceipt, String>) {
     if let Some(sender) = run.completion.take() { let _ = sender.send(result); }
 }
 fn remove(app: &AppHandle, id: &str) {
+    if let Some(job) = app.state::<ExportJobs>().0.lock().unwrap().remove(id) {
+        job.cancelled.store(true, Ordering::Release); finish(&job, Err("导出已取消".into()));
+    }
     if let Some(window) = app.get_webview_window(&format!("nb-export-{id}")) { let _ = window.destroy(); }
-    if let Some(job) = app.state::<ExportJobs>().0.lock().unwrap().remove(id) { finish(&job, Err("导出已取消".into())); }
 }
 pub fn release_owner(app: &AppHandle, owner: &str) {
+    pandoc::release_owner(app, owner);
     let ids: Vec<_> = app.state::<ExportJobs>().0.lock().unwrap().iter()
         .filter(|(_, job)| job.owner == owner).map(|(id, _)| id.clone()).collect();
     for id in ids { remove(app, &id); }
@@ -94,10 +98,11 @@ fn same_body_layout(a: &PdfOptions, b: &PdfOptions) -> bool {
 
 fn process_pdf(job: Arc<Job>, id: String, revision: u64, raw_revision: u64, options: PdfOptions, report: LayoutReport, printed: Result<(), String>) {
     std::thread::spawn(move || {
-        let result = printed.and_then(|_| pdf_document::prepare(&job.raw_path(raw_revision), &job.path(revision), &options))
+        if job.cancelled.load(Ordering::Acquire) { return; }
+        let result = printed.and_then(|_| pdf_document::prepare(&job.raw_path(raw_revision), &job.path(revision), &options, &job.cancelled))
             .map(|processed| PdfReceipt { id, revision, size: processed.size, pages: processed.pages,
                 issues: report.issues.clone(), adjustable: report.adjustable.clone(), locations: processed.locations });
-        if result.is_ok() {
+        if result.is_ok() && !job.cancelled.load(Ordering::Acquire) {
             let (keep, previous_raw) = {
                 let mut run = job.run.lock().unwrap();
                 let previous = run.raw_revision.replace(raw_revision); run.report = Some(report);
@@ -115,7 +120,7 @@ fn process_pdf(job: Arc<Job>, id: String, revision: u64, raw_revision: u64, opti
 pub async fn create_pdf(app: AppHandle, window: WebviewWindow, id: String, payload: PdfPayload) -> Result<PdfReceipt, String> {
     uuid::Uuid::parse_str(&id).map_err(|_| "无效的导出任务")?; validate(&payload.options)?;
     let (tx, rx) = mpsc::channel();
-    let job = Arc::new(Job { owner: window.label().into(), files: Mutex::new(Vec::new()), run: Mutex::new(Run { revision: 0, keep_revision: None, options: payload.options.clone(), completion: Some(tx), printing: false, raw_revision: None, report: None }), payload: Mutex::new(Some(payload)),
+    let job = Arc::new(Job { owner: window.label().into(), cancelled: AtomicBool::new(false), files: Mutex::new(Vec::new()), run: Mutex::new(Run { revision: 0, keep_revision: None, options: payload.options.clone(), completion: Some(tx), printing: false, raw_revision: None, report: None }), payload: Mutex::new(Some(payload)),
         directory: tempfile::Builder::new().prefix("noteboard-export-").tempdir().map_err(|e| e.to_string())? });
     {
         let state = app.state::<ExportJobs>(); let mut jobs = state.0.lock().unwrap();
@@ -193,7 +198,7 @@ pub fn read_pdf(app: AppHandle, window: WebviewWindow, id: String, revision: Opt
 #[tauri::command]
 pub fn save_pdf(app: AppHandle, window: WebviewWindow, id: String, revision: Option<u64>, path: String) -> Result<(), String> {
     let job = job(&app, &id, window.label())?;
-    std::fs::copy(job.path(revision.unwrap_or_else(|| job.run.lock().unwrap().revision)), path).map(|_| ()).map_err(|e| e.to_string())
+    output::copy(&job.path(revision.unwrap_or_else(|| job.run.lock().unwrap().revision)), std::path::Path::new(&path))
 }
 #[tauri::command]
 pub fn release_pdf(app: AppHandle, window: WebviewWindow, id: String) -> Result<(), String> {

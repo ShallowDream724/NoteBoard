@@ -2,6 +2,8 @@ import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { isDisplayMath, type MathDelimiter } from '../editor-md/mathSyntax';
 import { ALERT_META, alertKind } from '../editor-md/alertPresentation';
+import { buildLogicalTableGrid } from '../editor-md/tableGrid';
+import { isSafeHighlightColor } from '../editor-md/markdownHighlight';
 
 type Ast = { t: string; c?: unknown };
 const node = (t: string, c?: unknown): Ast => c === undefined ? { t } : { t, c };
@@ -21,7 +23,10 @@ function inline(value: DocumentNode): Ast[] {
     if (types[mark.type.name]) result = [node(types[mark.type.name], result)];
     else if (mark.type.name === 'code') result = [node('Code', [attr(), value.text ?? ''])];
     else if (mark.type.name === 'link') result = [node('Link', [attr(), result, [mark.attrs.href, mark.attrs.title ?? '']])];
-    else if (mark.type.name === 'highlight') result = [node('Span', [attr(['highlight']), result])];
+    else if (mark.type.name === 'highlight') {
+      const color = isSafeHighlightColor(mark.attrs.color) ? mark.attrs.color : '#ffff00';
+      result = [node('Span', [attr(['highlight'], [['data-color', color], ['style', `background-color: ${color}`]]), result])];
+    }
   }
   return result;
 }
@@ -54,14 +59,14 @@ function block(value: DocumentNode): Ast[] {
         [node('Para', [node('Strong', [node('Str', ALERT_META[kind].label)])]), ...children(value, block)]])];
     }
     case 'table': {
-      const rows: unknown[] = []; let header = false; let columns = 0;
-      value.forEach((row, _offset, index) => {
-        const cells: unknown[] = []; columns = Math.max(columns, row.childCount);
-        if (index === 0) header = Array.from({ length: row.childCount }, (_, i) => row.child(i)).every(cell => cell.type.name === 'tableHeader');
-        row.forEach(cell => cells.push([attr(), node('AlignDefault'), cell.attrs.rowspan ?? 1, cell.attrs.colspan ?? 1, children(cell, block)]));
-        rows.push([attr(), cells]);
-      });
-      return [node('Table', [attr(), [null, []], Array.from({ length: columns }, () => [node('AlignDefault'), node('ColWidthDefault')]),
+      const cells: DocumentNode[][] = [];
+      value.forEach(row => { const entries: DocumentNode[] = []; row.forEach(cell => entries.push(cell)); cells.push(entries); });
+      const grid = buildLogicalTableGrid(cells, cell => cell.attrs);
+      // A spanning first row must stay in the same Pandoc section as its body.
+      const header = !!grid.rows[0]?.length && grid.rows[0].every(({ cell, rowspan }) => cell.type.name === 'tableHeader' && rowspan === 1);
+      const rows: unknown[] = grid.rows.map((entries, index) => [attr(), entries.map(({ cell, colspan, rowspan }) =>
+        [attr(), node('AlignDefault'), Math.min(rowspan, grid.rows.length - index), colspan, children(cell, block)])]);
+      return [node('Table', [attr(), [null, []], Array.from({ length: grid.width }, () => [node('AlignDefault'), node('ColWidthDefault')]),
         [attr(), header ? [rows.shift()] : []], [[attr(), 0, [], rows]], [attr(), []]])];
     }
     default:

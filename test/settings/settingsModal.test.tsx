@@ -4,13 +4,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { SettingsModal } from '../../src/components/settings/SettingsModal';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { useSettingsStore } from '../../src/stores/settingsStore';
-import { saveSettings } from '../../src/core/ipc/commands';
+import { patchSettings } from '../../src/core/ipc/commands';
 
-vi.mock('../../src/core/ipc/commands', () => ({ saveSettings: vi.fn().mockResolvedValue(undefined), listSystemFonts: vi.fn().mockResolvedValue([]) }));
+vi.mock('../../src/core/ipc/commands', () => ({ patchSettings: vi.fn(), listSystemFonts: vi.fn().mockResolvedValue([]) }));
 vi.mock('../../src/stores/documentStore', () => ({ useDocumentStore: { getState: () => ({ syncSavePolicies: vi.fn() }) } }));
 
 describe('canonical settings dialog', () => {
   it('exposes and persists image removal policy through the actual File & Save panel', async () => {
+    vi.mocked(patchSettings).mockImplementation(async () => ({ ...useSettingsStore.getState().settings, revision: useSettingsStore.getState().settings.revision + 1 }));
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const host = document.createElement('div'); document.body.appendChild(host);
     const root = createRoot(host);
@@ -24,7 +25,7 @@ describe('canonical settings dialog', () => {
       expect(select.value).toBe('ask');
       await act(async () => { select.value = 'trash'; select.dispatchEvent(new Event('change', { bubbles: true })); });
       expect(useSettingsStore.getState().settings.file.imageDeletionPolicy).toBe('trash');
-      expect(saveSettings).toHaveBeenCalledWith(expect.objectContaining({ file: expect.objectContaining({ imageDeletionPolicy: 'trash' }) }));
+      expect(patchSettings).toHaveBeenCalledWith({ file: { imageDeletionPolicy: 'trash' } });
       await act(async () => render(false));
       await act(async () => render(true));
       expect(host.querySelector('select')?.value).toBe('trash');

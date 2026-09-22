@@ -28,10 +28,12 @@ import { EditorContextMenu } from './EditorContextMenu';
 import { LinkModal } from './LinkModal';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { bumpDocumentRevision, getDocumentRevision } from '../../core/editor/editorRegistry';
 import { autoSaveDocument } from './markdownAutoSave';
 import { registerHistoryMaterializeHook } from '../history/documentHistory';
 import { saveViewState } from '../session/editorSuspension';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
 
 interface VisualKernelProps {
   docKey: string;
@@ -75,6 +77,7 @@ export function VisualKernel({
   diskTimerRef,
 }: VisualKernelProps) {
   const active = useEditorActive();
+  const blockHandleEnabled = useSettingsStore(state => state.settings.editor.enableBlockHandle);
   // 扩展只随文档身份构建一次；输入、焦点、菜单和标签激活都不重新分配整套扩展。
   // 链接回调继续由模块级工厂创建，不能重新引入持有 editor 的组件闭包。
   const extensions = useMemo(() => buildExtensions(docKey, {
@@ -102,7 +105,7 @@ export function VisualKernel({
     onUpdate: ({ editor, transaction }) => {
       // 🔴 程序事务识别：仅忽略初始化/程序化设置内容的事务（同步作用域锁）；
       //    显示即输入：界面宣布可输入后的第一笔真实按键必须立即进入保护队列
-      if (isInitializingRef.current || !transaction.docChanged) {
+      if (isInitializingRef.current || !transaction.docChanged || transaction.getMeta('noteboard-document-replacement')) {
         return;
       }
 
@@ -120,7 +123,17 @@ export function VisualKernel({
       }
 
       const previousPendingExisted = hasPendingVisualSnapshot(docKey);
-      const diffPosition = transaction.before.content.findDiffStart(transaction.doc.content);
+      // Only a new group needs a starting position. Step maps describe the edit
+      // without searching the unchanged document prefix on every keystroke.
+      let diffPosition: number | undefined;
+      if (startsNewGroup || !previousPendingExisted) {
+        transaction.mapping.maps.forEach((map, index) => {
+          map.forEach((from) => {
+            const original = transaction.mapping.slice(0, index).invert().map(from);
+            diffPosition = Math.min(diffPosition ?? original, original);
+          });
+        });
+      }
       stagePendingVisualSnapshot(docKey, {
         doc: transaction.doc,
         revision: getDocumentRevision(docKey),
@@ -183,11 +196,12 @@ export function VisualKernel({
       handleDrop: (_view, event) => {
         const files = event.dataTransfer?.files;
         if (!files || files.length === 0) return false;
+        const dropPosition = editor?.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
         for (const file of Array.from(files)) {
           if (file.type.startsWith('image/')) {
             if (editor) {
               event.preventDefault();
-              handlePastedImageFile(editor, file, docKey);
+              handlePastedImageFile(editor, file, docKey, dropPosition);
               return true;
             }
           }
@@ -223,8 +237,7 @@ export function VisualKernel({
     // 编辑器创建与 React 视图挂载存在短暂时间差，视图尚未就绪时等待后续挂载，不能读取空 DOM。
     const editorView = editor.view;
     if (!editorView?.dom) return;
-    const scrollContainer = editorView.dom.parentElement as HTMLElement | null;
-    if (!scrollContainer) return;
+    const scrollContainer = findScrollContainer(editorView.dom);
 
     const saveRecoveryCheckpoint = () => {
       if (isInitializingRef.current || editor.isDestroyed) return;
@@ -235,6 +248,7 @@ export function VisualKernel({
           head: editor.state.selection.head,
         },
         scrollTop: scrollContainer.scrollTop,
+        scrollLeft: scrollContainer.scrollLeft,
         mode: 'visual' as const,
       });
     };
@@ -249,7 +263,7 @@ export function VisualKernel({
 
   // 打开超链接插入与编辑模态弹窗
   const handleOpenLinkModal = useCallback(() => {
-    if (!editor) return;
+    if (!editor || !active || !visible) return;
 
     let from = editor.state.selection.from;
     let to = editor.state.selection.to;
@@ -283,7 +297,7 @@ export function VisualKernel({
       from,
       to,
     });
-  }, [editor]);
+  }, [editor, active, visible]);
   // 🔴 P0-2：openLinkModalRef 桥接已移除——LinkClickHandler 现经 emit('open-link-modal')
   //    触发下方监听（组件内闭包不再传入 extension options，防 editor 圈泄漏）
 
@@ -302,8 +316,10 @@ export function VisualKernel({
 
   // 注册当前文档专用的 Ctrl+K 插入/编辑超链接快捷键（visual 内核存在时才注册）
   useEffect(() => {
+    if (!active || !visible) return;
     const unreg = registerShortcut({
       key: 'Ctrl+K',
+      when: () => useWindowStore.getState().activeKey === docKey,
       action: () => {
         const activeKey = useWindowStore.getState().activeKey;
         if (activeKey === docKey) {
@@ -316,7 +332,7 @@ export function VisualKernel({
     return () => {
       unreg();
     };
-  }, [docKey, handleOpenLinkModal]);
+  }, [docKey, handleOpenLinkModal, active, visible]);
 
   // 确认提交超链接
   const handleConfirmLink = useCallback(
@@ -375,6 +391,7 @@ export function VisualKernel({
 
   return (
     <div
+      data-editor-scroll="markdown"
       inert={!visible}
       aria-hidden={!visible}
       style={{
@@ -405,7 +422,7 @@ export function VisualKernel({
     >
       {editor && <EditorBubbleMenu editor={editor} enabled={active && visible} onOpenLinkModal={handleOpenLinkModal} />}
       {active && visible && editor && <TableToolbar editor={editor} />}
-      {active && visible && editor && <BlockDragHandle editor={editor} />}
+      {active && visible && blockHandleEnabled && editor && <BlockDragHandle editor={editor} />}
       {active && visible && contextMenu && editor && (
         <EditorContextMenu
           editor={editor}

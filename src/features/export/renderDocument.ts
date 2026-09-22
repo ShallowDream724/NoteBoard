@@ -6,10 +6,11 @@ import type { MathRendering } from '../editor-md/mathRendering';
 import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
 import type { ExportDocument, ExportItem } from './model';
 import { documentTableStyle } from '../editor-md/documentPresentation';
-import { matrixSource, matrixPart } from '../../core/math/structure';
+import { matrixSource, matrixPart, type MatrixSource } from '../../core/math/structure';
+import { MATH_LIMITS } from '../editor-md/mathLimits';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
-  math = renderMath, assetUrl: (path: string) => string = path => path): Promise<ExportDocument> {
+  math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths): Promise<ExportDocument> {
   signal?.throwIfAborted();
   const doc = snapshot ?? parseMarkdownDocument(markdown);
   const container = document.createElement('article');
@@ -31,9 +32,10 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     element.dataset.latex = latex;
     element.removeAttribute('latex');
     let renderSource = latex;
+    let matrix: MatrixSource | null = null;
     try {
-      const matrix = matrixSource(latex);
-      if (matrix && (matrix.rows.length > 64 || matrix.columns > 64)) {
+      matrix = matrixSource(latex);
+      if (matrix && (matrix.rows.length > 64 || matrix.columns > 64 || latex.length > MATH_LIMITS.inputCharacters)) {
         element.dataset.matrixPreview = 'true';
         renderSource = matrixPart(matrix, 0, Math.min(4, matrix.rows.length), 0, Math.min(8, matrix.columns));
       }
@@ -54,7 +56,11 @@ export async function renderDocument(markdown: string, title: string, baseDirect
         mathCache.set(key, rendered); mathBytes += bytes;
       }
     }
-    if (rendered.error) { element.textContent = latex; element.dataset.renderError = rendered.error; }
+    if (rendered.limited && matrix) {
+      // Admission failure of a full/sample matrix is a request for bounded
+      // continuation, not a syntax error or permission to mount huge markup.
+      element.dataset.matrixPreview = 'true'; element.textContent = '矩阵需要分段排版。';
+    } else if (rendered.error) { element.textContent = rendered.limited ? rendered.error : latex; element.dataset.renderError = rendered.error; }
     else element.innerHTML = rendered.html;
     items.push({ id, kind: 'formula', label: `公式 ${mathIndex} · ${latex.slice(0, 45)}` });
     if (mathIndex % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
@@ -76,18 +82,26 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     signal?.throwIfAborted();
     const source = code.textContent ?? '';
     const language = [...code.classList].find(name => name.startsWith('language-'))?.slice(9) ?? '';
-    code.innerHTML = codeTokensToHTML(source, await highlightCode(source, language));
+    code.innerHTML = codeTokensToHTML(source, await highlightCode(source, language, { signal }));
   }
   for (const diagram of container.querySelectorAll<HTMLElement>('[data-mermaid], [data-plantuml], [data-infographic]')) {
     const source = document.createElement('pre'); source.dataset.exportSourceOnly = 'true';
     source.textContent = diagram.getAttribute('code') ?? diagram.textContent;
     diagram.replaceWith(source);
   }
+  const localImages: Array<{ image: HTMLImageElement; path: string }> = [];
   for (const image of container.querySelectorAll('img')) {
     const source = image.getAttribute('src') ?? '';
     if (!/^(?:https?:|data:|asset:|blob:)/i.test(source) && (baseDirectory || /^(?:[A-Za-z]:|file:|\\\\)/i.test(source))) {
-      image.setAttribute('src', assetUrl(resolveRelativeDocPath(baseDirectory, source)));
+      localImages.push({ image, path: resolveRelativeDocPath(baseDirectory, source) });
     }
+  }
+  if (localImages.length) {
+    // Keep the original element references while the host maps paths to its
+    // asset scheme. Only these attributes change, before the sole serialization.
+    const urls = await assetUrls(localImages.map(({ path }) => path)); signal?.throwIfAborted();
+    if (urls.length !== localImages.length || urls.some(url => typeof url !== 'string')) throw new Error('图片资源地址映射不完整');
+    localImages.forEach(({ image }, index) => image.setAttribute('src', urls[index]));
   }
   for (const item of container.querySelectorAll<HTMLElement>('li[data-type="taskItem"]')) {
     const input = item.querySelector('input');

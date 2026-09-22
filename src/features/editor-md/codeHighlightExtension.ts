@@ -7,26 +7,47 @@ import { observeNearby } from './nearViewport';
 import { highlightCode, type CodeToken } from './codeHighlighting';
 
 const key = new PluginKey<DecorationSet>('code-token-colors');
-interface Update { position: number; node: Node; tokens: CodeToken[] }
-const batches = new WeakMap<Editor, Map<number, Update>>();
+interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: () => number | undefined }
+interface Batch { updates: Map<Update['getPosition'], Update>; frame: number }
+const batches = new WeakMap<Editor, Batch>();
+
+function flushHighlights(editor: Editor, batch: Batch) {
+  if (editor.isDestroyed) { batches.delete(editor); return; }
+  const updates: Update[] = [];
+  let tokenCount = 0;
+  for (const [identity, update] of batch.updates) {
+    if (updates.length && tokenCount + update.tokens.length > 4096) break;
+    batch.updates.delete(identity);
+    const position = update.getPosition();
+    if (position === undefined || editor.state.doc.nodeAt(position) !== update.node) continue;
+    updates.push({ ...update, position }); tokenCount += update.tokens.length;
+  }
+  if (batch.updates.size) batch.frame = requestAnimationFrame(() => flushHighlights(editor, batch));
+  else batches.delete(editor);
+  if (updates.length) editor.view.dispatch(editor.state.tr.setMeta(key, updates).setMeta('addToHistory', false));
+}
 
 function publishHighlight(editor: Editor, update: Update) {
   if (!update.tokens.length && !key.getState(editor.state)?.find(update.position + 1, update.position + update.node.nodeSize - 1).length) return;
   let batch = batches.get(editor);
   if (!batch) {
-    batch = new Map(); batches.set(editor, batch);
-    requestAnimationFrame(() => {
-      const current = batches.get(editor); batches.delete(editor);
-      if (!editor.isDestroyed && current?.size) editor.view.dispatch(editor.state.tr.setMeta(key, [...current.values()]).setMeta('addToHistory', false));
-    });
+    batch = { updates: new Map(), frame: 0 }; batches.set(editor, batch);
+    const scheduled = batch;
+    batch.frame = requestAnimationFrame(() => flushHighlights(editor, scheduled));
   }
-  batch.set(update.position, update);
+  batch.updates.set(update.getPosition, update);
 }
 
 export const CodeHighlight = Extension.create({
   name: 'codeHighlight',
-  addProseMirrorPlugins: () => [new Plugin({
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [new Plugin({
     key,
+    view: () => ({ destroy() {
+      const batch = batches.get(editor);
+      if (batch) { cancelAnimationFrame(batch.frame); batches.delete(editor); }
+    } }),
     state: {
       init: () => DecorationSet.empty,
       apply(tr, previous) {
@@ -42,7 +63,8 @@ export const CodeHighlight = Extension.create({
       },
     },
     props: { decorations: state => key.getState(state) },
-  })],
+    })];
+  },
 });
 
 export function useCodeHighlight(editor: Editor, node: Node, getPos: () => number | undefined, element: RefObject<HTMLElement | null>) {
@@ -51,15 +73,16 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
   useEffect(() => {
     if (!key.getState(editor.state)) return;
     let cancelled = false;
+    const controller = new AbortController();
     const publish = (tokens: CodeToken[]) => {
       const position = getPos();
       if (cancelled || editor.isDestroyed || position === undefined || editor.state.doc.nodeAt(position) !== node) return;
-      publishHighlight(editor, { position, node, tokens });
+      publishHighlight(editor, { position, node, tokens, getPosition: getPos });
     };
     const timer = setTimeout(() => {
-      if (near) void highlightCode(node.textContent, node.attrs.language ?? '').then(publish);
+      if (near) void highlightCode(node.textContent, node.attrs.language ?? '', { signal: controller.signal }).then(publish);
       else publish([]);
     }, near ? 40 : 0);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
   }, [editor, node, near]);
 }

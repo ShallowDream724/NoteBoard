@@ -36,6 +36,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().with_filter(|label| !label.starts_with("nb-export-")).build())
         .manage(Mutex::new(AppState::for_startup()))
         .manage(export::ExportJobs::default())
+        .manage(export::pandoc::PandocJobs::default())
         .setup(|app| {
             // 🔴 诊断 span：setup 钩子的真实执行区间（不含 WebView 创建提前量）
             perf::mark("setup_start");
@@ -53,6 +54,8 @@ pub fn run() {
             export::save_pdf,
             export::release_pdf,
             export::pandoc::pandoc_status,
+            export::pandoc::begin_pandoc,
+            export::pandoc::cancel_pandoc,
             export::pandoc::pandoc_export,
             // window（S04 打开队列 + 迁移协议）
             window::commands::window_listeners_ready,
@@ -87,6 +90,7 @@ pub fn run() {
             fsio::commands::rename_path,
             fsio::commands::move_to_trash,
             fsio::image_assets::recycle_document_image,
+            fsio::image_assets::recycle_document_images,
             fsio::image_assets::restore_document_image,
             fsio::commands::path_exists,
             fsio::commands::reveal_in_explorer,
@@ -94,6 +98,7 @@ pub fn run() {
             // settings
             settings::commands::load_settings,
             settings::commands::save_settings,
+            settings::commands::patch_settings,
             // staging
             staging::commands::get_default_staging_directory,
             staging::commands::ensure_staging_directory,

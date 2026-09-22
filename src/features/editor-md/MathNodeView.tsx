@@ -2,13 +2,15 @@ import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent } from
 import { createPortal } from 'react-dom';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
-import { isDisplayMath, type MathDelimiter } from './mathSyntax';
+import { isDisplayMath, writeMath, type MathDelimiter } from './mathSyntax';
 import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
 import { mountMathPreview } from './mathPreview';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 /** The document owns the draft, even while the source input has focus. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
+  const enabled = useSettingsStore(state => state.settings.editor.enableMath);
   const block = node.type.name === 'mathBlock';
   const delimiter = (node.attrs.delimiter ?? (block ? '$$' : '$')) as MathDelimiter;
   const display = isDisplayMath(delimiter);
@@ -31,8 +33,14 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     return close;
   }, [editing, editor]);
   useEffect(() => {
-    return viewportRef.current ? mountMathPreview(viewportRef.current, latex, display, editing) : undefined;
-  }, [latex, display, editing]);
+    const host = viewportRef.current;
+    if (!host) return;
+    if (!enabled) {
+      host.textContent = writeMath({ latex, delimiter }, block);
+      return () => host.replaceChildren();
+    }
+    return mountMathPreview(host, latex, display, editing);
+  }, [enabled, latex, delimiter, block, display, editing]);
 
   const exit = () => {
     setEditing(false);
@@ -87,7 +95,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display}
         onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
       <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
-        style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere' }}/>
+        style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere', whiteSpace: enabled ? undefined : 'pre-wrap', fontFamily: enabled ? undefined : 'var(--mono-font-family)' }}/>
     </NodeViewWrapper>
   );
 }

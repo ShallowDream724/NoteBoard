@@ -353,6 +353,7 @@ export async function startEventListeners(): Promise<void> {
   if (!reconcileTimer) {
     reconcileTimer = setInterval(async () => {
       const tabStore = useWindowStore.getState();
+      if (tabStore.transferringKeys.length) return;
       const keys = tabStore.tabs.map((t) => t.key);
       if (keys.length === 0) return;
 
@@ -404,6 +405,7 @@ export function stopEventListeners(): void {
  */
 export async function requestCurrentWindowClose(): Promise<void> {
   const tabStore = useWindowStore.getState();
+  if (tabStore.transferringKeys.length) return;
   const label = getCurrentWindow().label;
 
   // 空白未命名文件可直接关闭；只有脏态或确有内容的未命名文件进入关闭保护。
@@ -433,6 +435,8 @@ export async function requestCurrentWindowClose(): Promise<void> {
  */
 export async function performWindowClose(label: string, snapshotSaved = false): Promise<void> {
   const tabStore = useWindowStore.getState();
+  if (tabStore.transferringKeys.length) return;
+  useWindowStore.setState({ isWindowClosing: true });
 
   // 无确认框的干净窗口在这里记录；有确认框的分支会在移除标签前提前记录。
   if (!snapshotSaved) {
@@ -444,6 +448,7 @@ export async function performWindowClose(label: string, snapshotSaved = false): 
     }
   }
 
+  if (useWindowStore.getState().transferringKeys.length) return;
   // 🔴 N05：统一异步关闭协调（可等待）——逐标签完成
   //    停止接纳（标签移除时已同步完成）→ 排空在途写队列 → 按真实身份注销归属。
   //    逐个 await 保证注销序列稳定（drain 完成后再关窗，晚到的旧写入不覆盖）。
@@ -457,6 +462,7 @@ export async function performWindowClose(label: string, snapshotSaved = false): 
   try {
     await ipc.closeWindow(label);
   } catch (e) {
+    useWindowStore.setState({ isWindowClosing: false });
     console.error('关闭窗口失败:', e);
   }
 }

@@ -15,7 +15,21 @@ function group(source: string, at: number): Group | null {
 
 export interface MatrixSource { environment: string; prefix: string; suffix: string; rows: string[][]; columns: number; rowGaps: string[] }
 export const MAX_MATRIX_CELLS = 250_000;
+/** TeX comments consume their terminating newline. Remove them before slicing
+ * cells, so trimming a cell cannot make its comment swallow a new separator. */
+function withoutComments(source: string): string {
+  let result = '', start = 0;
+  for (let at = 0; at < source.length; at++) {
+    if (source[at] === '\\') { at++; continue; }
+    if (source[at] !== '%') continue;
+    result += source.slice(start, at);
+    const newline = source.indexOf('\n', at);
+    at = newline < 0 ? source.length : newline; start = at + 1;
+  }
+  return result + source.slice(start);
+}
 export function matrixSource(latex: string, options?: { retainBarred?: boolean }): MatrixSource | null {
+  latex = withoutComments(latex);
   const begin = /\\begin\{(matrix|[bpvBV]matrix)\}/.exec(latex);
   if (!begin) return null;
   const prefix = latex.slice(0, begin.index), environment = begin[1], ending = `\\end{${environment}}`;

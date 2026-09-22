@@ -1,3 +1,5 @@
 .nb-large-table { contain: layout style; }
 .nb-large-table > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
-.nb-prose .math-node-display { contain: layout style; }
+/* Wide formula descendants contribute to the editor's natural scroll extent. */
+.nb-prose .math-node-display { contain: style; }
+.nb-row-resize-guide { position: fixed; left: 0; top: 0; height: 4px; background: var(--accent-500, #3b82f6); pointer-events: none; z-index: 20; }

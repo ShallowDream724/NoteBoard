@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { SizedTableRow } from './markdownTable';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
 
 /** The row owns its preview-only height. Ignoring that DOM attribute prevents
  * the mutation observer from committing a transaction on every pointer move. */
@@ -20,7 +21,7 @@ export const ResizableTableRow = SizedTableRow.extend({
   },
 });
 
-interface Drag { row: HTMLTableRowElement; pos: number; pointer: number; y: number; height: number; scale: number; next: number; preview: ReturnType<typeof rowPreview>; restoreColumns: () => void }
+interface Drag { row: HTMLTableRowElement; pos: number; pointer: number; y: number; height: number; scale: number; next: number; guideBottom: number; preview: ReturnType<typeof rowPreview>; restoreColumns: () => void }
 let previewId = 0;
 /** CSSOM updates avoid waking ProseMirror's MutationObserver/selection reads on
  * every frame. Only the gesture's initial marker and final transaction touch DOM. */
@@ -75,7 +76,7 @@ function freezeColumns(row: HTMLTableRowElement) {
   };
 }
 function rowAtEdge(view: EditorView, event: PointerEvent) {
-  const target = event.target as HTMLElement;
+  const target = event.target; if (!(target instanceof Element)) return null;
   const row = target.closest<HTMLTableRowElement>('tr');
   const cell = target.closest<HTMLElement>('td,th');
   if (!row || !cell || !view.dom.contains(row)) return null;
@@ -94,13 +95,36 @@ export const TableSizing = Extension.create({
   name: 'tableSizing',
   addProseMirrorPlugins() {
     let drag: Drag | null = null, frame = 0, activeView: EditorView | null = null;
-    const paint = () => { frame = 0; if (drag) drag.preview.paint(drag.next); };
+    let guide: HTMLElement | undefined, guideRow: HTMLTableRowElement | null = null, hoverFrame = 0;
+    let latestPointer: PointerEvent | undefined;
+    const hideGuide = () => {
+      guideRow = null; if (guide) guide.hidden = true;
+      activeView?.dom.classList.remove('nb-row-resize-ready');
+    };
+    const showGuide = (row: HTMLTableRowElement) => {
+      if (!guide || !activeView) return;
+      const bounds = row.getBoundingClientRect(), viewport = findScrollContainer(activeView.dom).getBoundingClientRect();
+      const wrapper = row.closest('.tableWrapper')?.getBoundingClientRect();
+      const left = Math.max(bounds.left, viewport.left, wrapper?.left ?? -Infinity);
+      const right = Math.min(bounds.right, viewport.right, wrapper?.right ?? Infinity);
+      if (right <= left || bounds.bottom < viewport.top || bounds.bottom > viewport.bottom) { hideGuide(); return; }
+      guideRow = row; guide.hidden = false;
+      guide.style.transform = `translateX(${left}px)`; guide.style.top = `${bounds.bottom - 2}px`; guide.style.width = `${right - left}px`;
+      if (drag) drag.guideBottom = bounds.bottom - (drag.next - drag.height) * drag.scale;
+      activeView.dom.classList.add('nb-row-resize-ready');
+    };
+    const paint = () => {
+      frame = 0; if (!drag) return;
+      drag.preview.paint(drag.next);
+      if (guide) guide.style.top = `${drag.guideBottom + (drag.next - drag.height) * drag.scale - 2}px`;
+    };
     const finish = (view: EditorView, commit: boolean) => {
       if (!drag) return;
-      const current = drag; drag = null;
+      const current = drag; drag = null; latestPointer = undefined;
       cancelAnimationFrame(frame); frame = 0;
       current.preview.dispose();
       current.restoreColumns();
+      hideGuide();
       view.dom.classList.remove('nb-row-resizing', 'nb-row-resize-ready');
       if (view.dom.hasPointerCapture(current.pointer)) view.dom.releasePointerCapture(current.pointer);
       const node = view.state.doc.nodeAt(current.pos);
@@ -118,7 +142,11 @@ export const TableSizing = Extension.create({
             if (!frame) frame = requestAnimationFrame(paint);
             event.preventDefault(); return true;
           }
-          view.dom.classList.toggle('nb-row-resize-ready', !!rowAtEdge(view, event));
+          latestPointer = event;
+          if (!hoverFrame) hoverFrame = requestAnimationFrame(() => {
+            hoverFrame = 0; if (!latestPointer || drag || !activeView) return;
+            const row = rowAtEdge(activeView, latestPointer); if (row) showGuide(row); else hideGuide();
+          });
           return false;
         },
         pointerdown(view, event) {
@@ -127,19 +155,33 @@ export const TableSizing = Extension.create({
           const pos = rowPosition(view, row); if (pos == null) return false;
           const bounds = row.getBoundingClientRect(), height = row.offsetHeight;
           const restoreColumns = freezeColumns(row);
-          drag = { row, pos, pointer: event.pointerId, y: event.clientY, height, next: height, scale: bounds.height / height || 1, preview: rowPreview(row, height), restoreColumns };
+          drag = { row, pos, pointer: event.pointerId, y: event.clientY, height, next: height, guideBottom: bounds.bottom, scale: bounds.height / height || 1, preview: rowPreview(row, height), restoreColumns };
           view.dom.setPointerCapture(event.pointerId); view.dom.classList.add('nb-row-resizing');
+          showGuide(row);
           event.preventDefault(); return true;
         },
         pointerup(view) { if (!drag) return false; finish(view, true); return true; },
         pointercancel(view) { finish(view, false); return false; },
         lostpointercapture(view) { finish(view, false); return false; },
-        pointerleave(view) { if (!drag) view.dom.classList.remove('nb-row-resize-ready'); return false; },
+        pointerleave() { latestPointer = undefined; if (!drag) hideGuide(); return false; },
         keydown(view, event) { if (!drag) return false; finish(view, false); return event.key === 'Escape'; },
       } },
-      view(view) { activeView = view; return {
-        destroy() { finish(view, false); activeView = null; },
-      }; },
+      view(view) {
+        activeView = view;
+        guide = view.dom.ownerDocument.createElement('div'); guide.className = 'nb-row-resize-guide'; guide.hidden = true;
+        guide.setAttribute('aria-hidden', 'true'); view.dom.ownerDocument.body.append(guide);
+        // The editor owns one overlay outside its observed content DOM. Hover
+        // never decorates every cell or dispatches a document transaction.
+        const scroll = () => { if (drag) showGuide(drag.row); else hideGuide(); };
+        view.dom.ownerDocument.addEventListener('scroll', scroll, true);
+        return {
+          update() { if (guideRow && !view.dom.contains(guideRow)) hideGuide(); },
+          destroy() {
+            finish(view, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
+            view.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; activeView = null;
+          },
+        };
+      },
     })];
   },
 });

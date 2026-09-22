@@ -240,6 +240,11 @@ export interface Settings {
   export?: ExportSettings;
 }
 
+/** Only changed leaf fields; revision/schema ownership stays in Rust. */
+export type SettingsPatch = {
+  [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export']?: Partial<NonNullable<Settings[Section]>>;
+};
+
 export interface ExportSettings { pandocPath: string }
 
 export interface AppearanceSettings {

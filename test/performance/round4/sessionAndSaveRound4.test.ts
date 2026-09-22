@@ -11,7 +11,7 @@ import { stagePendingSourceSnapshot, discardPendingSourceSnapshot } from '@/feat
 import { initializeDocumentHistory, getCurrentDocumentHistoryContent } from '@/features/history/documentHistory';
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'review' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({ unregisterDocument: vi.fn(), registerDocument: vi.fn(), writeDocument: vi.fn(), setDocumentDirty: vi.fn() }));
 
@@ -47,7 +47,8 @@ it('D06：另存为等待注销时产生的 Markdown pending 输入必须进入�
   vi.mocked(save).mockResolvedValue(target);
   let release!: () => void;
   vi.mocked(ipc.unregisterDocument).mockImplementation(()=>new Promise(resolve=>{release=resolve;}));
-  const work = saveAs(key, 'base'); await microtasks();
+  const work = saveAs(key, 'base');
+  await vi.waitFor(() => expect(ipc.unregisterDocument).toHaveBeenCalledWith('review', key));
   // 与真实 source onUpdate 相同：新输入先暂存不可变 Text，500ms 前镜像仍为 base。
   stagePendingSourceSnapshot(key,{text:Text.of(['typed-during-unregister']),revision:1,isNewGroup:true});
   release(); await work;
@@ -64,7 +65,7 @@ it('另存为注销期间输入的历史末端也必须随新身份迁移', asyn
   let release!: () => void;
   vi.mocked(ipc.unregisterDocument).mockImplementation(() => new Promise(resolve => { release = resolve; }));
   const work = saveAs(key, 'base');
-  await microtasks();
+  await vi.waitFor(() => expect(ipc.unregisterDocument).toHaveBeenCalledWith('review', key));
   stagePendingSourceSnapshot(key, { text: Text.of(['late-history']), revision: 1, isNewGroup: true });
   release();
   await work;

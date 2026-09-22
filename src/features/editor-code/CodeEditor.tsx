@@ -6,22 +6,15 @@ import { useEffect, useRef } from 'react';
 import {
   EditorView,
   keymap,
-  highlightWhitespace,
-  lineNumbers,
-  highlightActiveLineGutter,
 } from '@codemirror/view';
 import { EditorState, Prec, Transaction } from '@codemirror/state';
 import { undoDepth as cmUndoDepth } from '@codemirror/commands';
 import {
   createBaseExtensions,
   languageCompartment,
-  wrapCompartment,
-  lineNumberCompartment,
   typographyCompartment,
-  whitespaceCompartment,
-  lineEndingCompartment,
-  showLineEndingsExtension,
 } from './setup';
+import { liveEditorSettings } from './editorSettingsBinding';
 import { loadLanguageExtension } from './languages';
 import { getLinterForLanguage } from './lint';
 import {
@@ -70,37 +63,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const doc = useDocumentStore((s) => s.documents.get(docKey));
   const setContent = useDocumentStore((s) => s.setContent);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
-  const editorSettings = useSettingsStore((s) => s.settings.editor);
   const typography = useSettingsStore((s) => s.settings.typography);
-
-  // 监听编辑器设置变化并热重配（空格、换行符、行号、软换行等）
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) return;
-    view.dispatch({
-      effects: [
-        whitespaceCompartment.reconfigure(
-          editorSettings.showWhitespace ? highlightWhitespace() : [],
-        ),
-        lineEndingCompartment.reconfigure(
-          editorSettings.showLineEndings ? showLineEndingsExtension : [],
-        ),
-        lineNumberCompartment.reconfigure(
-          editorSettings.showLineNumbers !== false
-            ? [lineNumbers(), highlightActiveLineGutter()]
-            : [],
-        ),
-        wrapCompartment.reconfigure(
-          editorSettings.softWrap ? EditorView.lineWrapping : [],
-        ),
-      ],
-    });
-  }, [
-    editorSettings.showWhitespace,
-    editorSettings.showLineEndings,
-    editorSettings.showLineNumbers,
-    editorSettings.softWrap,
-  ]);
 
   // 监听排版字体与字号变化并热重配 CM6，并刷新字符度量
   useEffect(() => {
@@ -307,6 +270,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       extensions: [
         unifiedHistoryKeymap,
         ...createBaseExtensions(initialEditorSettings),
+        liveEditorSettings,
         updateListener,
         jsonOperationsKeymap,
       ],

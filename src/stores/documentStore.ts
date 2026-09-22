@@ -144,7 +144,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setContent: (key, content) => {
     set((state) => {
       const doc = state.documents.get(key);
-      if (!doc) return {};
+      if (!doc) return state;
+      if (doc.content === content) return state;
       const newMap = new Map(state.documents);
       // 判断脏态：规范化换行符后内容与基线不同 = 脏（杜绝 Windows CRLF 导致假脏态）
       const isDirty = normalizeEol(content) !== normalizeEol(doc.baselineContent);

@@ -12,7 +12,7 @@ import { Text } from '@codemirror/state';
 import { stagePendingSourceSnapshot, discardPendingSourceSnapshot } from '@/features/editor-md/visualSnapshot';
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'nb-main' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({ registerDocument: vi.fn(), unregisterDocument: vi.fn(), writeDocument: vi.fn(), setDocumentDirty: vi.fn() }));
 

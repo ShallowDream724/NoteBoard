@@ -32,6 +32,7 @@ import { handleTransformCase } from '../toolbar/textOps';
 import { getMdTipTapEditor, getMdSourceView } from './editorInstances';
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { getDocumentRevision } from '../../core/editor/editorRegistry';
 import { getSessionGeneration } from '../../features/session/documentSession';
 // 🔴 R03：flush 镜像写入经统一提交屏障
@@ -152,6 +153,7 @@ export function createMarkdownEditorCapabilities(
           kind: 'markdown' as const,
           selection: { anchor: sel.anchor, head: sel.head },
           scrollTop: view.scrollDOM?.scrollTop ?? 0,
+          scrollLeft: view.scrollDOM?.scrollLeft ?? 0,
           mode: 'source' as const,
         };
       }
@@ -160,8 +162,8 @@ export function createMarkdownEditorCapabilities(
       return {
         kind: 'markdown' as const,
         selection: { anchor: editor.state.selection.anchor, head: editor.state.selection.head },
-        // TipTap 的 contenteditable 不自身滚动，滚动发生在 EditorContent 容器
-        scrollTop: (editor.view.dom.parentElement as HTMLElement | null)?.scrollTop ?? 0,
+        scrollTop: findScrollContainer(editor.view.dom).scrollTop,
+        scrollLeft: findScrollContainer(editor.view.dom).scrollLeft,
         mode: 'visual' as const,
       };
     },

@@ -24,7 +24,7 @@ pub fn save_settings(
     // 更新 AppState revision
     {
         let mut app_state = state.lock().unwrap();
-        app_state.settings_revision = revision;
+        app_state.settings_revision = app_state.settings_revision.max(revision);
     }
 
     // 🔴 emit 在 v2 里是广播 —— 这里是故意的（FR-1004 所有窗口同步）
@@ -32,4 +32,16 @@ pub fn save_settings(
     let _ = app.emit("nb://settings-changed", &s);
 
     Ok(revision)
+}
+
+/// Apply only changed fields to the latest durable snapshot, then broadcast it.
+#[tauri::command]
+pub fn patch_settings(app: AppHandle, state: State<'_, Mutex<AppState>>, patch: serde_json::Value) -> Result<Settings, String> {
+    let settings = model::patch(patch)?;
+    {
+        let mut app_state = state.lock().unwrap();
+        app_state.settings_revision = app_state.settings_revision.max(settings.revision);
+    }
+    let _ = app.emit("nb://settings-changed", &settings);
+    Ok(settings)
 }

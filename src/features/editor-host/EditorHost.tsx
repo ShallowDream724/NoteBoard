@@ -9,7 +9,7 @@
 //      不强制刷新窗口丢稿。
 //   5. 不切换文档状态表示（documentStore 语义不变），不改变后台标签挂载策略（S11 处理）。
 
-import React, { Component, useState, useCallback, useEffect, useRef, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react';
+import React, { Component, useState, useCallback, useEffect, useRef, useMemo, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useWindowStore, type Tab } from '../../stores/windowStore';
 import {
@@ -257,26 +257,22 @@ export function EditorHost({
   );
   const resource = useSyncExternalStore(subscribe, getSnapshot);
 
+  // Tab dirty/preview metadata is shell state, not an editor input. Retain the
+  // mounted editor element until its actual inputs or resource change. Context
+  // (active editor) and the editor's own subscriptions still update normally.
+  const mountedEditor = useMemo(() => {
+    const LoadedEditor = resource.component;
+    if (!LoadedEditor) return null;
+    switch (kind) {
+      case 'markdown': return <LoadedEditor docKey={tab.key} onEditorReady={onEditorReady} />;
+      case 'image': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} fileSize={fileSize ?? 0} />;
+      default: return <LoadedEditor docKey={tab.key} />;
+    }
+  }, [resource.component, kind, tab.key, tab.path, tab.displayName, fileSize, onEditorReady]);
+
   if (kind === 'unsupported') {
     return unsupportedView;
   }
-
-  // 各编辑器真实 props 的适配（键名与原 AppShell 渲染完全一致）
-  const editorProps: Record<string, unknown> = (() => {
-    switch (kind) {
-      case 'markdown':
-        return { docKey: tab.key, onEditorReady };
-      case 'image':
-        return {
-          docKey: tab.key,
-          filePath: tab.path ?? tab.key,
-          fileName: tab.displayName,
-          fileSize: fileSize ?? 0,
-        };
-      default:
-        return { docKey: tab.key };
-    }
-  })();
 
   // 🔴 加载错误：可见错误界面 + 安全重试（不自动刷新、不销毁未保存内容）
   if (resource.status === 'error') {
@@ -302,7 +298,6 @@ export function EditorHost({
     return <EditorLoadingFallback displayName={tab.displayName} />;
   }
 
-  const LoadedEditor = resource.component;
   return (
     <EditorErrorBoundary
       key={`${tab.key}:${retryGeneration}`}
@@ -318,7 +313,7 @@ export function EditorHost({
         useWindowStore.getState().requestCloseTab(tab.key);
       }}
     >
-      <LoadedEditor {...editorProps} />
+      {mountedEditor}
     </EditorErrorBoundary>
   );
 }

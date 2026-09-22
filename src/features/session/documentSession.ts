@@ -303,7 +303,7 @@ export function enqueueDocumentWrite<T>(
 ): Promise<T> {
   // 🔴 R3-05：closing 状态停止接纳——窗口整体关闭/标签关闭期间的新写任务被拒绝
   //    （旧任务正常排空；任务内部代际校验保证旧会话任务不越权）
-  if (isClosing(docKey)) {
+  if (isClosing(docKey) || useWindowStore.getState().isTransferring(docKey)) {
     return Promise.reject(new Error(`文档正在关闭，拒绝新的写任务: ${docKey}`));
   }
   const previous = writeQueues.get(docKey) ?? Promise.resolve();
@@ -374,6 +374,7 @@ async function refreshDirtyAfterWrite(docKey: string): Promise<boolean> {
  * CodeEditor / Markdown visual / Markdown source / BoardEditor 的 autosave 统一走这里。
  */
 export async function queuedAutoSave(docKey: string, content: string): Promise<void> {
+  if (useWindowStore.getState().isTransferring(docKey)) return;
   const store = useDocumentStore.getState();
   const targetDoc = store.getDocument(docKey);
   if (!targetDoc) return;
@@ -407,6 +408,11 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
     if (!doc) return;
     if (doc.savePolicy !== 'auto') return;
     if (doc.externalStatus === 'modified' || doc.externalStatus === 'deleted') return;
+    if (doc.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(docKey)) {
+      const { restoreImageAssetsForContent } = await import('../editor-md/imageAssetLifecycle');
+      await restoreImageAssetsForContent(docKey, content);
+      if (!isSessionCurrent(docKey, generation)) return;
+    }
     const result = await ipc.writeDocument(docKey, content, encoding, eol);
     // 写盘 I/O 返回后再次校验：等待磁盘期间会话换代则不推进基线/暂存清理
     if (!isSessionCurrent(docKey, generation)) return;
@@ -439,7 +445,7 @@ export async function writeDocumentWithBarrier(
 ): Promise<boolean> {
   // 🔴 R3-05/C09：closing 状态的旧会话拒绝写盘（返回 false——调用方得到明确失败，
   //    不以异常炸保存链；排空中的在途任务仍正常完成）
-  if (isClosing(docKey)) return false;
+  if (isClosing(docKey) || useWindowStore.getState().isTransferring(docKey)) return false;
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
   if (!doc) return false;
@@ -454,6 +460,11 @@ export async function writeDocumentWithBarrier(
     if (!isSessionCurrent(docKey, generation)) return false;
     const current = useDocumentStore.getState().getDocument(docKey);
     if (!current) return false;
+    if (current.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(docKey)) {
+      const { restoreImageAssetsForContent } = await import('../editor-md/imageAssetLifecycle');
+      await restoreImageAssetsForContent(docKey, content);
+      if (!isSessionCurrent(docKey, generation)) return false;
+    }
     const result = await ipc.writeDocument(docKey, content, encoding, eol);
     // 🔴 N04：写盘 I/O 返回后再校验（等待磁盘期间换代则不推进基线）
     if (!isSessionCurrent(docKey, generation)) return false;

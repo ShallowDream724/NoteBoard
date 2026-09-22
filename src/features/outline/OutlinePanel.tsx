@@ -4,7 +4,7 @@
 // 搜索过滤、h2/h3 折叠、双击就地重命名
 // 详见 docs/09-开发路线图.md 9.2-9.10
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
 import { Tooltip } from '../../components/Tooltip';
@@ -36,6 +36,21 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const headingItemsRef = useRef(headings);
+  const invalidateGeometryRef = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    headingItemsRef.current = headings;
+    invalidateGeometryRef.current?.();
+  }, [headings]);
+
+  useEffect(() => { setCollapsed(new Set()); setEditingId(null); }, [editor]);
+  useEffect(() => {
+    const ids = new Set(headings.map(heading => heading.id));
+    setCollapsed(previous => {
+      if ([...previous].every(id => ids.has(id))) return previous;
+      return new Set([...previous].filter(id => ids.has(id)));
+    });
+  }, [headings]);
 
   // 搜索过滤
   const filteredHeadings = useMemo(() => {
@@ -163,29 +178,74 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     if (!editor) return;
 
     const scrollContainer = findScrollContainer(editor.view.dom);
+    const editorRoot = editor.view.dom;
     let frame = 0;
+    let dirty = true;
+    let geometry: { id: string; top: number; pos: number }[] = [];
+    const invalidate = () => { dirty = true; };
+    invalidateGeometryRef.current = invalidate;
+    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(invalidate);
+    const topLevel = new Set<Element>([editorRoot, scrollContainer, ...editorRoot.children]);
+    let nestedFlow = new Set<Element>();
+    for (const element of topLevel) resize?.observe(element);
+    // Only source-layout boxes can invalidate geometry. Matrix preview cells are
+    // painted inside a fixed-size NodeView and must not create a heading scan per scroll.
+    const mutations = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.removedNodes) if (node instanceof Element && topLevel.delete(node) && !nestedFlow.has(node)) resize?.unobserve(node);
+        for (const node of record.addedNodes) if (node instanceof Element && !topLevel.has(node)) { topLevel.add(node); resize?.observe(node); }
+      }
+      for (const element of nestedFlow) if (!editorRoot.contains(element)) { nestedFlow.delete(element); resize?.unobserve(element); }
+      invalidate();
+    });
+    mutations.observe(editorRoot, { childList: true });
+    editor.on('update', invalidate);
     const handleScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         if (editor.isDestroyed || !scrollContainer.clientHeight) return;
-        const top = scrollContainer.getBoundingClientRect().top + 40;
-        // Read O(log H) live positions. No full heading scan or geometry cache
-        // to invalidate whenever a lazy formula changes height.
-        const index = lastAtOrBefore(headings.length, i => {
-          const dom = editor.view.nodeDOM(headings[i].pos);
-          return dom instanceof HTMLElement ? dom.getBoundingClientRect().top : Infinity;
-        }, top);
-        setActiveId(index >= 0 ? headings[index].id : null);
+        if (dirty) {
+          const origin = scrollContainer.getBoundingClientRect().top - scrollContainer.scrollTop;
+          geometry = [];
+          const flowParents = new Set<Element>();
+          const nextNestedFlow = new Set<Element>();
+          for (const heading of headingItemsRef.current) {
+            const dom = editor.view.nodeDOM(heading.pos);
+            if (!(dom instanceof HTMLElement)) continue;
+            if (dom.getClientRects().length) geometry.push({ id: heading.id, pos: heading.pos, top: dom.getBoundingClientRect().top - origin });
+            // A short table cell can grow without changing its row's total height.
+            // Observe direct flow siblings along heading ancestors, never descendants
+            // inside sibling NodeViews (in particular, no virtual matrix cells).
+            for (let parent = dom.parentElement; parent && parent !== editorRoot; parent = parent.parentElement) {
+              if (flowParents.has(parent)) break;
+              flowParents.add(parent);
+              for (const child of parent.children) nextNestedFlow.add(child);
+            }
+          }
+          for (const element of nestedFlow) if (!nextNestedFlow.has(element) && !topLevel.has(element)) resize?.unobserve(element);
+          for (const element of nextNestedFlow) if (!nestedFlow.has(element) && !topLevel.has(element)) resize?.observe(element);
+          nestedFlow = nextNestedFlow;
+          // Table cells may have nonmonotonic Y in document order. Rebuilding costs
+          // O(H) geometry reads + O(H log H) sorting; ordinary scrolling costs O(log H).
+          geometry.sort((a, b) => a.top - b.top || a.pos - b.pos);
+          dirty = false;
+        }
+        const index = lastAtOrBefore(geometry.length, i => geometry[i].top, scrollContainer.scrollTop + 40);
+        setActiveId(index >= 0 ? geometry[index].id : null);
       });
     };
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
+      editor.off('update', invalidate);
+      if (invalidateGeometryRef.current === invalidate) invalidateGeometryRef.current = null;
+      resize?.disconnect();
+      mutations.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [editor, headings, setActiveId]);
+  }, [editor, setActiveId]);
 
   // 大纲面板自身跟随当前项滚动
   useEffect(() => {

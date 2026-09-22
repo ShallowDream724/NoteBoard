@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { TextSelection } from '@tiptap/pm/state';
+import { TextSelection, type Transaction } from '@tiptap/pm/state';
 import { isEmbeddedEditing } from './embeddedEditor';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
@@ -570,8 +570,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     let frame = 0;
     const updateToolbar = () => {
       frame = 0;
-      const isInTable = editor.isActive('table');
-      if (!isInTable) {
+      if (editor.isDestroyed || isEmbeddedEditing(editor)) {
         setShow(false);
         return;
       }
@@ -599,13 +598,6 @@ export function TableToolbar({ editor }: { editor: Editor }) {
             tableDom = dom;
           }
           break;
-        }
-      }
-
-      if (!tableDom && $from.depth > 1) {
-        const dom = editor.view.nodeDOM($from.before(-1));
-        if (dom instanceof HTMLElement) {
-          tableDom = dom.closest('table') || dom;
         }
       }
 
@@ -645,8 +637,13 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     };
 
     const schedule = () => { if (!frame) frame = requestAnimationFrame(updateToolbar); };
-    editor.on('selectionUpdate', schedule);
-    editor.on('transaction', schedule);
+    let embeddedEditing = isEmbeddedEditing(editor);
+    const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+      const editing = isEmbeddedEditing(editor);
+      if (transaction.docChanged || transaction.selectionSet || transaction.storedMarksSet || editing !== embeddedEditing) schedule();
+      embeddedEditing = editing;
+    };
+    editor.on('transaction', onTransaction);
     scrollParent.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
     window.addEventListener('scroll', schedule, { passive: true });
@@ -654,8 +651,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
 
     return () => {
       cancelAnimationFrame(frame);
-      editor.off('selectionUpdate', schedule);
-      editor.off('transaction', schedule);
+      editor.off('transaction', onTransaction);
       scrollParent.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule);

@@ -56,27 +56,36 @@ function Page({ pdf, index, width, locations, selected, onSelect, issues }: {
 }
 const EMPTY_LOCATIONS: ItemLocation[] = [];
 
-export function PdfPreview({ bytes, receipt, onPages, selected, navigation, onSelect, issues }: {
-  bytes?: Uint8Array; receipt?: PdfReceipt; onPages: (pages: number) => void; selected?: string; navigation?: { id: string; serial: number }; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
+export function PdfPreview({ bytes, receipt, onPages, onSettled, selected, navigation, onSelect, issues }: {
+  bytes?: Uint8Array; receipt?: PdfReceipt; onPages: (pages: number) => void; onSettled?: (receipt: PdfReceipt, error?: string) => void; selected?: string; navigation?: { id: string; serial: number }; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
 }) {
   const [loaded, setLoaded] = useState<{ pdf: PDFDocumentProxy; width: number; height: number; key: string; receipt?: PdfReceipt; task: PDFDocumentLoadingTask } | null>(null);
   const tasks = useRef(new Set<PDFDocumentLoadingTask>());
+  const displayed = useRef<PDFDocumentLoadingTask | null>(null);
   const [width, setWidth] = useState(600), [error, setError] = useState('');
   const scroll = useRef<HTMLDivElement>(null);
   const documentKey = receipt ? `${receipt.id}:${receipt.revision}` : 'bytes';
   useEffect(() => {
-    const range = receipt ? new NativePdfRange(receipt, error => { setError(String(error)); void task.destroy(); }) : undefined;
+    const fail = (error: unknown) => { if (!disposed) { setError(String(error)); if (receipt) onSettled?.(receipt, String(error)); } };
+    const range = receipt ? new NativePdfRange(receipt, error => { fail(error); void task.destroy(); }) : undefined;
     const task = getDocument(range ? { range, rangeChunkSize: 65536, disableAutoFetch: true, disableStream: true, useSystemFonts: true } : { data: bytes!.slice(), useSystemFonts: true });
     tasks.current.add(task);
     let disposed = false, published = false;
     void task.promise.then(async pdf => {
       const first = await pdf.getPage(1), viewport = first.getViewport({ scale: 1 });
-      if (!disposed) { published = true; setLoaded({ pdf, width: viewport.width, height: viewport.height, key: documentKey, receipt, task }); onPages(pdf.numPages); setError(''); }
-    }).catch(error => { if (!disposed) setError(String(error)); });
+      if (!disposed) {
+        published = true;
+        const previous = displayed.current; displayed.current = task;
+        setLoaded({ pdf, width: viewport.width, height: viewport.height, key: documentKey, receipt, task }); onPages(pdf.numPages); setError('');
+        // Release the old native reader before allowing the next revision to
+        // prune its file. Retained canvases alone do not establish ownership.
+        if (previous && tasks.current.delete(previous)) await previous.destroy();
+        if (!disposed && receipt) onSettled?.(receipt);
+      }
+    }).catch(fail);
     // Keep the previous page geometry and canvas until the new PDF is ready.
     return () => { disposed = true; if (!published && tasks.current.delete(task)) { range?.abort(); void task.destroy(); } };
-  }, [bytes, receipt, documentKey, onPages]);
-  useEffect(() => () => { if (loaded && tasks.current.delete(loaded.task)) void loaded.task.destroy(); }, [loaded]);
+  }, [bytes, receipt, documentKey, onPages, onSettled]);
   useEffect(() => { const live = tasks.current; return () => { live.forEach(task => { void task.destroy(); }); live.clear(); }; }, []);
   useEffect(() => {
     const root = scroll.current!;

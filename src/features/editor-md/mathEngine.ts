@@ -1,10 +1,12 @@
 import type { MathRendering } from './mathRendering';
+import { checkMathMarkup, checkMathSource } from './mathLimits';
 
 let loading: Promise<typeof import('katex')> | undefined;
 let chemistry: Promise<unknown> | undefined;
 
 /** DOM-free renderer, shared by the worker and non-worker test environments. */
 export async function renderMathMarkup(latex: string, displayMode: boolean): Promise<MathRendering> {
+  const refused = checkMathSource(latex); if (refused) return refused;
   try {
     loading ??= import('katex').catch(error => { loading = undefined; throw error; });
     const katex = await loading;
@@ -12,10 +14,13 @@ export async function renderMathMarkup(latex: string, displayMode: boolean): Pro
       chemistry ??= import('katex/contrib/mhchem').catch(error => { chemistry = undefined; throw error; });
       await chemistry;
     }
-    return { html: katex.renderToString(latex, {
+    const html = katex.renderToString(latex, {
       displayMode, throwOnError: true, trust: false, strict: false, maxExpand: 1000, maxSize: 100,
-    }) };
+    });
+    // Reject oversized markup here, before a Worker posts it or export parses it.
+    return checkMathMarkup(html) ?? { html };
   } catch (error) {
-    return { html: '', error: error instanceof Error ? error.message.replace(/^KaTeX parse error: /, '') : '公式暂时无法排版' };
+    const message = error instanceof Error ? error.message.replace(/^KaTeX parse error: /, '') : '公式暂时无法排版';
+    return { html: '', error: message.length > 512 ? message.slice(0, 512) + '…' : message };
   }
 }

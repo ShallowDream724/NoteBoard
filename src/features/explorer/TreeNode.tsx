@@ -21,8 +21,7 @@ import { useTreeData } from './useTreeData';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { markOpenDocumentDeleted } from '../external/missingFileGuard';
 import { getFileIcon } from '../../components/FileIcon';
-import { useDocumentStore } from '../../stores/documentStore';
-import { useWindowStore } from '../../stores/windowStore';
+import { renameOpenPath } from './renameOpenPath';
 import { showToast } from '../../stores/toastStore';
 import * as ipc from '../../core/ipc/commands';
 
@@ -55,6 +54,7 @@ export const TreeNode = memo(function TreeNode({
   const [isRenaming, setIsRenaming] = useState(false);
   const [editName, setEditName] = useState(node.name);
   const inputRef = useRef<HTMLInputElement>(null);
+  const renameInFlight = useRef(false);
 
   // 目录内直接新建子项状态
   const [creatingSub, setCreatingSub] = useState<'file' | 'folder' | null>(null);
@@ -216,6 +216,7 @@ export const TreeNode = memo(function TreeNode({
 
   // 提交重命名
   const handleRenameSubmit = async () => {
+    if (renameInFlight.current) return;
     const trimmed = editName.trim();
     // 未改变或空操作直接退出
     if (!trimmed || trimmed === node.name) {
@@ -238,20 +239,9 @@ export const TreeNode = memo(function TreeNode({
     const newPath = parentDir ? `${parentDir}\\${trimmed}` : trimmed;
 
     try {
-      await ipc.renamePath(node.path, newPath);
-
-      if (!node.isDir) {
-        // 单文件：同步迁移已打开文档 store 与 Tab 标签页
-        useDocumentStore.getState().renameDocument(node.path, newPath, trimmed, parentDir);
-        useWindowStore.getState().updateTabPath(node.path, newPath, trimmed);
-        if (isRevealed) {
-          setRevealed(newPath, false);
-        }
-      } else {
-        // 目录：批量迁移该目录下所有已打开文档与 Tab
-        useDocumentStore.getState().renameDirectory(node.path, newPath);
-        useWindowStore.getState().renameTabsDirectory(node.path, newPath);
-      }
+      renameInFlight.current = true;
+      await renameOpenPath(node.path, newPath, node.isDir);
+      if (isRevealed) setRevealed(newPath, false);
 
       // 刷新父目录以更新左侧文件树
       if (parentDir) {
@@ -266,6 +256,7 @@ export const TreeNode = memo(function TreeNode({
       console.error('重命名失败:', error);
       showToast(typeof error === 'string' ? error : error instanceof Error ? error.message : '重命名失败', 'error');
     } finally {
+      renameInFlight.current = false;
       setIsRenaming(false);
     }
   };

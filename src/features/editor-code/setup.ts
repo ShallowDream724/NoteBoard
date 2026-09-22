@@ -2,7 +2,7 @@
 // history / defaultKeymap / searchKeymap / indentWithTab / bracketMatching 等
 // 详见 docs/09-开发路线图.md 阶段4
 
-import { Compartment, type Extension, RangeSetBuilder } from '@codemirror/state';
+import { Compartment, EditorState, type Extension, RangeSetBuilder } from '@codemirror/state';
 import {
   history,
   defaultKeymap,
@@ -60,6 +60,64 @@ export const whitespaceCompartment = new Compartment();
 
 /** 换行符号显示热重配 */
 export const lineEndingCompartment = new Compartment();
+
+/** Tab width, inserted indentation and guides must change together without rebuilding history. */
+export const indentationCompartment = new Compartment();
+
+function buildIndentGuides(view: EditorView): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>();
+  const seen = new Set<number>();
+  const tabSize = view.state.tabSize;
+  for (const { from, to } of view.visibleRanges) {
+    for (let position = from; position <= to;) {
+      const line = view.state.doc.lineAt(position);
+      position = line.to + 1;
+      if (seen.has(line.from)) continue;
+      seen.add(line.from);
+      let columns = 0;
+      // Cap unusually deep whitespace at 64 visible guides; no whole-document pass.
+      for (const char of line.text) {
+        if (char === ' ') columns++;
+        else if (char === '\t') columns += tabSize - columns % tabSize;
+        else break;
+        if (columns >= tabSize * 64) break;
+      }
+      const count = Math.floor(columns / tabSize);
+      if (!count) continue;
+      const images = Array(count).fill('repeating-linear-gradient(to bottom, var(--editor-border) 0 2px, transparent 2px 5px)').join(',');
+      const positions = Array.from({ length: count }, (_, index) => `calc(2px + ${index * tabSize}ch) 0`).join(',');
+      builder.add(line.from, line.from, Decoration.line({ attributes: {
+        class: 'cm-indent-guides',
+        style: `background-image:${images};background-position:${positions};background-size:1px 100%;background-repeat:no-repeat`,
+      } }));
+    }
+  }
+  return builder.finish();
+}
+
+export const indentGuidesExtension = ViewPlugin.fromClass(class {
+  decorations: DecorationSet;
+  constructor(view: EditorView) { this.decorations = buildIndentGuides(view); }
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || update.geometryChanged || update.state.tabSize !== update.startState.tabSize) this.decorations = buildIndentGuides(update.view);
+  }
+}, { decorations: value => value.decorations });
+
+export function createIndentationExtensions(options: BaseExtensionsOptions = {}): Extension[] {
+  const tabSize = Math.max(1, Math.min(8, Math.trunc(options.tabSize ?? 2) || 2));
+  return [EditorState.tabSize.of(tabSize), indentUnit.of(options.insertSpaces === false ? '\t' : ' '.repeat(tabSize)),
+    ...(options.showIndentGuides ? [indentGuidesExtension] : [])];
+}
+
+export function editorDisplayEffects(options: BaseExtensionsOptions) {
+  return [
+    whitespaceCompartment.reconfigure(options.showWhitespace ? highlightWhitespace() : []),
+    lineEndingCompartment.reconfigure(options.showLineEndings ? showLineEndingsExtension : []),
+    lineNumberCompartment.reconfigure(options.showLineNumbers !== false ? [lineNumbers(), highlightActiveLineGutter()] : []),
+    wrapCompartment.reconfigure(options.softWrap ? EditorView.lineWrapping : []),
+    indentationCompartment.reconfigure(createIndentationExtensions(options)),
+  ];
+}
 
 // ── 换行符号小部件与扩展 ──
 
@@ -121,6 +179,9 @@ export interface BaseExtensionsOptions {
   showLineEndings?: boolean;
   showLineNumbers?: boolean;
   softWrap?: boolean;
+  tabSize?: number;
+  insertSpaces?: boolean;
+  showIndentGuides?: boolean;
 }
 
 /**
@@ -159,7 +220,7 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
     // 输入时自动缩进
     indentOnInput(),
     // 缩进单位
-    indentUnit.of('  '),
+    indentationCompartment.of(createIndentationExtensions(options)),
     // 语法高亮（NoteBoard 自定义样式）
     themeCompartment.of(nbSyntaxHighlighting),
     // fallback 高亮（覆盖未映射的 tag）

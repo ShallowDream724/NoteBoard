@@ -145,6 +145,7 @@ function disposeTabLifecycle(key: string): void {
  * 幂等（重复调用安全）；窗口整体关闭/普通标签关闭统一走本接口。
  */
 export async function disposeTabLifecycleAsync(key: string): Promise<void> {
+  if (useWindowStore.getState().isTransferring(key)) return;
   // 0. 🔴 R4-05/D05：公开入口独立调用时补齐会话终结（同步清理的等价步骤）——
   //    经 disposeTabLifecycle（closeTab 路径）进入时这些步骤已完成（幂等跳过）：
   //    beginClosing 同代无操作；disposeDocumentSession 已推进代际则
@@ -222,6 +223,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   closeTab: (key) => {
+    if (get().isTransferring(key)) return;
     set((state) => {
       const idx = state.tabs.findIndex((t) => t.key === key);
       if (idx < 0) return {};
@@ -239,6 +241,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   // 关闭除目标标签页外的所有其他标签页
   closeOtherTabs: (key) => {
+    if (get().transferringKeys.length) return;
     const { tabs } = get();
     const removedKeys = tabs.filter((t) => t.key !== key).map((t) => t.key);
     set((state) => ({
@@ -251,6 +254,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   // 关闭目标标签页左侧的所有标签页
   closeTabsLeft: (key) => {
+    if (get().transferringKeys.length) return;
     const { tabs } = get();
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx <= 0) return;
@@ -268,6 +272,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   // 关闭目标标签页右侧的所有标签页
   closeTabsRight: (key) => {
+    if (get().transferringKeys.length) return;
     const { tabs } = get();
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx < 0) return;
@@ -285,6 +290,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   // 关闭全部标签页
   closeAllTabs: () => {
+    if (get().transferringKeys.length) return;
     const { tabs } = get();
     const removedKeys = tabs.map((t) => t.key);
     set({ tabs: [], activeKey: null });
@@ -354,6 +360,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   requestWindowClose: (keys) => {
+    if (get().transferringKeys.length) return;
     set({ pendingCloseKeys: keys, isWindowClosing: true });
   },
 
@@ -362,21 +369,27 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   setTabDirty: (key, isDirty) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.key === key ? { ...t, isDirty } : t)),
-    }));
+    set((state) => {
+      const tab = state.tabs.find(t => t.key === key);
+      if (!tab || tab.isDirty === isDirty) return state;
+      return { tabs: state.tabs.map(t => t === tab ? { ...t, isDirty } : t) };
+    });
   },
 
   setTabPreview: (key, isPreview) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.key === key ? { ...t, isPreview } : t)),
-    }));
+    set((state) => {
+      const tab = state.tabs.find(t => t.key === key);
+      if (!tab || tab.isPreview === isPreview) return state;
+      return { tabs: state.tabs.map(t => t === tab ? { ...t, isPreview } : t) };
+    });
   },
 
   setTabViewMode: (key, mode) => {
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.key === key ? { ...t, viewMode: mode } : t)),
-    }));
+    set((state) => {
+      const tab = state.tabs.find(t => t.key === key);
+      if (!tab || tab.viewMode === mode) return state;
+      return { tabs: state.tabs.map(t => t === tab ? { ...t, viewMode: mode } : t) };
+    });
   },
 
   setTabExternalStatus: (key, status) => {
@@ -412,10 +425,12 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
         t.key === key
           // 另存为建立了新的有效磁盘路径，同时解除原文件删除/断开状态。
           ? { ...t, path: newPath, displayName: newDisplayName, key: newPath, kind, language,
+            lazySource: t.lazySource && normalizePath(t.lazySource).toLowerCase() === normalizePath(key).toLowerCase() ? newPath : t.lazySource,
             viewMode: kind === t.kind ? t.viewMode : null, externalStatus: 'clean', isDetached: false }
           : t,
       ),
       activeKey: state.activeKey === key ? newPath : state.activeKey,
+      pendingCloseKeys: state.pendingCloseKeys.map(pending => pending === key ? newPath : pending),
     }));
   },
 
@@ -458,6 +473,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   },
 
   confirmCloseBatch: (keys) => {
+    if (keys.some(key => get().isTransferring(key))) return;
     set((state) => {
       const newTabs = state.tabs.filter((t) => !keys.includes(t.key));
       let newActive = state.activeKey;

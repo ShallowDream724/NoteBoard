@@ -1,6 +1,6 @@
 //! Post-process only our generated PDFs: extract interactive item bounds,
 //! remove private navigation links, then add selectable vector page numbers.
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, path::Path, sync::atomic::{AtomicBool, Ordering}};
 use lopdf::{Document, Object, ObjectId, Dictionary, Stream, dictionary, content::{Content, Operation}};
 use serde::Serialize;
 use super::PdfOptions;
@@ -31,7 +31,9 @@ fn private_annotation(doc: &Document, value: &Object) -> Option<(String, [f32; 4
     Some((id, [rect[0].as_float().ok()?, rect[1].as_float().ok()?, rect[2].as_float().ok()?, rect[3].as_float().ok()?]))
 }
 
-pub fn prepare(input: &Path, output: &Path, options: &PdfOptions) -> Result<Processed, String> {
+pub fn prepare(input: &Path, output: &Path, options: &PdfOptions, cancelled: &AtomicBool) -> Result<Processed, String> {
+    let check = || if cancelled.load(Ordering::Acquire) { Err("导出已取消".to_string()) } else { Ok(()) };
+    check()?;
     let mut doc = Document::load(input).map_err(|e| e.to_string())?;
     let pages = doc.get_pages();
     let count = pages.len() as u32;
@@ -40,6 +42,7 @@ pub fn prepare(input: &Path, output: &Path, options: &PdfOptions) -> Result<Proc
         "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
     }));
     for (number, id) in pages {
+        check()?;
         let annotations = doc.get_dictionary(id).ok().and_then(|p| p.get(b"Annots").ok())
             .and_then(|a| resolve(&doc, a)).and_then(|a| a.as_array().ok()).cloned().unwrap_or_default();
         let mut retained = Vec::new();
@@ -82,7 +85,7 @@ pub fn prepare(input: &Path, output: &Path, options: &PdfOptions) -> Result<Proc
             doc.add_page_contents(id, contents.encode().map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         }
     }
-    doc.save(output).map_err(|e| e.to_string())?;
+    check()?; doc.save(output).map_err(|e| e.to_string())?; check()?;
     Ok(Processed { locations: locations.into_iter().map(|((id, page), rect)| ItemLocation { id, page, rect }).collect(), pages: count,
         size: std::fs::metadata(output).map_err(|e| e.to_string())?.len() })
 }

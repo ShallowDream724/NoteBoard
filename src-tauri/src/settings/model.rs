@@ -3,7 +3,11 @@
 // 读取容错：任一字段缺失用默认值填充，不整体丢弃
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Mutex};
+
+// One process-wide authority serializes every read/modify/write transaction.
+// Client revisions never allocate revisions and cannot replace this snapshot.
+static SETTINGS: Mutex<Option<Settings>> = Mutex::new(None);
 
 pub(crate) fn app_data_dir() -> PathBuf {
     let base = std::env::var("APPDATA")
@@ -308,6 +312,10 @@ fn default_ui_scale() -> u32 { 100 }
 
 /// 读取设置（容错：缺字段填默认，损坏文件不 panic）
 pub fn load() -> Settings {
+    SETTINGS.lock().unwrap().get_or_insert_with(read_from_disk).clone()
+}
+
+fn read_from_disk() -> Settings {
     let path = settings_path();
     if !path.exists() {
         return Settings::default();
@@ -334,16 +342,12 @@ pub fn load() -> Settings {
     }
 }
 
-/// 保存设置（原子写 + revision 递增）
-pub fn save(settings: &mut Settings) -> Result<u64, String> {
+fn persist(settings: &Settings) -> Result<(), String> {
     // 确保 APPDATA 目录存在
     let dir = app_data_dir();
     if !dir.exists() {
         std::fs::create_dir_all(&dir).map_err(|e| format!("创建数据目录失败: {}", e))?;
     }
-
-    // revision 递增
-    settings.revision += 1;
 
     let json = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("序列化设置失败: {}", e))?;
@@ -354,6 +358,54 @@ pub fn save(settings: &mut Settings) -> Result<u64, String> {
     crate::fsio::write::atomic_write(&path, json.as_bytes())
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+fn next_revision(current: &Settings) -> Result<u64, String> {
+    current.revision.checked_add(1).filter(|revision| *revision <= 9_007_199_254_740_991)
+        .ok_or_else(|| "设置版本号超出范围".into())
+}
+
+/// A settings patch replaces named leaf fields only. Serde supplies the same
+/// type validation as loading; metadata and unknown section/field names fail.
+fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, String> {
+    let sections = patch.as_object().ok_or("设置修改必须是对象")?;
+    let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
+    for (section, fields) in sections {
+        if !["appearance", "typography", "editor", "file", "layout", "export"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
+        let fields = fields.as_object().ok_or("设置分组修改必须是对象")?;
+        let target = value[section].as_object_mut().ok_or("设置分组无效")?;
+        for (field, field_value) in fields {
+            if !target.contains_key(field) { return Err(format!("未知设置字段: {section}.{field}")); }
+            target.insert(field.clone(), field_value.clone());
+        }
+    }
+    let mut updated: Settings = serde_json::from_value(value).map_err(|e| format!("设置值无效: {e}"))?;
+    updated.revision = next_revision(current)?;
+    Ok(updated)
+}
+
+fn commit_patch(current: &mut Settings, patch: &serde_json::Value, write: impl FnOnce(&Settings) -> Result<(), String>) -> Result<Settings, String> {
+    let updated = patched(current, patch)?;
+    write(&updated)?;
+    *current = updated.clone();
+    Ok(updated)
+}
+
+pub fn patch(patch: serde_json::Value) -> Result<Settings, String> {
+    let mut state = SETTINGS.lock().unwrap();
+    commit_patch(state.get_or_insert_with(read_from_disk), &patch, persist)
+}
+
+/// Legacy whole-document callers must match the authoritative revision. New
+/// clients use patch() so unrelated edits from another window are retained.
+pub fn save(settings: &mut Settings) -> Result<u64, String> {
+    let mut state = SETTINGS.lock().unwrap();
+    let current = state.get_or_insert_with(read_from_disk);
+    if settings.revision != current.revision { return Err("设置已在其他窗口更新，请重新载入后保存".into()); }
+    let mut updated = settings.clone(); updated.revision = next_revision(current)?;
+    persist(&updated)?;
+    *current = updated.clone(); *settings = updated;
     Ok(settings.revision)
 }
 
@@ -368,5 +420,30 @@ mod tests {
             .expect("旧版设置应能补全新字段");
         assert_eq!(settings.file.image_dir_name, "images");
         assert_eq!(settings.file.staging_directory, default_staging_directory());
+    }
+
+    #[test]
+    fn independent_patches_share_authoritative_sequence_and_preserve_each_other() {
+        let mut current = Settings::default();
+        let first = commit_patch(&mut current, &serde_json::json!({"editor":{"softWrap":false}}), |_| Ok(())).unwrap();
+        let second = commit_patch(&mut current, &serde_json::json!({"file":{"showHiddenFiles":true}}), |_| Ok(())).unwrap();
+        assert_eq!(first.revision, 1); assert_eq!(second.revision, 2);
+        assert!(!second.editor.soft_wrap); assert!(second.file.show_hidden_files);
+    }
+
+    #[test]
+    fn failed_settings_write_keeps_snapshot_and_revision() {
+        let mut current = Settings::default();
+        let result = commit_patch(&mut current, &serde_json::json!({"editor":{"softWrap":false}}), |_| Err("disk full".into()));
+        assert!(result.is_err()); assert_eq!(current.revision, 0); assert!(current.editor.soft_wrap);
+        let saved = commit_patch(&mut current, &serde_json::json!({"file":{"showHiddenFiles":true}}), |_| Ok(())).unwrap();
+        assert_eq!(saved.revision, 1); assert!(saved.editor.soft_wrap);
+    }
+
+    #[test]
+    fn patches_cannot_assign_revision_or_unknown_fields() {
+        assert!(patched(&Settings::default(), &serde_json::json!({"revision":9})).is_err());
+        assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"unknown":true}})).is_err());
+        assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"tabSize":"oops"}})).is_err());
     }
 }

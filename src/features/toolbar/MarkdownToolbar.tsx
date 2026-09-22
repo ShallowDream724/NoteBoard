@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Editor } from '@tiptap/core';
+import type { Transaction } from '@tiptap/pm/state';
 import {
   Undo2,
   Redo2,
@@ -55,7 +56,7 @@ import {
   redoDocumentHistory,
   useDocumentHistory,
 } from '../history/documentHistory';
-import { insertLocalImageWithDialog, pickAndSaveLocalImage } from '../editor-md/imagePaste';
+import { insertLocalImageWithDialog, insertSourceImageWithDialog } from '../editor-md/imagePaste';
 // 🔴 S03：从 editor-md 边界内实例表获取内核实例（不再依赖编辑器组件文件的 getter 导出）
 import { getMdTipTapEditor as getActiveTipTapEditor, getMdSourceView as getActiveSourceView } from '../editor-md/editorInstances';
 import { emit } from '../../core/emitter';
@@ -81,14 +82,17 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   // 监听 TipTap 编辑器事务与选区变化
   useEffect(() => {
     if (!editor || isSourceMode) return;
-    const handleTransaction = () => {
-      forceUpdate();
+    let frame = 0;
+    const handleTransaction = ({ transaction }: { transaction: Transaction }) => {
+      // Highlight/viewport decorations carry no formatting state. Do not make
+      // every lazy preview update rebuild the full toolbar React tree.
+      if (!transaction.docChanged && !transaction.selectionSet && !transaction.storedMarksSet) return;
+      if (!frame) frame = requestAnimationFrame(() => { frame = 0; forceUpdate(); });
     };
     editor.on('transaction', handleTransaction);
-    editor.on('selectionUpdate', handleTransaction);
     return () => {
+      cancelAnimationFrame(frame);
       editor.off('transaction', handleTransaction);
-      editor.off('selectionUpdate', handleTransaction);
     };
   }, [editor, isSourceMode, forceUpdate]);
 
@@ -373,17 +377,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleInsertLocalImage = async () => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const imageInfo = await pickAndSaveLocalImage(docKey);
-      if (imageInfo) {
-        executeSourceAction((view) => {
-          const { from, to } = view.state.selection.main;
-          const snippet = `![${imageInfo.alt}](${imageInfo.src})`;
-          view.dispatch({
-            changes: { from, to, insert: snippet },
-            selection: { anchor: from + snippet.length },
-          });
-        });
-      }
+      const view = getActiveSourceView(docKey);
+      if (view) await insertSourceImageWithDialog(view, docKey);
       return;
     }
     if (editor) {

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({
-  docs: new Map<string, { key: string; dirPath: string; kind: string; content: string }>(),
-  policy: 'trash', generation: 1,
+  docs: new Map<string, { key: string; dirPath: string; kind: string; content: string | null }>(),
+  caps: new Map<string, any>(), pending: new Set<string>(),
+  policy: 'trash', generation: 1, revision: 1,
   save: vi.fn(), recycle: vi.fn(), restore: vi.fn(), toast: vi.fn(),
   listeners: new Map<string, (payload: any) => void>(),
 }));
@@ -15,16 +16,18 @@ vi.mock('../../src/stores/settingsStore', () => ({
 vi.mock('../../src/features/explorer/explorerStore', () => ({
   useExplorerStore: { getState: () => ({ root: 'C:\\notes' }) },
 }));
-vi.mock('../../src/features/editor-md/linkHandler', () => ({
-  resolveRelativeDocPath: (base: string, src: string) => base + '\\' + src.replaceAll('/', '\\'),
+vi.mock('../../src/core/editor/editorRegistry', () => ({
+  getDocumentRevision: () => mock.revision,
+  getEditorCapabilities: (key: string) => mock.caps.get(key) ?? null,
 }));
-vi.mock('../../src/features/session/documentSession', () => ({ getSessionGeneration: () => mock.generation }));
+vi.mock('../../src/features/editor-md/visualSnapshot', () => ({ hasPendingSnapshot: (key: string) => mock.pending.has(key) }));
+vi.mock('../../src/features/session/documentSession', () => ({ getSessionGeneration: () => mock.generation, getSavedRevision: () => 1 }));
 vi.mock('../../src/features/editor-code/orchestration/saveDocument', () => ({ saveDocument: mock.save }));
 vi.mock('../../src/features/editor-code/orchestration/syncDocumentContent', () => ({
   syncDocumentContent: async (key: string) => mock.docs.get(key),
 }));
 vi.mock('../../src/core/ipc/commands', () => ({
-  recycleDocumentImage: mock.recycle, restoreDocumentImage: mock.restore,
+  recycleDocumentImages: mock.recycle, restoreDocumentImage: mock.restore,
 }));
 vi.mock('../../src/features/explorer/refreshAfterWrite', () => ({ refreshExplorerAfterWrite: async () => {} }));
 vi.mock('../../src/core/emitter', () => ({
@@ -37,11 +40,12 @@ vi.mock('../../src/stores/toastStore', () => ({ showToast: mock.toast }));
 beforeEach(() => {
   vi.resetModules(); vi.clearAllMocks();
   mock.docs.clear();
+  mock.caps.clear(); mock.pending.clear();
   mock.listeners.clear();
   mock.docs.set('C:\\notes\\a.md', { key: 'C:\\notes\\a.md', dirPath: 'C:\\notes', kind: 'markdown', content: '正文' });
-  mock.policy = 'trash'; mock.generation = 1;
+  mock.policy = 'trash'; mock.generation = 1; mock.revision = 1;
   mock.save.mockResolvedValue(true);
-  mock.recycle.mockResolvedValue({ ticket: 'receipt', path: 'C:\\notes\\img\\a.png' });
+  mock.recycle.mockImplementation(async (_key: string, paths: string[]) => paths.map(path => ({ ticket: 'receipt', path })));
   mock.restore.mockResolvedValue(undefined);
 });
 const removed = new Set(['img/a.png']);
@@ -52,6 +56,63 @@ function saved(key = 'C:\\notes\\a.md') {
 }
 
 describe('图片删除协调', () => {
+  it('源码恢复引用后保存屏障等待实际图片恢复，失败会阻止保存并保留凭据', async () => {
+    const { reconcileImageAssets, restoreImageAssetsForContent } = await import('../../src/features/editor-md/imageAssetLifecycle');
+    reconcileImageAssets('C:\\notes\\a.md', removed, empty, () => false);
+    await settle(); saved();
+    await vi.waitFor(() => expect(mock.recycle).toHaveBeenCalledTimes(1));
+    mock.restore.mockRejectedValueOnce(new Error('文件被占用'));
+    await expect(restoreImageAssetsForContent('C:\\notes\\a.md', '![恢复](img/%61.png)')).rejects.toThrow('文件被占用');
+    await restoreImageAssetsForContent('C:\\notes\\a.md', '<img src="img/a&#46;png">');
+    expect(mock.restore).toHaveBeenCalledTimes(2);
+    saved(); await settle();
+    expect(mock.recycle).toHaveBeenCalledTimes(1);
+  });
+  it('同一保存批次只刷新一次其他文档，全部候选通过一个原生调用', async () => {
+    const key = 'C:\\notes\\b.md';
+    mock.docs.set(key, { key, dirPath: 'C:\\notes', kind: 'markdown', content: '正文' });
+    const flush = vi.fn(async () => ({ docKey: key, instanceId: 'peer', revision: 1, content: '正文' }));
+    mock.caps.set(key, { instanceId: 'peer', flush });
+    const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
+    reconcileImageAssets('C:\\notes\\a.md', new Set(['img/a.png', 'img/b.png']), empty, () => false);
+    await settle(); saved();
+    await vi.waitFor(() => expect(mock.recycle).toHaveBeenCalledTimes(1));
+    expect(mock.recycle.mock.calls[0][1]).toEqual(['C:\\notes\\img\\a.png', 'C:\\notes\\img\\b.png']);
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+  it.each(['![共享](img/%61.png)', '<img src="img/a&#46;png">', null])('目录外后台文档的编码引用或未知正文阻止回收：%s', async content => {
+    const key = 'D:\\outside\\peer.md';
+    mock.docs.set(key, { key, dirPath: 'D:\\outside', kind: 'markdown', content });
+    const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
+    reconcileImageAssets('C:\\notes\\a.md', removed, empty, () => false);
+    await settle(); saved(); await settle();
+    expect(mock.recycle).not.toHaveBeenCalled();
+  });
+  it.each(['null', 'stale', 'failure', 'pending', 'uncommitted'])('刷新未知或过期结果不会回退到旧镜像：%s', async kind => {
+    const key = 'D:\\outside\\peer.md';
+    mock.docs.set(key, { key, dirPath: 'D:\\outside', kind: 'markdown', content: '旧镜像没有图片' });
+    if (kind === 'pending') mock.pending.add(key);
+    else mock.caps.set(key, { instanceId: 'peer', flush: async () => {
+      if (kind === 'failure') throw new Error('flush failed');
+      if (kind === 'uncommitted') return { docKey: key, instanceId: 'peer', revision: 1, content: '未通过镜像提交的快照' };
+      return kind === 'null' ? null : { docKey: key, instanceId: 'old', revision: 0, content: '旧镜像' };
+    } });
+    const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
+    reconcileImageAssets('C:\\notes\\a.md', removed, empty, () => false);
+    await settle(); saved(); await settle();
+    expect(mock.recycle).not.toHaveBeenCalled();
+  });
+  it('原生操作期间任一文档版本变化会恢复整个批次', async () => {
+    let finish!: (receipts: Array<{ ticket: string; path: string }>) => void;
+    mock.recycle.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
+    reconcileImageAssets('C:\\notes\\a.md', removed, empty, () => false);
+    await settle(); saved();
+    await vi.waitFor(() => expect(mock.recycle).toHaveBeenCalledTimes(1));
+    mock.revision++;
+    finish([{ ticket: 'receipt', path: 'C:\\notes\\img\\a.png' }]);
+    await vi.waitFor(() => expect(mock.restore).toHaveBeenCalledWith('receipt'));
+  });
   it('恢复失败保留回收凭据；重做不重复回收，再次撤销可以重试', async () => {
     mock.restore.mockRejectedValueOnce(new Error('文件被占用')).mockResolvedValue(undefined);
     const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
@@ -69,7 +130,7 @@ describe('图片删除协调', () => {
     expect(mock.restore).toHaveBeenLastCalledWith('receipt');
   });
   it('不代为保存；收到正常保存成功事件才回收，撤销在途删除恢复一次', async () => {
-    let finish!: (receipt: { ticket: string }) => void;
+    let finish!: (receipt: Array<{ ticket: string; path: string }>) => void;
     mock.recycle.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     const { reconcileImageAssets } = await import('../../src/features/editor-md/imageAssetLifecycle');
     let referenced = false;
@@ -81,7 +142,7 @@ describe('图片删除协调', () => {
     await vi.waitFor(() => expect(mock.recycle).toHaveBeenCalledTimes(1));
     referenced = true;
     reconcileImageAssets('C:\\notes\\a.md', empty, removed, () => referenced);
-    finish({ ticket: 'receipt' });
+    finish([{ ticket: 'receipt', path: 'C:\\notes\\img\\a.png' }]);
     await vi.waitFor(() => expect(mock.restore).toHaveBeenCalledTimes(1));
     await settle();
     expect(mock.restore).toHaveBeenCalledWith('receipt');

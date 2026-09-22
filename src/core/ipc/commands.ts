@@ -12,6 +12,7 @@ import type {
   RegisterResult,
   ReconcileResult,
   Settings,
+  SettingsPatch,
   WriteResult,
   WindowIntent,
   CreateWindowResponse,
@@ -232,8 +233,8 @@ export function createDir(dir: string, name: string): Promise<void> {
   return invoke<void>('create_dir', { dir, name });
 }
 
-export function renamePath(from: string, to: string): Promise<void> {
-  return invoke<void>('rename_path', { from, to });
+export function renamePath(label: string, from: string, to: string, expectedKeys: string[]): Promise<void> {
+  return invoke<void>('rename_path', { label, from, to, expectedKeys });
 }
 
 export function moveToTrash(path: string): Promise<void> {
@@ -242,6 +243,10 @@ export function moveToTrash(path: string): Promise<void> {
 
 export function recycleDocumentImage(documentPath: string, imagePath: string, imageDirectory: string, referenceRoot: string | null) {
   return invoke<{ ticket: string; path: string }>('recycle_document_image', { documentPath, imagePath, imageDirectory, referenceRoot });
+}
+export function recycleDocumentImages(documentPath: string, imagePaths: string[], imageDirectory: string, referenceRoot: string | null) {
+  return invoke<Array<{ path: string; ticket?: string; error?: string }>>('recycle_document_images',
+    { documentPath, imagePaths, imageDirectory, referenceRoot });
 }
 export function restoreDocumentImage(ticket: string): Promise<void> {
   return invoke<void>('restore_document_image', { ticket });
@@ -267,6 +272,10 @@ export function loadSettings(): Promise<Settings> {
 
 export function saveSettings(settings: Settings): Promise<number> {
   return invoke<number>('save_settings', { settings });
+}
+
+export function patchSettings(patch: SettingsPatch): Promise<Settings> {
+  return invoke<Settings>('patch_settings', { patch });
 }
 
 // ── 暂存 ──

@@ -17,18 +17,26 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const [format, setFormat] = useState('pdf');
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
   const [pages, setPages] = useState(0);
-  const [acceptedRevision, setAcceptedRevision] = useState<number>();
+  const [acceptedReceipt, setAcceptedReceipt] = useState<string>();
   const [item, setItem] = useState('');
   const [navigation, setNavigation] = useState<{ id: string; serial: number }>();
+  const session = useRef<{ controller: AbortController; pandoc?: string } | null>(null);
+  const savingRef = useRef(false);
   const navigateToItem = (id: string) => { setItem(id); setNavigation(value => ({ id, serial: (value?.serial ?? 0) + 1 })); };
   const [itemSearch, setItemSearch] = useState('');
   const path = useSettingsStore(s => s.settings.export?.pandocPath ?? '');
   const pdf = usePdfJob(document, options, format === 'pdf');
+  useEffect(() => { setAcceptedReceipt(undefined); }, [document, pdf.receipt?.id]);
   useEffect(() => {
     let disposed = false;
     const controller = new AbortController();
+    const current = { controller } as { controller: AbortController; pandoc?: string }; session.current = current;
     void captureDocument(docKey, controller.signal).then(value => { if (!disposed) setDocument(value); }).catch(error => { if (!disposed) setError(String(error)); });
-    return () => { disposed = true; controller.abort(); };
+    return () => {
+      disposed = true; controller.abort();
+      if (current.pandoc) void invoke('cancel_pandoc', { id: current.pandoc }).catch(() => {});
+      if (session.current === current) session.current = null;
+    };
   }, [docKey]);
   useEffect(() => {
     const previous = window.document.activeElement as HTMLElement | null;
@@ -60,27 +68,36 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   }, [pdf.receipt, itemIndex, itemSearch]).slice();
   if (currentItem && !visibleItems.includes(currentItem)) visibleItems.unshift(currentItem);
   const blocked = pdf.receipt?.issues.some(issue => issue.blocking);
-  const accepted = acceptedRevision !== undefined && acceptedRevision === pdf.receipt?.revision;
+  const receiptKey = pdf.receipt ? `${pdf.receipt.id}:${pdf.receipt.revision}` : undefined;
+  const accepted = acceptedReceipt !== undefined && acceptedReceipt === receiptKey;
   const download = async () => {
-    if (!document) return;
+    const current = session.current;
+    if (!document || !current || savingRef.current) return;
+    const { signal } = current.controller;
+    savingRef.current = true;
     setSaving(true); setError('');
     try {
-      if (format !== 'pdf') {
-        const status = await invoke<{ available: boolean }>('pandoc_status', { path });
-        if (!status.available) { setError('未找到 Pandoc，请在「设置 → 导出」中选择程序或下载安装。'); return; }
-      }
       const extension = format === 'html5' ? 'html' : format === 'latex' ? 'tex' : format;
       const destination = await save({ defaultPath: document.title.replace(/\.[^.]+$/, '') + '.' + extension,
         filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
+      signal.throwIfAborted();
       if (!destination) return;
       if (format === 'pdf' && pdf.receipt) await invoke('save_pdf', { id: pdf.receipt.id, revision: pdf.receipt.revision, path: destination });
       else {
+        const id = crypto.randomUUID(); current.pandoc = id;
+        await invoke('begin_pandoc', { id }); signal.throwIfAborted();
         const { preparePandoc } = await import('./documentConversion');
-        const warnings = await invoke<string>('pandoc_export', { path, format, source: await preparePandoc(document.markdown), directory: document.baseDirectory, destination });
+        const source = await preparePandoc(document.markdown, signal); signal.throwIfAborted();
+        const warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
+        signal.throwIfAborted();
         if (warnings) { setError('已导出，请检查：' + warnings); return; }
       }
       setError('已导出');
-    } catch (error) { setError(String(error)); } finally { setSaving(false); }
+    } catch (error) { if (!signal.aborted) setError(String(error)); } finally {
+      if (current.pandoc) { void invoke('cancel_pandoc', { id: current.pandoc }).catch(() => {}); current.pandoc = undefined; }
+      savingRef.current = false;
+      if (!signal.aborted) setSaving(false);
+    }
   };
   const number = (key: 'marginMm' | 'fontPt' | 'lineHeight', label: string, min: number, max: number, step: number) => <label className="export-field">{label}
     <input type="number" min={min} max={max} step={step} value={options[key]} onChange={e => { const value = Number(e.target.value); if (Number.isFinite(value)) setOptions(o => ({ ...o, [key]: Math.min(max, Math.max(min, value)) })); }}/></label>;
@@ -112,10 +129,10 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
           </select></label>}
         </section>}
         {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => navigateToItem(issue.id)}><AlertCircle size={15}/><span>{itemIndex.get(issue.id)?.label && <strong>{itemIndex.get(issue.id)!.label}<br/></strong>}{issue.message}</span></button>)}
-        {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedRevision(e.target.checked ? pdf.receipt?.revision : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
+        {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedReceipt(e.target.checked ? receiptKey : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
       </> : <p className="export-note">由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。</p>}
     </aside><main>{format === 'pdf' ? <>
-      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/> : <div className="export-empty">{pdf.error || error ? '暂时无法生成预览' : '正在排版…'}</div>}
+      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/> : <div className="export-empty">{pdf.error || error ? '暂时无法生成预览' : '正在排版…'}</div>}
       {pdf.busy && <div className="export-updating"><LoaderCircle size={14}/>更新预览…</div>}
     </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p><span>转换后用对应软件查看</span></div>}</main></div>
     <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : format === 'pdf' && pages ? `${pages} 页` : '')} details={diagnostics}/>
