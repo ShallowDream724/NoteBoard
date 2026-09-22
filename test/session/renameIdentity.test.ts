@@ -10,6 +10,7 @@ import { stagePendingSourceSnapshot } from '@/features/editor-md/visualSnapshot'
 import { initializeDocumentHistory, getCurrentDocumentHistoryContent } from '@/features/history/documentHistory';
 import { getBaseline } from '@/features/editor-md/serialize';
 import { getStagedPath, registerRestoredStagedPath } from '@/features/staging/stagingManager';
+import { kindFromPath, languageFromPath } from '@/core/docKind';
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'rename-test' }) }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
@@ -21,8 +22,9 @@ vi.mock('@/core/ipc/commands', () => ({
 }));
 
 function seed(key: string): void {
-  useDocumentStore.getState().upsertFromPayload({ key, displayName: key.split(/[\\/]/).pop()!, dirPath: 'C:\\notes', kind: 'markdown', language: 'markdown', content: 'base', encoding: 'utf8', eol: 'lf', size: 4, mtime: 1, readonly: false });
-  useWindowStore.getState().openTab({ key, path: key, displayName: 'note.md', kind: 'markdown', language: 'markdown', isDirty: false, isPreview: false, viewMode: 'source', externalStatus: null, isDetached: false });
+  const kind = kindFromPath(key), language = languageFromPath(key);
+  useDocumentStore.getState().upsertFromPayload({ key, displayName: key.split(/[\\/]/).pop()!, dirPath: 'C:\\notes', kind, language, content: 'base', encoding: 'utf8', eol: 'lf', size: 4, mtime: 1, readonly: false });
+  useWindowStore.getState().openTab({ key, path: key, displayName: key.split(/[\\/]/).pop()!, kind, language, isDirty: false, isPreview: false, viewMode: kind === 'markdown' ? 'source' : null, externalStatus: null, isDetached: false });
   initializeDocumentHistory(key, 'base', 'source');
   getBaseline(key).setBaseline('base');
 }
@@ -91,4 +93,17 @@ it('reclassifies the tab after an extension change', async () => {
   await renameOpenPath(old, next, false);
   expect(useDocumentStore.getState().getDocument(next)).toMatchObject({ kind: 'code', language: 'sql', content: 'SELECT 1', isDirty: true });
   expect(useWindowStore.getState().getTab(next)).toMatchObject({ kind: 'code', language: 'sql', viewMode: null, isDirty: true });
+});
+
+it('reclassifies repeated extension changes without converting or saving pending content', async () => {
+  let key = 'C:\\notes\\A'; seed(key); edit(key, '# unsaved');
+  for (const [name, kind] of [['A.MD', 'markdown'], ['A.Doc', 'unsupported'], ['A.docx', 'unsupported'], ['A.md', 'markdown'], ['A', 'code']] as const) {
+    const next = 'C:\\notes\\' + name;
+    await renameOpenPath(key, next, false);
+    expect(useDocumentStore.getState().getDocument(next)).toMatchObject({ kind, content: '# unsaved', baselineContent: 'base', isDirty: true });
+    expect(useWindowStore.getState().getTab(next)).toMatchObject({ kind, isDirty: true });
+    expect(getCurrentDocumentHistoryContent(next)).toBe('# unsaved');
+    key = next;
+  }
+  expect(ipc.writeDocument).not.toHaveBeenCalled();
 });

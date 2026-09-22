@@ -11,9 +11,11 @@ export async function renameOpenPath(from: string, to: string, directory: boolea
   const matches = (key: string) => directory ? isSubPath(source, key) : sameKey(source, key);
   const allKeys = new Set([...useDocumentStore.getState().documents.keys(), ...useWindowStore.getState().tabs.map(tab => tab.key)]);
   const keys = [...allKeys].filter(matches);
+  const sourceKeys = new Set(keys);
+  const otherPaths = new Set([...allKeys].filter(key => !sourceKeys.has(key)).map(key => normalizePath(key).toLowerCase()));
   const moves = keys.map(key => ({ from: key, to: directory ? destination + normalizePath(key).slice(source.length) : destination }));
   for (const move of moves) {
-    if ([...allKeys].some(key => !keys.includes(key) && sameKey(key, move.to))) throw new Error('目标路径已有打开的文档');
+    if (otherPaths.has(normalizePath(move.to).toLowerCase())) throw new Error('目标路径已有打开的文档');
   }
   const leases: DocumentIdentityLease[] = [];
   try {

@@ -32,7 +32,12 @@ normalized, case-insensitive path matching and segment boundaries. A failed fina
 pending serialization rolls the native rename back before publishing local keys.
 Native rename does not copy or rewrite document bodies. It uses one filesystem
 rename while retaining the registry lock, so no competing registration can enter
-between the filesystem and ownership commits.
+between the filesystem and ownership commits. The frontend destination collision
+check builds a normalized path set once, taking O(D × L) time and space for D
+open paths of average length L; it does not rescan every source for every target.
+This bound covers collision detection, not the subsequent per-document migration.
+Repeated extension changes, including extensionless → Markdown → DOC/DOCX →
+Markdown, reclassify both document and tab without converting their file contents.
 
 Save As retains its existing target registration and explicit body write. The
 same identity barriers capture edits made while writing or releasing the original
