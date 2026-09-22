@@ -2,6 +2,7 @@
 import { Node, mergeAttributes, type MarkdownToken, type MarkdownTokenizer } from '@tiptap/core';
 import { findMathStart, readMath, readMathBlock, writeMath, type MathDelimiter, type MathSource } from './mathSyntax';
 import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
+import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
 
 type MathToken = MarkdownToken & MathSource;
 const inlineTokenizer: MarkdownTokenizer = {
@@ -105,14 +106,26 @@ export const ImageNode = Node.create<{ docKey: string }>({
   },
 });
 
-function diagramNode(name: string, attribute: string, languages: string[]) {
+function diagramNode(name: string, attribute: string, languages: readonly string[]) {
   return Node.create({
     name, group: 'block', atom: true, selectable: true, isolating: true,
     addAttributes() { return { code: { default: '' } }; },
     parseHTML() { return [{ tag: `div[${attribute}]` }, ...languages.map(language => ({ tag: `pre[data-language="${language}"]` }))]; },
     renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { [attribute]: '' })]; },
+    markdownTokenName: 'code',
+    parseMarkdown(token, helpers) {
+      return diagramLanguage(token.lang) === diagramLanguage(languages[0]) ? helpers.createNode(name, { code: String(token.text ?? '') }) : [];
+    },
+    renderMarkdown(node) {
+      const code = String(node.attrs?.code ?? '');
+      // The body may itself contain Markdown fences; choose a longer fence.
+      let length = 3;
+      for (const run of code.matchAll(/`+/g)) length = Math.max(length, run[0].length + 1);
+      const fence = '`'.repeat(length);
+      return `${fence}${languages[0]}\n${code}\n${fence}`;
+    },
   });
 }
-export const MermaidNode = diagramNode('mermaidBlock', 'data-mermaid', ['mermaid']);
-export const PlantUmlNode = diagramNode('plantumlBlock', 'data-plantuml', ['plantuml', 'uml', 'puml']);
-export const InfographicNode = diagramNode('infographicBlock', 'data-infographic', ['infographic', 'info']);
+export const MermaidNode = diagramNode('mermaidBlock', 'data-mermaid', DIAGRAM_LANGUAGES.mermaid);
+export const PlantUmlNode = diagramNode('plantumlBlock', 'data-plantuml', DIAGRAM_LANGUAGES.plantuml);
+export const InfographicNode = diagramNode('infographicBlock', 'data-infographic', DIAGRAM_LANGUAGES.infographic);

@@ -6,7 +6,7 @@ import Blockquote from '@tiptap/extension-blockquote';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { TableCell, TableHeader } from '@tiptap/extension-table';
 import { MarkdownTable, SizedTableRow } from './markdownTable';
-import Highlight from '@tiptap/extension-highlight';
+import { MarkdownHighlight } from './markdownHighlight';
 import { Markdown, MarkdownManager } from '@tiptap/markdown';
 import { DocumentPresentation } from './documentPresentation';
 import { MathInlineNode, MathBlockNode, AlertNode, ImageNode, MermaidNode, PlantUmlNode, InfographicNode } from './documentNodes';
@@ -25,10 +25,12 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
       link: { openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: null, title: 'Ctrl + 单击以访问链接' } },
       dropcursor: { width: 2, color: 'var(--editor-accent)', class: 'nb-dropcursor' },
     }),
-    MarkdownCode, MarkdownBlockquote, ImageNode, Highlight.configure({ multicolor: true }),
+    // Highlight must wrap inline code; serializing its markup inside backticks
+    // would turn the mark into literal code and discard the highlight on reload.
+    MarkdownHighlight.configure({ multicolor: true }), MarkdownCode, MarkdownBlockquote, ImageNode,
     TaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, TableCell, TableHeader,
-    CodeBlock, MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, AlertNode, DocumentPresentation, Markdown,
+    MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, Markdown,
   ].map(extension => views[extension.name] ?? extension);
 }
 

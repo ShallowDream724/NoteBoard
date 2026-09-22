@@ -12,7 +12,8 @@ import type { Editor } from '@tiptap/core';
 const COMMONMARK_ESCAPABLE_PUNCTUATION = new Set(
   [...'!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'],
 );
-const TIPTAP_MARKDOWN_SPECIAL_CHARACTERS = new Set(['`', '*', '_', '[', ']', '~']);
+// Include delimiters supplied by our inline grammar, not only StarterKit marks.
+const TIPTAP_MARKDOWN_SPECIAL_CHARACTERS = new Set(['`', '*', '_', '[', ']', '~', '=', '$']);
 // Unicode 标点与符号类别用于发现“可能是转义前缀”的反斜杠，不按具体字符逐项维护。
 const UNICODE_PUNCTUATION_OR_SYMBOL = /[\p{P}\p{S}]/u;
 
@@ -190,17 +191,19 @@ function collectMarkdownCleanupCandidates(markdown: string): MarkdownCleanupCand
   return candidates;
 }
 
-/** 从右向左应用清理项，保证各项仍可使用原 Markdown 字符偏移。 */
+/** 候选按原文位置递增且互不重叠；一次拼接，避免每项都复制整篇文档。 */
 function applyMarkdownCleanupCandidates(
   markdown: string,
   candidates: MarkdownCleanupCandidate[],
 ): string {
-  let output = markdown;
-  for (let index = candidates.length - 1; index >= 0; index -= 1) {
-    const candidate = candidates[index];
-    output = output.slice(0, candidate.start) + candidate.replacement + output.slice(candidate.end);
+  const fragments: string[] = [];
+  let cursor = 0;
+  for (const candidate of candidates) {
+    fragments.push(markdown.slice(cursor, candidate.start), candidate.replacement);
+    cursor = candidate.end;
   }
-  return output;
+  fragments.push(markdown.slice(cursor));
+  return fragments.join('');
 }
 
 /**

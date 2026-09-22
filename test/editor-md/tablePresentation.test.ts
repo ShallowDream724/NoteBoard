@@ -65,6 +65,23 @@ describe('table presentation roundtrip', () => {
     try { const md = serializeMarkdown(editor); expect(md.length).toBeLessThan(long.length + 100); expect(md).not.toMatch(/ {20}|-{20}/); }
     finally { editor.destroy(); }
   });
+  it('emits every GFM separator when all rows cover the same merged column', () => {
+    const editor = editorFor('<table><tr><th colspan="2">LEFT</th><th>RIGHT</th></tr><tr><td colspan="2">BODY</td><td>TAIL</td></tr></table>');
+    try {
+      const markdown = serializeMarkdown(editor);
+      expect(markdown).toContain('| --- | --- | --- |');
+      expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.state.doc.toJSON());
+    } finally { editor.destroy(); }
+  });
+  it('keeps source text entered into an old merged placeholder by discarding stale spans', () => {
+    const editor = editorFor('<table><tr><th colspan="2">LEFT</th><th>RIGHT</th></tr><tr><td colspan="2">BODY</td><td>TAIL</td></tr></table>');
+    try {
+      const markdown = serializeMarkdown(editor).replace('| LEFT |  | RIGHT |', '| LEFT | NEW | RIGHT |');
+      const reparsed = parseMarkdownDocument(markdown);
+      expect(reparsed.textContent).toContain('LEFTNEWRIGHT');
+      expect(reparsed.firstChild?.firstChild?.childCount).toBe(3);
+    } finally { editor.destroy(); }
+  });
   it('ignores invalid dimension metadata without losing table text', () => {
     const editor = editorFor('<!-- noteboard-table {"widths":[80,100],"heights":{},"rows":{"0":{"count":2,"cells":{"0":{"colspan":10000000,"rowspan":1,"header":true}}}}} -->\n' + source);
     try {

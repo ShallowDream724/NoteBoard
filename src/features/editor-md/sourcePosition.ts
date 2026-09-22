@@ -1,20 +1,22 @@
 import type { Editor } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
-import { serializeMarkdownFragment, type MarkdownManagerLike } from './serialize';
+import type { MarkdownManagerLike } from './serialize';
+import { diagramLanguage } from './diagramSyntax';
 
-interface Token { type: string; raw?: string; text?: string; tokens?: Token[]; items?: Token[]; header?: Token[] | boolean; rows?: Token[][] }
+interface Token { type: string; raw?: string; text?: string; lang?: string; ordered?: boolean; tokens?: Token[]; items?: Token[]; header?: Token[] | boolean; rows?: Token[][] }
 interface Span { from: number; to: number; source: number }
 interface Located { text: string; spans: Span[] }
 interface Character { value: string; from: number; to: number }
-const position = (text: Located, offset: number) => {
+const position = (text: Located, offset: number, affinity: 'left' | 'right' = 'right') => {
   let low = 0, high = text.spans.length - 1;
-  while (low < high) { const middle = (low + high) >>> 1; if (text.spans[middle].to < offset) low = middle + 1; else high = middle; }
+  while (low < high) { const middle = (low + high) >>> 1; if (text.spans[middle].to < offset || (affinity === 'right' && text.spans[middle].to === offset)) low = middle + 1; else high = middle; }
   const span = text.spans[low];
   return span ? span.source + Math.min(offset, span.to) - span.from : 0;
 };
 
 /** Child raw text may have quote/list prefixes stripped. Match lines in order within its parent. */
 function locate(parent: Located, text: string, start: number): { located: Located; end: number } {
+  if (start === 0 && text === parent.text) return { located: parent, end: text.length };
   const exact = parent.text.indexOf(text, start);
   if (exact >= 0) {
     let low = 0, high = parent.spans.length;
@@ -53,24 +55,32 @@ function* literal(text: Located, decode: boolean): Generator<Character> {
       const entity = /^&(?:#\d+|#x[\da-f]+|[a-z]+);/i.exec(text.text.slice(i, i + 35));
       if (entity) { decoder!.innerHTML = entity[0]; value = decoder!.value; length = entity[0].length; }
     }
-    for (const character of value.split('')) if (!/\s/.test(character)) yield { value: character, from: position(text, i), to: position(text, i + length) };
+    for (const character of value.split('')) yield { value: /\s/.test(character) ? ' ' : character,
+      from: position(text, i), to: position(text, i + length, 'left') };
     i += length;
   }
 }
 
-function* sourceCharacters(tokens: Token[], parent: Located): Generator<Character> {
+function* tableCells(token: Token): Generator<Token> {
+  if (Array.isArray(token.header)) yield* token.header;
+  for (const row of token.rows ?? []) yield* row;
+}
+
+function* sourceCharacters(tokens: Iterable<Token>, parent: Located): Generator<Character> {
   let cursor = 0;
   for (const token of tokens) {
-    const raw = token.raw ?? token.text ?? '';
+    const raw = token.raw || token.text || '';
     const found = locate(parent, raw, cursor); cursor = found.end;
     const here = found.located;
     if (token.type === 'space' || token.type === 'documentPresentation') continue;
-    if (/^(mathInline|mathBlock|image|hr|mermaid|plantuml|infographic)/i.test(token.type)) {
-      yield { value: '\uFFFC', from: position(here, 0), to: position(here, raw.length) }; continue;
+    if (/^(mathInline|mathBlock|image|hr|mermaid|plantuml|infographic)/i.test(token.type)
+      || (token.type === 'code' && diagramLanguage(token.lang))) {
+      const end = raw.replace(/[\r\n]+$/, '').length;
+      yield { value: '\uFFFC', from: position(here, 0), to: position(here, end, 'left') }; continue;
     }
     if (token.items) { yield* sourceCharacters(token.items, here); continue; }
     if (Array.isArray(token.header)) {
-      yield* sourceCharacters([...token.header, ...(token.rows ?? []).flat()], here); continue;
+      yield* sourceCharacters(tableCells(token), here); continue;
     }
     if (token.tokens) { yield* sourceCharacters(token.tokens, here); continue; }
     if (token.type === 'br') continue;
@@ -82,7 +92,7 @@ function* documentCharacters(node: DocumentNode, offset = -1): Generator<Charact
   if (node.type.name === 'documentPresentation') return;
   if (node.isText) {
     const text = node.text ?? '';
-    for (let i = 0; i < text.length; i++) if (!/\s/.test(text[i])) yield { value: text[i], from: offset + i, to: offset + i + 1 };
+    for (let i = 0; i < text.length; i++) yield { value: /\s/.test(text[i]) ? ' ' : text[i], from: offset + i, to: offset + i + 1 };
   } else if (node.isAtom && node.type.name !== 'hardBreak' && node.type.name !== 'paragraph') {
     yield { value: '\uFFFC', from: offset, to: offset + node.nodeSize };
   } else {
@@ -91,53 +101,137 @@ function* documentCharacters(node: DocumentNode, offset = -1): Generator<Charact
   }
 }
 
-/** Transient semantic walk. No retained text copies, per-character arrays, or editor instances. */
+interface Block {
+  token?: Token; located: Located; node: DocumentNode; visualStart: number;
+  sourceStart: number; sourceEnd: number;
+}
+
+/** Marked normalizes newlines. Keep only line spans to recover original UTF-16
+ * offsets, including CRLF; LF input reuses the supplied string without copying. */
+function sourceLocation(markdown: string): Located {
+  if (!markdown.includes('\r')) return { text: markdown, spans: [{ from: 0, to: markdown.length, source: 0 }] };
+  const spans: Span[] = [], parts: string[] = [];
+  let cursor = 0, local = 0;
+  for (const match of markdown.matchAll(/\r\n?/g)) {
+    const body = markdown.slice(cursor, match.index);
+    parts.push(body, '\n');
+    if (body.length) spans.push({ from: local, to: local + body.length, source: cursor });
+    local += body.length;
+    spans.push({ from: local, to: local + 1, source: match.index + match[0].length - 1 });
+    local++;
+    cursor = match.index + match[0].length;
+  }
+  const tail = markdown.slice(cursor); parts.push(tail);
+  spans.push({ from: local, to: local + tail.length, source: cursor });
+  return { text: parts.join(''), spans };
+}
+
+function nodeTypeForToken(token: Token): string | null {
+  switch (token.type) {
+    case 'paragraph': case 'text':
+      return token.tokens?.length === 1 && token.tokens[0].type === 'image' ? 'image' : 'paragraph';
+    case 'heading': return 'heading';
+    case 'blockquote': return 'blockquote';
+    case 'list': return token.ordered ? 'orderedList' : 'bulletList';
+    case 'taskList': return 'taskList';
+    case 'code': {
+      const diagram = diagramLanguage(token.lang);
+      return diagram ? `${diagram}Block` : 'codeBlock';
+    }
+    case 'hr': return 'horizontalRule';
+    case 'table': return 'table';
+    case 'githubAlert': return 'githubAlert';
+    case 'mathBlock': return 'mathBlock';
+    case 'image': return 'image';
+    case 'documentPresentation': return 'documentPresentation';
+    default: return null;
+  }
+}
+
+/** Pair known grammar blocks structurally, without serializing preceding nodes.
+ * Unknown HTML/extensions or paragraph splitting use the same token stream's
+ * semantic fallback, never a second full-document lex/serialization pass. */
+function locateBlocks(tokens: Token[], source: Located, doc: DocumentNode): Block[] | null {
+  const blocks: Block[] = [];
+  let cursor = 0, childIndex = 0, visualStart = 0;
+  const emptyParagraph = (sourcePoint: number) => {
+    const node = doc.child(childIndex++);
+    blocks.push({ node, visualStart, located: { text: '', spans: [] }, sourceStart: sourcePoint, sourceEnd: sourcePoint });
+    visualStart += node.nodeSize;
+  };
+  for (const token of tokens) {
+    const raw = token.raw || token.text || '';
+    const found = locate(source, raw, cursor); cursor = found.end;
+    if (token.type === 'space' || token.type === 'def') continue;
+    while (childIndex < doc.childCount && doc.child(childIndex).type.name === 'paragraph' && !doc.child(childIndex).content.size) {
+      emptyParagraph(position(found.located, 0));
+    }
+    if (childIndex >= doc.childCount) return null;
+    const node = doc.child(childIndex++);
+    if (node.type.name !== nodeTypeForToken(token)) return null;
+    blocks.push({ token, located: found.located, node, visualStart,
+      sourceStart: position(found.located, 0),
+      sourceEnd: position(found.located, raw.replace(/[\r\n]+$/, '').length, 'left') });
+    visualStart += node.nodeSize;
+  }
+  while (childIndex < doc.childCount && doc.child(childIndex).type.name === 'paragraph' && !doc.child(childIndex).content.size) {
+    emptyParagraph(position(source, source.text.length, 'left'));
+  }
+  return childIndex === doc.childCount ? blocks : null;
+}
+
+function mapBlock(block: Block, direction: 'source' | 'visual', selection: { anchor: number; head: number }) {
+  const visualStart = block.visualStart + (block.node.isTextblock ? 1 : 0);
+  if (!block.token) return direction === 'source'
+    ? { anchor: block.sourceStart, head: block.sourceStart }
+    : { anchor: visualStart, head: visualStart };
+  return mapCharacters(sourceCharacters([block.token], block.located), documentCharacters(block.node, block.visualStart),
+    direction, selection, { source: block.sourceStart, visual: visualStart });
+}
+
+/** One transient lexer result; only selected known blocks get a character walk.
+ * No node JSON/serialization, retained full text, token cache or character arrays. */
 export function mapModeSelection(editor: Editor, markdown: string, direction: 'source' | 'visual', selection: { anchor: number; head: number }) {
   const manager = editor.storage.markdown?.manager as unknown as (MarkdownManagerLike & { instance?: { lexer: (text: string) => Token[] } }) | undefined;
   if (!manager?.instance) return { anchor: 0, head: 0 };
-  // Canonical source matches independently serialized top-level blocks. Locate
-  // blocks sequentially (including duplicates), then lex only the selected ones.
-  // Non-canonical source edits fall back to the full semantic mapping below.
-  if (manager.serialize) {
-    const points = [selection.anchor, selection.head];
-    const mapped: Array<number | undefined> = [undefined, undefined];
-    let cursor = 0, visualStart = 0;
-    for (let index = 0; index < editor.state.doc.childCount; index++) {
-      const child = editor.state.doc.child(index);
-      const raw = serializeMarkdownFragment(manager, { type: 'doc', attrs: undefined, content: [child.toJSON()] }).trim();
-      if (!raw && child.isTextblock && !child.content.size) {
-        const sourcePoint = index === editor.state.doc.childCount - 1 ? markdown.length : cursor;
-        for (let point = 0; point < points.length; point++) {
-          if (mapped[point] === undefined && points[point] <= (direction === 'source' ? visualStart + child.nodeSize : sourcePoint)) {
-            mapped[point] = direction === 'source' ? sourcePoint : visualStart + 1;
+  const located = sourceLocation(markdown);
+  const tokens = manager.instance.lexer(located.text);
+  const blocks = locateBlocks(tokens, located, editor.state.doc);
+  const maximum = direction === 'source' ? markdown.length : editor.state.doc.content.size;
+  if (blocks?.length) {
+    const selectBlock = (point: number, affinity: 'left' | 'right') => {
+      let previous: Block | undefined;
+      for (const block of blocks) {
+        const start = direction === 'source' ? block.visualStart : block.sourceStart;
+        const end = direction === 'source' ? block.visualStart + block.node.nodeSize : block.sourceEnd;
+        if (point < end || (point === end && (direction === 'visual' || affinity === 'left'))) {
+          if (previous && point < start) {
+            const previousEnd = direction === 'source' ? previous.visualStart + previous.node.nodeSize : previous.sourceEnd;
+            return point - previousEnd <= start - point ? previous : block;
           }
+          return block;
         }
-        if (mapped.every(value => value !== undefined)) return { anchor: mapped[0]!, head: mapped[1]! };
-        visualStart += child.nodeSize;
-        continue;
+        previous = block;
       }
-      const at = markdown.indexOf(raw, cursor);
-      if (!raw || at < 0) break;
-      const end = direction === 'source' ? visualStart + child.nodeSize : at + raw.length;
-      for (let point = 0; point < points.length; point++) {
-        if (mapped[point] !== undefined || points[point] > end) continue;
-        const source = sourceCharacters(manager.instance.lexer(raw), { text: raw, spans: [{ from: 0, to: raw.length, source: at }] });
-        mapped[point] = mapCharacters(source, documentCharacters(child, visualStart), direction, { anchor: points[point], head: points[point] }).head;
-      }
-      if (mapped.every(value => value !== undefined)) return clampSelection({ anchor: mapped[0]!, head: mapped[1]! }, direction === 'source' ? markdown.length : editor.state.doc.content.size);
-      cursor = at + raw.length; visualStart += child.nodeSize;
-    }
+      return blocks[blocks.length - 1];
+    };
+    const forward = selection.anchor <= selection.head;
+    const anchorBlock = selectBlock(selection.anchor, forward ? 'right' : 'left');
+    const headBlock = selectBlock(selection.head, forward && selection.anchor !== selection.head ? 'left' : 'right');
+    if (anchorBlock === headBlock) return clampSelection(mapBlock(anchorBlock, direction, selection), maximum);
+    return clampSelection({
+      anchor: mapBlock(anchorBlock, direction, { anchor: selection.anchor, head: selection.anchor }).anchor,
+      head: mapBlock(headBlock, direction, { anchor: selection.head, head: selection.head }).head,
+    }, maximum);
   }
-  const source = sourceCharacters(manager.instance.lexer(markdown), { text: markdown, spans: [{ from: 0, to: markdown.length, source: 0 }] });
-  const visual = documentCharacters(editor.state.doc);
-  return clampSelection(mapCharacters(source, visual, direction, selection), direction === 'source' ? markdown.length : editor.state.doc.content.size);
+  return clampSelection(mapCharacters(sourceCharacters(tokens, located), documentCharacters(editor.state.doc), direction, selection), maximum);
 }
 
 function clampSelection(selection: { anchor: number; head: number }, max: number) {
   return { anchor: Math.max(0, Math.min(max, selection.anchor)), head: Math.max(0, Math.min(max, selection.head)) };
 }
 
-function mapCharacters(source: Generator<Character>, visual: Generator<Character>, direction: 'source' | 'visual', selection: { anchor: number; head: number }) {
+function mapCharacters(source: Generator<Character>, visual: Generator<Character>, direction: 'source' | 'visual', selection: { anchor: number; head: number }, start = { source: 0, visual: 0 }) {
   const input = direction === 'source' ? visual : source;
   const output = direction === 'source' ? source : visual;
   const values = [selection.anchor, selection.head]; const result: Array<number | undefined> = [undefined, undefined];
@@ -145,7 +239,8 @@ function mapCharacters(source: Generator<Character>, visual: Generator<Character
   const fill = (buffer: Character[], stream: Generator<Character>, count: number) => {
     while (buffer.length < count) { const next = stream.next(); if (next.done) break; buffer.push(next.value); }
   };
-  let previousInput = 0, previousOutput = 0;
+  let previousInput = direction === 'source' ? start.visual : start.source;
+  let previousOutput = direction === 'source' ? start.source : start.visual;
   for (;;) {
     fill(left, input, 1); fill(right, output, 1);
     if (!left.length || !right.length) break;
