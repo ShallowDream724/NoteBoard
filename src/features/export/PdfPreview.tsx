@@ -21,8 +21,8 @@ class NativePdfRange extends PDFDataRangeTransport {
   abort() { this.stopped = true; }
 }
 
-function Page({ pdf, index, width, locations, selected, onSelect }: {
-  pdf: PDFDocumentProxy; index: number; width: number; locations: ItemLocation[]; selected?: string; onSelect?: (id: string) => void;
+function Page({ pdf, index, width, locations, selected, onSelect, issues }: {
+  pdf: PDFDocumentProxy; index: number; width: number; locations: ItemLocation[]; selected?: string; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [regions, setRegions] = useState<Array<{ id: string; left: number; top: number; width: number; height: number }>>([]);
@@ -49,15 +49,15 @@ function Page({ pdf, index, width, locations, selected, onSelect }: {
   }, [pdf, index, width, locations]);
   return <div style={{ position: 'relative' }}>
     <canvas ref={canvas} aria-label={`第 ${index + 1} 页`} style={{ display: 'block', background: 'white', boxShadow: '0 2px 12px #0002' }}/>
-    {regions.map((region, index) => <button key={`${region.id}:${index}`} className={'export-item-region' + (selected === region.id ? ' selected' : '')}
+    {regions.map((region, index) => <button key={`${region.id}:${index}`} className={'export-item-region' + (selected === region.id ? ' selected' : '') + (issues?.has(region.id) ? ' has-error' : '')}
       aria-label={region.id.startsWith('table') ? '调整此表格' : '调整此公式'} title="点击调整" onClick={() => onSelect?.(region.id)}
       style={{ position: 'absolute', left: region.left, top: region.top, width: region.width, height: Math.max(18, region.height) }}/>) }
   </div>;
 }
 const EMPTY_LOCATIONS: ItemLocation[] = [];
 
-export function PdfPreview({ bytes, receipt, onPages, selected, onSelect }: {
-  bytes?: Uint8Array; receipt?: PdfReceipt; onPages: (pages: number) => void; selected?: string; onSelect?: (id: string) => void;
+export function PdfPreview({ bytes, receipt, onPages, selected, navigation, onSelect, issues }: {
+  bytes?: Uint8Array; receipt?: PdfReceipt; onPages: (pages: number) => void; selected?: string; navigation?: { id: string; serial: number }; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
 }) {
   const [loaded, setLoaded] = useState<{ pdf: PDFDocumentProxy; width: number; height: number; key: string; receipt?: PdfReceipt; task: PDFDocumentLoadingTask } | null>(null);
   const tasks = useRef(new Set<PDFDocumentLoadingTask>());
@@ -92,15 +92,15 @@ export function PdfPreview({ bytes, receipt, onPages, selected, onSelect }: {
   const virtual = useVirtualizer({ count: loaded?.pdf.numPages ?? 0, getScrollElement: () => scroll.current, estimateSize: () => pageHeight + 36, overscan: 1 });
   useEffect(() => { virtual.measure(); }, [pageHeight, virtual]);
   useEffect(() => {
-    if (!selected || !loaded || loaded.key !== documentKey) return;
-    const location = receipt?.locations.find(location => location.id === selected);
+    if (!navigation?.id || !loaded || loaded.key !== documentKey) return;
+    const location = receipt?.locations.find(location => location.id === navigation.id);
     if (location) virtual.scrollToOffset(Math.max(0, (location.page - 1) * (pageHeight + 36) + (loaded.height - location.rect[3]) * width / loaded.width - 50));
-  }, [selected, receipt, loaded, documentKey, virtual, pageHeight, width]);
+  }, [navigation, receipt, loaded, documentKey, virtual, pageHeight, width]);
   return <div ref={scroll} className="export-preview" aria-label="PDF 预览">
     {error && <p role="alert">{error}</p>}
     <div style={{ height: virtual.getTotalSize(), position: 'relative', width, margin: '20px auto' }}>
       {loaded && virtual.getVirtualItems().map(item => <div key={item.key} style={{ position: 'absolute', top: item.start, left: 0 }}>
-        <Page pdf={loaded.pdf} index={item.index} width={width} locations={locations.get(item.index + 1) ?? EMPTY_LOCATIONS} selected={selected} onSelect={onSelect}/>
+        <Page pdf={loaded.pdf} index={item.index} width={width} locations={locations.get(item.index + 1) ?? EMPTY_LOCATIONS} selected={selected} onSelect={onSelect} issues={loaded.key === documentKey ? issues : undefined}/>
         <div className="export-page-number">{item.index + 1}</div>
       </div>)}
     </div>

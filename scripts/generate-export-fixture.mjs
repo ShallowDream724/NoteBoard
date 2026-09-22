@@ -7,7 +7,7 @@ const rows = Number(process.argv[3] ?? 1000);
 const columns = Number(process.argv[4] ?? 30);
 if (!Number.isInteger(rows) || rows < 1 || rows > 100000 || !Number.isInteger(columns) || columns < 3 || columns > 100) throw new Error('Invalid fixture dimensions');
 const sections = ['# 公式与表格排版试验册',
-  '用于检查长公式换行、逐项缩放、宽表格续表、跨页表头与页码。普通内容保持统一字号。超宽矩阵、分式可以单独选择“缩到正文宽度”。',
+  '用于检查公式与表格的自动排版、单项调整、跨页表头与页码。超宽对象默认使用“视觉最优”，也可单独选择“缩到正文宽度”。',
   '> [!IMPORTANT]\n> 先在导出预览里点击超宽对象，再修改它的排版方式。其他对象的设置应当保持原样。\n>\n> 这里的中文、**粗体**、[外部链接](https://katex.org/)和提示块样式应完整保留。',
   '## 连续表达式'];
 function formula(label, source, delimiter = '$$') {
@@ -23,8 +23,9 @@ formula('自动换行与显式对齐', String.raw`\begin{aligned}
   \nabla\times\mathbf{E} &= -\frac{\partial\mathbf{B}}{\partial t}, &
   \nabla\times\mathbf{B} &= \mu_0\mathbf{J}+\mu_0\varepsilon_0\frac{\partial\mathbf{E}}{\partial t}.
 \end{aligned}`);
-formula('超宽矩阵（单独缩放）', String.raw`A=\begin{bmatrix}`+Array.from({length:5},(_,r)=>terms(18,c=>`a_{${r+1},${c}}`,'&')).join('\\\\[3pt]')+String.raw`\end{bmatrix}`);
-formula('不可从分子中间拆开的分式（单独缩放）', String.raw`R=\frac{`+terms(40,i=>`x_{${i}}^{2}`)+String.raw`}{1+\sum_{j=1}^{n}y_j^2}`);
+formula('超宽矩阵', String.raw`A=\begin{bmatrix}`+Array.from({length:5},(_,r)=>terms(18,c=>`a_{${r+1},${c}}`,'&')).join('\\\\[3pt]')+String.raw`\end{bmatrix}`);
+formula('分子与分母都很长', String.raw`R=\frac{`+terms(40,i=>`x_{${i}}^{2}`)+'}{'+terms(40,i=>`y_{${i}}^{2}`)+'}');
+formula('千行矩阵（按行列范围续排）', String.raw`M=\begin{bmatrix}`+Array.from({length:1000},(_,r)=>terms(4,c=>`${r+1}${c}`,'&')).join('\\\\')+String.raw`\end{bmatrix}`);
 formula('颜色、边框与组合符号', String.raw`\boxed{\color{blue}{\mathcal{H}}=\underbrace{\sum_{i=1}^{n}\frac{\hbar^2}{2m_i}\nabla_i^2}_{\text{kinetic energy}}+\overbrace{\sum_{i<j}\frac{q_iq_j}{4\pi\varepsilon_0r_{ij}}}^{\text{interaction}}}`);
 formula('条件分段', String.raw`f(x)=\begin{cases}\displaystyle\frac{\sin x}{x},&x\ne0,\\[6pt]1,&x=0.\end{cases}`);
 formula('化学反应', String.raw`\ce{2KMnO4 + 16HCl -> 2KCl + 2MnCl2 + 5Cl2 ^ + 8H2O}`);

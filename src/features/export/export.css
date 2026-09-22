@@ -22,3 +22,9 @@
 .export-item-region { cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 0; }
 .export-item-region:hover { border-color: #3b82f6; background: #3b82f60b; }
 .export-item-region.selected { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f622; }
+.export-item-region.has-error { border-color: #dc3535; background: #dc353512; box-shadow: 0 0 0 1px #dc353540; }
+.export-item-list button.has-error { color: var(--error-600, #c53030); }
+.export-diagnostics { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.export-diagnostics [role=status] { flex: 1; min-width: 0; max-height: 90px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; cursor: text; }
+.export-copy { flex-shrink: 0; display: flex; align-items: center; gap: 5px; color: var(--editor-text-secondary); background: transparent; border: 1px solid var(--editor-border); border-radius: 5px; padding: 6px 8px; }
+.export-copy:hover { background: var(--toolbar-hover); }

@@ -18,7 +18,7 @@ async function render() {
         document.documentElement.style.setProperty('--export-font', `${options.fontPt}pt`);
         document.documentElement.style.setProperty('--export-line', String(options.lineHeight));
         document.documentElement.style.setProperty('--export-width', `${paperSize(options)[0] - options.marginMm * 2}mm`);
-        const report = layout.update(options);
+        const report = await layout.update(options);
         await invoke('pdf_ready', { id, revision, ...report, error: null });
       } catch (error) { await invoke('pdf_ready', { id, revision, issues: [], adjustable: [], error: String(error) }); }
     };

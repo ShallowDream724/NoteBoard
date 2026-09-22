@@ -1,30 +1,34 @@
 import { paperSize, type LayoutIssue, type LayoutReport, type PdfOptions } from './model';
+import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
+import { readableScale, renderedScale } from './layoutMetrics';
+import { continueFraction, continueMatrix } from './mathLayout';
 
 const ITEM_URI = 'https://noteboard.invalid/export-item/';
 function extent(element: HTMLElement) {
-  const scale = Number(element.style.zoom) || 1;
-  return Math.max(element.scrollWidth * scale, element.getBoundingClientRect().width);
+  return Math.max(element.scrollWidth * renderedScale(element), element.getBoundingClientRect().width);
 }
 function fit(element: HTMLElement, width: number, measured: number) {
   const scale = Math.min(1, width / measured);
   if (scale < .999) element.style.zoom = String(scale);
 }
+function availableWidth(element: HTMLElement, width: number) {
+  const cell = element.closest<HTMLElement>('th,td');
+  return cell ? Math.max(1, (cell.clientWidth - parseFloat(getComputedStyle(cell).paddingLeft) - parseFloat(getComputedStyle(cell).paddingRight)) * renderedScale(cell)) : width;
+}
 
 /** Clone only retained cells. Work is proportional to output size, not to
  * original cells multiplied by every continuation group. */
-function splitColumns(table: HTMLTableElement, width: number, columnWidths: number[]): HTMLElement | null {
+function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: TablePlan): HTMLElement | null {
   const rows = Array.from(table.rows), count = rows[0]?.cells.length ?? 0;
   if (count < 3 || rows.some(row => Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan > 1))) return null;
-  const keyWidth = columnWidths[0];
-  if (!keyWidth || columnWidths.some(value => !Number.isFinite(value) || value <= 0) || columnWidths.slice(1).some(value => keyWidth + value > width + 1)) return null;
   const group = document.createElement('div'); group.dataset.exportTableGroup = table.dataset.exportItem;
-  for (let start = 1, part = 1; start < count; part++) {
-    let end = start, used = keyWidth;
-    while (end < count && used + columnWidths[end] <= width + 1) used += columnWidths[end++];
+  for (const [part, band] of plan.bands.entries()) {
+    const start = band.from, end = band.to, used = columnWidths[0] + columnWidths.slice(start, end).reduce((sum, width) => sum + width, 0);
     const clone = table.cloneNode(false) as HTMLTableElement;
     // Preserve the measured/user-adjusted column widths. A short continuation
     // must not stretch merely because the paper has space left over.
     clone.classList.add('table-wrap'); clone.style.width = `${used}px`; clone.style.minWidth = '';
+    if (plan.scale < 1) clone.style.zoom = String(plan.scale);
     const columns = document.createElement('colgroup');
     for (const index of [0, ...Array.from({ length: end - start }, (_, i) => start + i)]) {
       const column = document.createElement('col'); column.style.width = `${columnWidths[index]}px`; columns.append(column);
@@ -37,9 +41,8 @@ function splitColumns(table: HTMLTableElement, width: number, columnWidths: numb
       for (let column = start; column < end; column++) if (row.cells[column]) rowClone.append(row.cells[column].cloneNode(true));
       (row.parentElement?.tagName === 'THEAD' ? head : body).append(rowClone);
     }
-    const caption = document.createElement('div'); caption.className = 'table-continuation'; caption.textContent = `续表 ${part}`;
+    const caption = document.createElement('div'); caption.className = 'table-continuation'; caption.textContent = `续表 ${part + 1}`;
     group.append(caption, clone);
-    start = end;
   }
   table.replaceWith(group); return group;
 }
@@ -78,6 +81,7 @@ function itemLinks(elements: Iterable<HTMLElement>, adjustable: Set<string>) {
 export function createLayoutSession(root: HTMLElement) {
   let previous: PdfOptions | undefined;
   const originals = new Map<string, string>(); // only tables that actually split
+  const formulaOriginals = new Map<string, string>(); // only structurally continued formulas
   const itemIndex = new Map<string, HTMLElement[]>();
   const groups = new Map<string, HTMLElement>();
   const register = (scope: HTMLElement) => {
@@ -104,13 +108,14 @@ export function createLayoutSession(root: HTMLElement) {
       replaceTable(id, template.content.firstElementChild as HTMLElement, group); groups.delete(id); originals.delete(id);
     }
     elements(id).forEach(element => {
+      if (element.classList.contains('export-math') && formulaOriginals.has(id)) { element.innerHTML = formulaOriginals.get(id)!; delete element.dataset.mathContinued; }
       element.style.removeProperty('zoom'); element.classList.remove('wrap', 'table-wrap');
       element.querySelector<HTMLElement>('.katex-html')?.style.removeProperty('zoom');
       element.querySelectorAll('a.export-item-link').forEach(link => link.replaceWith(...link.childNodes));
     });
     issues.delete(id);
   };
-  return { update(options: PdfOptions): LayoutReport {
+  return { async update(options: PdfOptions): Promise<LayoutReport> {
     const numberBandChanged = previous && previous.marginMm < 8 && previous.pageNumbers !== options.pageNumbers;
     const global = !previous || numberBandChanged || ['paper', 'landscape', 'marginMm', 'fontPt', 'lineHeight'].some(key => options[key as keyof PdfOptions] !== previous![key as keyof PdfOptions]);
     const changed = new Set<string>();
@@ -128,19 +133,26 @@ export function createLayoutSession(root: HTMLElement) {
     const width = (paperWidth - options.marginMm * 2) * 96 / 25.4;
     const numberBand = options.pageNumbers ? Math.max(0, 8 - options.marginMm) : 0;
     const pageHeight = (paperHeight - options.marginMm * 2 - numberBand) * 96 / 25.4;
-    const issue = (id: string, message: string, blocking = true) => { issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };
+    const issue = (id: string, message: string, blocking = true) => { if (id) adjustable.add(id); issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };
     const tables = [...changed].flatMap(elements).filter((e): e is HTMLTableElement => e.tagName === 'TABLE');
-    const tableWidths = tables.map(table => ({ width: extent(table), columns: Array.from(table.rows[0]?.cells ?? [], cell => cell.getBoundingClientRect().width) }));
+    const tableWidths = tables.map(table => {
+      const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
+      // A scaled table rounds border/text metrics differently. A small guard on
+      // natural widths prevents a final identifier character wrapping by 1 px.
+      return { manual, width: extent(table), columns: Array.from(table.rows[0]?.cells ?? [], cell => manual ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2) };
+    });
     tables.forEach((table, index) => {
       const id = table.dataset.exportItem!, mode = options.items[id] ?? 'auto';
       if (tableWidths[index].width <= width + 1 && !adjustable.has(id)) return;
       adjustable.add(id);
       if (mode === 'fit') fit(table, width, tableWidths[index].width);
       else {
-        const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
+        const manual = tableWidths[index].manual;
         if (mode === 'columns' || mode === 'auto') {
           const original = table.outerHTML;
-          const group = splitColumns(table, width, tableWidths[index].columns);
+          const plan = planTableColumns(tableWidths[index].columns, width, mode === 'columns' ? 1 : readableScale(table, options.fontPt));
+          if (plan?.bands.length === 1) { fit(table, width, tableWidths[index].width); return; }
+          const group = plan && splitColumns(table, tableWidths[index].columns, plan);
           if (group) {
             originals.set(id, original); groups.set(id, group);
             const ids = new Set([id, ...Array.from(table.querySelectorAll<HTMLElement>('[data-export-item]'), e => e.dataset.exportItem!)]);
@@ -153,27 +165,68 @@ export function createLayoutSession(root: HTMLElement) {
       elements(id).forEach(e => e.querySelectorAll<HTMLElement>('.export-math[data-export-item]').forEach(math => changed.add(math.dataset.exportItem!)));
     });
     const formulas = [...changed].flatMap(elements).filter(e => e.classList.contains('export-math'));
+    for (const element of formulas) {
+      if (element.dataset.matrixPreview !== 'true') continue;
+      const id = element.dataset.exportItem!;
+      if (!formulaOriginals.has(id)) formulaOriginals.set(id, element.innerHTML);
+      adjustable.add(id);
+      const result = await continueMatrix(element, availableWidth(element, width), pageHeight, options.fontPt, options.items[id] === 'fit');
+      if (result.issue) issue(id, result.issue);
+    }
     const measures = formulas.map(element => {
-      const math = element.querySelector<HTMLElement>('.katex-html'); const cell = element.closest<HTMLElement>('th,td');
-      const available = cell ? Math.max(1, cell.clientWidth - parseFloat(getComputedStyle(cell).paddingLeft) - parseFloat(getComputedStyle(cell).paddingRight)) : width;
+      const math = element.dataset.mathContinued ? null : element.querySelector<HTMLElement>('.katex-html');
+      const available = availableWidth(element, width);
       const measured = math ? extent(math) : 0;
-      return { math, available, measured, wide: measured > available + 1 };
+      const bases = math ? Array.from(math.children).filter(child => child.classList.contains('base')) : [];
+      return { math, available, measured, height: math?.getBoundingClientRect().height ?? 0, wide: measured > available + 1,
+        canContinue: bases.length > 1 && bases.every(base => base.getBoundingClientRect().height <= pageHeight) };
     });
     formulas.forEach((element, index) => {
       const id = element.dataset.exportItem!, mode = options.items[id] ?? 'auto';
-      if (element.dataset.renderError) { issue(id, '公式语法有误，请返回正文修改'); return; }
+      if (element.dataset.renderError) { issue(id, element.dataset.renderError); return; }
       const { math, available, measured, wide } = measures[index]; if (!math) return;
-      if (wide || adjustable.has(id)) {
+      if (wide || measures[index].height > pageHeight || adjustable.has(id)) {
         adjustable.add(id);
         if (mode === 'fit') fit(math, available, measured);
         else element.classList.add('wrap');
       }
     });
+    // Measure all wrapped candidates in one read phase, then choose locally.
+    const plans = formulas.map((element, i) => {
+      const { math, available, measured, height } = measures[i];
+      if (!math || options.items[element.dataset.exportItem!] === 'fit' || !element.classList.contains('wrap')) return null;
+      return planMath({ width: measured, height, wrappedWidth: extent(math), wrappedHeight: math.getBoundingClientRect().height,
+        availableWidth: available, availableHeight: measures[i].canContinue ? Infinity : pageHeight, minimumScale: readableScale(math, options.fontPt) });
+    });
+    plans.forEach((plan, i) => {
+      if (!plan) return;
+      formulas[i].classList.toggle('wrap', plan.wrap);
+      if (plan.readable && plan.scale < 1) measures[i].math!.style.zoom = String(plan.scale);
+    });
+    // Reflow only the formulas that remain unreadable at ordinary break points.
+    for (let i = 0; i < formulas.length; i++) {
+      const plan = plans[i], element = formulas[i], id = element.dataset.exportItem!;
+      if (!plan || plan.readable) continue;
+      if (!formulaOriginals.has(id)) formulaOriginals.set(id, element.innerHTML);
+      const matrix = await continueMatrix(element, measures[i].available, pageHeight, options.fontPt, false);
+      if (matrix.issue) issue(id, matrix.issue);
+      if (!matrix.handled) {
+        await continueFraction(element, measures[i].available, options.fontPt);
+        measures[i].math = element.querySelector<HTMLElement>('.katex-html');
+        const math = measures[i].math;
+        if (math) measures[i].canContinue = Array.from(math.children).filter(child => child.classList.contains('base')).every(base => base.getBoundingClientRect().height <= pageHeight);
+        if (math && extent(math) > measures[i].available + 1) {
+          const scale = measures[i].available / extent(math);
+          if (scale >= readableScale(math, options.fontPt)) math.style.zoom = String(scale);
+        }
+      }
+    }
     // Validate after the write phase, avoiding a forced full layout per formula.
     formulas.forEach((element, i) => {
       const { math, available } = measures[i], id = element.dataset.exportItem!;
-      if (math && extent(math) > available + 1) issue(id, '此公式无法在安全边界换行，可选择缩到正文宽度');
-      if (element.getBoundingClientRect().height > pageHeight) issue(id, '公式高于一页，请拆成多个公式');
+      if (element.dataset.mathContinued) return;
+      if (math && extent(math) > available + 1) issue(id, '换行后仍超宽，继续缩小会影响阅读；可手动选择适宽缩放。');
+      if (element.getBoundingClientRect().height > pageHeight && !(element.classList.contains('wrap') && measures[i].canContinue)) issue(id, '此公式整体高于一页，需分段排版或调整源码。');
     });
     for (const id of changed) for (const table of elements(id).filter(e => e.tagName === 'TABLE'))
       if (extent(table) > width + 1) issue(id, '表格仍超出正文宽度，可选择缩放');
@@ -189,4 +242,4 @@ export function createLayoutSession(root: HTMLElement) {
   } };
 }
 
-export function layoutDocument(root: HTMLElement, options: PdfOptions): LayoutIssue[] { return createLayoutSession(root).update(options).issues; }
+export async function layoutDocument(root: HTMLElement, options: PdfOptions): Promise<LayoutIssue[]> { return (await createLayoutSession(root).update(options)).issues; }

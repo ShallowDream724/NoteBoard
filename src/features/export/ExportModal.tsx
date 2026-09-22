@@ -6,6 +6,7 @@ import { captureDocument } from './capture';
 import { DEFAULT_PDF, type ExportDocument, type ItemMode } from './model';
 import { usePdfJob } from './usePdfJob';
 import { PdfPreview } from './PdfPreview';
+import { ExportDiagnostics } from './ExportDiagnostics';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './export.css';
 
@@ -16,7 +17,10 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const [format, setFormat] = useState('pdf');
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
   const [pages, setPages] = useState(0);
+  const [acceptedRevision, setAcceptedRevision] = useState<number>();
   const [item, setItem] = useState('');
+  const [navigation, setNavigation] = useState<{ id: string; serial: number }>();
+  const navigateToItem = (id: string) => { setItem(id); setNavigation(value => ({ id, serial: (value?.serial ?? 0) + 1 })); };
   const [itemSearch, setItemSearch] = useState('');
   const path = useSettingsStore(s => s.settings.export?.pandocPath ?? '');
   const pdf = usePdfJob(document, options, format === 'pdf');
@@ -42,6 +46,9 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   }, [onClose]);
   const itemIndex = useMemo(() => new Map(document?.items.map(value => [value.id, value])), [document]);
   const currentItem = itemIndex.get(item);
+  const issueIds = useMemo(() => new Set(pdf.receipt?.issues.filter(issue => issue.blocking).map(issue => issue.id) ?? []), [pdf.receipt]);
+  const diagnostics = useMemo(() => [error && error !== '已导出' ? error : '', pdf.error,
+    ...(pdf.receipt?.issues.map(issue => `${itemIndex.get(issue.id)?.label ?? issue.id}: ${issue.message}`) ?? [])].filter(Boolean).join('\n\n'), [error, pdf.error, pdf.receipt, itemIndex]);
   const visibleItems = useMemo(() => {
     const result = []; const query = itemSearch.toLowerCase();
     for (const id of pdf.receipt?.adjustable ?? []) {
@@ -53,6 +60,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   }, [pdf.receipt, itemIndex, itemSearch]).slice();
   if (currentItem && !visibleItems.includes(currentItem)) visibleItems.unshift(currentItem);
   const blocked = pdf.receipt?.issues.some(issue => issue.blocking);
+  const accepted = acceptedRevision !== undefined && acceptedRevision === pdf.receipt?.revision;
   const download = async () => {
     if (!document) return;
     setSaving(true); setError('');
@@ -98,18 +106,19 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         </div>}
         {!!pdf.receipt?.adjustable.length && <section className="export-item-settings"><h4>超宽内容</h4>
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
-          <div className="export-item-list" aria-label="需要调整的公式与表格">{visibleItems.map(value => <button key={value.id} className={value.id === item ? 'selected' : ''} onClick={() => setItem(value.id)}>{value.label}</button>)}</div>
+          <div className="export-item-list" aria-label="需要调整的公式与表格">{visibleItems.map(value => <button key={value.id} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
           {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => setOptions(o => ({ ...o, items: { ...o.items, [item]: e.target.value as ItemMode } }))}>
-            <option value="auto">{currentItem.kind === 'table' ? '换行 / 续表' : '自动换行'}</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
+            <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
           </select></label>}
         </section>}
-        {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => setItem(issue.id)}><AlertCircle size={15}/><span>{issue.message}</span></button>)}
+        {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => navigateToItem(issue.id)}><AlertCircle size={15}/><span>{itemIndex.get(issue.id)?.label && <strong>{itemIndex.get(issue.id)!.label}<br/></strong>}{issue.message}</span></button>)}
+        {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedRevision(e.target.checked ? pdf.receipt?.revision : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
       </> : <p className="export-note">由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。</p>}
     </aside><main>{format === 'pdf' ? <>
-      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} selected={item} onSelect={setItem}/> : <div className="export-empty">{pdf.error || error ? '暂时无法生成预览' : '正在排版…'}</div>}
+      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/> : <div className="export-empty">{pdf.error || error ? '暂时无法生成预览' : '正在排版…'}</div>}
       {pdf.busy && <div className="export-updating"><LoaderCircle size={14}/>更新预览…</div>}
     </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p><span>转换后用对应软件查看</span></div>}</main></div>
-    <footer><span role="status">{error || pdf.error || (format === 'pdf' && pages ? `${pages} 页` : '')}</span>
-      <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || blocked))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>
+    <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : format === 'pdf' && pages ? `${pages} 页` : '')} details={diagnostics}/>
+      <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || (blocked && !accepted)))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>
   </div></div>;
 }

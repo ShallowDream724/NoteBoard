@@ -6,6 +6,7 @@ import type { MathRendering } from '../editor-md/mathRendering';
 import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
 import type { ExportDocument, ExportItem } from './model';
 import { documentTableStyle } from '../editor-md/documentPresentation';
+import { matrixSource, matrixPart } from './mathContinuation';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
   math = renderMath, assetUrl: (path: string) => string = path => path): Promise<ExportDocument> {
@@ -28,10 +29,22 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     element.dataset.exportItem = id;
     element.className = display ? 'export-math display' : 'export-math inline';
     element.dataset.latex = latex;
-    const key = String(display) + ':' + latex;
+    element.removeAttribute('latex');
+    let renderSource = latex;
+    try {
+      const matrix = matrixSource(latex);
+      if (matrix && (matrix.rows.length > 64 || matrix.columns > 64)) {
+        element.dataset.matrixPreview = 'true';
+        renderSource = matrixPart(matrix, 0, Math.min(4, matrix.rows.length), 0, Math.min(8, matrix.columns));
+      }
+    } catch (error) {
+      element.dataset.renderError = String(error); element.textContent = String(error);
+      element.dataset.latex = ''; items.push({ id, kind: 'formula', label: `公式 ${mathIndex} · 矩阵过大` }); continue;
+    }
+    const key = String(display) + ':' + renderSource;
     let rendered = mathCache.get(key);
     if (!rendered) {
-      rendered = await math(latex, display);
+      rendered = await math(renderSource, display);
       const bytes = 2 * (key.length + rendered.html.length);
       if (bytes < 262144) {
         while (mathCache.size && mathBytes + bytes > 4 * 1024 * 1024) {
