@@ -1,49 +1,16 @@
 // NoteBoard 扩展名 → DocumentKind 单一真相源
-// Rust 侧 build.rs include_str! 同一份 JSON
+// Rust dto.rs include_str! 读取同一份类型与语言映射
 // 详见 docs/08-数据契约与持久化.md §5.2
 
 import kindByExtJson from './docKind.json' with { type: 'json' };
+import languageByExtJson from './languageByExt.json' with { type: 'json' };
 import type { DocumentKind, LanguageId, SavePolicy } from './ipc/types';
 
 /** 扩展名 → kind 的映射表（小写键） */
 export const KIND_BY_EXT: Record<string, DocumentKind> = kindByExtJson as Record<string, DocumentKind>;
 
 /** 扩展名 → LanguageId */
-export const LANGUAGE_BY_EXT: Record<string, LanguageId> = {
-  md: 'markdown',
-  markdown: 'markdown',
-  txt: 'plaintext',
-  log: 'plaintext',
-  ini: 'plaintext',
-  conf: 'plaintext',
-  cfg: 'plaintext',
-  env: 'plaintext',
-  sql: 'sql',
-  json: 'json',
-  yaml: 'yaml',
-  yml: 'yaml',
-  xml: 'xml',
-  excalidraw: 'plaintext',
-  board: 'plaintext',
-  canvas: 'plaintext',
-  mmd: 'mermaid',
-  mermaid: 'mermaid',
-  puml: 'plantuml',
-  plantuml: 'plantuml',
-  iuml: 'plantuml',
-  uml: 'plantuml',
-  drawio: 'xml',
-  dio: 'xml',
-  mindmap: 'json',
-  xmind: 'plaintext',
-  mm: 'plaintext',
-  // 多维表格采用结构化 JSON 格式持久化
-  bitable: 'json',
-  table: 'json',
-  // 信息图为声明式 YAML/JSON 源码，需专属 language 以走分屏预览编辑器
-  infographic: 'infographic',
-  ig: 'infographic',
-};
+export const LANGUAGE_BY_EXT: Record<string, LanguageId> = languageByExtJson as Record<string, LanguageId>;
 
 /** 从路径提取扩展名（小写，无点） */
 export function extFromPath(path: string): string {

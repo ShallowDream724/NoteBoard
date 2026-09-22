@@ -167,6 +167,9 @@ fn prepare_on_worker(path: &str, key: &str) -> Result<PreparedDocument, String> 
         .unwrap_or(0);
 
     match kind {
+        DocumentKind::Unsupported => Ok(PreparedDocument::Unsupported {
+            key: key.to_string(), display_name, dir_path, language: "plaintext".to_string(), size,
+        }),
         // 图片走资源协议按路径解码，不读正文
         DocumentKind::Image => Ok(PreparedDocument::Image {
             key: key.to_string(),
@@ -210,6 +213,31 @@ fn prepare_on_worker(path: &str, key: &str) -> Result<PreparedDocument, String> 
                     message,
                     missing: false,
                 }),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod classification_tests {
+    use super::*;
+
+    #[test]
+    fn renamed_text_is_reclassified_by_the_shared_format_map() {
+        let directory = tempfile::tempdir().unwrap();
+        for extension in ["docx", "PDF", "xlsx", "pptx", "zip", "mp4"] {
+            let path = directory.path().join(format!("renamed.{extension}"));
+            std::fs::write(&path, "plain text before rename").unwrap();
+            let path = path.to_str().unwrap();
+            assert!(matches!(prepare_on_worker(path, path).unwrap(), PreparedDocument::Unsupported { .. }));
+        }
+        for (extension, expected) in [("md", DocumentKind::Markdown), ("txt", DocumentKind::Code), ("dot", DocumentKind::Code)] {
+            let path = directory.path().join(format!("renamed.{extension}"));
+            std::fs::write(&path, "plain text before rename").unwrap();
+            let path = path.to_str().unwrap();
+            match prepare_on_worker(path, path).unwrap() {
+                PreparedDocument::Text { payload } => assert_eq!(payload.kind, expected),
+                other => panic!("unexpected classification: {other:?}"),
             }
         }
     }

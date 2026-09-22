@@ -25,6 +25,18 @@ function openDocument(content: string): void {
 }
 
 describe('documentStore 保存基线', () => {
+  it.each(['docx', 'PDF', 'pptx', 'xlsx', 'zip', 'mp4'])('改名为 %s 后统一切到外部文件视图，并保留未保存内容供改回恢复', extension => {
+    const old = 'C:\\notes\\A', next = `${old}.${extension}`;
+    useDocumentStore.getState().upsertFromPayload({ key: old, displayName: 'A', dirPath: 'C:\\notes', kind: 'code', language: 'plaintext', content: 'draft', encoding: 'utf8', eol: 'lf', size: 5, mtime: 0, readonly: false });
+    useDocumentStore.getState().setContent(old, 'unsaved');
+    useWindowStore.getState().openTab({ key: old, path: old, displayName: 'A', kind: 'code', language: 'plaintext', isDirty: true, isPreview: false, viewMode: null, externalStatus: null, isDetached: false });
+    useDocumentStore.getState().renameDocument(old, next, `A.${extension}`, 'C:\\notes');
+    useWindowStore.getState().updateTabPath(old, next, `A.${extension}`);
+    expect(useDocumentStore.getState().getDocument(next)).toMatchObject({ kind: 'unsupported', content: 'unsaved', isDirty: true });
+    expect(useWindowStore.getState().getTab(next)?.kind).toBe('unsupported');
+    useDocumentStore.getState().renameDocument(next, old + '.txt', 'A.txt', 'C:\\notes');
+    expect(useDocumentStore.getState().getDocument(old + '.txt')).toMatchObject({ kind: 'code', content: 'unsaved', isDirty: true });
+  });
   it('重命名补上 md 后缀时文档与标签切换类型，保留未保存正文', () => {
     const old = 'C:\\notes.v1\\test', next = old + '.md';
     useDocumentStore.getState().upsertFromPayload({ key: old, displayName: 'test', dirPath: 'C:\\notes.v1', kind: 'code', language: 'plaintext', content: '# Draft', encoding: 'utf8', eol: 'lf', size: 7, mtime: 0, readonly: false });

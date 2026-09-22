@@ -1,0 +1,8 @@
+{
+  "md": "markdown", "markdown": "markdown",
+  "sql": "sql", "json": "json", "yaml": "yaml", "yml": "yaml", "xml": "xml",
+  "mmd": "mermaid", "mermaid": "mermaid",
+  "puml": "plantuml", "plantuml": "plantuml", "iuml": "plantuml", "uml": "plantuml",
+  "drawio": "xml", "dio": "xml", "mindmap": "json",
+  "bitable": "json", "table": "json", "infographic": "infographic", "ig": "infographic"
+}

@@ -361,29 +361,13 @@ pub struct FontPackStatus {
 // ── 扩展名映射（单一真相源）──
 
 pub fn kind_by_ext(ext: &str) -> (DocumentKind, LanguageId) {
-    match ext.to_lowercase().as_str() {
-        "md" | "markdown" => (DocumentKind::Markdown, LanguageId::Markdown),
-        "excalidraw" | "board" | "canvas" => (DocumentKind::Board, LanguageId::Plaintext),
-        "mindmap" | "xmind" | "mm" => (DocumentKind::Mindmap, LanguageId::Json),
-        "drawio" | "dio" => (DocumentKind::Drawio, LanguageId::Xml),
-        "bitable" | "table" => (DocumentKind::Bitable, LanguageId::Json),
-        "mmd" | "mermaid" => (DocumentKind::Code, LanguageId::Mermaid),
-        "puml" | "plantuml" | "iuml" | "uml" => (DocumentKind::Code, LanguageId::Plantuml),
-        "infographic" | "ig" => (DocumentKind::Code, LanguageId::Infographic),
-        "sql" => (DocumentKind::Code, LanguageId::Sql),
-        "json" => (DocumentKind::Code, LanguageId::Json),
-        "yaml" | "yml" => (DocumentKind::Code, LanguageId::Yaml),
-        "xml" => (DocumentKind::Code, LanguageId::Xml),
-        "txt" | "log" | "ini" | "conf" | "cfg" | "env" => {
-            (DocumentKind::Code, LanguageId::Plaintext)
-        }
-        // 常见与特殊图片格式（包括 gif、webp、ico、png、jpg、svg、bmp 等）
-        "png" | "jpg" | "jpeg" | "jpe" | "jfif" | "gif" | "webp" | "ico" | "cur" | "svg"
-        | "bmp" | "dib" | "avif" | "apng" | "tif" | "tiff" => {
-            (DocumentKind::Image, LanguageId::Plaintext)
-        }
-        _ => (DocumentKind::Code, LanguageId::Plaintext),
-    }
+    use std::{collections::HashMap, sync::OnceLock};
+    static KINDS: OnceLock<HashMap<String, DocumentKind>> = OnceLock::new();
+    static LANGUAGES: OnceLock<HashMap<String, LanguageId>> = OnceLock::new();
+    let kinds = KINDS.get_or_init(|| serde_json::from_str(include_str!("../../src/core/docKind.json")).expect("valid shared document kinds"));
+    let languages = LANGUAGES.get_or_init(|| serde_json::from_str(include_str!("../../src/core/languageByExt.json")).expect("valid shared languages"));
+    let ext = ext.to_lowercase();
+    (*kinds.get(&ext).unwrap_or(&DocumentKind::Code), *languages.get(&ext).unwrap_or(&LanguageId::Plaintext))
 }
 
 pub fn ext_from_path(path: &str) -> String {
