@@ -1,3 +1,4 @@
+import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 多维表格网格视图 (Grid View)
 // 支持表头指针拖拽换列、各字段格式专有排序、树形子任务展开收起、选区高亮与剪切/复制/粘贴/删除
 // 剪贴板通过隐藏代理输入框接收原生 copy/cut/paste 事件，规避 navigator.clipboard 的读权限弹窗
@@ -284,6 +285,7 @@ export function BitableGridView({
     targetColId: string;
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  useMenuBounds(contextMenuRef, !!cellContextMenu, cellContextMenu?.x ?? 0, cellContextMenu?.y ?? 0);
 
   // 填充柄拖拽预测选区预览状态
   const [fillPreview, setFillPreview] = useState<{
@@ -3245,8 +3247,8 @@ export function BitableGridView({
           data-no-drag
           style={{
             position: 'fixed',
-            left: Math.min(cellContextMenu.x, window.innerWidth - 180),
-            top: Math.min(cellContextMenu.y, window.innerHeight - 380),
+            left: cellContextMenu.x,
+            top: cellContextMenu.y,
             zIndex: 9999,
             background: 'var(--editor-surface, #ffffff)',
             border: '1px solid var(--editor-border, #cbd5e1)',

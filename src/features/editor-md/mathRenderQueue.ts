@@ -17,11 +17,14 @@ async function flush() {
   try {
     while (pending.size) {
       await frame();
-      const start = performance.now();
-      while (pending.size && performance.now() - start < 6) {
+      const start = performance.now(); let inserted = 0, markup = 0;
+      while (pending.size && inserted < 2 && markup < 32_768 && performance.now() - start < 4) {
         const [id, request] = pending.entries().next().value!;
         const result = await renderMath(request.latex, request.display);
-        if (pending.get(id) === request) { pending.delete(id); request.done(result); }
+        // Worker time may have crossed multiple frames. Give input/scroll a turn
+        // before the synchronous DOM commit; its cost belongs to this budget.
+        if (performance.now() - start >= 4) await frame();
+        if (pending.get(id) === request) { pending.delete(id); request.done(result); inserted++; markup += result.html.length; }
       }
     }
   } finally { running = false; }

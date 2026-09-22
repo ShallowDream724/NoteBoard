@@ -1,3 +1,4 @@
+import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 多维表格甘特图视图 (Gantt View)
 // 左侧为可配置并始终固定的字段列，右侧为时间轴：条形支持整体拖动与两端拉伸改期，
 // 支持周 / 月 / 季 / 年四档刻度、仅工作日模式与「今天」定位。
@@ -270,6 +271,7 @@ export function BitableGanttView({
     targetColId: string;
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  useMenuBounds(contextMenuRef, !!cellContextMenu, cellContextMenu?.x ?? 0, cellContextMenu?.y ?? 0);
   // 隐藏剪贴板代理：持有焦点以接收原生 copy / cut / paste
   const clipboardProxyRef = useRef<HTMLTextAreaElement>(null);
   const rowBodyRef = useRef<HTMLTableSectionElement>(null);
@@ -2662,8 +2664,8 @@ export function BitableGanttView({
           data-no-drag
           style={{
             position: 'fixed',
-            left: Math.min(cellContextMenu.x, window.innerWidth - 190),
-            top: Math.min(cellContextMenu.y, window.innerHeight - 400),
+            left: cellContextMenu.x,
+            top: cellContextMenu.y,
             zIndex: 9999,
             background: 'var(--editor-surface, #ffffff)',
             border: '1px solid var(--editor-border, #cbd5e1)',

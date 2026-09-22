@@ -1,3 +1,4 @@
+import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 资源管理器：树节点
 // 24px 行高、depth*12+8 缩进、缩进导线、图标、悬停、当前 tab 高亮、行内重命名与右键菜单
 // 详见 docs/07-UI布局与交互规范.md §5.1
@@ -62,6 +63,7 @@ export const TreeNode = memo(function TreeNode({
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  useMenuBounds(menuRef, !!menuPos, menuPos?.x ?? 0, menuPos?.y ?? 0);
   const rowRef = useRef<HTMLDivElement>(null);
   const lastScrolledCountRef = useRef<number>(-1);
 
@@ -179,11 +181,7 @@ export const TreeNode = memo(function TreeNode({
     e.preventDefault();
     e.stopPropagation();
     setRevealed(node.path, false);
-    const menuWidth = 180;
-    const menuHeight = node.isDir ? 230 : 190;
-    const x = e.clientX + menuWidth > window.innerWidth ? Math.max(8, e.clientX - menuWidth) : e.clientX;
-    const y = e.clientY + menuHeight > window.innerHeight ? Math.max(8, e.clientY - menuHeight) : e.clientY;
-    setMenuPos({ x, y });
+    setMenuPos({ x: e.clientX, y: e.clientY });
   };
 
   // 按键响应：支持 F2 快捷键直接进入重命名

@@ -1,3 +1,4 @@
+import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard Markdown 编辑器右键双模上下文菜单
 // 1. 选中文本：浮现加粗、斜体、代码、多色高亮(二级菜单)、标题转换(H1~H6二级菜单)、引用、复制剪切
 // 2. 未选中文本：浮现标题(H1~H6二级菜单)、提示块(二级菜单)、列表(二级菜单)、代码块、表格、公式、图表等
@@ -83,6 +84,8 @@ export function EditorContextMenu({
     left: 0,
     flipLeft: false,
   });
+  useMenuBounds(menuRef, !!position, position?.x ?? 0, position?.y ?? 0);
+  useMenuBounds(submenuRef, !!position && !!activeSubmenu, submenuPos.left, submenuPos.top);
 
   useEffect(() => {
     if (!position) return;
@@ -124,10 +127,6 @@ export function EditorContextMenu({
     margin: '4px 0',
   };
 
-  // 计算主菜单位置与越界防护
-  const adjustedX = Math.min(position.x, window.innerWidth - 220);
-  const adjustedY = Math.min(position.y, window.innerHeight - 440);
-
   // 打开二级子菜单并计算位置
   const handleOpenSubmenu = (submenuKey: string, e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -148,8 +147,8 @@ export function EditorContextMenu({
         ref={menuRef}
         style={{
           position: 'fixed',
-          top: Math.max(adjustedY, 40),
-          left: Math.max(adjustedX, 10),
+          top: position.y,
+          left: position.x,
           zIndex: 9999,
           background: 'var(--editor-surface, #ffffff)',
           border: '1px solid var(--editor-border, rgba(0,0,0,0.12))',
@@ -162,6 +161,7 @@ export function EditorContextMenu({
           overflowY: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
+        onScroll={() => setActiveSubmenu(null)}
       >
         {hasSelection ? (
           // ── 模式 A：选中文本时的格式化与编辑菜单（剪切复制置顶） ──
@@ -727,7 +727,7 @@ export function EditorContextMenu({
           ref={submenuRef}
           style={{
             position: 'fixed',
-            top: Math.min(submenuPos.top, window.innerHeight - 300),
+            top: submenuPos.top,
             left: submenuPos.left,
             zIndex: 10000,
             background: 'var(--editor-surface, #ffffff)',

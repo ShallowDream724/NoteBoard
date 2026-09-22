@@ -22,11 +22,11 @@
 
 1. `mathSyntax.ts`：纯边界识别与序列化。
 2. `documentNodes.ts` 定义共享 Markdown/ProseMirror 节点；`katexExtensions.tsx` 只附加输入行为与编辑视图，导出不加载这些交互组件。
-3. `MathNodeView.tsx`：焦点、输入和预览；不持有独立的正文草稿副本。
+3. `MathNodeView.tsx`：焦点与输入；不持有独立的正文草稿副本。`mathPreview.ts` 独立拥有空预览宿主的 DOM，滚动中不重渲染 React NodeView、不产生文档事务。
 4. `mathRendering.ts`：共享 Worker 请求、相同公式去重及缓存；最多 512 项且按 UTF-16 估算不超过 4 MiB，不含引擎对象开销。`mathEngine.ts` 在 Worker 中按需加载 KaTeX/mhchem，不让 TeX 排版阻塞滚动。
 5. `embeddedEditor.ts`：在公式所在段落前创建临时 ProseMirror widget，通过 React portal 放置源码输入；不插入正文节点。事务只映射活动公式位置，属性更新不会关闭输入。`FormulaSourceEditor` 负责自适应高度和手动纵向调整。行内预览仍保留在原段落。
-6. `nearViewport.ts`：每个实际滚动容器共用一个 IntersectionObserver，预加载上下约两屏。离开范围后释放 KaTeX DOM，保留测量尺寸占位；返回时在新 HTML 就绪前仍保留尺寸。隐藏模式/标签不作为滚出视口处理。首次尚未测量的公式暂用源码占位。
-7. `mathRenderQueue.ts`：仅调度附近节点，每个约 6 ms 时间片后让出主线程；同一公式更新替换旧请求，离开范围或卸载取消请求，不静默丢弃其它节点任务。
+6. `nearViewport.ts`：每个实际滚动容器共用一个 IntersectionObserver，预加载上下约两屏。`mathPreview` 离屏后延迟 180 ms 回收，短暂反向滚动复用已有 DOM；共享 ResizeObserver 记录尺寸，避免滚动时同步测量。返回时在新 HTML 就绪前保留占位。隐藏模式/标签不作为滚出视口；首次占位最多显示 100 个源码字符。
+7. `mathRenderQueue.ts`：预算包括同步 HTML 挂载，单帧最多两个预览、约 4 ms 及 32 Ki 字符标记；单个插入不能中断，因此这些是调度边界而非任意公式耗时上限。Worker 完成跨帧任务后先让出一帧再挂载。同一公式更新替换旧请求，离开范围或卸载取消尚未提交的请求。
 
 公式源码编辑占用所在正文块的可用宽度，初始至少三行（块公式四行），自动增长上限约 40vh，可手动拉到 75vh。长公式预览继续扩展整个编辑区的横向滚动空间，不新增公式内部滚动条。纸张适配仅在导出副本执行。
 

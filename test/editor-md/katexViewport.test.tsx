@@ -107,6 +107,12 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
     expect(host.querySelectorAll('.katex')).toHaveLength(2);
     height.mockReturnValue(800);
     await act(async () => observer!.deactivate(firstTarget));
+    // Brief boundary crossings retain existing markup rather than rebuilding it.
+    const firstMarkup = host.querySelector('.katex');
+    await act(async () => observer!.activate(firstTarget));
+    expect(host.querySelector('.katex')).toBe(firstMarkup);
+    await act(async () => observer!.deactivate(firstTarget));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 220)); });
     expect(host.querySelectorAll('.katex')).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());

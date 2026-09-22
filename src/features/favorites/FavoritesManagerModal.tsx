@@ -1,3 +1,4 @@
+import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 收藏夹管理模态弹窗 (类似 Microsoft Edge 收藏夹管理器)
 // 包含左侧目录树与搜索过滤、右侧内容列表、拖拽移动与排序、失效文件优雅警示与打开
 
@@ -79,6 +80,7 @@ export function FavoritesManagerModal() {
     folderId: string;
   } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  useMenuBounds(contextMenuRef, !!folderContextMenu, folderContextMenu?.x ?? 0, folderContextMenu?.y ?? 0);
 
   // 监听 Escape 键关闭
   useEffect(() => {

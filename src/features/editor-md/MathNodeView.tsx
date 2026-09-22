@@ -3,13 +3,9 @@ import { createPortal } from 'react-dom';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { isDisplayMath, type MathDelimiter } from './mathSyntax';
-import type { MathRendering } from './mathRendering';
-import { observeNearby } from './nearViewport';
 import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
-import { queueMath } from './mathRenderQueue';
-
-let nextTaskId = 0;
+import { mountMathPreview } from './mathPreview';
 
 /** The document owns the draft, even while the source input has focus. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
@@ -18,26 +14,8 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const display = isDisplayMath(delimiter);
   const latex = String(node.attrs.latex ?? '');
   const [editing, setEditing] = useState(false);
-  const [rendered, setRendered] = useState<MathRendering | null>(null);
-  const [visible, setVisible] = useState(false);
   const viewportRef = useRef<HTMLSpanElement>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
-  const size = useRef<{ width: number; height: number } | null>(null);
-  const versionRef = useRef(0);
-  const identity = useRef<string | null>(null);
-  identity.current ??= 'math:' + (++nextTaskId);
-
-  useEffect(() => {
-    const element = viewportRef.current;
-    if (!element) return;
-    return observeNearby(element, near => {
-      if (!near && element.querySelector('.math-preview')) {
-        const bounds = element.getBoundingClientRect();
-        size.current = { width: Math.max(bounds.width, element.scrollWidth), height: bounds.height };
-      }
-      setVisible(near);
-    });
-  }, []);
   useEffect(() => {
     const selection = editor.state.selection;
     // TipTap also marks atoms selected when a text/all-document selection covers
@@ -53,15 +31,8 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     return close;
   }, [editing, editor]);
   useEffect(() => {
-    if (!visible && !editing) { setRendered(null); return; }
-    const version = ++versionRef.current;
-    const id = identity.current!;
-    if (!latex.trim()) { setRendered(null); return; }
-    const cancel = queueMath(id, { latex, display, done: result => {
-        if (version === versionRef.current) setRendered(result);
-    } });
-    return () => { versionRef.current++; cancel(); };
-  }, [latex, display, visible, editing]);
+    return viewportRef.current ? mountMathPreview(viewportRef.current, latex, display, editing) : undefined;
+  }, [latex, display, editing]);
 
   const exit = () => {
     setEditing(false);
@@ -111,22 +82,12 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
         padding: display ? '8px 0' : '0 2px', borderRadius: 'var(--radius-sm)',
         background: selected && !editing ? 'var(--editor-selection-background)' : undefined,
       }}
-      onClick={() => { setVisible(true); setEditing(true); }}
+      onClick={() => setEditing(true)}
     >
       {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display}
         onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
       <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
-        style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere',
-          ...(!rendered && !editing && size.current ? { width: size.current.width, height: size.current.height } : {}) }}>
-        {rendered?.html && latex.trim()
-          ? <span className="math-preview" dangerouslySetInnerHTML={{ __html: rendered.html }} />
-          : !editing && size.current ? null : <span style={{ color: 'var(--editor-text-muted)' }}>{latex || (editing ? '输入 LaTeX 公式' : '点击输入公式')}</span>}
-        {rendered?.error && latex.trim() && (
-          <span role="status" style={{ display: 'block', fontSize: 12, color: 'var(--error-500)', whiteSpace: 'pre-wrap' }}>
-            {rendered.error}
-          </span>
-        )}
-      </span>
+        style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere' }}/>
     </NodeViewWrapper>
   );
 }
