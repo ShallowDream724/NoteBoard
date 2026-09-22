@@ -5,13 +5,16 @@ import { renderMath } from '../editor-md/mathRendering';
 import type { MathRendering } from '../editor-md/mathRendering';
 import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
 import type { ExportDocument, ExportItem } from './model';
+import { documentTableStyle } from '../editor-md/documentPresentation';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
   math = renderMath, assetUrl: (path: string) => string = path => path): Promise<ExportDocument> {
   signal?.throwIfAborted();
   const doc = snapshot ?? parseMarkdownDocument(markdown);
   const container = document.createElement('article');
+  container.dataset.tableStyle = documentTableStyle(doc);
   container.append(DOMSerializer.fromSchema(doc.type.schema).serializeFragment(doc.content));
+  container.querySelectorAll('[data-document-presentation]').forEach(element => element.remove());
   const items: ExportItem[] = [];
   let mathIndex = 0;
   // A short-lived export cache avoids repeated KaTeX work without retaining an atlas forever.
@@ -84,5 +87,5 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   }
   // Export never contains editing controls or active document scripts.
   container.querySelectorAll('script,iframe,button,input,textarea,select').forEach(node => node.remove());
-  return { title, markdown, baseDirectory, html: container.innerHTML, items };
+  return { title, markdown, baseDirectory, html: container.outerHTML, items };
 }

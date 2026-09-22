@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { serializeMarkdownFragment, type MarkdownManagerLike } from './serialize';
 
-interface Token { type: string; raw?: string; text?: string; tokens?: Token[]; items?: Token[]; header?: Token[]; rows?: Token[][] }
+interface Token { type: string; raw?: string; text?: string; tokens?: Token[]; items?: Token[]; header?: Token[] | boolean; rows?: Token[][] }
 interface Span { from: number; to: number; source: number }
 interface Located { text: string; spans: Span[] }
 interface Character { value: string; from: number; to: number }
@@ -64,12 +64,12 @@ function* sourceCharacters(tokens: Token[], parent: Located): Generator<Characte
     const raw = token.raw ?? token.text ?? '';
     const found = locate(parent, raw, cursor); cursor = found.end;
     const here = found.located;
-    if (token.type === 'space') continue;
+    if (token.type === 'space' || token.type === 'documentPresentation') continue;
     if (/^(mathInline|mathBlock|image|hr|mermaid|plantuml|infographic)/i.test(token.type)) {
       yield { value: '\uFFFC', from: position(here, 0), to: position(here, raw.length) }; continue;
     }
     if (token.items) { yield* sourceCharacters(token.items, here); continue; }
-    if (token.header) {
+    if (Array.isArray(token.header)) {
       yield* sourceCharacters([...token.header, ...(token.rows ?? []).flat()], here); continue;
     }
     if (token.tokens) { yield* sourceCharacters(token.tokens, here); continue; }
@@ -79,6 +79,7 @@ function* sourceCharacters(tokens: Token[], parent: Located): Generator<Characte
   }
 }
 function* documentCharacters(node: DocumentNode, offset = -1): Generator<Character> {
+  if (node.type.name === 'documentPresentation') return;
   if (node.isText) {
     const text = node.text ?? '';
     for (let i = 0; i < text.length; i++) if (!/\s/.test(text[i])) yield { value: text[i], from: offset + i, to: offset + i + 1 };

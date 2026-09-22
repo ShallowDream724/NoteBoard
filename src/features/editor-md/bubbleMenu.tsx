@@ -29,6 +29,7 @@ import {
 import { handleLinkClick } from './linkHandler';
 import { useWindowStore } from '../../stores/windowStore';
 import { Tooltip } from '../../components/Tooltip';
+import { TableAppearanceMenu } from './TableAppearanceMenu';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -556,6 +557,7 @@ function HeaderRowIcon() {
 
 /** 表格浮动工具条（精美分类与方向直观区分，支持滚动实时跟随与智能避让） */
 export function TableToolbar({ editor }: { editor: Editor }) {
+  const toolbar = useRef<HTMLDivElement>(null);
   const [show, setShow] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
 
@@ -565,7 +567,9 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     const editorDom = editor.view.dom;
     const scrollParent = findScrollContainer(editorDom);
 
+    let frame = 0;
     const updateToolbar = () => {
+      frame = 0;
       const isInTable = editor.isActive('table');
       if (!isInTable) {
         setShow(false);
@@ -598,7 +602,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         }
       }
 
-      if (!tableDom) {
+      if (!tableDom && $from.depth > 1) {
         const dom = editor.view.nodeDOM($from.before(-1));
         if (dom instanceof HTMLElement) {
           tableDom = dom.closest('table') || dom;
@@ -620,38 +624,41 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         // 计算顶部悬浮位置：
         // 1. 若表格上方到操作栏有足够空间（>= 44px），工具条悬浮于表格上方 44px
         // 2. 若表格向上滚动且顶部已接近或滚出容器顶部，工具条吸顶在容器顶部下方安全区（containerRect.top + 8px）
-        const topPos = rect.top - 44 >= containerRect.top + 6
-          ? rect.top - 44
+        const toolbarBounds = toolbar.current?.getBoundingClientRect();
+        const height = toolbarBounds?.height ?? 40;
+        const halfWidth = Math.min(toolbarBounds?.width ?? 490, containerRect.width - 16) / 2;
+        const topPos = rect.top - height - 6 >= containerRect.top + 6
+          ? rect.top - height - 6
           : Math.max(rect.top + 8, containerRect.top + 8);
 
         // 计算水平居中位置，并施加容器边界安全约束（工具条宽约 420px，半宽约 210px，留安全边距）
         const targetLeft = rect.left + rect.width / 2;
         const clampedLeft = Math.max(
-          containerRect.left + 220,
-          Math.min(targetLeft, containerRect.right - 220)
+          Math.max(8, containerRect.left) + halfWidth + 8,
+          Math.min(targetLeft, Math.min(window.innerWidth, containerRect.right) - halfWidth - 8)
         );
 
-        setPosition({
-          top: topPos,
-          left: clampedLeft,
-        });
+        setPosition(previous => previous.top === topPos && previous.left === clampedLeft ? previous : { top: topPos, left: clampedLeft });
       } else {
         setShow(false);
       }
     };
 
-    editor.on('selectionUpdate', updateToolbar);
-    editor.on('transaction', updateToolbar);
-    scrollParent.addEventListener('scroll', updateToolbar, { passive: true });
-    window.addEventListener('resize', updateToolbar, { passive: true });
-    window.addEventListener('scroll', updateToolbar, { passive: true });
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(updateToolbar); };
+    editor.on('selectionUpdate', schedule);
+    editor.on('transaction', schedule);
+    scrollParent.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    window.addEventListener('scroll', schedule, { passive: true });
+    schedule();
 
     return () => {
-      editor.off('selectionUpdate', updateToolbar);
-      editor.off('transaction', updateToolbar);
-      scrollParent.removeEventListener('scroll', updateToolbar);
-      window.removeEventListener('resize', updateToolbar);
-      window.removeEventListener('scroll', updateToolbar);
+      cancelAnimationFrame(frame);
+      editor.off('selectionUpdate', schedule);
+      editor.off('transaction', schedule);
+      scrollParent.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule);
     };
   }, [editor]);
 
@@ -659,12 +666,15 @@ export function TableToolbar({ editor }: { editor: Editor }) {
 
   return (
     <div
+      ref={toolbar}
       style={{
         position: 'fixed',
         top: position.top,
         left: position.left,
         transform: 'translateX(-50%)',
         display: 'flex',
+        flexWrap: 'wrap',
+        maxWidth: 'calc(100vw - 24px)',
         alignItems: 'center',
         padding: '4px 6px',
         background: 'var(--editor-surface, #ffffff)',
@@ -739,6 +749,10 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         icon={<Split size={16} />}
         onClick={() => editor.chain().focus().splitCell().run()}
       />
+
+      <MenuDivider />
+
+      <TableAppearanceMenu editor={editor}/>
 
       <MenuDivider />
 

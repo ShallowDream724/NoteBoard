@@ -33,7 +33,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     return observeNearby(element, near => {
       if (!near && element.querySelector('.math-preview')) {
         const bounds = element.getBoundingClientRect();
-        size.current = { width: bounds.width, height: bounds.height };
+        size.current = { width: Math.max(bounds.width, element.scrollWidth), height: bounds.height };
       }
       setVisible(near);
     });

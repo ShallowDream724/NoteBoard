@@ -176,6 +176,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
     const handleMouseMove = (event: MouseEvent) => {
       if (dragSessionRef.current) return;
+      if (editorDom.classList.contains('nb-row-resizing')) {
+        setState(current => current.visible ? { ...current, visible: false } : current);
+        return;
+      }
 
       // 把手是编辑器的兄弟节点；进入把手后保持当前源块，不再按坐标重算。
       if (handleRef.current?.contains(event.target as Node)) {

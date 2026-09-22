@@ -1,4 +1,5 @@
 @import 'katex/dist/katex.min.css';
+@import '../editor-md/tablePresentation.css';
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: white; color: #18202b; }
@@ -22,7 +23,8 @@ pre code { background: transparent; padding: 0; }
 table { border-collapse: collapse; margin: .8em 0; max-width: none; }
 th,td { border: 1px solid #cbd3de; padding: .35em .6em; text-align: left; vertical-align: top; }
 th { background: #f1f4f8; font-weight: 600; }
-td > p,th > p { margin: 0; }
+td p,th p { margin: 0; }
+td p + p,th p + p { margin-top: .35em; }
 thead { display: table-header-group; } tfoot { display: table-footer-group; }
 tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
 .table-wrap { width: 100%; table-layout: fixed; } .table-wrap th,.table-wrap td { overflow-wrap: anywhere; }

@@ -15,6 +15,8 @@ interface ShortcutEntry {
   preventDefault?: boolean;
   /** 布局等应用级组合键不能继续触发编辑器命令。 */
   stopPropagation?: boolean;
+  /** A mounted but inactive editor must not consume another editor's binding. */
+  when?: () => boolean;
 }
 
 const registry: ShortcutEntry[] = [];
@@ -126,7 +128,7 @@ export function initShortcuts(): () => void {
     if ((e.target as HTMLElement | null)?.closest?.('[data-shortcuts-suspended]')) return;
     // 按作用域优先级查找：当前作用域 > global
     const entries = registry.filter(
-      (entry) => entry.key === key && (entry.scope === activeScope || entry.scope === 'global'),
+      (entry) => entry.key === key && (entry.scope === activeScope || entry.scope === 'global') && (entry.when?.() ?? true),
     );
     // 作用域优先：editor/explorer/outline > global
     const scoped = entries.find((entry) => entry.scope === activeScope);

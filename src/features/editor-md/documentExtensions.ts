@@ -4,9 +4,11 @@ import { Code } from '@tiptap/extension-code';
 import CodeBlock from '@tiptap/extension-code-block';
 import Blockquote from '@tiptap/extension-blockquote';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
-import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
+import { TableCell, TableHeader } from '@tiptap/extension-table';
+import { MarkdownTable, SizedTableRow } from './markdownTable';
 import Highlight from '@tiptap/extension-highlight';
 import { Markdown, MarkdownManager } from '@tiptap/markdown';
+import { DocumentPresentation } from './documentPresentation';
 import { MathInlineNode, MathBlockNode, AlertNode, ImageNode, MermaidNode, PlantUmlNode, InfographicNode } from './documentNodes';
 import { serializeMarkdownFromDoc, type MarkdownManagerLike } from './serialize';
 
@@ -25,8 +27,8 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     }),
     MarkdownCode, MarkdownBlockquote, ImageNode, Highlight.configure({ multicolor: true }),
     TaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
-    Table.configure({ resizable: true, HTMLAttributes: { class: 'nb-table' } }), TableRow, TableCell, TableHeader,
-    CodeBlock, MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, AlertNode, Markdown,
+    MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, TableCell, TableHeader,
+    CodeBlock, MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, AlertNode, DocumentPresentation, Markdown,
   ].map(extension => views[extension.name] ?? extension);
 }
 

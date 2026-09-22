@@ -60,7 +60,7 @@ export function getTopLevelBlockInfo(
     const $topLevelPos = view.state.doc.resolve(pos);
     const node = view.state.doc.nodeAt(pos);
 
-    if ($topLevelPos.depth !== 0 || !node?.isBlock) return null;
+    if ($topLevelPos.depth !== 0 || !node?.isBlock || node.type.name === 'documentPresentation') return null;
     return { element, pos, node };
   } catch {
     // NodeView 正在重绘或 DOM 已失效时不生成落点，等待下一次指针事件重新解析。
@@ -129,7 +129,8 @@ export function isTopLevelBlockMoveAllowed(
     const $insert = doc.resolve(insertPos);
     const sourceNode = doc.nodeAt(sourcePos);
 
-    if ($source.depth !== 0 || $insert.depth !== 0 || !sourceNode?.isBlock) return false;
+    if ($source.depth !== 0 || $insert.depth !== 0 || !sourceNode?.isBlock || sourceNode.type.name === 'documentPresentation') return false;
+    if (insertPos === 0 && doc.firstChild?.type.name === 'documentPresentation') return false;
 
     const sourceEnd = sourcePos + sourceNode.nodeSize;
     if (insertPos >= sourcePos && insertPos <= sourceEnd) return false;

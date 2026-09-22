@@ -12,24 +12,34 @@ function fit(element: HTMLElement, width: number, measured: number) {
 
 /** Clone only retained cells. Work is proportional to output size, not to
  * original cells multiplied by every continuation group. */
-function splitColumns(table: HTMLTableElement, width: number, firstColumnWidth: number): HTMLElement | null {
+function splitColumns(table: HTMLTableElement, width: number, columnWidths: number[]): HTMLElement | null {
   const rows = Array.from(table.rows), count = rows[0]?.cells.length ?? 0;
   if (count < 3 || rows.some(row => Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan > 1))) return null;
-  const keyWidth = Math.min(width * .3, Math.max(70, firstColumnWidth));
-  const perGroup = Math.max(1, Math.floor((width - keyWidth) / 85));
+  const keyWidth = columnWidths[0];
+  if (!keyWidth || columnWidths.some(value => !Number.isFinite(value) || value <= 0) || columnWidths.slice(1).some(value => keyWidth + value > width + 1)) return null;
   const group = document.createElement('div'); group.dataset.exportTableGroup = table.dataset.exportItem;
-  for (let start = 1, part = 1; start < count; start += perGroup, part++) {
+  for (let start = 1, part = 1; start < count; part++) {
+    let end = start, used = keyWidth;
+    while (end < count && used + columnWidths[end] <= width + 1) used += columnWidths[end++];
     const clone = table.cloneNode(false) as HTMLTableElement;
-    clone.classList.add('table-wrap'); clone.style.removeProperty('width'); clone.style.removeProperty('min-width');
+    // Preserve the measured/user-adjusted column widths. A short continuation
+    // must not stretch merely because the paper has space left over.
+    clone.classList.add('table-wrap'); clone.style.width = `${used}px`; clone.style.minWidth = '';
+    const columns = document.createElement('colgroup');
+    for (const index of [0, ...Array.from({ length: end - start }, (_, i) => start + i)]) {
+      const column = document.createElement('col'); column.style.width = `${columnWidths[index]}px`; columns.append(column);
+    }
+    clone.append(columns);
     const head = clone.createTHead(), body = clone.createTBody();
     for (const row of rows) {
       const rowClone = row.cloneNode(false) as HTMLTableRowElement;
       rowClone.append(row.cells[0].cloneNode(true));
-      for (let column = start; column < Math.min(count, start + perGroup); column++) if (row.cells[column]) rowClone.append(row.cells[column].cloneNode(true));
+      for (let column = start; column < end; column++) if (row.cells[column]) rowClone.append(row.cells[column].cloneNode(true));
       (row.parentElement?.tagName === 'THEAD' ? head : body).append(rowClone);
     }
     const caption = document.createElement('div'); caption.className = 'table-continuation'; caption.textContent = `续表 ${part}`;
     group.append(caption, clone);
+    start = end;
   }
   table.replaceWith(group); return group;
 }
@@ -120,22 +130,23 @@ export function createLayoutSession(root: HTMLElement) {
     const pageHeight = (paperHeight - options.marginMm * 2 - numberBand) * 96 / 25.4;
     const issue = (id: string, message: string, blocking = true) => { issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };
     const tables = [...changed].flatMap(elements).filter((e): e is HTMLTableElement => e.tagName === 'TABLE');
-    const tableWidths = tables.map(table => ({ width: extent(table), first: table.rows[0]?.cells[0]?.getBoundingClientRect().width ?? 70 }));
+    const tableWidths = tables.map(table => ({ width: extent(table), columns: Array.from(table.rows[0]?.cells ?? [], cell => cell.getBoundingClientRect().width) }));
     tables.forEach((table, index) => {
       const id = table.dataset.exportItem!, mode = options.items[id] ?? 'auto';
       if (tableWidths[index].width <= width + 1 && !adjustable.has(id)) return;
       adjustable.add(id);
       if (mode === 'fit') fit(table, width, tableWidths[index].width);
       else {
-        const columns = table.rows[0]?.cells.length ?? 0;
-        if (mode === 'columns' || (mode === 'auto' && columns * 85 > width)) {
+        const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
+        if (mode === 'columns' || mode === 'auto') {
           const original = table.outerHTML;
-          const group = splitColumns(table, width, tableWidths[index].first);
+          const group = splitColumns(table, width, tableWidths[index].columns);
           if (group) {
             originals.set(id, original); groups.set(id, group);
             const ids = new Set([id, ...Array.from(table.querySelectorAll<HTMLElement>('[data-export-item]'), e => e.dataset.exportItem!)]);
             ids.forEach(key => itemIndex.delete(key)); register(group);
-          } else { table.classList.add('table-wrap'); if (mode === 'columns') issue(id, '合并单元格无法分栏，请选择换行或缩到正文宽度'); }
+          } else if (!manual) { table.classList.add('table-wrap'); if (mode === 'columns') issue(id, '当前列组无法分栏，请选择换行或缩到正文宽度'); }
+          else issue(id, '手动列宽超出可用空间，请调整列宽或选择缩到正文宽度');
         } else table.classList.add('table-wrap');
       }
       // Formula widths in changed table cells also need to be checked.

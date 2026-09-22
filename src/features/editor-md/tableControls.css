@@ -1,0 +1,10 @@
+@import './tablePresentation.css';
+.ProseMirror.nb-row-resize-ready, .ProseMirror.nb-row-resize-ready *,
+.ProseMirror.nb-row-resizing, .ProseMirror.nb-row-resizing * { cursor: row-resize !important; }
+.nb-table-style-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 2px; width: 40px; height: 32px; flex-shrink: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--editor-text); cursor: pointer; }
+.nb-table-style-trigger:hover,.nb-table-style-trigger[data-state="open"] { background: var(--toolbar-hover); }
+.nb-table-style-menu { min-width: 150px; padding: 5px; border: 1px solid var(--editor-border); border-radius: 8px; background: var(--editor-surface); color: var(--editor-text); box-shadow: var(--shadow-md); z-index: 1100; font-size: 13px; }
+.nb-table-style-menu [role="menuitemradio"],.nb-table-style-menu [role="menuitem"] { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 4px; outline: none; cursor: pointer; }
+.nb-table-style-menu [data-highlighted] { background: var(--toolbar-hover); }
+.nb-table-style-menu [data-state="checked"] { color: var(--editor-accent); background: var(--editor-selection-background); }
+.nb-table-style-label { padding: 6px 9px; color: var(--editor-text-muted); font-size: 12px; }

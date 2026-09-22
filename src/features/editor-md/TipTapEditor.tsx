@@ -690,12 +690,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   useEffect(() => {
     const unreg = registerShortcut({
       key: 'Ctrl+/',
-      action: () => {
-        const activeKey = useWindowStore.getState().activeKey;
-        if (activeKey === docKey) {
-          toggleViewMode();
-        }
-      },
+      when: () => useWindowStore.getState().activeKey === docKey,
+      action: () => toggleViewMode(),
+      stopPropagation: true,
       scope: 'global',
       description: '切换 Markdown 可视化 / 源码模式',
     });

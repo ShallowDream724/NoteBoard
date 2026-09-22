@@ -403,6 +403,16 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeView
 
 // 导出扩展：基于 @tiptap/extension-code-block + ReactNodeViewRenderer
 export const CodeBlockView = CodeBlock.extend({
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      'Mod-a': () => {
+        const { $from, $to } = this.editor.state.selection;
+        if ($from.parent.type.name !== this.name || !$from.sameParent($to)) return false;
+        return this.editor.commands.setTextSelection({ from: $from.start(), to: $from.end() });
+      },
+    };
+  },
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockComponent);
   },

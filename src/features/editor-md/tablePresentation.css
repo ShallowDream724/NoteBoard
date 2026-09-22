@@ -1,0 +1,9 @@
+/* Shared read-only styling; no document-node or HTML regeneration. */
+[data-table-style="three-line"] table {
+  border-top: 2px solid var(--editor-text-secondary, #526174);
+  border-bottom: 2px solid var(--editor-text-secondary, #526174);
+}
+[data-table-style="three-line"] table th,
+[data-table-style="three-line"] table td { border-color: transparent; }
+[data-table-style="three-line"] table th { background: transparent; }
+[data-table-style="three-line"] table tr:first-child > th { border-bottom-color: var(--editor-text-secondary, #526174); }

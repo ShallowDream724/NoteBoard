@@ -21,6 +21,7 @@ import { slashSuggestion } from '../slashCommand';
 
 import { handleLinkClick } from '../linkHandler';
 import { TableClipboard } from '../tableClipboard';
+import { ResizableTableRow, TableSizing } from '../tableSizing';
 import { useWindowStore } from '../../../stores/windowStore';
 
 import Suggestion from '@tiptap/suggestion';
@@ -148,12 +149,12 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
   return [
     ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
       mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
-      infographicBlock: InfographicBlock, githubAlert: GitHubAlert }),
+      infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow }),
     UnifiedDocumentHistoryKeys.configure({ docKey }),
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
-    CharacterCount, TableClipboard, CodeHighlight, searchReplaceExtension(),
+    CharacterCount, TableClipboard, TableSizing, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
       addOptions() { return { suggestion: slashSuggestion }; },
