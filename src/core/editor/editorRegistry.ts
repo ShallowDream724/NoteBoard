@@ -21,6 +21,14 @@ const registry = new Map<string, RegisteredCapabilities>();
 
 /** docKey → 内容版本计数（重挂载不重置，文档关闭才清理） */
 const revisions = new Map<string, number>();
+const revisionListeners = new Set<(docKey: string) => void>();
+
+/** Cheap content notification, independent of mirrored store updates. Listeners
+ * enqueue work only; serialization belongs behind a flush boundary. */
+export function subscribeDocumentRevisions(listener: (docKey: string) => void): () => void {
+  revisionListeners.add(listener);
+  return () => { revisionListeners.delete(listener); };
+}
 
 /**
  * 注册当前实例的能力对象，返回 disposer。
@@ -47,6 +55,7 @@ export function getEditorCapabilities(docKey: string): EditorCapabilities | null
 export function bumpDocumentRevision(docKey: string): number {
   const next = (revisions.get(docKey) ?? 0) + 1;
   revisions.set(docKey, next);
+  revisionListeners.forEach(listener => listener(docKey));
   return next;
 }
 
@@ -61,6 +70,7 @@ export function moveDocumentRevision(fromKey: string, toKey: string): void {
   const revision = revisions.get(fromKey);
   if (revision !== undefined) revisions.set(toKey, revision);
   revisions.delete(fromKey);
+  revisionListeners.forEach(listener => listener(toKey));
 }
 
 /** 文档最终关闭（非标签切换）时清理版本计数，避免长期运行累积 */
@@ -72,4 +82,5 @@ export function clearDocumentRevision(docKey: string): void {
 export function resetEditorRegistryForTest(): void {
   registry.clear();
   revisions.clear();
+  revisionListeners.clear();
 }

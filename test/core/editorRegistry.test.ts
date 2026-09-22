@@ -9,6 +9,7 @@ import {
   getDocumentRevision,
   clearDocumentRevision,
   resetEditorRegistryForTest,
+  subscribeDocumentRevisions,
 } from '@/core/editor/editorRegistry';
 import type { EditorCapabilities } from '@/core/editor/editorTypes';
 
@@ -71,5 +72,13 @@ describe('editorRegistry 能力注册表', () => {
     expect(getDocumentRevision('k2')).toBe(1);
     expect(getEditorCapabilities('k1')?.docKey).toBe('k1');
     expect(getEditorCapabilities('k2')?.docKey).toBe('k2');
+  });
+
+  it('notifies only the changed document after committing its revision and releases subscriptions', () => {
+    const seen: [string, number][] = [];
+    const stop = subscribeDocumentRevisions(key => seen.push([key, getDocumentRevision(key)]));
+    bumpDocumentRevision('one'); bumpDocumentRevision('two'); bumpDocumentRevision('one');
+    stop(); bumpDocumentRevision('one');
+    expect(seen).toEqual([['one', 1], ['two', 1], ['one', 2]]);
   });
 });

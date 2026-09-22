@@ -5,10 +5,11 @@ import * as ipc from '../../core/ipc/commands';
 import type { StagingDocument, StagingResult } from '../../core/ipc/types';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { syncDocumentContent } from '../editor-code/orchestration/syncDocumentContent';
 // 🔴 R13：dirty 队列签名使用真实每文档 revision
-import { getDocumentRevision } from '../../core/editor/editorRegistry';
-import { hasUnsavedWork } from './stagingPolicy';
+import { getDocumentRevision, subscribeDocumentRevisions } from '../../core/editor/editorRegistry';
+import { hasUnsavedWork, hasUnsavedContent } from './stagingPolicy';
 
 /** 编辑停止后快速落盘，缩小任务管理器强制终止时可能丢失的时间窗口。 */
 const STAGING_DEBOUNCE_MS = 800;
@@ -17,58 +18,67 @@ const STAGING_INTERVAL_MS = 5_000;
 
 // 每个文档在一次编辑会话内复用同一暂存文件，避免每次键入都生成历史副本。
 /** 暂存记录：key → 副本路径与暂存内容（undefined=内容未知，如恢复登记的副本；内容证明用于保存后只清理被覆盖的副本） */
-const stagedPaths = new Map<string, { path: string; content?: string }>();
+const stagedPaths = new Map<string, { path: string; content?: string; revision?: number; directory?: string }>();
 // 明确选择“暂存”的文档不再由标签移除后的清理流程删除。
 const retainedKeys = new Set<string>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let intervalTimer: ReturnType<typeof setInterval> | null = null;
-let stopDocumentSubscription: (() => void) | null = null;
-let stopWindowSubscription: (() => void) | null = null;
+let stopRevisionSubscription: (() => void) | null = null;
 let writeQueue: Promise<StagingResult[]> = Promise.resolve([]);
 
 /** 统一复用关闭保护策略：空白未命名文件不暂存，有内容或脏态才暂存。 */
 const shouldStage = hasUnsavedWork;
 
 /** 收集指定范围内需暂存的文档，并在关闭/失焦前通过异步 flush 捕获编辑器权威内容。 */
-async function collectDocuments(keys?: string[]): Promise<StagingDocument[]> {
+interface StagingSnapshot { document: StagingDocument; revision: number; directory: string }
+async function collectDocuments(keys?: string[], onlyChanged = false): Promise<StagingSnapshot[]> {
   const tabs = useWindowStore.getState().tabs;
+  const documents = useDocumentStore.getState().documents;
   const requestedKeys = keys ? new Set(keys) : null;
   const candidates = tabs.filter((tab) => {
     if (requestedKeys && !requestedKeys.has(tab.key)) return false;
     // 🔴 R01：未加载的恢复标签正文未知（content=null）——自动/批量暂存一律跳过，
     //    绝不能用空占位正文重写原暂存副本；其副本已在磁盘，关闭走保留/丢弃语义。
     if (tab.lazySource) return false;
-    return shouldStage(tab.key);
+    return hasUnsavedContent(documents.get(tab.key), tab);
   });
 
-  // 🔴 S03：syncDocumentContent 为统一异步屏障，必须 await 后再读取镜像，
-  //    否则防抖前的最新输入不会进入暂存副本
+  const snapshots: StagingSnapshot[] = [];
   for (const tab of candidates) {
-    await syncDocumentContent(tab.key);
-  }
+    const revision = getDocumentRevision(tab.key);
+    const directory = useSettingsStore.getState().settings.file.stagingDirectory;
+    const record = stagedPaths.get(tab.key);
+    const before = useDocumentStore.getState().getDocument(tab.key);
+    if (onlyChanged && record?.revision === revision && record.directory === directory
+      && record.content !== undefined && record.content === before?.content) continue;
 
-  const store = useDocumentStore.getState();
-  return candidates.flatMap((tab) => {
-    const document = store.getDocument(tab.key);
-    if (!document || !shouldStage(tab.key)) return [];
-    return [{
+    // Keep the capture's starting revision. Edits arriving during the await
+    // must still be captured on the next pass, even if this write succeeds.
+    await syncDocumentContent(tab.key);
+    const document = useDocumentStore.getState().getDocument(tab.key);
+    if (!document || !shouldStage(tab.key)) continue;
+    snapshots.push({ revision, directory, document: {
       key: tab.key,
       displayName: tab.displayName || document.displayName,
       content: document.content ?? '',
       encoding: document.encoding,
       eol: document.eol,
       targetPath: stagedPaths.get(tab.key)?.path ?? null,
-    }];
-  });
+    } });
+  }
+  return snapshots;
 }
 
 /** 清理已恢复干净且未被明确保留的副本，避免正常编辑产生长期垃圾。 */
 async function cleanupResolvedCopies(): Promise<void> {
   const cleanupTasks: Promise<void>[] = [];
+  const tabs = new Map(useWindowStore.getState().tabs.map(tab => [tab.key, tab]));
+  const documents = useDocumentStore.getState().documents;
   for (const [key, record] of stagedPaths) {
-    if (retainedKeys.has(key) || shouldStage(key)) continue;
+    const tab = tabs.get(key);
+    if (retainedKeys.has(key) || hasUnsavedContent(documents.get(key), tab)) continue;
     // 🔴 R01：未加载的恢复标签（正文未知）不在清理范围——副本是唯一恢复来源
-    if (useWindowStore.getState().getTab(key)?.lazySource) continue;
+    if (tab?.lazySource) continue;
     stagedPaths.delete(key);
     cleanupTasks.push(ipc.deleteStagedFile(record.path).catch((error) => {
       console.warn('[stagingManager] 清理已恢复文档的暂存副本失败:', error);
@@ -78,7 +88,7 @@ async function cleanupResolvedCopies(): Promise<void> {
 }
 
 /** 实际执行一次暂存写入；由串行队列调用，防止定时器与关闭事件并发覆盖。 */
-async function writePendingDocuments(keys?: string[], retain = false): Promise<StagingResult[]> {
+async function writePendingDocuments(keys?: string[], retain = false, onlyChanged = false): Promise<StagingResult[]> {
   await cleanupResolvedCopies();
   // 🔴 R01：显式指定范围（用户"暂存并关闭"）中被跳过的未加载恢复标签：
   //    原暂存副本即用户要求保留的内容，标记保留且不重写。
@@ -90,13 +100,13 @@ async function writePendingDocuments(keys?: string[], retain = false): Promise<S
       }
     }
   }
-  const documents = await collectDocuments(keys);
+  const documents = await collectDocuments(keys, onlyChanged);
   if (documents.length === 0) return [];
 
   const results: StagingResult[] = [];
   const errors: string[] = [];
   // 逐份调用以保留部分成功结果：某一文件失败时，其余文件仍能得到异常退出保护与稳定覆盖路径。
-  for (const document of documents) {
+  for (const { document, revision, directory } of documents) {
     try {
       const [result] = await ipc.stashDocuments([document]);
       if (!result) {
@@ -105,7 +115,7 @@ async function writePendingDocuments(keys?: string[], retain = false): Promise<S
       }
       const previousPath = document.targetPath;
       // 记录暂存内容：保存后清理需要内容证明（只删被保存覆盖的副本）
-      stagedPaths.set(result.key, { path: result.targetPath, content: document.content });
+      stagedPaths.set(result.key, { path: result.targetPath, content: document.content, revision, directory });
       results.push(result);
       // 修改设置位置后 Rust 会返回新路径，此时清理旧位置中仅用于异常恢复的副本。
       if (previousPath && previousPath !== result.targetPath) {
@@ -127,12 +137,12 @@ async function writePendingDocuments(keys?: string[], retain = false): Promise<S
 /**
  * 立即暂存未保存文档。所有调用串行执行；retain=true 表示用户明确要求保留并关闭。
  */
-export function stashPendingDocuments(options: { keys?: string[]; retain?: boolean } = {}): Promise<StagingResult[]> {
+export function stashPendingDocuments(options: { keys?: string[]; retain?: boolean; onlyChanged?: boolean } = {}): Promise<StagingResult[]> {
   const keys = options.keys ? [...options.keys] : undefined;
   const retain = options.retain ?? false;
   writeQueue = writeQueue
     .catch(() => [])
-    .then(() => writePendingDocuments(keys, retain));
+    .then(() => writePendingDocuments(keys, retain, options.onlyChanged && !retain));
   return writeQueue;
 }
 
@@ -142,9 +152,7 @@ export function getStagedPath(docKey: string): string | null {
 }
 
 /**
- * S10：会话恢复的轻量标签把快照中的暂存路径登记回内存记录。
- * 恢复的副本内容未知（content 记为空串：保存后的清理按"已被覆盖"处理，
- * 关闭丢弃/保留流程照常工作）。
+ * S10：恢复副本的内容与版本未知；只有显式捕获后才能证明已保存覆盖。
  */
 export function registerRestoredStagedPath(docKey: string, path: string): void {
   if (!stagedPaths.has(docKey)) {
@@ -194,46 +202,9 @@ export async function discardStagedDocuments(keys: string[]): Promise<void> {
   await Promise.allSettled(tasks);
 }
 
-/**
- * 🔴 S14→R13（K 节）：暂存从「任意 store 变化扫描全部文档」改为 dirty revision 队列——
- * 订阅回调 diff 出内容/脏态变化的文档 key，防抖到期只暂存变化集合；
- * 单纯切标签/改变选区不触发全量暂存。
- * 🔴 R13：签名使用真实每文档 revision（editorRegistry）——等长替换（revision 递增）
- * 不再因 length 相同漏检；windowStore 订阅保留为兜底（结构变化路径）。
- */
+/** Keyed revisions keep the edit hot path O(1), including equal-length edits.
+ * Structural/restore changes are reconciled by the low-frequency fallback. */
 const pendingStagingKeys = new Set<string>();
-/** 上一快照的（revision/脏态）签名，用于 diff */
-let lastContentSignatures: Map<string, string> | null = null;
-
-function computeContentSignatures(state: ReturnType<typeof useDocumentStore.getState>): Map<string, string> {
-  const signatures = new Map<string, string>();
-  for (const [key, doc] of state.documents) {
-    // 只对可能有未保存工作的文档计算签名（空白未命名不参与暂存）；
-    // revision 每真实编辑递增（等长替换也递增）
-    signatures.set(key, `${doc.isDirty ? 1 : 0}:${getDocumentRevision(key)}`);
-  }
-  return signatures;
-}
-
-/** 订阅回调：diff 变化 key 入队并安排限时暂存 */
-function scheduleStagingFromDocuments(state: ReturnType<typeof useDocumentStore.getState>): void {
-  const signatures = computeContentSignatures(state);
-  if (lastContentSignatures) {
-    for (const [key, signature] of signatures) {
-      if (lastContentSignatures.get(key) !== signature) {
-        pendingStagingKeys.add(key);
-      }
-    }
-    for (const key of lastContentSignatures.keys()) {
-      if (!signatures.has(key)) pendingStagingKeys.delete(key);
-    }
-  } else {
-    // 首次订阅：不主动入队（启动恢复场景由各自流程触发）
-  }
-  lastContentSignatures = signatures;
-  if (pendingStagingKeys.size === 0) return;
-  scheduleStaging([...pendingStagingKeys]);
-}
 
 /** 文档变化时安排一次近期限时暂存；已有任务不顺延，避免连续输入长期推迟异常保护。 */
 function scheduleStaging(keys?: string[]): void {
@@ -246,30 +217,29 @@ function scheduleStaging(keys?: string[]): void {
     // 只暂存变化集合（队列快照后清空；执行期间新变化进入下一轮）
     const keysToStage = [...pendingStagingKeys];
     pendingStagingKeys.clear();
-    stashPendingDocuments(keysToStage.length > 0 ? { keys: keysToStage } : undefined).catch((error) => {
+    stashPendingDocuments({ keys: keysToStage.length ? keysToStage : undefined, onlyChanged: true }).catch((error) => {
       console.error('[stagingManager] 增量暂存失败:', error);
     });
   }, STAGING_DEBOUNCE_MS);
 }
 
 /**
- * 启动异常退出保护：订阅内容与标签变化，并在失焦、页面隐藏及固定间隔立即刷新副本。
+ * 内容版本通知安排近期限时暂存；失焦、隐藏及定时兜底只捕获未暂存的版本。
  */
 export function startStagingManager(): () => void {
-  if (stopDocumentSubscription || stopWindowSubscription) {
+  if (stopRevisionSubscription) {
     return stopStagingManager;
   }
 
-  stopDocumentSubscription = useDocumentStore.subscribe(scheduleStagingFromDocuments);
-  stopWindowSubscription = useWindowStore.subscribe(() => scheduleStaging());
+  stopRevisionSubscription = subscribeDocumentRevisions(key => scheduleStaging([key]));
   intervalTimer = setInterval(() => {
-    stashPendingDocuments().catch((error) => {
+    stashPendingDocuments({ onlyChanged: true }).catch((error) => {
       console.error('[stagingManager] 定时暂存失败:', error);
     });
   }, STAGING_INTERVAL_MS);
 
   const handleWindowBlur = () => {
-    stashPendingDocuments().catch((error) => {
+    stashPendingDocuments({ onlyChanged: true }).catch((error) => {
       console.error('[stagingManager] 失焦暂存失败:', error);
     });
   };
@@ -295,12 +265,9 @@ function stopStagingManager(): void {
   if (intervalTimer) clearInterval(intervalTimer);
   debounceTimer = null;
   pendingStagingKeys.clear();
-  lastContentSignatures = null;
   intervalTimer = null;
-  stopDocumentSubscription?.();
-  stopWindowSubscription?.();
+  stopRevisionSubscription?.();
   stopEventListeners?.();
-  stopDocumentSubscription = null;
-  stopWindowSubscription = null;
+  stopRevisionSubscription = null;
   stopEventListeners = null;
 }

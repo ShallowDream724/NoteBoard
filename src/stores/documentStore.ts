@@ -156,7 +156,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setDirty: (key, isDirty) => {
     set((state) => {
       const doc = state.documents.get(key);
-      if (!doc) return {};
+      if (!doc || doc.isDirty === isDirty) return state;
       const newMap = new Map(state.documents);
       newMap.set(key, { ...doc, isDirty });
       return { documents: newMap };
