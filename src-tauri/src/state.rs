@@ -81,6 +81,33 @@ pub struct PendingPrepare {
 }
 
 impl AppState {
+    /// Reserve the configured main window before native/plugin setup can receive
+    /// another launch. Readiness controls consumption, not window ownership.
+    pub fn for_startup() -> Self {
+        let mut state = Self::default();
+        state.register_window("nb-main".into(), WindowRecord::new("nb-main".into(), 0));
+        state
+    }
+
+    /// Must be called while holding the state mutex. Claiming an unready window
+    /// prevents concurrent launch callbacks from each starting a new WebView.
+    pub fn claim_launch_window(&mut self) -> (String, bool) {
+        let existing = self.windows.values()
+            .filter(|w| !self.is_closing(&w.label))
+            .max_by_key(|w| (w.is_ready, w.last_active_at, std::cmp::Reverse(w.seq)))
+            .map(|w| w.label.clone());
+        if let Some(label) = existing {
+            return (label, false);
+        }
+        let label = self.alloc_label();
+        self.register_window(label.clone(), WindowRecord::new(label.clone(), self.next_window_seq - 1));
+        if !self.orphan_requests.is_empty() {
+            self.open_requests.insert(label.clone(), std::mem::take(&mut self.orphan_requests));
+            self.open_queue_version += 1;
+        }
+        (label, true)
+    }
+
     /// 预约 TTL：前端 prepare 返回后正常会立即 register；超过该时限视为放弃
     /// （崩溃/异常），惰性清理（读取点检查，无需后台定时器）。
     pub const PREPARE_RESERVATION_TTL: std::time::Duration = std::time::Duration::from_secs(30);
@@ -170,6 +197,35 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_uses_reserved_main_before_frontend_readiness() {
+        let mut state = AppState::for_startup();
+        assert_eq!(state.claim_launch_window(), ("nb-main".into(), false));
+        assert_eq!(state.windows.len(), 1);
+    }
+
+    #[test]
+    fn concurrent_launches_claim_one_unready_window() {
+        let state = std::sync::Arc::new(std::sync::Mutex::new(AppState::default()));
+        let threads: Vec<_> = (0..32).map(|index| {
+            let state = state.clone();
+            std::thread::spawn(move || {
+                let mut state = state.lock().unwrap();
+                let claim = state.claim_launch_window();
+                crate::window::intent::enqueue_open_requests_inner(
+                    &mut state, &claim.0, vec![format!("C:\\test\\{index}.md")],
+                    None, crate::dto::OpenRequestSource::SecondInstance,
+                );
+                claim
+            })
+        }).collect();
+        let claims: Vec<_> = threads.into_iter().map(|thread| thread.join().unwrap()).collect();
+        assert_eq!(claims.iter().filter(|(_, created)| *created).count(), 1);
+        assert!(claims.iter().all(|(label, _)| label == "nb-1"));
+        assert_eq!(state.lock().unwrap().windows.len(), 1);
+        assert_eq!(state.lock().unwrap().open_requests["nb-1"].len(), 32);
+    }
 
     /// 🔴 N05 prepare 预约：TTL 内的预约对并发查询存活（消除注册空窗双开）
     #[test]

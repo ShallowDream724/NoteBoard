@@ -27,50 +27,14 @@ fn handle_second_instance_on_worker(app: &tauri::AppHandle, argv: Vec<String>) {
 
     let state = app.state::<Mutex<AppState>>();
 
-    // 优先选择已就绪的最后活跃窗口，再回退到任意仍存活的窗口
-    let active_label = {
-        let s = state.lock().unwrap();
-        s.last_active_window().cloned()
-    };
-    let target_label = active_label.or_else(|| {
-        app.webview_windows()
-            .into_iter()
-            .next()
-            .map(|(label, _)| label)
-    });
-
-    if let Some(target_label) = target_label {
-        if !paths.is_empty() {
-            // 🔴 入队而非直接发路径事件：前端未订阅/正在初始化时请求不丢失
-            let (_, queue_version) = crate::window::intent::enqueue_open_requests(
-                &state,
-                &target_label,
-                paths,
-                None,
-                crate::dto::OpenRequestSource::SecondInstance,
-            );
-            crate::window::intent::notify_open_requests(app, &target_label, queue_version);
-        }
-
-        if let Some(win) = app.get_webview_window(&target_label) {
-            // 从资源管理器打开文件或重复启动时，恢复已有窗口并突破 Windows 后台焦点限制。
-            crate::window::manager::bring_to_front(&win);
-        }
-        return;
-    }
-
-    // 极端情况下首实例仍存活但已经没有窗口：把请求入队到新窗口（无路径则普通空窗口）
-    let label = {
+    // Routing and reservation form one atomic state transition. Native windows
+    // may not exist yet; hidden export WebViews must never receive file opens.
+    let (label, create, version) = {
         let mut s = state.lock().unwrap();
-        let label = s.alloc_label();
-        let seq = label.trim_start_matches("nb-").parse::<u32>().unwrap_or(0);
-        s.register_window(
-            label.clone(),
-            crate::window::manager::WindowRecord::new(label.clone(), seq),
-        );
-        if paths.is_empty() {
+        let (label, create) = s.claim_launch_window();
+        if paths.is_empty() && create {
             s.intents.insert(label.clone(), WindowIntent::Empty);
-        } else {
+        } else if !paths.is_empty() {
             crate::window::intent::enqueue_open_requests_inner(
                 &mut s,
                 &label,
@@ -79,7 +43,14 @@ fn handle_second_instance_on_worker(app: &tauri::AppHandle, argv: Vec<String>) {
                 crate::dto::OpenRequestSource::SecondInstance,
             );
         }
-        label
+        (label, create, s.open_queue_version)
     };
-    let _ = crate::window::manager::create_window(app, label);
+    // Keep native calls outside both the registry lock and WM_COPYDATA callback.
+    if create {
+        let _ = crate::window::manager::create_window(app, label.clone());
+    }
+    crate::window::intent::notify_open_requests(app, &label, version);
+    if let Some(window) = app.get_webview_window(&label) {
+        crate::window::manager::bring_to_front(&window);
+    }
 }

@@ -19,10 +19,7 @@ pub fn setup(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let state = app.state::<Mutex<AppState>>();
     {
         let mut s = state.lock().unwrap();
-        s.register_window(
-            "nb-main".to_string(),
-            manager::WindowRecord::new("nb-main".to_string(), 0),
-        );
+        s.windows.entry("nb-main".to_string()).or_insert_with(|| manager::WindowRecord::new("nb-main".to_string(), 0));
     }
 
     // 解析命令行参数

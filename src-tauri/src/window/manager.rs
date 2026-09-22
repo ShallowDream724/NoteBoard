@@ -114,7 +114,7 @@ pub fn create_window(app: &tauri::AppHandle, label: String) -> Result<(), String
     let l = label.clone();
 
     std::thread::spawn(move || {
-        let _ = tauri::WebviewWindowBuilder::new(
+        let result = tauri::WebviewWindowBuilder::new(
             &handle,
             &l,
             tauri::WebviewUrl::App("index.html".into()),
@@ -128,6 +128,15 @@ pub fn create_window(app: &tauri::AppHandle, label: String) -> Result<(), String
         // 启用窗口拖拽文件接收能力
         .drag_and_drop(true)
         .build();
+        if let Err(error) = result {
+            log::error!("Window {l} creation failed: {error}");
+            // Release the reservation and retain queued file requests for a
+            // later launch instead of leaving an immortal unready window.
+            let state = handle.state::<Mutex<AppState>>();
+            if let Some((target, version)) = unregister_window(&state, &l) {
+                crate::window::intent::notify_open_requests(&handle, &target, version);
+            }
+        }
     });
 
     Ok(())
