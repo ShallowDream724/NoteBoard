@@ -22,6 +22,8 @@ import { slashSuggestion } from '../slashCommand';
 import { handleLinkClick } from '../linkHandler';
 import { TableClipboard } from '../tableClipboard';
 import { ResizableTableRow, TableSizing } from '../tableSizing';
+import { MarkdownTable } from '../markdownTable';
+import { EfficientTableView } from '../tableView';
 import { useWindowStore } from '../../../stores/windowStore';
 
 import Suggestion from '@tiptap/suggestion';
@@ -149,7 +151,8 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
   return [
     ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
       mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
-      infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow }),
+      infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow,
+      table: MarkdownTable.configure({ resizable: true, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
     UnifiedDocumentHistoryKeys.configure({ docKey }),
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),

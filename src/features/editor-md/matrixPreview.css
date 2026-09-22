@@ -1,0 +1,10 @@
+.nb-matrix-view { display: inline-flex; align-items: center; vertical-align: middle; max-width: none; overflow-anchor: none; }
+.nb-matrix-prefix { flex: none; margin-right: .3em; }
+.nb-matrix-frame { display: inline-block; flex: none; position: relative; padding: 0 .35em; }
+.nb-matrix-grid { display: block; position: relative; }
+.nb-matrix-cell { position: absolute; display: inline-block; box-sizing: border-box; width: max-content; text-align: center; padding: 0 .5em; font-family: KaTeX_Main, serif; font-size: 1.21em; line-height: 1.2; white-space: nowrap; }
+.nb-matrix-cell .katex { font-size: 1em; }
+.nb-matrix-bmatrix { border-inline: 1px solid currentColor; background: linear-gradient(currentColor,currentColor) left top/6px 1px no-repeat,linear-gradient(currentColor,currentColor) right top/6px 1px no-repeat,linear-gradient(currentColor,currentColor) left bottom/6px 1px no-repeat,linear-gradient(currentColor,currentColor) right bottom/6px 1px no-repeat; }
+.nb-matrix-pmatrix { border-inline: 1px solid currentColor; border-radius: 50% / 1em; }
+.nb-matrix-vmatrix { border-inline: 1px solid currentColor; }
+.nb-matrix-Vmatrix { border-inline: 3px double currentColor; }

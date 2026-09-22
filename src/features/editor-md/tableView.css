@@ -1,0 +1,3 @@
+.nb-large-table { contain: layout style; }
+.nb-large-table > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.nb-prose .math-node-display { contain: layout style; }

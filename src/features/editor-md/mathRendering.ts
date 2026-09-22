@@ -42,7 +42,9 @@ export async function renderMath(latex: string, displayMode: boolean): Promise<M
   const task = requestMarkup(latex, displayMode);
   inFlight.set(key, task);
   let result: MathRendering;
-  try { result = await task; } finally { inFlight.delete(key); }
+  try { result = await task; }
+  catch { result = { html: '', error: '公式排版失败，请重试' }; }
+  finally { inFlight.delete(key); }
   if (!result.error && latex.length < 16_384 && result.html.length < 262_144) {
     const previous = cache.get(key);
     if (previous) cacheBytes -= entryBytes(key, previous);

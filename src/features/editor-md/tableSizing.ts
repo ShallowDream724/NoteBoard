@@ -24,9 +24,9 @@ interface Drag { row: HTMLTableRowElement; pos: number; pointer: number; y: numb
 let previewId = 0;
 /** CSSOM updates avoid waking ProseMirror's MutationObserver/selection reads on
  * every frame. Only the gesture's initial marker and final transaction touch DOM. */
-function rowPreview(row: HTMLTableRowElement) {
+function rowPreview(row: HTMLTableRowElement, height: number) {
   const name = `nb-row-preview-${++previewId}`, style = row.ownerDocument.createElement('style');
-  style.textContent = `.${name} { height: ${row.offsetHeight}px !important; }`;
+  style.textContent = `.${name} { height: ${height}px !important; }`;
   row.ownerDocument.head.append(style); row.classList.add(name);
   const rule = style.sheet!.cssRules[0] as CSSStyleRule;
   return { paint(height: number) { rule.style.setProperty('height', `${height}px`, 'important'); },
@@ -42,9 +42,34 @@ function freezeColumns(row: HTMLTableRowElement) {
   const measured = columns.map(column => ({ column, before: column.style.width, width: column.getBoundingClientRect().width / scale }));
   if (!measured.length || measured.some(column => column.width <= 0)) return () => {};
   const tableWidth = table.getBoundingClientRect().width / scale;
+  // Native table layout revisits every cell when one row height changes. During
+  // large, unmerged-table row gestures use the already measured column widths
+  // in independent grid rows. DOM/model/selection remain intact, and CSSOM-only
+  // height updates can skip distant rows. Merged tables retain native semantics.
+  const wrapper = table.parentElement;
+  const isolateRows = wrapper?.classList.contains('nb-large-table') && !table.querySelector('[rowspan]:not([rowspan="1"]),[colspan]:not([colspan="1"])');
+  let restoreRows = () => {};
+  if (isolateRows) {
+    const name = `nb-table-gesture-${++previewId}`;
+    const style = table.ownerDocument.createElement('style');
+    const template = measured.map(column => `${column.width}px`).join(' ');
+    style.textContent = `
+      table.${name} { display:block !important; }
+      table.${name}>colgroup { display:none; }
+      table.${name}>tbody,table.${name}>thead,table.${name}>tfoot { display:block; }
+      table.${name} tr { display:grid; grid-template-columns:${template}; content-visibility:auto; contain-intrinsic-size:auto 44px; }
+      table.${name} tr+tr { margin-top:-1px; }
+      table.${name} td,table.${name} th { display:block; min-width:0; box-sizing:border-box; }
+      table.${name} td+td,table.${name} th+th { margin-left:-1px; }
+    `;
+    table.ownerDocument.head.append(style);
+    table.classList.add(name);
+    restoreRows = () => { table.classList.remove(name); style.remove(); };
+  }
   measured.forEach(({ column, width }) => { column.style.width = `${width}px`; });
   table.style.width = `${tableWidth}px`; table.style.tableLayout = 'fixed';
   return () => {
+    restoreRows();
     measured.forEach(({ column, before }) => { column.style.width = before; });
     table.style.width = width; table.style.tableLayout = layout;
   };
@@ -102,7 +127,7 @@ export const TableSizing = Extension.create({
           const pos = rowPosition(view, row); if (pos == null) return false;
           const bounds = row.getBoundingClientRect(), height = row.offsetHeight;
           const restoreColumns = freezeColumns(row);
-          drag = { row, pos, pointer: event.pointerId, y: event.clientY, height, next: height, scale: bounds.height / height || 1, preview: rowPreview(row), restoreColumns };
+          drag = { row, pos, pointer: event.pointerId, y: event.clientY, height, next: height, scale: bounds.height / height || 1, preview: rowPreview(row, height), restoreColumns };
           view.dom.setPointerCapture(event.pointerId); view.dom.classList.add('nb-row-resizing');
           event.preventDefault(); return true;
         },

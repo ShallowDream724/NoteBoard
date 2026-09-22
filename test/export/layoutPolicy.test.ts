@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import katex from 'katex';
 import { planMath, planTableColumns } from '../../src/features/export/layoutPolicy';
-import { matrixPart, matrixSource, MAX_MATRIX_CELLS, reflowFractions } from '../../src/features/export/mathContinuation';
+import { matrixPart, matrixSource, MAX_MATRIX_CELLS, reflowFractions } from '../../src/core/math/structure';
 
 describe('print layout policy', () => {
   it('keeps natural width and balances continuation columns without losing their order', () => {
@@ -34,11 +34,13 @@ describe('structured formula continuation', () => {
     expect(source.rows).toHaveLength(2); expect(source.columns).toBe(2);
     expect(source.rows[0][0]).toBe(String.raw`\text{a\&b}`);
     expect(matrixPart(source, 1, 2, 0, 2)).toBe(String.raw`\begin{bmatrix}5&\end{bmatrix}`);
+    expect(matrixPart(source, 0, 2, 0, 2)).toContain(String.raw`\\[2pt]`);
     expect(() => katex.renderToString(matrixPart(source, 0, 2, 0, 2), { throwOnError: true })).not.toThrow();
   });
   it('does not tile a matrix used as an operand and stops oversized inputs before rendering', () => {
     expect(matrixSource(String.raw`B\begin{bmatrix}1&2\end{bmatrix}`)).toBeNull();
     expect(matrixSource(String.raw`\begin{vmatrix}1&2\\3&4\end{vmatrix}`)).toBeNull();
+    expect(matrixSource(String.raw`\begin{matrix}\color{red}x&y\end{matrix}`)).toBeNull();
     expect(() => matrixSource('\\begin{matrix}' + 'x&'.repeat(MAX_MATRIX_CELLS) + 'x\\end{matrix}')).toThrow('单元格');
   });
   it('wraps numerator and denominator independently while retaining every term', () => {

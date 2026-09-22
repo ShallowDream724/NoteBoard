@@ -6,7 +6,7 @@ import type { MathRendering } from '../editor-md/mathRendering';
 import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
 import type { ExportDocument, ExportItem } from './model';
 import { documentTableStyle } from '../editor-md/documentPresentation';
-import { matrixSource, matrixPart } from './mathContinuation';
+import { matrixSource, matrixPart } from '../../core/math/structure';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
   math = renderMath, assetUrl: (path: string) => string = path => path): Promise<ExportDocument> {

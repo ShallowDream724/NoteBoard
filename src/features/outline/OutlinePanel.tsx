@@ -9,6 +9,8 @@ import { ChevronRight } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
+import { findScrollContainer } from '../../core/dom/scrollContainer';
+import { lastAtOrBefore } from '../../core/dom/orderedPosition';
 
 interface OutlinePanelProps {
   editor: Editor | null;
@@ -160,37 +162,28 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   useEffect(() => {
     if (!editor) return;
 
-    const scrollContainer = editor.view.dom.parentElement;
-    if (!scrollContainer) return;
-
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
+    const scrollContainer = findScrollContainer(editor.view.dom);
+    let frame = 0;
     const handleScroll = () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        // 取 offsetTop <= scrollTop + 40 的最后一个
-        const scrollTop = scrollContainer.scrollTop;
-        let lastVisible: HeadingItem | null = null;
-
-        for (const h of headings) {
-          const dom = editor.view.nodeDOM(h.pos);
-          if (dom instanceof HTMLElement) {
-            if (dom.offsetTop <= scrollTop + 40) {
-              lastVisible = h;
-            }
-          }
-        }
-
-        if (lastVisible) {
-          setActiveId(lastVisible.id);
-        }
-      }, 50);
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (editor.isDestroyed || !scrollContainer.clientHeight) return;
+        const top = scrollContainer.getBoundingClientRect().top + 40;
+        // Read O(log H) live positions. No full heading scan or geometry cache
+        // to invalidate whenever a lazy formula changes height.
+        const index = lastAtOrBefore(headings.length, i => {
+          const dom = editor.view.nodeDOM(headings[i].pos);
+          return dom instanceof HTMLElement ? dom.getBoundingClientRect().top : Infinity;
+        }, top);
+        setActiveId(index >= 0 ? headings[index].id : null);
+      });
     };
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
-      if (debounceTimer) clearTimeout(debounceTimer);
+      cancelAnimationFrame(frame);
     };
   }, [editor, headings, setActiveId]);
 

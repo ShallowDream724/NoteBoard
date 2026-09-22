@@ -1,5 +1,5 @@
 import { renderMath } from '../editor-md/mathRendering';
-import { matrixSource, matrixPart, reflowFractions } from './mathContinuation';
+import { matrixSource, matrixPart, reflowFractions } from '../../core/math/structure';
 import { readableScale, renderedScale } from './layoutMetrics';
 
 function width(element: HTMLElement) { return Math.max(element.getBoundingClientRect().width, element.scrollWidth * renderedScale(element)); }

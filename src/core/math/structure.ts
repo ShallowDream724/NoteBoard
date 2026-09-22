@@ -13,19 +13,22 @@ function group(source: string, at: number): Group | null {
   return null;
 }
 
-export interface MatrixSource { environment: string; prefix: string; suffix: string; rows: string[][]; columns: number }
+export interface MatrixSource { environment: string; prefix: string; suffix: string; rows: string[][]; columns: number; rowGaps: string[] }
 export const MAX_MATRIX_CELLS = 250_000;
-export function matrixSource(latex: string): MatrixSource | null {
+export function matrixSource(latex: string, options?: { retainBarred?: boolean }): MatrixSource | null {
   const begin = /\\begin\{(matrix|[bpvBV]matrix)\}/.exec(latex);
   if (!begin) return null;
   const prefix = latex.slice(0, begin.index), environment = begin[1], ending = `\\end{${environment}}`;
   // Bars may denote a determinant or norm: displaying separate barred tiles
   // would suggest independent determinants, which changes the expression.
-  if (environment === 'vmatrix' || environment === 'Vmatrix') return null;
+  if (!options?.retainBarred && (environment === 'vmatrix' || environment === 'Vmatrix')) return null;
   const end = latex.lastIndexOf(ending), suffix = latex.slice(end + ending.length);
   // Tiling a matrix inside a larger product/fraction would change its meaning.
   if (end < 0 || !/^\s*(?:[A-Za-z](?:_[A-Za-z0-9]|_\{[^{}]+\})?\s*=\s*)?$/.test(prefix) || !/^\s*[.,;]?\s*$/.test(suffix)) return null;
-  const body = latex.slice(begin.index + begin[0].length, end), rows: string[][] = [];
+  const body = latex.slice(begin.index + begin[0].length, end), rows: string[][] = [], rowGaps: string[] = [];
+  // These commands can carry state or rules across cells. Independent-cell
+  // rendering must leave them to the complete TeX renderer.
+  if (/\\(?:def|gdef|global|newcommand|renewcommand|color|hline|hdashline|cline|multicolumn)\b/.test(body)) return null;
   let row: string[] = [], start = 0, braces = 0, nested = 0, count = 0;
   const cell = (end: number) => {
     if (++count > MAX_MATRIX_CELLS) throw new Error(`矩阵超过 ${MAX_MATRIX_CELLS.toLocaleString('en-US')} 个单元格，请拆分后导出。`);
@@ -39,6 +42,7 @@ export function matrixSource(latex: string): MatrixSource | null {
       if (body[at + 1] === '\\' && !braces && !nested) {
         cell(at); rows.push(row); row = []; at++;
         const gap = /^\*?(?:\s*\[-?\d+(?:\.\d+)?(?:pt|em|ex|mm|cm)\])?/.exec(body.slice(at + 1, at + 64))![0];
+        rowGaps.push(gap);
         at += gap.length; start = at + 1;
       } else at++;
       continue;
@@ -52,11 +56,12 @@ export function matrixSource(latex: string): MatrixSource | null {
   const columns = rows.reduce((max, values) => Math.max(max, values.length), 0);
   if (!rows.length || !columns) return null;
   if (rows.length * columns > MAX_MATRIX_CELLS) throw new Error(`矩阵超过 ${MAX_MATRIX_CELLS.toLocaleString('en-US')} 个单元格，请拆分后导出。`);
-  return { environment, prefix, suffix, rows, columns };
+  return { environment, prefix, suffix, rows, columns, rowGaps };
 }
 export function matrixPart(source: MatrixSource, rowFrom: number, rowTo: number, columnFrom: number, columnTo: number): string {
-  return `\\begin{${source.environment}}` + source.rows.slice(rowFrom, rowTo).map(row =>
-    Array.from({ length: columnTo - columnFrom }, (_, i) => row[columnFrom + i] ?? '').join('&')).join('\\\\') + `\\end{${source.environment}}`;
+  return `\\begin{${source.environment}}` + source.rows.slice(rowFrom, rowTo).map((row, index) =>
+    (index ? '\\\\' + (source.rowGaps[rowFrom + index - 1] ?? '') : '') +
+    Array.from({ length: columnTo - columnFrom }, (_, i) => row[columnFrom + i] ?? '').join('&')).join('') + `\\end{${source.environment}}`;
 }
 
 const symbols = new Set('alpha beta gamma delta epsilon varepsilon zeta eta theta vartheta iota kappa lambda mu nu xi pi varpi rho varrho sigma varsigma tau upsilon phi varphi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Upsilon Phi Psi Omega sum prod int iint iiint oint lim sin cos tan cot sec csc sinh cosh tanh log ln exp min max arg det gcd infty partial nabla ell hbar cdot times pm mp div le ge leq geq neq approx sim in notin subset supset cup cap land lor'.split(' '));

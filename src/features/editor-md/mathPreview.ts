@@ -1,5 +1,7 @@
 import { observeNearby } from './nearViewport';
 import { queueMath } from './mathRenderQueue';
+import { matrixSource } from '../../core/math/structure';
+import { mountMatrixPreview } from './matrixPreview';
 
 let nextId = 0;
 type Size = { width: number; height: number };
@@ -19,6 +21,14 @@ function observeSize(element: HTMLElement, callback: (size: Size) => void) {
 /** Owns only the empty preview host, outside React's node-view render cycle.
  * Viewport work never changes the document or editor selection. */
 export function mountMathPreview(host: HTMLElement, latex: string, display: boolean, editing: boolean) {
+  // Allocate a stable geometric placeholder before first paint. A thousand-row
+  // matrix must never first appear as two source lines, then shift the document.
+  if (latex.length > 1200 && latex.includes('\\begin{')) {
+    try {
+      const matrix = matrixSource(latex, { retainBarred: true });
+      if (matrix && matrix.environment !== 'Bmatrix' && (matrix.rows.length > 64 || matrix.rows.length * matrix.columns > 512)) return mountMatrixPreview(host, matrix);
+    } catch (error) { host.textContent = String(error); return () => host.replaceChildren(); }
+  }
   const id = `math-preview:${++nextId}`;
   let cancel: (() => void) | undefined, timer: ReturnType<typeof setTimeout> | undefined;
   let live = true, mounted = false, size: Size | undefined;

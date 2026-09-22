@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { Transaction } from '@tiptap/pm/state';
 import { EDITOR_SEARCH_NAVIGATION_META } from '../../core/editor/searchNavigation';
+import { lastAtOrBefore } from '../../core/dom/orderedPosition';
 
 export interface HeadingItem {
   id: string;
@@ -92,17 +93,8 @@ export function useHeadings(editor: Editor | null) {
     }
 
     const cursorPos = editor.state.selection.from;
-    let active: HeadingItem | null = null;
-
-    for (const h of currentHeadings) {
-      if (h.pos <= cursorPos) {
-        active = h;
-      } else {
-        break;
-      }
-    }
-
-    setActiveId(active?.id ?? null);
+    const index = lastAtOrBefore(currentHeadings.length, i => currentHeadings[i].pos, cursorPos);
+    setActiveId(index >= 0 ? currentHeadings[index].id : null);
   }, [editor]);
 
   // 监听编辑器更新
