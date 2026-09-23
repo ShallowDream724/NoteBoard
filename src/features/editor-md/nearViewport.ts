@@ -11,7 +11,7 @@ export function viewportIsScrolling(element: Element): boolean {
   return lastScroll !== undefined && performance.now() - lastScroll < 80;
 }
 
-/** Shared near/visible observers, with one screen of vertical overscan. */
+/** Shared near/visible observers, with two screens of vertical overscan. */
 export function observeNearby(element: HTMLElement, callback: Callback): () => void {
   if (typeof IntersectionObserver === 'undefined') { callback(true, true); return () => {}; }
   const root = findScrollContainer(element);
@@ -32,7 +32,7 @@ export function observeNearby(element: HTMLElement, callback: Callback): () => v
     const create = () => new IntersectionObserver(entries => notify(entries, false), {
     // Horizontal overflow belongs to the document. Unloading a wide equation
     // while panning it would collapse scrollWidth and snap scrollLeft to zero.
-      root, rootMargin: `${Math.max(400, root.clientHeight)}px 1000000px`, threshold: 0 });
+      root, rootMargin: `${Math.max(800, root.clientHeight * 2)}px 1000000px`, threshold: 0 });
     let height = root.clientHeight;
     pool = { callbacks, lastScroll: -Infinity, onScroll: () => { const current = pools.get(root); if (current) current.lastScroll = performance.now(); }, observer: create(), visible: new IntersectionObserver(entries => notify(entries, true), { root, rootMargin: '0px 1000000px', threshold: 0 }), resize: typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => {
       if (!root.clientHeight || root.clientHeight === height) return;

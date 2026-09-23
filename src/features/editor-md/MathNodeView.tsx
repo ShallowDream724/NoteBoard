@@ -5,7 +5,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { isDisplayMath, writeMath, type MathDelimiter } from './mathSyntax';
 import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
-import { mountMathPreview } from './mathPreview';
+import { mountMathPreview, type MathPreviewController } from './mathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 /** The document owns the draft, even while the source input has focus. */
@@ -17,6 +17,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const latex = String(node.attrs.latex ?? '');
   const [editing, setEditing] = useState(false);
   const viewportRef = useRef<HTMLSpanElement>(null);
+  const previewRef = useRef<MathPreviewController | null>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const selection = editor.state.selection;
@@ -39,8 +40,12 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       host.textContent = writeMath({ latex, delimiter }, block);
       return () => host.replaceChildren();
     }
-    return mountMathPreview(host, latex, display, editing);
-  }, [enabled, latex, delimiter, block, display, editing]);
+    const preview = mountMathPreview(host, latex, display, false, editor.view.dom);
+    previewRef.current = preview;
+    return () => { previewRef.current = null; preview.dispose(); };
+  }, [enabled, latex, delimiter, block, display, editor]);
+  // Focus changes are priority changes, not a new formula or DOM lifetime.
+  useEffect(() => { previewRef.current?.setEditing(editing); });
 
   const exit = () => {
     setEditing(false);

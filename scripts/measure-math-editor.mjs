@@ -9,10 +9,12 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 const require = createRequire(import.meta.url);
 const { chromium } = require('C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
-const repo = process.cwd(), dir = path.join(repo, '.tmp/math-editor-measure');
+const current = process.argv.includes('--current');
+const repo = process.cwd(), dir = path.join(repo, current ? '.tmp/math-editor-measure-current' : '.tmp/math-editor-measure');
 await fs.mkdir(dir, { recursive: true });
 if (!process.argv.includes('--reuse-build')) {
-    execFileSync('tar', ['-x'], { cwd: dir, input: execFileSync('git', ['archive', '3c129ad', 'src'], { cwd: repo, maxBuffer: 64 * 1024 * 1024 }), maxBuffer: 64 * 1024 * 1024 });
+    if (current) await fs.cp(path.join(repo, 'src'), path.join(dir, 'src'), { recursive: true });
+    else execFileSync('tar', ['-x'], { cwd: dir, input: execFileSync('git', ['archive', '3c129ad', 'src'], { cwd: repo, maxBuffer: 64 * 1024 * 1024 }), maxBuffer: 64 * 1024 * 1024 });
     const preview = path.join(dir, 'src/features/editor-md/mathPreview.ts');
     let source = await fs.readFile(preview, 'utf8');
     // Controlled diagnostic branch only: keep all previews mounted, changing no math.
@@ -37,7 +39,7 @@ const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const results = [];
 const atlas = await fs.readFile(path.resolve(repo, '../../outputs/NoteBoard-math-atlas.md'), 'utf8');
 try {
-    for (const eager of [false, true, false, true]) {
+    for (const eager of process.argv.includes('--normal-only') ? [false, false] : [false, true, false, true]) {
         const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
         const page = await context.newPage();
         const errors = [];
@@ -47,7 +49,7 @@ try {
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
         await page.waitForFunction(() => !!window.editorBench);
         const mount = await page.evaluate(md => window.editorBench.mount(md), atlas);
-        if (eager)
+        if (eager || process.argv.includes('--settled'))
             await page.waitForFunction(() => document.querySelectorAll('.math-preview .katex').length === 466);
         else
             await page.waitForFunction(() => document.querySelectorAll('.math-preview .katex').length >= 4);
@@ -83,7 +85,7 @@ try {
         const { profile } = await cdp.send('Profiler.stop');
         await fs.writeFile(path.join(dir, `profile-${process.argv.includes('--continuous') ? 'continuous' : 'jump'}-${results.length}-${eager ? 'eager' : 'lazy'}.json`), JSON.stringify(profile));
         const delta = Object.fromEntries(['TaskDuration', 'ScriptDuration', 'LayoutDuration', 'RecalcStyleDuration', 'LayoutCount', 'RecalcStyleCount'].map(k => [k, after[k] - before[k]]));
-        const result = { eager, mount, scroll, delta, errors };
+        const result = { current, eager, settled: process.argv.includes('--settled'), mount, scroll, delta, errors };
         results.push(result);
         console.log(JSON.stringify(result));
         await context.close();
@@ -92,5 +94,5 @@ try {
 finally {
     await browser.close();
     server.close();
-    await fs.writeFile(path.join(dir, process.argv.includes('--continuous') ? 'results-continuous.json' : 'results.json'), JSON.stringify(results, null, 2));
+    await fs.writeFile(path.join(dir, `results${process.argv.includes('--continuous') ? '-continuous' : ''}${process.argv.includes('--settled') ? '-settled' : ''}.json`), JSON.stringify(results, null, 2));
 }

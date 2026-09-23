@@ -34,6 +34,8 @@ import { autoSaveDocument } from './markdownAutoSave';
 import { registerHistoryMaterializeHook } from '../history/documentHistory';
 import { saveViewState } from '../session/editorSuspension';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
+import { setMathPreviewSessionActive } from './mathPreviewSession';
+import { transactionStart } from './transactionStart';
 
 interface VisualKernelProps {
   docKey: string;
@@ -133,15 +135,9 @@ export function VisualKernel({
       const previousPendingExisted = hasPendingVisualSnapshot(docKey);
       // Only a new group needs a starting position. Step maps describe the edit
       // without searching the unchanged document prefix on every keystroke.
-      let diffPosition: number | undefined;
-      if (startsNewGroup || !previousPendingExisted) {
-        transaction.mapping.maps.forEach((map, index) => {
-          map.forEach((from) => {
-            const original = transaction.mapping.slice(0, index).invert().map(from);
-            diffPosition = Math.min(diffPosition ?? original, original);
-          });
-        });
-      }
+      const diffPosition = startsNewGroup || !previousPendingExisted
+        ? transactionStart(transaction.mapping.maps)
+        : undefined;
       stagePendingVisualSnapshot(docKey, {
         doc: transaction.doc,
         revision: getDocumentRevision(docKey),
@@ -218,6 +214,13 @@ export function VisualKernel({
       },
     },
   }, [docKey]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const owner = editor.view.dom;
+    setMathPreviewSessionActive(owner, active && visible);
+    return () => setMathPreviewSessionActive(owner, false);
+  }, [editor, active, visible]);
 
   // 🔴 J2 的合并序列化已按复审要求重做：输入热路径只暂存不可变快照（O(1)），
   //    序列化按历史组延迟执行；编辑器内核常驻期间卸载前的最终内容

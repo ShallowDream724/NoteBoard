@@ -7,12 +7,14 @@ import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { build } from 'vite';
 const repo = process.cwd();
-const directory = path.join(repo, '.tmp/math-latency');
+const current = process.argv.includes('--current');
+const directory = path.join(repo, current ? '.tmp/math-latency-current' : '.tmp/math-latency');
 const require = createRequire(import.meta.url);
 const { chromium } = require('C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 await fs.mkdir(path.join(directory, 'baseline'), { recursive: true });
-for (const file of ['mathRendering.ts', 'mathRenderQueue.ts', 'mathWorker.ts', 'mathEngine.ts', 'mathLimits.ts', 'mathSyntax.ts']) {
-    await fs.writeFile(path.join(directory, 'baseline', file), execFileSync('git', ['show', `3c129ad:src/features/editor-md/${file}`], { cwd: repo }));
+for (const file of ['mathRendering.ts', 'mathRenderQueue.ts', 'mathWorker.ts', 'mathEngine.ts', 'mathLimits.ts', 'mathSyntax.ts', ...(current ? ['mathWorkerProtocol.ts'] : [])]) {
+    const text = current ? await fs.readFile(path.join(repo, 'src/features/editor-md', file)) : execFileSync('git', ['show', `3c129ad:src/features/editor-md/${file}`], { cwd: repo });
+    await fs.writeFile(path.join(directory, 'baseline', file), text);
 }
 await fs.copyFile(path.resolve(repo, '../../outputs/NoteBoard-math-atlas.md'), path.join(directory, 'atlas.md'));
 await fs.writeFile(path.join(directory, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"></head><body><article id="content"></article><script type="module" src="./entry.ts"></script></body></html>');
@@ -37,7 +39,7 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const result = { createdAt: new Date().toISOString(), baseline: '3c129ad (installed 0.3.9)', cpu: os.cpus()[0].model, logicalCpus: os.cpus().length, totalMemoryGiB: os.totalmem() / 2 ** 30, browser: browser.version(), runs: [] };
+const result = { createdAt: new Date().toISOString(), baseline: current ? 'working tree 0.3.10' : '3c129ad (installed 0.3.9)', cpu: os.cpus()[0].model, logicalCpus: os.cpus().length, totalMemoryGiB: os.totalmem() / 2 ** 30, browser: browser.version(), runs: [] };
 try {
     for (let run = 0; run < 3; run++) {
         const context = await browser.newContext({ viewport: { width: 1400, height: 1000 }, deviceScaleFactor: 1 });

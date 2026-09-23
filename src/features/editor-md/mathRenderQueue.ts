@@ -1,65 +1,100 @@
 import { renderMath, type MathRendering } from './mathRendering';
+import { mathMarkupNodeCount } from './mathLimits';
 
 type Request = { latex: string; display: boolean; priority?: () => number; isScrolling?: () => boolean; done: (value: MathRendering) => void };
-interface Entry { request: Request; controller: AbortController; started: boolean; result?: MathRendering }
+interface Entry { id: string; request: Request; controller: AbortController; started: boolean; result?: MathRendering; nodes: number; rank: number }
+interface Retirement { readyAt: number; done: () => void }
 const pending = new Map<string, Entry>();
-let frame = 0;
+const retirements = new Map<string, Retirement>();
+const waiting = [new Set<Entry>(), new Set<Entry>(), new Set<Entry>()];
+const ready = [new Set<Entry>(), new Set<Entry>(), new Set<Entry>()];
+const MAX_IN_FLIGHT = 16;
+const FOREGROUND_RESERVE = 4;
+const MAX_READY_CHARACTERS = 256 * 1024;
+const readyByRank = [0, 0, 0];
+// HTML parsing time excludes the browser's following layout. Charge estimated
+// DOM work too; one large expression is indivisible and admitted alone.
+const FRAME_NODES = 1000;
+const FRAME_MILLISECONDS = 3;
+let inFlight = 0, readyCharacters = 0, frame = 0, dirtyPriorities = false;
 let retry: ReturnType<typeof setTimeout> | undefined;
-const priority = (entry: Entry) => entry.request.priority?.() ?? 1;
+const rank = (request: Request) => Math.max(0, Math.min(2, request.priority?.() ?? 1));
 function schedule() { if (!frame) frame = requestAnimationFrame(flush); }
-export function refreshMathQueue() { if (pending.size) schedule(); }
+export function refreshMathQueue() { dirtyPriorities = true; if (pending.size || retirements.size) schedule(); }
 
-/** Render completion never blocks the frame queue. Both worker work and a ready
- * DOM commit disappear when their owner leaves the nearby viewport. */
+function remove(entry: Entry) {
+  if (pending.get(entry.id) !== entry) return;
+  pending.delete(entry.id); waiting[entry.rank].delete(entry); ready[entry.rank].delete(entry);
+  if (entry.result) { readyCharacters -= entry.result.html.length; readyByRank[entry.rank] -= entry.result.html.length; }
+  else if (entry.started) inFlight--;
+}
+
+/** Owners cancel independently; a result never writes into a replaced view. */
 export function queueMath(id: string, request: Request): () => void {
-  pending.get(id)?.controller.abort();
-  const entry: Entry = { request, controller: new AbortController(), started: false };
-  pending.set(id, entry); schedule();
-  return () => {
-    if (pending.get(id) === entry) pending.delete(id);
-    entry.controller.abort(); schedule();
-  };
+  const previous = pending.get(id);
+  if (previous) { remove(previous); previous.controller.abort(); }
+  const entry: Entry = { id, request, controller: new AbortController(), started: false, nodes: 0, rank: rank(request) };
+  pending.set(id, entry); waiting[entry.rank].add(entry); schedule();
+  return () => { remove(entry); entry.controller.abort(); schedule(); };
+}
+
+/** Only resident-budget eviction uses this path; leaving the viewport alone
+ * does not destroy a formula. Mutations share one frame scheduler. */
+export function retireMath(id: string, done: () => void): () => void {
+  const entry = { readyAt: performance.now() + 180, done };
+  retirements.set(id, entry); schedule();
+  return () => { if (retirements.get(id) === entry) retirements.delete(id); };
+}
+
+function refreshPriorities() {
+  if (!dirtyPriorities) return;
+  dirtyPriorities = false;
+  // Once per viewport notification batch, never once per item removed.
+  for (const entry of pending.values()) {
+    const next = rank(entry.request); if (next === entry.rank) continue;
+    if (entry.result) { readyByRank[entry.rank] -= entry.result.html.length; readyByRank[next] += entry.result.html.length; }
+    const buckets = entry.result ? ready : !entry.started ? waiting : undefined;
+    buckets?.[entry.rank].delete(entry); entry.rank = next; buckets?.[next].add(entry);
+  }
 }
 function prepare() {
-  // A newly visible expression can reclaim preparation slots held by overscan.
-  let waitingPriority = Infinity;
-  for (const entry of pending.values()) if (!entry.started) waitingPriority = Math.min(waitingPriority, priority(entry));
-  for (const entry of pending.values()) if (entry.started && priority(entry) > waitingPriority) {
-    entry.controller.abort(); entry.controller = new AbortController();
-    entry.started = false; entry.result = undefined;
-  }
-  // Bound both worker lead and completed markup retained before DOM commits.
-  let count = 0; for (const entry of pending.values()) if (entry.started) count++;
-  while (count < 3) {
-    let next: [string, Entry] | undefined;
-    for (const item of pending) if (!item[1].started && (!next || priority(item[1]) < priority(next[1]))) next = item;
-    if (!next) return;
-    const [id, entry] = next, controller = entry.controller; entry.started = true; count++;
-    void renderMath(entry.request.latex, entry.request.display, { signal: controller.signal, priority: entry.request.priority }).then(result => {
-      if (pending.get(id) !== entry || entry.controller !== controller) return;
-      entry.result = result; schedule();
-    }, () => { if (pending.get(id) === entry && entry.controller === controller) pending.delete(id); schedule(); });
+  for (let priority = 0; priority < waiting.length; priority++) {
+    const bucket = waiting[priority];
+    const limit = priority === 0 ? MAX_IN_FLIGHT : MAX_IN_FLIGHT - FOREGROUND_RESERVE;
+    // Deferred background markup must never lock out a newly visible formula.
+    while (bucket.size && inFlight < limit && (priority === 0 ? readyByRank[0] : readyCharacters) < MAX_READY_CHARACTERS) {
+      const entry = bucket.values().next().value!; bucket.delete(entry);
+      entry.started = true; inFlight++;
+      void renderMath(entry.request.latex, entry.request.display, { signal: entry.controller.signal, priority: entry.request.priority }).then(result => {
+        if (pending.get(entry.id) !== entry) return;
+        inFlight--; entry.result = result; entry.nodes = Math.max(1, mathMarkupNodeCount(result.html));
+        readyCharacters += result.html.length; readyByRank[entry.rank] += result.html.length; ready[entry.rank].add(entry); schedule();
+      }, () => { remove(entry); schedule(); });
+    }
   }
 }
 function flush() {
-  frame = 0; prepare();
-  const start = performance.now(); let inserted = 0, markup = 0;
-  while (inserted < 2 && markup < 32_768 && performance.now() - start < 3) {
-    let next: [string, Entry] | undefined;
-    for (const item of pending) {
-      const entry = item[1]; if (!entry.result) continue;
-      // A single large native HTML parse cannot be preempted. Commit it only
-      // once scrolling rests; it remains cancellable while it is deferred.
-      if (entry.result.html.length > 32_768 && entry.request.isScrolling?.()) continue;
-      if (!next || priority(entry) < priority(next[1])) next = item;
+  frame = 0; clearTimeout(retry); retry = undefined; refreshPriorities(); prepare();
+  const start = performance.now(); let nodes = 0, mutations = 0, deferred = false;
+  for (const bucket of ready) {
+    for (const entry of bucket) {
+      const scrolling = entry.request.isScrolling?.() ?? false;
+      if (scrolling && (entry.nodes > FRAME_NODES || entry.result!.html.length > 32_768 || entry.rank === 2)) { deferred = true; continue; }
+      if (mutations && (nodes + entry.nodes > FRAME_NODES || performance.now() - start >= FRAME_MILLISECONDS)) break;
+      remove(entry); entry.request.done(entry.result!); nodes += entry.nodes; mutations++;
     }
-    if (!next) break;
-    const [id, entry] = next; pending.delete(id);
-    const result = entry.result!;
-    entry.request.done(result); inserted++; markup += result.html.length;
+    if (nodes >= FRAME_NODES || performance.now() - start >= FRAME_MILLISECONDS) break;
+  }
+  const now = performance.now(); let nextRetirement = Infinity;
+  for (const [id, entry] of retirements) {
+    if (entry.readyAt <= now && mutations < 16 && performance.now() - start < FRAME_MILLISECONDS) {
+      retirements.delete(id); entry.done(); mutations++;
+    } else nextRetirement = Math.min(nextRetirement, entry.readyAt);
   }
   prepare();
-  const ready = [...pending.values()].filter(entry => entry.result);
-  if (ready.some(entry => entry.result!.html.length <= 32_768 || !entry.request.isScrolling?.())) schedule();
-  else if (ready.length && retry === undefined) retry = setTimeout(() => { retry = undefined; schedule(); }, 80);
+  if ((ready.some(bucket => bucket.size) && (!deferred || mutations > 0)) || nextRetirement <= now) schedule();
+  else {
+    const delay = Math.min(deferred ? 80 : Infinity, nextRetirement - now);
+    if (Number.isFinite(delay)) retry = setTimeout(() => { retry = undefined; schedule(); }, delay);
+  }
 }

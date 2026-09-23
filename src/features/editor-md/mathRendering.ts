@@ -1,16 +1,18 @@
 import { checkMathMarkup, checkMathSource, MATH_LIMITS, mathLimitFailure, type MathLimitReason } from './mathLimits';
+import { MATH_BATCH_LIMITS, type MathWorkerRequest, type MathWorkerResponse } from './mathWorkerProtocol';
 
 export interface MathRendering { html: string; error?: string; limited?: MathLimitReason }
 export interface MathRenderOptions { signal?: AbortSignal; priority?: () => number }
 interface Subscriber { resolve: (value: MathRendering) => void; priority: () => number; clean: () => void }
-interface Task { id: number; key: string; latex: string; display: boolean; subscribers: Set<Subscriber> }
+interface Task { id: number; key: string; latex: string; display: boolean; subscribers: Set<Subscriber>; inFlight?: boolean }
+interface Batch { id: number; pending: Task[]; progressAt: number }
 const cache = new Map<string, MathRendering>();
 let cacheBytes = 0;
 const MAX_CACHE_BYTES = 4 * 1024 * 1024;
 const entryBytes = (key: string, value: MathRendering) => 2 * (key.length + value.html.length + (value.error?.length ?? 0));
 const tasks = new Map<string, Task>();
-let worker: Worker | undefined, active: Task | undefined, sequence = 0;
-let scheduled: ReturnType<typeof setTimeout> | undefined;
+let worker: Worker | undefined, active: Batch | undefined, sequence = 0, batchSequence = 0;
+let scheduled = false;
 let deadline: ReturnType<typeof setTimeout> | undefined;
 let idleRelease: ReturnType<typeof setTimeout> | undefined;
 const failure = (): MathRendering => ({ html: '', error: '公式排版失败，请重试' });
@@ -29,16 +31,31 @@ function remember(task: Task, result: MathRendering) {
   }
 }
 function settle(task: Task, result: MathRendering) {
-  if (active !== task) return;
-  clearTimeout(deadline); deadline = undefined;
-  active = undefined;
+  task.inFlight = false;
   if (tasks.get(task.key) === task) tasks.delete(task.key);
   remember(task, result);
   for (const subscriber of task.subscribers) { subscriber.clean(); subscriber.resolve(result); }
-  task.subscribers.clear(); schedule();
+  task.subscribers.clear();
+}
+function finishBatch(batch: Batch) {
+  if (active !== batch) return;
+  clearTimeout(deadline); deadline = undefined; active = undefined;
+  for (const task of batch.pending) {
+    task.inFlight = false;
+    if (!task.subscribers.size && tasks.get(task.key) === task) tasks.delete(task.key);
+  }
+  schedule();
+}
+function failCurrent(result: MathRendering) {
+  const batch = active;
+  if (!batch) return;
+  const task = batch.pending.shift();
+  if (task) settle(task, result);
+  // Unstarted expressions keep their subscribers and return to the scheduler.
+  finishBatch(batch);
 }
 function schedule() {
-  if (active || scheduled !== undefined) return;
+  if (active || scheduled) return;
   if (!tasks.size) {
     if (worker && idleRelease === undefined) {
       const current = worker;
@@ -50,50 +67,94 @@ function schedule() {
     return;
   }
   clearTimeout(idleRelease); idleRelease = undefined;
-  // Let one IntersectionObserver delivery update all priorities before choosing.
-  scheduled = setTimeout(() => { scheduled = undefined; start(); }, 0);
+  // Coalesce a delivery's callers without adding a timer turn per expression.
+  scheduled = true;
+  queueMicrotask(() => { scheduled = false; start(); });
+}
+function selectBatch(): Task[] {
+  let best = Infinity;
+  const candidates: Task[] = [];
+  for (const task of tasks.values()) {
+    if (!task.subscribers.size) continue;
+    const rank = priority(task);
+    if (rank < best) { best = rank; candidates.length = 0; }
+    if (rank === best) candidates.push(task);
+  }
+  let characters = 0;
+  const selected: Task[] = [];
+  for (const task of candidates) {
+    // An admitted expression larger than the slice source budget runs alone.
+    if (selected.length && characters + task.latex.length > MATH_BATCH_LIMITS.sourceCharacters) break;
+    selected.push(task); characters += task.latex.length;
+    if (selected.length >= MATH_BATCH_LIMITS.expressions) break;
+  }
+  return selected;
+}
+function armDeadline(batch: Batch, milliseconds: number = MATH_LIMITS.workerMilliseconds) {
+  // Fast batches use one watchdog. Results only update the current task's age.
+  deadline = setTimeout(() => {
+    if (active !== batch || !batch.pending.length) return;
+    const remaining = MATH_LIMITS.workerMilliseconds - (performance.now() - batch.progressAt);
+    if (remaining > 0) { armDeadline(batch, remaining); return; }
+    worker?.terminate(); worker = undefined; failCurrent(mathLimitFailure('time'));
+  }, milliseconds);
+}
+function accept(batch: Batch, id: number, result: MathRendering) {
+  if (active !== batch || batch.pending[0]?.id !== id) return;
+  const task = batch.pending.shift()!;
+  settle(task, checkMathMarkup(result.html) ?? result);
+  batch.progressAt = performance.now();
+}
+async function runWithoutWorker(batch: Batch) {
+  // SSR/test fallback has no hard interruption; browsers use the worker path.
+  try {
+    const engine = await import('./mathEngine');
+    const started = performance.now();
+    while (active === batch && batch.pending.length) {
+      const task = batch.pending[0];
+      accept(batch, task.id, await engine.renderMathMarkup(task.latex, task.display));
+      if (performance.now() - started >= MATH_BATCH_LIMITS.milliseconds) break;
+    }
+    // Unlike worker messages, fallback microtasks do not give the browser a
+    // rendering opportunity. Yield once per slice if more source remains.
+    if (tasks.size) await new Promise<void>(resolve => setTimeout(resolve, 0));
+    finishBatch(batch);
+  } catch { failCurrent(failure()); }
 }
 function start() {
   if (active) return;
-  let next: Task | undefined;
-  for (const task of tasks.values()) if (task.subscribers.size && (!next || priority(task) < priority(next))) next = task;
-  if (!next) return;
-  active = next;
-  const task = next;
-  if (typeof Worker === 'undefined') {
-    void import('./mathEngine').then(engine => engine.renderMathMarkup(task.latex, task.display)).then(result => settle(task, result), () => settle(task, failure()));
-    return;
-  }
+  const pending = selectBatch();
+  if (!pending.length) return;
+  const batch: Batch = { id: ++batchSequence, pending, progressAt: performance.now() };
+  active = batch;
+  for (const task of pending) task.inFlight = true;
+  if (typeof Worker === 'undefined') { void runWithoutWorker(batch); return; }
   if (!worker) {
     try {
       const current = new Worker(new URL('./mathWorker.ts', import.meta.url), { type: 'module' });
       worker = current;
-      current.onmessage = ({ data }: MessageEvent<{ id: number; result: MathRendering }>) => {
-        if (worker === current && active?.id === data.id) settle(active, checkMathMarkup(data.result.html) ?? data.result);
+      current.onmessage = ({ data }: MessageEvent<MathWorkerResponse>) => {
+        if (worker !== current || active?.id !== data.batchId) return;
+        if ('result' in data) accept(active, data.id, data.result);
+        if (data.done) finishBatch(active);
       };
       current.onerror = () => {
         if (worker !== current) return;
-        current.terminate(); worker = undefined;
-        if (active) settle(active, failure());
+        current.terminate(); worker = undefined; failCurrent(failure());
       };
-    } catch { settle(task, failure()); return; }
+    } catch { failCurrent(failure()); return; }
   }
   try {
-    worker.postMessage({ id: task.id, latex: task.latex, displayMode: task.display });
-    // KaTeX has no cooperative interruption during macro expansion. This is a
-    // hard worker-lifetime bound, in addition to source/output admission limits.
-    deadline = setTimeout(() => {
-      if (active !== task) return;
-      worker?.terminate(); worker = undefined; settle(task, mathLimitFailure('time'));
-    }, MATH_LIMITS.workerMilliseconds);
+    const request: MathWorkerRequest = { batchId: batch.id, expressions: pending.map(task => ({ id: task.id, latex: task.latex, displayMode: task.display })) };
+    worker.postMessage(request); armDeadline(batch);
   }
-  catch { settle(task, failure()); }
+  catch { failCurrent(failure()); }
 }
 
-/** One worker owns only one expression at a time; waiting requests stay on the
- * main-thread scheduler so newly visible work can pass distant matrix cells.
- * Aborting the final subscriber terminates even synchronous KaTeX work. Export
- * callers share the cache but have an independent, non-cancellable subscriber. */
+/** Requests coalesce into bounded, single-priority worker slices. Each completed
+ * expression streams back without a round trip; priorities are reconsidered at
+ * every slice. Cancellation is per consumer, while already dispatched work may
+ * finish and warm the bounded cache. Export owns an independent subscriber. */
 export function renderMath(latex: string, displayMode: boolean, options: MathRenderOptions = {}): Promise<MathRendering> {
   if (options.signal?.aborted) return Promise.reject(new DOMException('Formula rendering cancelled', 'AbortError'));
   const refused = checkMathSource(latex); if (refused) return Promise.resolve(refused);
@@ -108,8 +169,7 @@ export function renderMath(latex: string, displayMode: boolean, options: MathRen
       subscriber.clean(); current.subscribers.delete(subscriber);
       reject(new DOMException('Formula rendering cancelled', 'AbortError'));
       if (!current.subscribers.size) {
-        if (tasks.get(key) === current) tasks.delete(key);
-        if (active === current && worker) { clearTimeout(deadline); deadline = undefined; worker.terminate(); worker = undefined; active = undefined; }
+        if (!current.inFlight && tasks.get(key) === current) tasks.delete(key);
         schedule();
       }
     };
