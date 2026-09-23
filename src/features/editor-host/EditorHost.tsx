@@ -119,13 +119,16 @@ class EditorErrorBoundary extends Component<EditorErrorBoundaryProps, EditorErro
 // ── 加载中 fallback（目标文件名 + 稳定背景尺寸） ──
 
 function EditorLoadingFallback({ displayName }: { displayName: string }): ReactNode {
-  // 只统计真正挂载的加载占位，避免 render 重试及 StrictMode 重演把一次展示计成多次。
+  // Fast module resolution should not flash a loading page. This only delays
+  // feedback, never the ready editor; slow I/O still gets a readable status.
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setVisible(true), 150); return () => clearTimeout(timer); }, []);
   const countedRef = useRef(false);
   useEffect(() => {
-    if (countedRef.current) return;
+    if (!visible || countedRef.current) return;
     countedRef.current = true;
     noteEditorFallbackShown();
-  }, []);
+  }, [visible]);
   return (
     <div
       style={{
@@ -141,18 +144,7 @@ function EditorLoadingFallback({ displayName }: { displayName: string }): ReactN
         fontFamily: 'var(--ui-font-family, sans-serif)',
       }}
     >
-      <div style={{ fontSize: 13 }}>正在加载「{displayName}」的编辑器…</div>
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          border: '2px solid var(--editor-border, #e2e8f0)',
-          borderTopColor: 'var(--accent, #3b82f6)',
-          borderRadius: '50%',
-          animation: 'nb-editor-spin 0.8s linear infinite',
-        }}
-      />
-      <style>{'@keyframes nb-editor-spin { to { transform: rotate(360deg); } }'}</style>
+      {visible && <div role="status" style={{ fontSize: 13 }}>正在打开「{displayName}」…</div>}
     </div>
   );
 }

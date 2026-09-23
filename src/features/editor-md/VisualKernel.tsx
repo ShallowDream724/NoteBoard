@@ -14,7 +14,7 @@ import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
 import { on, off, emit } from '../../core/emitter';
 import { registerShortcut } from '../../core/shortcuts';
 import { buildExtensions } from './extensions';
-import { getMarkdownManager } from './serialize';
+import { getMarkdownManager, initializeMarkdownContent } from './serialize';
 // 🔴 J2：输入热路径只暂存不可变快照（O(1)）；序列化按历史组延迟执行
 import {
   stagePendingVisualSnapshot,
@@ -67,6 +67,12 @@ function makeLinkModalOpener(docKey: string): () => void {
   };
 }
 
+function makeInitialContentLoader(docKey: string) {
+  return ({ editor }: { editor: Editor }) => {
+    initializeMarkdownContent(editor, useDocumentStore.getState().getDocument(docKey)?.content ?? '');
+  };
+}
+
 export function VisualKernel({
   docKey,
   visible,
@@ -83,6 +89,7 @@ export function VisualKernel({
   const extensions = useMemo(() => buildExtensions(docKey, {
     onOpenLinkModal: makeLinkModalOpener(docKey),
   }), [docKey]);
+  const initializeContent = useMemo(() => makeInitialContentLoader(docKey), [docKey]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   // 超链接插入与编辑弹窗状态
   const [linkModalState, setLinkModalState] = useState<{
@@ -101,6 +108,7 @@ export function VisualKernel({
     //    泄漏一个完整 editor 圈（真机内存持续增长根因）
     extensions,
     content: '',
+    onBeforeCreate: initializeContent,
     shouldRerenderOnTransaction: false,
     onUpdate: ({ editor, transaction }) => {
       // 🔴 程序事务识别：仅忽略初始化/程序化设置内容的事务（同步作用域锁）；

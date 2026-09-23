@@ -10,7 +10,7 @@
 // 3. 编辑器内核持有内容权威副本，store 里的是防抖后镜像。
 // 4. onUpdate 500ms → store；800ms → 盘（auto 策略，VisualKernel/源码模式各自实现）。
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
@@ -103,14 +103,20 @@ interface TipTapEditorProps {
 }
 
 export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
-  const [viewMode, setViewMode] = useState<'visual' | 'source'>('visual');
+  const initialView = useMemo(() => {
+    const document = useDocumentStore.getState().getDocument(docKey);
+    const verdict = judgeLargeDoc(document?.content ?? '', document?.size);
+    const requested = useWindowStore.getState().getTab(docKey)?.viewMode ?? useSettingsStore.getState().settings.editor.defaultViewMode;
+    return { verdict, mode: verdict.isLarge ? 'source' as const : requested };
+  }, [docKey]);
+  const [viewMode, setViewMode] = useState<'visual' | 'source'>(initialView.mode);
   // 始终记录最新模式，供只在真正卸载时执行的清理逻辑读取
-  const viewModeRef = useRef<'visual' | 'source'>('visual');
+  const viewModeRef = useRef<'visual' | 'source'>(initialView.mode);
   const [showLargeBanner, setShowLargeBanner] = useState(false);
   const [largeVerdict, setLargeVerdict] = useState<ReturnType<typeof judgeLargeDoc> | null>(null);
   // 🔴 S08：TipTap 内核惰性挂载——首次进入 visual 模式才挂载 VisualKernel，
   //    挂载后常驻（display 切换）；source 初始模式不创建 TipTap 实例
-  const [hasVisualKernel, setHasVisualKernel] = useState(false);
+  const [hasVisualKernel, setHasVisualKernel] = useState(initialView.mode === 'visual');
   // editor 实例由 VisualKernel onReady 回传（替代原 useEditor 返回值）
   const [editor, setEditorState] = useState<Editor | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -522,7 +528,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const content = currentDoc.content ?? '';
 
     // 大文档判定
-    const verdict = judgeLargeDoc(content, currentDoc.size);
+    const verdict = initialView.verdict;
     setLargeVerdict(verdict);
     // 先确定初始模式，文件历史的首节点必须采用当前权威内核实际展示的内容
     const tab = useWindowStore.getState().getTab(docKey);

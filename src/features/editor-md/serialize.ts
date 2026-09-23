@@ -5,7 +5,7 @@
 // 不变式 I-13: 打开文件后，序列化的结果必须等于磁盘原文（否则"什么都没做就变脏"）
 // 不变式 I-14: 打开 → 切 visual → 切 source → tab 不出现脏圆点
 
-import type { Editor } from '@tiptap/core';
+import type { Editor, JSONContent } from '@tiptap/core';
 
 // CommonMark 允许反斜杠转义的 ASCII 标点；这些字符前的双反斜杠不能擅自折叠，
 // 否则原本可见的反斜杠会在下一次解析时被当成转义符吞掉。
@@ -489,11 +489,51 @@ function deduplicateParsedMarkdownMarks(root: ParsedMarkdownNode): void {
   root.content?.forEach(deduplicateParsedMarkdownMarks);
 }
 
+function parseMarkdownJSON(editor: Editor, markdown: string): JSONContent | null {
+  if (!markdown.trim()) return { type: 'doc', content: [{ type: 'paragraph' }] };
+  const parsed = getMarkdownManager(editor)?.parse?.(markdown);
+  if (!parsed) return null;
+  deduplicateParsedMarkdownMarks(parsed as ParsedMarkdownNode);
+  return parsed;
+}
+
+/** Before the first EditorState/view exists, seed its real document directly.
+ * There is no empty editor, replacement transaction or second schema conversion. */
+export function initializeMarkdownContent(editor: Editor, markdown: string): void {
+  let doc;
+  try {
+    const parsed = parseMarkdownJSON(editor, markdown);
+    if (parsed) doc = editor.schema.nodeFromJSON(parsed);
+  }
+  catch (error) { console.error('[NoteBoard] Markdown 解析失败，保留原文:', error); }
+  doc ??= editor.schema.topNodeType.create(null, editor.schema.nodes.paragraph.create(null, markdown ? editor.schema.text(markdown) : undefined));
+  // TrailingNode normally normalizes after a replacement transaction. Seed the
+  // same editable tail now so the first real keystroke cannot change a clean
+  // document's baseline merely by appending that structural paragraph.
+  const trailing = editor.extensionManager.extensions.find(extension => extension.name === 'trailingNode');
+  if (trailing) {
+    const options = trailing.options as { node?: string; notAfter?: string | string[] };
+    const name = options.node ?? editor.schema.topNodeType.contentMatch.defaultType?.name ?? 'paragraph';
+    const excluded = Array.isArray(options.notAfter) ? options.notAfter : options.notAfter ? [options.notAfter] : [];
+    const last = doc.lastChild?.type.name;
+    if (last !== name && !excluded.includes(last ?? '')) {
+      doc = doc.copy(doc.content.addToEnd(editor.schema.nodes[name].create()));
+    }
+  }
+  // Tiptap createDocument/createNodeFromContent accept a ProseMirror Node and
+  // reuse it directly, although EditorOptions.content has a narrower TS type.
+  // Keep the adaptation here; the constructor identity contract covers upgrades.
+  editor.options.content = doc as unknown as Editor['options']['content'];
+  lastParsed.set(editor, { doc, markdown });
+}
+
 export function parseMarkdown(
   editor: Editor,
   markdown: string,
   origin: 'sync' | 'history' = 'sync',
 ): void {
+  const previous = lastParsed.get(editor);
+  if (previous?.doc === editor.state.doc && previous.markdown === markdown) return;
   if (markdown.trim() === '') {
     // 空内容同样必须显式控制历史，否则初次打开空文件后可能出现伪撤销步骤
     replaceEditorContent(
@@ -505,13 +545,9 @@ export function parseMarkdown(
     return;
   }
   try {
-    const manager = getMarkdownManager(editor);
-    const parsed = manager?.parse?.(markdown);
-    if (parsed) {
-      // @tiptap/markdown 的 marked 适配器在长文档的相邻粗体边界上可能返回
-      // bold,bold 等非法 mark 集合；进入 schema 前统一修复并显式校验。
-      deduplicateParsedMarkdownMarks(parsed as ParsedMarkdownNode);
-      editor.schema.nodeFromJSON(parsed);
+    const json = parseMarkdownJSON(editor, markdown);
+    if (json) {
+      const parsed = editor.schema.nodeFromJSON(json);
       replaceEditorContent(
         editor,
         editor.chain().setContent(parsed, { contentType: 'json' }),

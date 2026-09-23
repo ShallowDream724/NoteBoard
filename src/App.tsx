@@ -32,6 +32,7 @@ import {
 } from './features/welcome/welcomeActions';
 import { saveAs } from './features/editor-code/orchestration/saveDocument';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { prefetchEditor } from './features/editor-host/editorLoaders';
 import { startStagingManager } from './features/staging/stagingManager';
 import { checkActiveDocumentStillExists } from './features/external/missingFileGuard';
 import {
@@ -111,6 +112,9 @@ export default function App() {
       perfMark('window_boot_done', { intentType: boot.startupMode, bootMs: Math.round(performance.now() - intentStart) });
       if (disposed) return;
       // 设置初始化（字体服务独立，不阻塞渲染）
+      // Prepare the primary editor while native settings/restore I/O is pending.
+      // Loading its module creates no editor, document model or preview workers.
+      prefetchEditor('markdown');
       await init();
       perfMark('settings_init_done');
       // 初始化加载收藏夹数据
