@@ -2,6 +2,7 @@ import { paperSize, type LayoutIssue, type LayoutReport, type PdfOptions } from 
 import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
 import { readableScale, renderedScale } from './layoutMetrics';
 import { continueFraction, continueMatrix } from './mathLayout';
+import { createProseOverflowCheck } from './proseOverflow';
 
 const ITEM_URI = 'https://noteboard.invalid/export-item/';
 function extent(element: HTMLElement) {
@@ -18,7 +19,7 @@ function availableWidth(element: HTMLElement, width: number) {
 
 /** Clone only retained cells. Work is proportional to output size, not to
  * original cells multiplied by every continuation group. */
-function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: TablePlan): HTMLElement | null {
+function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: TablePlan): { group: HTMLElement; original: string } | null {
   const rows = Array.from(table.rows), count = rows[0]?.cells.length ?? 0;
   if (count < 3 || rows.some(row => Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan > 1))) return null;
   const group = document.createElement('div'); group.dataset.exportTableGroup = table.dataset.exportItem;
@@ -44,7 +45,8 @@ function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: Tab
     const caption = document.createElement('div'); caption.className = 'table-continuation'; caption.textContent = `续表 ${part + 1}`;
     group.append(caption, clone);
   }
-  table.replaceWith(group); return group;
+  const original = table.outerHTML;
+  table.replaceWith(group); return { group, original };
 }
 
 function itemLinks(elements: Iterable<HTMLElement>, adjustable: Set<string>) {
@@ -90,6 +92,7 @@ export function createLayoutSession(root: HTMLElement) {
   const formulaOriginals = new Map<string, string>(); // only structurally continued formulas
   const itemIndex = new Map<string, HTMLElement[]>();
   const groups = new Map<string, HTMLElement>();
+  const checkProseOverflow = createProseOverflowCheck(root);
   const register = (scope: HTMLElement) => {
     for (const element of scope.querySelectorAll<HTMLElement>('[data-export-item]')) {
       const id = element.dataset.exportItem!;
@@ -157,11 +160,11 @@ export function createLayoutSession(root: HTMLElement) {
       else {
         const manual = tableWidths[index].manual;
         if (mode === 'columns' || mode === 'auto') {
-          const original = table.outerHTML;
           const plan = planTableColumns(tableWidths[index].columns, width, mode === 'columns' ? 1 : readableScale(table, options.fontPt));
           if (plan?.bands.length === 1) { fit(table, width, tableWidths[index].width); return; }
-          const group = plan && splitColumns(table, tableWidths[index].columns, plan);
-          if (group) {
+          const split = plan && splitColumns(table, tableWidths[index].columns, plan);
+          if (split) {
+            const { group, original } = split;
             originals.set(id, original); groups.set(id, group);
             const ids = new Set([id, ...Array.from(table.querySelectorAll<HTMLElement>('[data-export-item]'), e => e.dataset.exportItem!)]);
             ids.forEach(key => itemIndex.delete(key)); register(group);
@@ -246,16 +249,10 @@ export function createLayoutSession(root: HTMLElement) {
     }
     // Final geometry includes prose, headings, code, and imported block markup.
     // A clipping boundary is never itself evidence that a document fits.
-    issues.delete('document-overflow');
-    const boundary = root.getBoundingClientRect();
-    for (const element of root.querySelectorAll<HTMLElement>('p,h1,h2,h3,h4,h5,h6,pre,li,blockquote,.github-alert')) {
-      if (element.closest('[data-export-item]')) continue;
-      const box = element.getBoundingClientRect();
-      if (box.right > boundary.right + 1 || box.left < boundary.left - 1 || element.scrollWidth * renderedScale(element) > box.width + 1) {
-        issues.set('document-overflow', [{ id: '', message: '有正文或代码超出页面边界，请调整内容或页面设置。', blocking: true }]); break;
-      }
-    }
-    itemLinks([...changed].flatMap(elements), adjustable);
+    const changedElements = [...changed].flatMap(elements);
+    if (checkProseOverflow(!!global, changedElements)) issues.set('document-overflow', [{ id: '', message: '有正文或代码超出页面边界，请调整内容或页面设置。', blocking: true }]);
+    else issues.delete('document-overflow');
+    itemLinks(changedElements, adjustable);
     previous = options;
     return { issues: [...issues.values()].flat(), adjustable: [...adjustable] };
   } };

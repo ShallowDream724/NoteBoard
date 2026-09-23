@@ -10,7 +10,7 @@ import type { Editor } from '@tiptap/core';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
-import { lastAtOrBefore } from '../../core/dom/orderedPosition';
+import { HeadingGeometry } from './headingGeometry';
 
 interface OutlinePanelProps {
   editor: Editor | null;
@@ -180,69 +180,27 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     const scrollContainer = findScrollContainer(editor.view.dom);
     const editorRoot = editor.view.dom;
     let frame = 0;
-    let dirty = true;
-    let geometry: { id: string; top: number; pos: number }[] = [];
-    const invalidate = () => { dirty = true; };
+    const geometry = new HeadingGeometry(editorRoot, pos => editor.view.nodeDOM(pos));
+    geometry.setHeadings(headingItemsRef.current);
+    const invalidate = () => geometry.setHeadings(headingItemsRef.current);
     invalidateGeometryRef.current = invalidate;
-    const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(invalidate);
-    const topLevel = new Set<Element>([editorRoot, scrollContainer, ...editorRoot.children]);
-    let nestedFlow = new Set<Element>();
-    for (const element of topLevel) resize?.observe(element);
-    // Only source-layout boxes can invalidate geometry. Matrix preview cells are
-    // painted inside a fixed-size NodeView and must not create a heading scan per scroll.
-    const mutations = new MutationObserver(records => {
-      for (const record of records) {
-        for (const node of record.removedNodes) if (node instanceof Element && topLevel.delete(node) && !nestedFlow.has(node)) resize?.unobserve(node);
-        for (const node of record.addedNodes) if (node instanceof Element && !topLevel.has(node)) { topLevel.add(node); resize?.observe(node); }
-      }
-      for (const element of nestedFlow) if (!editorRoot.contains(element)) { nestedFlow.delete(element); resize?.unobserve(element); }
-      invalidate();
-    });
-    mutations.observe(editorRoot, { childList: true });
-    editor.on('update', invalidate);
+    const handleUpdate = () => geometry.invalidateStructure();
+    editor.on('update', handleUpdate);
     const handleScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
         frame = 0;
         if (editor.isDestroyed || !scrollContainer.clientHeight) return;
-        if (dirty) {
-          const origin = scrollContainer.getBoundingClientRect().top - scrollContainer.scrollTop;
-          geometry = [];
-          const flowParents = new Set<Element>();
-          const nextNestedFlow = new Set<Element>();
-          for (const heading of headingItemsRef.current) {
-            const dom = editor.view.nodeDOM(heading.pos);
-            if (!(dom instanceof HTMLElement)) continue;
-            if (dom.getClientRects().length) geometry.push({ id: heading.id, pos: heading.pos, top: dom.getBoundingClientRect().top - origin });
-            // A short table cell can grow without changing its row's total height.
-            // Observe direct flow siblings along heading ancestors, never descendants
-            // inside sibling NodeViews (in particular, no virtual matrix cells).
-            for (let parent = dom.parentElement; parent && parent !== editorRoot; parent = parent.parentElement) {
-              if (flowParents.has(parent)) break;
-              flowParents.add(parent);
-              for (const child of parent.children) nextNestedFlow.add(child);
-            }
-          }
-          for (const element of nestedFlow) if (!nextNestedFlow.has(element) && !topLevel.has(element)) resize?.unobserve(element);
-          for (const element of nextNestedFlow) if (!nestedFlow.has(element) && !topLevel.has(element)) resize?.observe(element);
-          nestedFlow = nextNestedFlow;
-          // Table cells may have nonmonotonic Y in document order. Rebuilding costs
-          // O(H) geometry reads + O(H log H) sorting; ordinary scrolling costs O(log H).
-          geometry.sort((a, b) => a.top - b.top || a.pos - b.pos);
-          dirty = false;
-        }
-        const index = lastAtOrBefore(geometry.length, i => geometry[i].top, scrollContainer.scrollTop + 40);
-        setActiveId(index >= 0 ? geometry[index].id : null);
+        setActiveId(geometry.at(scrollContainer.getBoundingClientRect().top + 40));
       });
     };
 
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
-      editor.off('update', invalidate);
+      editor.off('update', handleUpdate);
       if (invalidateGeometryRef.current === invalidate) invalidateGeometryRef.current = null;
-      resize?.disconnect();
-      mutations.disconnect();
+      geometry.destroy();
       cancelAnimationFrame(frame);
     };
   }, [editor, setActiveId]);
