@@ -2,7 +2,7 @@
 // 自研 infographicBlock 节点 + 视口门控 + 就地编辑 + 模板选择 + 全屏缩放预览
 // 信息图是纯 DOM 渲染，对外只产出图片：复制/导出 SVG 矢量图或 PNG 位图
 
-import { useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useMemo, useRef } from 'react';
 import { InfographicNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
@@ -21,160 +21,13 @@ import { observe } from './viewportActivation';
 import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
+import './infographicExtension.css';
 
-/** Infographic 交互微反馈样式注入（支持 Hover 与 Active 动效反馈） */
-const INFOGRAPHIC_STYLES = `
-/* 顶部操作小图标按钮反馈 */
-.nb-info-icon-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-  padding: 3px 6px;
-  border-radius: 4px;
-  color: var(--editor-text-muted, #64748b);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.nb-info-icon-btn:hover {
-  background: var(--toolbar-hover, #f1f5f9);
-  color: var(--editor-text, #1e293b);
-  border-color: var(--editor-border, #e2e8f0);
-}
-.nb-info-icon-btn:active {
-  background: var(--toolbar-active, #e2e8f0);
-  transform: scale(0.95);
-}
-
-/* 预设模板触发按钮反馈 */
-.nb-info-tmpl-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  border: 1px solid var(--editor-border, #cbd5e1);
-  background: var(--editor-surface, #ffffff);
-  color: var(--editor-accent, #3b82f6);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.nb-info-tmpl-trigger:hover {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: var(--editor-accent, #3b82f6);
-}
-.nb-info-tmpl-trigger:active {
-  background: rgba(59, 130, 246, 0.16);
-  transform: scale(0.96);
-}
-
-/* 下拉菜单项反馈 */
-.nb-info-dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--editor-text, #1e293b);
-  border-bottom: 1px solid var(--editor-border, #f1f5f9);
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.nb-info-dropdown-item:last-child {
-  border-bottom: none;
-}
-.nb-info-dropdown-item:hover {
-  background: var(--toolbar-hover, #f1f5f9);
-}
-.nb-info-dropdown-item:active {
-  background: var(--toolbar-active, #e2e8f0);
-  transform: scale(0.985);
-}
-
-/* 主操作按钮（完成） */
-.nb-info-btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 10px;
-  border-radius: 4px;
-  background: var(--editor-accent, #3b82f6);
-  color: #ffffff;
-  border: 1px solid transparent;
-  font-size: 12px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.nb-info-btn-primary:hover {
-  background: #2563eb;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
-}
-.nb-info-btn-primary:active {
-  background: #1d4ed8;
-  transform: scale(0.96);
-}
-
-/* 次要操作按钮（取消） */
-.nb-info-btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--editor-text-muted, #64748b);
-  border: 1px solid var(--editor-border, #e2e8f0);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-}
-.nb-info-btn-secondary:hover {
-  background: var(--toolbar-hover, #f1f5f9);
-  color: var(--editor-text, #1e293b);
-  border-color: #cbd5e1;
-}
-.nb-info-btn-secondary:active {
-  background: var(--toolbar-active, #e2e8f0);
-  transform: scale(0.96);
-}
-
-/* 关闭按钮 */
-.nb-info-close-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  color: var(--editor-text-muted, #64748b);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-.nb-info-close-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-.nb-info-close-btn:active {
-  background: rgba(239, 68, 68, 0.2);
-  transform: scale(0.92);
-}
-`;
+const MemoInfographicRenderer = memo(InfographicRenderer);
 
 function InfographicComponent({ node, updateAttributes, selected }: NodeViewProps) {
+  // 首次进入共享 observer 的 800px 预加载范围后保留预览，滚动不会重建图表或编辑状态。
+  const [activated, setActivated] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
@@ -189,8 +42,11 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
   const dropdownRef = useRef<HTMLDivElement>(null);
   const code = node.attrs.code || '';
 
-  // 解析当前代码
-  const { data, error } = parseInfographicCode(code);
+  // 未访问的屏外节点既不解析配置，也不挂载完整图表；交互状态变化复用已解析数据。
+  const { data, error } = useMemo(
+    () => activated ? parseInfographicCode(code) : { data: null, error: null },
+    [activated, code],
+  );
 
   // 导出来源：解析成功且对应渲染节点已挂载才可用
   const activeEl = fullscreen ? fullscreenEl : inlineEl;
@@ -198,14 +54,15 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
     !error && data && activeEl ? { kind: 'element', element: activeEl } : null;
   const exportFileName = buildExportFileName('', 'infographic');
 
-  // 视口门控优化监听挂载
+  // 一次性激活；无 IntersectionObserver 的环境由 observe 立即回退到渲染。
   useEffect(() => {
+    if (activated) return;
     const el = containerRef.current;
     if (!el) return;
 
-    const unobserve = observe(el, () => {}, { once: true });
+    const unobserve = observe(el, () => setActivated(true), { once: true });
     return unobserve;
-  }, []);
+  }, [activated]);
 
   // 点击外部自动关闭下拉模板选择面板
   useEffect(() => {
@@ -222,7 +79,6 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
   if (editing) {
     return (
       <NodeViewWrapper as="div" style={{ display: 'block', margin: '14px 0' }}>
-        <style>{INFOGRAPHIC_STYLES}</style>
         <div
           style={{
             border: '1px solid var(--editor-accent, #3b82f6)',
@@ -371,7 +227,6 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
 
   return (
     <NodeViewWrapper as="div" style={{ display: 'block', margin: '14px 0' }} selected={selected}>
-      <style>{INFOGRAPHIC_STYLES}</style>
       <div
         ref={containerRef}
         className="nb-infographic-container"
@@ -425,6 +280,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
                 type="button"
                 className="nb-info-icon-btn"
                 onClick={() => {
+                  setActivated(true);
                   setEditValue(code);
                   setEditing(true);
                 }}
@@ -450,7 +306,10 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
               <button
                 type="button"
                 className="nb-info-icon-btn"
-                onClick={() => setFullscreen(true)}
+                onClick={() => {
+                  setActivated(true);
+                  setFullscreen(true);
+                }}
                 aria-label="全屏放大查看"
               >
                 <Maximize2 size={12} />
@@ -462,6 +321,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
         {/* 内容展示区 */}
         <div
           onDoubleClick={() => {
+            setActivated(true);
             setEditValue(code);
             setEditing(true);
           }}
@@ -499,8 +359,14 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
 
           {!error && data && (
             <div ref={setInlineEl} style={{ width: '100%' }}>
-              <InfographicRenderer data={data} />
+              <MemoInfographicRenderer data={data} />
             </div>
+          )}
+
+          {!activated && code && (
+            <span style={{ color: 'var(--editor-text-muted, #64748b)', fontSize: 13 }}>
+              信息图预览
+            </span>
           )}
 
           {!code && (
@@ -587,7 +453,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
                   boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
                 }}
               >
-                <InfographicRenderer data={data} />
+                <MemoInfographicRenderer data={data} />
               </div>
             )}
           </div>

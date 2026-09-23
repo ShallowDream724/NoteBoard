@@ -134,11 +134,15 @@ function reversePatch(patch: TextPatch): TextPatch {
 /** 物化指定节点的完整内容（带相邻缓存与链式回溯） */
 function materializeNode(state: DocumentHistoryState, index: number): string {
   const node = state.entries[index];
-  if (node.checkpoint !== null) return node.checkpoint;
+  if (node.checkpoint !== null) {
+    state.lastMaterialized = { index, content: node.checkpoint };
+    return node.checkpoint;
+  }
 
-  // 相邻缓存：目标恰为缓存节点的前驱（逆向撤销路径）或后继（正向路径）
+  // 当前或相邻缓存：记录后再次读取当前全文无需重放；相邻导航只应用一个补丁。
   const cached = state.lastMaterialized;
   if (cached) {
+    if (cached.index === index) return cached.content;
     if (cached.index === index + 1 && state.entries[index + 1]?.patch) {
       const content = applyPatch(cached.content, reversePatch(state.entries[index + 1].patch!));
       state.lastMaterialized = { index, content };
@@ -473,8 +477,6 @@ export function recordDocumentChange(
     };
     state.checkpointDistance = 0;
   }
-  state.lastMaterialized = { index: state.index, content };
-
   if (state.entries.length > MAX_HISTORY_ENTRIES) {
     const overflow = state.entries.length - MAX_HISTORY_ENTRIES;
     // 🔴 J1：淘汰最老节点前先物化"将保留的最老节点"——
@@ -497,6 +499,8 @@ export function recordDocumentChange(
       }
     }
   }
+  // 头部裁剪会临时物化幸存首节点并平移索引；恢复当前全文缓存必须在裁剪之后。
+  state.lastMaterialized = { index: state.index, content };
   state.lastEditMode = options.mode;
   state.forceNextGroup = false;
   notifyHistoryChange(docKey);
