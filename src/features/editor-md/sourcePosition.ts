@@ -106,6 +106,19 @@ interface Block {
   sourceStart: number; sourceEnd: number;
 }
 
+interface PositionIndex {
+  doc: DocumentNode;
+  markdown: string;
+  located: Located;
+  tokens: Token[];
+  blocks: Block[] | null;
+}
+
+// One index per live editor, replaced after either representation changes. The
+// immutable root identity makes selection-only transactions a cheap cache hit;
+// weak ownership never keeps a closed editor or older document history alive.
+const positionIndexes = new WeakMap<Editor, PositionIndex>();
+
 /** Marked normalizes newlines. Keep only line spans to recover original UTF-16
  * offsets, including CRLF; LF input reuses the supplied string without copying. */
 function sourceLocation(markdown: string): Located {
@@ -189,31 +202,37 @@ function mapBlock(block: Block, direction: 'source' | 'visual', selection: { anc
     direction, selection, { source: block.sourceStart, visual: visualStart });
 }
 
-/** One transient lexer result; only selected known blocks get a character walk.
- * No node JSON/serialization, retained full text, token cache or character arrays. */
+/** Build only on explicit mode transfer. Repeated transfers reuse one snapshot;
+ * only selected known blocks get a character walk, never preceding blocks. */
 export function mapModeSelection(editor: Editor, markdown: string, direction: 'source' | 'visual', selection: { anchor: number; head: number }) {
   const manager = editor.storage.markdown?.manager as unknown as (MarkdownManagerLike & { instance?: { lexer: (text: string) => Token[] } }) | undefined;
   if (!manager?.instance) return { anchor: 0, head: 0 };
-  const located = sourceLocation(markdown);
-  const tokens = manager.instance.lexer(located.text);
-  const blocks = locateBlocks(tokens, located, editor.state.doc);
+  let index = positionIndexes.get(editor);
+  if (index?.doc !== editor.state.doc || index.markdown !== markdown) {
+    const located = sourceLocation(markdown);
+    const tokens = manager.instance.lexer(located.text);
+    index = { doc: editor.state.doc, markdown, located, tokens, blocks: locateBlocks(tokens, located, editor.state.doc) };
+    positionIndexes.set(editor, index);
+  }
+  const { located, tokens, blocks } = index;
   const maximum = direction === 'source' ? markdown.length : editor.state.doc.content.size;
   if (blocks?.length) {
     const selectBlock = (point: number, affinity: 'left' | 'right') => {
-      let previous: Block | undefined;
-      for (const block of blocks) {
-        const start = direction === 'source' ? block.visualStart : block.sourceStart;
-        const end = direction === 'source' ? block.visualStart + block.node.nodeSize : block.sourceEnd;
-        if (point < end || (point === end && (direction === 'visual' || affinity === 'left'))) {
-          if (previous && point < start) {
-            const previousEnd = direction === 'source' ? previous.visualStart + previous.node.nodeSize : previous.sourceEnd;
-            return point - previousEnd <= start - point ? previous : block;
-          }
-          return block;
-        }
-        previous = block;
+      const endOf = (block: Block) => direction === 'source' ? block.visualStart + block.node.nodeSize : block.sourceEnd;
+      const includeEnd = direction === 'visual' || affinity === 'left';
+      let low = 0, high = blocks.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1, end = endOf(blocks[middle]);
+        if (point < end || (includeEnd && point === end)) high = middle;
+        else low = middle + 1;
       }
-      return blocks[blocks.length - 1];
+      const block = blocks[Math.min(low, blocks.length - 1)];
+      const previous = low > 0 ? blocks[low - 1] : undefined;
+      const start = direction === 'source' ? block.visualStart : block.sourceStart;
+      if (previous && point < start) {
+        return point - endOf(previous) <= start - point ? previous : block;
+      }
+      return block;
     };
     const forward = selection.anchor <= selection.head;
     const anchorBlock = selectBlock(selection.anchor, forward ? 'right' : 'left');

@@ -1,6 +1,6 @@
 {
   "name": "noteboard",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Windows 桌面笔记 + 画板软件",
   "type": "module",
   "license": "GPL-3.0-only",
@@ -86,6 +86,7 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^0.460.0",
     "markdown-it": "^14.1.0",
+    "marked": "17.0.6",
     "mermaid": "^11.12.2",
     "mitt": "^3.0.1",
     "pdfjs-dist": "6.3.289",

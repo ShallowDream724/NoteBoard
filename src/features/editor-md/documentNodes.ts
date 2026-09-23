@@ -3,6 +3,7 @@ import { Node, mergeAttributes, type MarkdownToken, type MarkdownTokenizer } fro
 import { findMathStart, readMath, readMathBlock, writeMath, type MathDelimiter, type MathSource } from './mathSyntax';
 import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
 import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
+import { currentParagraph } from './markdownLexer';
 
 type MathToken = MarkdownToken & MathSource;
 const inlineTokenizer: MarkdownTokenizer = {
@@ -14,7 +15,7 @@ const inlineTokenizer: MarkdownTokenizer = {
 };
 const blockTokenizer: MarkdownTokenizer = {
   name: 'mathBlock', level: 'block',
-  start: source => /^ {0,3}(?:\$\$|\\\[)/m.exec(source)?.index ?? -1,
+  start: source => /^ {0,3}(?:\$\$|\\\[)/m.exec(currentParagraph(source))?.index ?? -1,
   tokenize(source) {
     const match = readMathBlock(source);
     return match ? { type: 'mathBlock', raw: match.raw, latex: match.latex, delimiter: match.delimiter } : undefined;
@@ -64,7 +65,7 @@ export const AlertNode = Node.create({
   markdownTokenName: 'githubAlert',
   markdownTokenizer: {
     name: 'githubAlert', level: 'block',
-    start: source => /^ {0,3}>[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/im.exec(source)?.index ?? -1,
+    start: source => /^ {0,3}>[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/im.exec(currentParagraph(source))?.index ?? -1,
     tokenize(source, _tokens, lexer) {
       const header = /^ {0,3}>[ \t]*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i.exec(source);
       if (!header) return undefined;

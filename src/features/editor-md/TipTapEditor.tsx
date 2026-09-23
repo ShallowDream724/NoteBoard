@@ -123,6 +123,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 持有最新 TipTap 实例，供仅按 docKey 注册的卸载清理读取，避免模式切换触发误清理
   const tipTapEditorRef = useRef<Editor | null>(null);
   const sourceViewRef = useRef<EditorView | null>(null);
+  const sourceContentRef = useRef<{ text: EditorView['state']['doc']; markdown: string } | null>(null);
   const sourceDivRef = useRef<HTMLDivElement>(null);
   const storeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const diskTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -305,13 +306,24 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     };
   }, []);
 
+  // Keep one materialized string per immutable source snapshot. Focus/selection
+  // changes preserve Text identity and do not copy the whole rope on each toggle.
+  const readSourceContent = useCallback(() => {
+    const text = sourceViewRef.current?.state.doc;
+    if (!text) return undefined;
+    if (sourceContentRef.current?.text !== text) {
+      sourceContentRef.current = { text, markdown: text.toString() };
+    }
+    return sourceContentRef.current.markdown;
+  }, []);
+
   // 初始化 source 模式编辑器（CM6 + markdown）
   const initSourceEditor = useCallback((content: string) => {
     if (!sourceDivRef.current) return;
 
     // 已创建的源码编辑器必须复用；模式同步只更新视图，不得写入文件级或原生历史
     if (sourceViewRef.current) {
-      const currentContent = sourceViewRef.current.state.doc.toString();
+      const currentContent = readSourceContent();
       if (currentContent !== content) {
         sourceViewRef.current.dispatch({
           changes: {
@@ -321,6 +333,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           },
           annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
         });
+        sourceContentRef.current = { text: sourceViewRef.current.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
       }
       registerMdSourceView(docKey, sourceViewRef.current);
       return;
@@ -442,8 +455,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     });
 
     sourceViewRef.current = view;
+    sourceContentRef.current = { text: view.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
     registerMdSourceView(docKey, view);
-  }, [docKey]);
+  }, [docKey, readSourceContent]);
 
   // 当前可见模式负责呈现统一历史节点，另一内核会在下次切换时无历史地同步到同一内容
   useEffect(() => {
@@ -647,7 +661,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       useDocumentStore.getState().setContent(docKey, md);
       initSourceEditor(md);
       const embedded = editor ? embeddedEditingPosition(editor) : null;
-      const sourceText = sourceViewRef.current?.state.doc.toString() ?? md;
+      const sourceText = readSourceContent() ?? md;
       const selection = editor ? mapModeSelection(editor, sourceText, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
@@ -659,14 +673,21 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       // 源码 → 可视化模式
       // CM positions count its LF-normalized Text. A pristine history entry may
       // still contain CRLF, so its offsets cannot be used with a CM selection.
-      const historyContent = getCurrentDocumentHistoryContent(docKey);
-      const md = sourceViewRef.current?.state.doc.toString()
-        ?? historyContent ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '';
-      const verdict = judgeLargeDoc(md);
+      // The refusal must precede history materialization and Text.toString():
+      // large source files stay responsive even with an uncommitted edit group.
+      const sourceDocument = sourceViewRef.current?.state.doc;
+      const verdict = judgeLargeDoc(sourceDocument ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '');
       if (verdict.isLarge) {
         setLargeVerdict(verdict); setShowLargeBanner(true);
         return;
       }
+      const materializedSource = flushPendingSourceSnapshot(docKey);
+      if (materializedSource !== null && sourceDocument) {
+        sourceContentRef.current = { text: sourceDocument, markdown: materializedSource };
+      }
+      const historyContent = getCurrentDocumentHistoryContent(docKey);
+      const md = readSourceContent()
+        ?? historyContent ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '';
       // 模式同步不产生历史节点；文件级时间线已经逐步记录了源码阶段的真实编辑
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
@@ -719,7 +740,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const visualSelection = mapModeSelection(editor, md, 'visual', sourceSelection);
       scheduleModeSelection('visual', visualSelection);
     }
-  }, [editor, docKey, initSourceEditor, scheduleModeSelection]);
+  }, [editor, docKey, initSourceEditor, readSourceContent, scheduleModeSelection]);
 
   // 监听来自状态栏或外部的模式切换请求
   useEffect(() => {
@@ -776,6 +797,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         sourceViewRef.current.destroy();
         sourceViewRef.current = null;
       }
+      sourceContentRef.current = null;
       tipTapEditorRef.current = null;
       unregisterMdSourceView(docKey);
       // 兜底：清理任何残留暂存（如物化降级路径失败）

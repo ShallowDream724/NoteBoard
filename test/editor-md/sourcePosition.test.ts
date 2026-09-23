@@ -81,7 +81,7 @@ describe('跨模式位置', () => {
     } finally { editor.destroy(); }
   });
 
-  it('长前缀只进行一次词法分析，不序列化未选择的正文块', () => {
+  it('长前缀往返和光标移动复用同一索引，不序列化未选择的正文块', () => {
     const md = Array.from({ length: 400 }, (_, i) => `paragraph ${i} **repeated text**`).join('\n\n') + '\n\nlast target';
     const editor = new Editor({ extensions: buildDocumentExtensions() });
     try {
@@ -92,8 +92,33 @@ describe('跨模式位置', () => {
       const source = md.lastIndexOf('target') + 3;
       const mapped = mapModeSelection(editor, md, 'visual', { anchor: source, head: source });
       expect(mapped.head).toBe(editor.state.doc.content.size - 4);
+      editor.commands.setTextSelection(mapped.head);
+      expect(mapModeSelection(editor, md, 'source', mapped).head).toBe(source);
+      const otherSource = md.indexOf('paragraph 10') + 5;
+      const otherVisual = mapModeSelection(editor, md, 'visual', { anchor: otherSource, head: otherSource });
+      expect(mapModeSelection(editor, md, 'source', otherVisual).head).toBe(otherSource);
       expect(lexer).toHaveBeenCalledTimes(1);
       expect(serialize).not.toHaveBeenCalled();
+    } finally { editor.destroy(); }
+  });
+
+  it('源码表示和可视化不可变根各自变化时替换索引', () => {
+    const md = '**first** then **target**';
+    const editor = new Editor({ extensions: buildDocumentExtensions() });
+    try {
+      parseMarkdown(editor, md);
+      const lexer = vi.spyOn(editor.storage.markdown.manager.instance, 'lexer');
+      const source = md.indexOf('target') + 3;
+      const visual = mapModeSelection(editor, md, 'visual', { anchor: source, head: source });
+      const alternate = '__first__ then **target**\n';
+      expect(mapModeSelection(editor, alternate, 'source', visual).head).toBe(alternate.indexOf('target') + 3);
+      expect(lexer).toHaveBeenCalledTimes(2);
+
+      editor.commands.insertContentAt(1, 'new ');
+      const edited = `new ${alternate}`;
+      const editedSource = edited.indexOf('target') + 3;
+      expect(mapModeSelection(editor, edited, 'visual', { anchor: editedSource, head: editedSource }).head).toBe(visual.head + 4);
+      expect(lexer).toHaveBeenCalledTimes(3);
     } finally { editor.destroy(); }
   });
 });

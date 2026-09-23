@@ -54,6 +54,15 @@ describe('largeDoc 判定', () => {
       expect(verdict.charCount).toBe(0);
     });
 
+    it('大文档长度可直接拒绝 visual，无需展开源码或编码为字节', () => {
+      const source = { length: 1_500_008, toString() { throw new Error('must not materialize'); } };
+      const verdict = judgeLargeDoc(source);
+      expect(verdict.isLarge).toBe(true);
+      expect(verdict.charCount).toBe(source.length);
+      expect(verdict.byteSize).toBeUndefined();
+      expect(judgeLargeDoc(source, 1_700_000).byteSize).toBe(1_700_000);
+    });
+
   });
 
   describe('shouldSkipCodeBlockHighlight', () => {

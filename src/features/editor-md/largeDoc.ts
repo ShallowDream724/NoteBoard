@@ -1,5 +1,5 @@
 // NoteBoard 大文档判定
-// 阈值判定（单趟扫描，提前 return）+ 降级到 source 模式 + 横幅
+// 阈值判定（仅读取长度）+ 降级到 source 模式 + 横幅
 // 详见 docs/09-开发路线图.md 7.15
 //
 // 阈值设置：
@@ -24,8 +24,8 @@ export interface LargeDocVerdict {
   isLarge: boolean;
   /** 字符数 */
   charCount: number;
-  /** 字节数 */
-  byteSize: number;
+  /** 已知的文件字节数；源码编辑后未编码时不重新扫描正文计算 */
+  byteSize?: number;
   /** 使用的阈值 */
   threshold: number;
   /** 建议的模式 */
@@ -34,11 +34,10 @@ export interface LargeDocVerdict {
 
 /**
  * 判定文档是否为大文档
- * 单趟扫描，提前 return，不递归遍历
+ * 仅按 UTF-16 长度判定；同时接受 CodeMirror Text，拒绝大文件切换前无需展开 rope。
  */
-export function judgeLargeDoc(content: string, byteSize?: number): LargeDocVerdict {
+export function judgeLargeDoc(content: { readonly length: number }, byteSize?: number): LargeDocVerdict {
   const charCount = content.length;
-  const bytes = byteSize ?? new Blob([content]).size;
 
   // The current visual editor is not document-virtualized. Never route a large
   // file into the obsolete section scaffold or an unbounded contenteditable.
@@ -46,7 +45,7 @@ export function judgeLargeDoc(content: string, byteSize?: number): LargeDocVerdi
     return {
       isLarge: true,
       charCount,
-      byteSize: bytes,
+      byteSize,
       threshold: THRESHOLDS.VISUAL_MODE_LIMIT,
       suggestedMode: 'source',
     };
@@ -56,7 +55,7 @@ export function judgeLargeDoc(content: string, byteSize?: number): LargeDocVerdi
   return {
     isLarge: false,
     charCount,
-    byteSize: bytes,
+    byteSize,
     threshold: THRESHOLDS.VISUAL_MODE_LIMIT,
     suggestedMode: 'visual',
   };
