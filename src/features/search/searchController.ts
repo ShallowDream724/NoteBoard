@@ -16,6 +16,9 @@ import {
   searchPanelOpen,
 } from '@codemirror/search';
 import { EDITOR_SEARCH_NAVIGATION_META } from '../../core/editor/searchNavigation';
+import { clearSourceSearchSnapshot, sourceSearchIndex, sourceSearchRanges } from './sourceSearchSnapshot';
+import type { MatchStats } from '../../core/editor/editorTypes';
+import { cancelRegexSearch, navigateRegexTarget, replaceRegexTarget, searchRegexTarget, watchRegexSearch } from './regexSearchSession';
 
 export interface SearchOptions {
   searchText: string;
@@ -48,6 +51,19 @@ export type EditorTarget =
   | { type: 'tiptap'; editor: Editor }
   | { type: 'codemirror'; view: EditorView }
   | null;
+
+export function cancelSearch(target: EditorTarget): void {
+  if (target?.type === 'tiptap' && target.editor.isDestroyed) return;
+  cancelRegexSearch(target);
+  executeLiteralSearch(target, { searchText: '', replaceText: '', caseSensitive: false, wholeWord: false, isRegex: false });
+}
+
+/** Cleanup captures the actual editor, so a mode/tab switch cannot clear the
+ * newly active editor while leaving the previous one's search listeners live. */
+export function watchSearchUpdates(target: EditorTarget, listener: (stats: MatchStats) => void): () => void {
+  const unsubscribe = watchRegexSearch(target, listener);
+  return () => { unsubscribe(); cancelSearch(target); };
+}
 
 /** 获取 TipTap 搜索插件存储数据 */
 function getSearchStorage(editor: Editor): SearchAndReplaceStorage | undefined {
@@ -85,7 +101,18 @@ function navigateTipTapSearchResult(editor: Editor, from: number, to = from): vo
 }
 
 /** 执行搜索更新，返回当前匹配索引与总数 */
+export function executeSearch(target: EditorTarget, options: SearchOptions & { isRegex: false }): MatchStats;
+export function executeSearch(target: EditorTarget, options: SearchOptions): MatchStats | Promise<MatchStats>;
 export function executeSearch(
+  target: EditorTarget,
+  options: SearchOptions,
+): MatchStats | Promise<MatchStats> {
+  if (target && options.isRegex && options.searchText) return searchRegexTarget(target, options);
+  cancelRegexSearch(target);
+  return executeLiteralSearch(target, options);
+}
+
+function executeLiteralSearch(
   target: EditorTarget,
   options: SearchOptions,
 ): { matchIndex: number; matchCount: number } {
@@ -95,6 +122,7 @@ export function executeSearch(
   if (target.type === 'codemirror') {
     const { view } = target;
     if (!searchText) {
+      clearSourceSearchSnapshot(view);
       if (searchPanelOpen(view.state)) {
         closeSearchPanel(view);
       }
@@ -128,24 +156,11 @@ export function executeSearch(
         effects: setSearchQuery.of(query),
       });
 
-      let count = 0;
-      let current = 0;
-      let firstMatch: { from: number; to: number } | null = null;
-      const cursor = query.getCursor(view.state.doc);
-      let iter = cursor.next();
+      const ranges = sourceSearchRanges(view, query);
+      const count = ranges.length / 2;
       const selFrom = view.state.selection.main.from;
       const selTo = view.state.selection.main.to;
-
-      while (!iter.done) {
-        count++;
-        if (!firstMatch) {
-          firstMatch = { from: iter.value.from, to: iter.value.to };
-        }
-        if (iter.value.from === selFrom && iter.value.to === selTo) {
-          current = count;
-        }
-        iter = cursor.next();
-      }
+      let current = sourceSearchIndex(ranges, selFrom, selTo);
 
       // 如果没有匹配项，若当前存在非空选区，将其折叠为单光标，解除 highlightSelectionMatches 的全篇匹配高亮
       if (count === 0) {
@@ -159,11 +174,11 @@ export function executeSearch(
       }
 
       // 如果当前选区未完全覆盖任何匹配项且存在匹配项，默认选中首个匹配项并滚动居中
-      if (count > 0 && current === 0 && firstMatch) {
+      if (count > 0 && current === 0) {
         current = 1;
         view.dispatch({
-          selection: { anchor: firstMatch.from, head: firstMatch.to },
-          effects: [EditorView.scrollIntoView(firstMatch.from, { y: 'center' })],
+          selection: { anchor: ranges[0], head: ranges[1] },
+          effects: [EditorView.scrollIntoView(ranges[0], { y: 'center' })],
           userEvent: 'select.search',
         });
       }
@@ -216,11 +231,15 @@ export function executeSearch(
 }
 
 /** 查找下一个匹配项 */
+export function executeFindNext(target: EditorTarget, options: SearchOptions & { isRegex: false }): MatchStats;
+export function executeFindNext(target: EditorTarget, options: SearchOptions): MatchStats | Promise<MatchStats>;
 export function executeFindNext(
   target: EditorTarget,
   options: SearchOptions,
-): { matchIndex: number; matchCount: number } {
+): MatchStats | Promise<MatchStats> {
   if (!target || !options.searchText) return { matchIndex: 0, matchCount: 0 };
+  if (options.isRegex) return navigateRegexTarget(target, options, 1);
+  cancelRegexSearch(target);
 
   if (target.type === 'codemirror') {
     const { view } = target;
@@ -228,7 +247,7 @@ export function executeFindNext(
       openSearchPanel(view);
     }
     cmFindNext(view);
-    return executeSearch(target, options);
+    return executeLiteralSearch(target, options);
   } else if (target.type === 'tiptap') {
     const { editor } = target;
     const storage = getSearchStorage(editor);
@@ -248,11 +267,15 @@ export function executeFindNext(
 }
 
 /** 查找上一个匹配项 */
+export function executeFindPrev(target: EditorTarget, options: SearchOptions & { isRegex: false }): MatchStats;
+export function executeFindPrev(target: EditorTarget, options: SearchOptions): MatchStats | Promise<MatchStats>;
 export function executeFindPrev(
   target: EditorTarget,
   options: SearchOptions,
-): { matchIndex: number; matchCount: number } {
+): MatchStats | Promise<MatchStats> {
   if (!target || !options.searchText) return { matchIndex: 0, matchCount: 0 };
+  if (options.isRegex) return navigateRegexTarget(target, options, -1);
+  cancelRegexSearch(target);
 
   if (target.type === 'codemirror') {
     const { view } = target;
@@ -260,7 +283,7 @@ export function executeFindPrev(
       openSearchPanel(view);
     }
     cmFindPrevious(view);
-    return executeSearch(target, options);
+    return executeLiteralSearch(target, options);
   } else if (target.type === 'tiptap') {
     const { editor } = target;
     const storage = getSearchStorage(editor);
@@ -280,39 +303,25 @@ export function executeFindPrev(
 }
 
 /** 替换当前匹配项并跳到下一个 */
+export function executeReplace(target: EditorTarget, options: SearchOptions & { isRegex: false }): ReplaceResult;
+export function executeReplace(target: EditorTarget, options: SearchOptions): ReplaceResult | Promise<ReplaceResult>;
 export function executeReplace(
   target: EditorTarget,
   options: SearchOptions,
-): ReplaceResult {
+): ReplaceResult | Promise<ReplaceResult> {
   if (!target || !options.searchText) return { success: false, replacedCount: 0, matchIndex: 0, matchCount: 0 };
-  const { searchText, wholeWord, isRegex } = options;
-
-  // 校验正则表达式合法性
-  if (isRegex) {
-    try {
-      const pattern = buildRegexPattern(searchText, wholeWord, isRegex);
-      new RegExp(pattern);
-    } catch {
-      return {
-        success: false,
-        replacedCount: 0,
-        matchIndex: 0,
-        matchCount: 0,
-        error: '正则表达式格式错误',
-      };
-    }
-  }
-
+  if (options.isRegex) return replaceRegexTarget(target, options, false);
+  cancelRegexSearch(target);
   if (target.type === 'codemirror') {
     const { view } = target;
     // 确保 SearchQuery 最新状态已应用至编辑器并获取匹配数
-    const statsBefore = executeSearch(target, options);
+    const statsBefore = executeLiteralSearch(target, options);
     if (statsBefore.matchCount === 0) {
       return { success: false, replacedCount: 0, matchIndex: 0, matchCount: 0 };
     }
     // 执行单处替换
     cmReplaceNext(view);
-    const statsAfter = executeSearch(target, options);
+    const statsAfter = executeLiteralSearch(target, options);
     return {
       success: true,
       replacedCount: 1,
@@ -322,7 +331,7 @@ export function executeReplace(
   } else if (target.type === 'tiptap') {
     const { editor } = target;
     // 确保 TipTap 搜索状态为最新
-    const statsBefore = executeSearch(target, options);
+    const statsBefore = executeLiteralSearch(target, options);
     if (statsBefore.matchCount === 0) {
       return { success: false, replacedCount: 0, matchIndex: 0, matchCount: 0 };
     }
@@ -333,7 +342,7 @@ export function executeReplace(
     if (current) {
       // 替换当前选中的匹配片段
       editor.chain().focus().insertContentAt({ from: current.from, to: current.to }, options.replaceText).run();
-      const statsAfter = executeSearch(target, options);
+      const statsAfter = executeLiteralSearch(target, options);
       return {
         success: true,
         replacedCount: 1,
@@ -347,40 +356,26 @@ export function executeReplace(
 }
 
 /** 替换全部匹配项 */
+export function executeReplaceAll(target: EditorTarget, options: SearchOptions & { isRegex: false }): ReplaceResult;
+export function executeReplaceAll(target: EditorTarget, options: SearchOptions): ReplaceResult | Promise<ReplaceResult>;
 export function executeReplaceAll(
   target: EditorTarget,
   options: SearchOptions,
-): ReplaceResult {
+): ReplaceResult | Promise<ReplaceResult> {
   if (!target || !options.searchText) return { success: false, replacedCount: 0, matchIndex: 0, matchCount: 0 };
-  const { searchText, wholeWord, isRegex } = options;
-
-  // 校验正则表达式合法性
-  if (isRegex) {
-    try {
-      const pattern = buildRegexPattern(searchText, wholeWord, isRegex);
-      new RegExp(pattern);
-    } catch {
-      return {
-        success: false,
-        replacedCount: 0,
-        matchIndex: 0,
-        matchCount: 0,
-        error: '正则表达式格式错误',
-      };
-    }
-  }
-
+  if (options.isRegex) return replaceRegexTarget(target, options, true);
+  cancelRegexSearch(target);
   if (target.type === 'codemirror') {
     const { view } = target;
     // 确保 SearchQuery 最新状态已应用至编辑器并计算待替换总数
-    const statsBefore = executeSearch(target, options);
+    const statsBefore = executeLiteralSearch(target, options);
     if (statsBefore.matchCount === 0) {
       return { success: false, replacedCount: 0, matchIndex: 0, matchCount: 0 };
     }
     const countToReplace = statsBefore.matchCount;
     // 执行全部替换
     cmReplaceAll(view);
-    const statsAfter = executeSearch(target, options);
+    const statsAfter = executeLiteralSearch(target, options);
     return {
       success: true,
       replacedCount: countToReplace,
@@ -390,7 +385,7 @@ export function executeReplaceAll(
   } else if (target.type === 'tiptap') {
     const { editor } = target;
     // 确保 TipTap 搜索状态为最新
-    executeSearch(target, options);
+    executeLiteralSearch(target, options);
     const storage = getSearchStorage(editor);
     const results = [...(storage?.results ?? [])];
     const count = results.length;
@@ -403,7 +398,7 @@ export function executeReplaceAll(
       tr.insertText(options.replaceText, results[i].from, results[i].to);
     }
     editor.view.dispatch(tr);
-    const statsAfter = executeSearch(target, options);
+    const statsAfter = executeLiteralSearch(target, options);
     return {
       success: true,
       replacedCount: count,

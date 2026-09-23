@@ -2,7 +2,7 @@
 // 适用于 Markdown（可视化/源码）、TXT 及全部代码文档
 // 样式与交互遵循设计规范与主题色彩 Token
 
-import React, { useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react';
 import {
   Search,
   ChevronUp,
@@ -17,7 +17,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { showToast } from '../../stores/toastStore';
 // 🔴 S03：搜索栏统一通过 core 能力注册表分发，不再从编辑器组件导入实例 getter
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
-import type { SearchCapabilities } from '../../core/editor/editorTypes';
+import type { MatchStats, SearchCapabilities } from '../../core/editor/editorTypes';
 
 export function SearchReplaceBar() {
   const {
@@ -45,6 +45,10 @@ export function SearchReplaceBar() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const requestVersion = useRef(0);
+  const replacing = useRef(false);
+  const [pending, setPending] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   // 当前活动文档的搜索能力（code / markdown visual / markdown source 由注册表分派）
   const getSearch = useCallback((): SearchCapabilities | null => {
@@ -65,19 +69,30 @@ export function SearchReplaceBar() {
     [searchText, replaceText, caseSensitive, wholeWord, isRegex],
   );
 
-  // 触发实时搜索并更新匹配统计
-  const runSearch = useCallback(() => {
+  const applyStats = useCallback((stats: MatchStats) => {
+    setMatchStats(stats.matchIndex, stats.matchCount); setPending(!!stats.pending); setSearchError(stats.error ?? '');
+  }, [setMatchStats]);
+  useEffect(() => {
     if (!isOpen) return;
-    const search = getSearch();
-    const stats = search
-      ? search.search(searchOptions)
-      : { matchIndex: 0, matchCount: 0 };
-    setMatchStats(stats.matchIndex, stats.matchCount);
-  }, [isOpen, getSearch, searchOptions, setMatchStats]);
+    const search = getSearch(), unsubscribe = search?.subscribe?.(applyStats);
+    return () => { requestVersion.current++; if (unsubscribe) unsubscribe(); else search?.cancel?.(); };
+  }, [isOpen, getSearch, applyStats]);
+
+  // 异步搜索保留输入；过期结果不能覆盖当前查询的计数和错误。
+  const runSearch = useCallback(async () => {
+    if (!isOpen) return;
+    const version = ++requestVersion.current, search = getSearch();
+    try {
+      const stats = await (search ? search.search(searchOptions) : { matchIndex: 0, matchCount: 0 });
+      if (version === requestVersion.current) applyStats(stats);
+    } catch (error) {
+      if (version === requestVersion.current && !(error instanceof DOMException && error.name === 'AbortError')) { setPending(false); setSearchError(String(error)); }
+    }
+  }, [isOpen, getSearch, searchOptions, applyStats]);
 
   // 当搜索词、选项或当前文档切换时，实时重跑搜索
   useEffect(() => {
-    runSearch();
+    void runSearch();
   }, [runSearch]);
 
   // 打开搜索栏或切换聚焦目标时，自动聚焦并全选输入框内容
@@ -102,10 +117,11 @@ export function SearchReplaceBar() {
   // 处理关闭与焦点回归
   const handleClose = useCallback(() => {
     const search = getSearch();
+    requestVersion.current++; setPending(false); setSearchError('');
     closeSearch();
     // 清除搜索高亮状态
     if (search) {
-      search.search({
+      void search.search({
         searchText: '',
         replaceText: '',
         caseSensitive: false,
@@ -119,23 +135,26 @@ export function SearchReplaceBar() {
   }, [getSearch, closeSearch, activeKey]);
 
   // 查找下一处
-  const handleFindNext = useCallback(() => {
+  const handleFindNext = useCallback(async () => {
     const search = getSearch();
-    if (!search) return;
-    const stats = search.findNext(searchOptions);
-    setMatchStats(stats.matchIndex, stats.matchCount);
-  }, [getSearch, searchOptions, setMatchStats]);
+    if (!search || pending) return;
+    const version = ++requestVersion.current;
+    try { const stats = await search.findNext(searchOptions); if (version === requestVersion.current) applyStats(stats); }
+    catch (error) { if (version === requestVersion.current && !(error instanceof DOMException && error.name === 'AbortError')) setSearchError(String(error)); }
+  }, [getSearch, searchOptions, applyStats, pending]);
 
   // 查找上一处
-  const handleFindPrev = useCallback(() => {
+  const handleFindPrev = useCallback(async () => {
     const search = getSearch();
-    if (!search) return;
-    const stats = search.findPrev(searchOptions);
-    setMatchStats(stats.matchIndex, stats.matchCount);
-  }, [getSearch, searchOptions, setMatchStats]);
+    if (!search || pending) return;
+    const version = ++requestVersion.current;
+    try { const stats = await search.findPrev(searchOptions); if (version === requestVersion.current) applyStats(stats); }
+    catch (error) { if (version === requestVersion.current && !(error instanceof DOMException && error.name === 'AbortError')) setSearchError(String(error)); }
+  }, [getSearch, searchOptions, applyStats, pending]);
 
   // 替换单处
-  const handleReplace = useCallback(() => {
+  const handleReplace = useCallback(async () => {
+    if (pending || replacing.current) return;
     // 校验搜索关键字是否为空
     if (!searchText) {
       showToast('请输入要搜索的内容', 'warning');
@@ -147,8 +166,11 @@ export function SearchReplaceBar() {
       showToast('当前视图不支持替换操作', 'warning');
       return;
     }
-    const result = search.replace(searchOptions);
-    setMatchStats(result.matchIndex, result.matchCount);
+    const version = ++requestVersion.current; replacing.current = true; setPending(true);
+    try {
+    const result = await search.replace(searchOptions);
+    if (version !== requestVersion.current) return;
+    applyStats(result);
     // 根据替换执行结果弹出状态提示
     if (result.error) {
       showToast(`替换失败: ${result.error}`, 'error');
@@ -157,10 +179,13 @@ export function SearchReplaceBar() {
     } else {
       showToast('未找到可替换的内容', 'warning');
     }
-  }, [getSearch, searchOptions, searchText, setMatchStats]);
+    } catch (error) { if (version === requestVersion.current && !(error instanceof DOMException && error.name === 'AbortError')) setSearchError(String(error)); }
+    finally { replacing.current = false; if (version === requestVersion.current) setPending(false); }
+  }, [getSearch, searchOptions, searchText, applyStats, pending]);
 
   // 替换全部
-  const handleReplaceAll = useCallback(() => {
+  const handleReplaceAll = useCallback(async () => {
+    if (pending || replacing.current) return;
     // 校验搜索关键字是否为空
     if (!searchText) {
       showToast('请输入要搜索的内容', 'warning');
@@ -172,8 +197,11 @@ export function SearchReplaceBar() {
       showToast('当前视图不支持替换操作', 'warning');
       return;
     }
-    const result = search.replaceAll(searchOptions);
-    setMatchStats(result.matchIndex, result.matchCount);
+    const version = ++requestVersion.current; replacing.current = true; setPending(true);
+    try {
+    const result = await search.replaceAll(searchOptions);
+    if (version !== requestVersion.current) return;
+    applyStats(result);
     // 根据全部替换执行结果弹出状态提示
     if (result.error) {
       showToast(`全部替换失败: ${result.error}`, 'error');
@@ -182,7 +210,9 @@ export function SearchReplaceBar() {
     } else {
       showToast('未找到匹配项，未执行替换', 'warning');
     }
-  }, [getSearch, searchOptions, searchText, setMatchStats]);
+    } catch (error) { if (version === requestVersion.current && !(error instanceof DOMException && error.name === 'AbortError')) setSearchError(String(error)); }
+    finally { replacing.current = false; if (version === requestVersion.current) setPending(false); }
+  }, [getSearch, searchOptions, searchText, applyStats, pending]);
 
   if (!isOpen) return null;
 
@@ -276,7 +306,7 @@ export function SearchReplaceBar() {
                 whiteSpace: 'nowrap',
               }}
             >
-              {matchIndex}/{matchCount}
+              {pending ? '搜索中…' : `${matchIndex}/${matchCount}`}
             </span>
           )}
         </div>
@@ -286,6 +316,7 @@ export function SearchReplaceBar() {
           <button
             type="button"
             onClick={handleFindPrev}
+            disabled={pending || !!searchError}
             style={{
               width: 28,
               height: 28,
@@ -330,6 +361,7 @@ export function SearchReplaceBar() {
           <button
             type="button"
             onClick={handleFindNext}
+            disabled={pending || !!searchError}
             style={{
               width: 28,
               height: 28,
@@ -475,6 +507,7 @@ export function SearchReplaceBar() {
           <button
             type="button"
             onClick={handleReplace}
+            disabled={pending || !!searchError}
             style={{
               height: 32,
               padding: '0 8px',
@@ -521,6 +554,7 @@ export function SearchReplaceBar() {
           <button
             type="button"
             onClick={handleReplaceAll}
+            disabled={pending || !!searchError}
             style={{
               height: 32,
               padding: '0 8px',
@@ -564,6 +598,7 @@ export function SearchReplaceBar() {
         </Tooltip>
       </div>
 
+      {searchError && <p role="alert" style={{ margin: 0, userSelect: 'text', color: 'var(--editor-text)', overflowWrap: 'anywhere' }}>{searchError}</p>}
       {/* ── 第三行：选项设置（区分大小写 / 全字匹配 / 正则表达式） ── */}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, paddingTop: 2, width: '100%', boxSizing: 'border-box' }}>
         <label

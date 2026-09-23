@@ -43,6 +43,8 @@ export interface TextSearchOptions {
 export interface MatchStats {
   matchIndex: number;
   matchCount: number;
+  pending?: boolean;
+  error?: string;
 }
 
 /** 替换操作结果 */
@@ -57,11 +59,13 @@ export interface ReplaceOutcome extends MatchStats {
  * 搜索栏与快捷键只依赖本接口，不接触任何内核实例。
  */
 export interface SearchCapabilities {
-  search(options: TextSearchOptions): MatchStats;
-  findNext(options: TextSearchOptions): MatchStats;
-  findPrev(options: TextSearchOptions): MatchStats;
-  replace(options: TextSearchOptions): ReplaceOutcome;
-  replaceAll(options: TextSearchOptions): ReplaceOutcome;
+  search(options: TextSearchOptions): MatchStats | Promise<MatchStats>;
+  findNext(options: TextSearchOptions): MatchStats | Promise<MatchStats>;
+  findPrev(options: TextSearchOptions): MatchStats | Promise<MatchStats>;
+  replace(options: TextSearchOptions): ReplaceOutcome | Promise<ReplaceOutcome>;
+  replaceAll(options: TextSearchOptions): ReplaceOutcome | Promise<ReplaceOutcome>;
+  subscribe?(listener: (stats: MatchStats) => void): () => void;
+  cancel?(): void;
 }
 
 /**

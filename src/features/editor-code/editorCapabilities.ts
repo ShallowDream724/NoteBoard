@@ -16,6 +16,8 @@ import {
   executeFindPrev,
   executeReplace,
   executeReplaceAll,
+  cancelSearch,
+  watchSearchUpdates,
 } from '../search/searchController';
 import {
   handleExpandJson,
@@ -51,6 +53,8 @@ export function createCodeEditorCapabilities(
     findPrev: (options: TextSearchOptions) => executeFindPrev({ type: 'codemirror', view }, options),
     replace: (options: TextSearchOptions) => executeReplace({ type: 'codemirror', view }, options),
     replaceAll: (options: TextSearchOptions) => executeReplaceAll({ type: 'codemirror', view }, options),
+    subscribe: listener => watchSearchUpdates({ type: 'codemirror', view }, listener),
+    cancel: () => cancelSearch({ type: 'codemirror', view }),
   };
 
   // 代码操作能力：JSON/XML/大小写转换，内部持有内核视图

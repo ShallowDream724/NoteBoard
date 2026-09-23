@@ -1,7 +1,7 @@
 // NoteBoard 搜索替换控制器单元测试
 // 验证反斜杠字面量检索、替换以及无匹配时的高亮与选区重置
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { search } from '@codemirror/search';
@@ -10,6 +10,8 @@ import {
   executeReplace,
   executeReplaceAll,
 } from '@/features/search/searchController';
+
+vi.mock('../../src/features/search/searchMatching', () => ({ searchRegex: vi.fn().mockResolvedValue({ ranges: new Uint32Array(), error: '正则表达式格式错误' }) }));
 
 // JSDOM 环境下补全 Range 测量接口以支持 CodeMirror 6
 if (typeof Range !== 'undefined') {
@@ -92,7 +94,7 @@ describe('searchController 搜索与替换控制器', () => {
     expect(quadStats.matchIndex).toBe(0);
   });
 
-  test('反斜杠字面量替换：单处与全部替换返回正确计数与状态', () => {
+  test('反斜杠字面量替换：单处与全部替换返回正确计数与状态', async () => {
     const doc = 'a \\\\ b \\\\ c';
     const view = createCMView(doc);
 
@@ -155,7 +157,7 @@ describe('searchController 搜索与替换控制器', () => {
     expect(res4.replacedCount).toBe(0);
 
     // 正则表达式语法错误时返回 error 提示
-    const res5 = executeReplace(
+    const res5 = await executeReplace(
       { type: 'codemirror', view },
       {
         searchText: '[invalid_regex',

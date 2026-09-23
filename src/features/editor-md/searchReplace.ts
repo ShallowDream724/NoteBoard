@@ -7,10 +7,15 @@
 
 import SearchAndReplace from '@sereneinserenade/tiptap-search-and-replace';
 import { registerShortcut } from '../../core/shortcuts';
+import { searchDecorationPlugins } from './searchDecorations';
+
+const IncrementalSearchAndReplace = SearchAndReplace.extend({
+  addProseMirrorPlugins() { return searchDecorationPlugins(this.storage, this.options); },
+});
 
 /** 搜索替换扩展配置 */
 export function searchReplaceExtension() {
-  return SearchAndReplace.configure({
+  return IncrementalSearchAndReplace.configure({
     // 结果样式
     searchResultClass: 'nb-search-result',
     // 允许底层正则解析（由 searchController 安全转义与控制）

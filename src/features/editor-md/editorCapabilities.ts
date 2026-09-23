@@ -17,6 +17,8 @@ import {
   executeFindPrev,
   executeReplace,
   executeReplaceAll,
+  cancelSearch,
+  watchSearchUpdates,
   focusActiveEditor,
   getSelectedText,
   type EditorTarget,
@@ -74,6 +76,8 @@ export function createMarkdownEditorCapabilities(
     findPrev: (options: TextSearchOptions) => executeFindPrev(currentTarget(docKey), options),
     replace: (options: TextSearchOptions) => executeReplace(currentTarget(docKey), options),
     replaceAll: (options: TextSearchOptions) => executeReplaceAll(currentTarget(docKey), options),
+    subscribe: listener => watchSearchUpdates(currentTarget(docKey), listener),
+    cancel: () => cancelSearch(currentTarget(docKey)),
   };
 
   // 代码操作能力：仅源码模式提供（与旧快捷键行为一致——可视化模式无 JSON/XML 操作入口）
