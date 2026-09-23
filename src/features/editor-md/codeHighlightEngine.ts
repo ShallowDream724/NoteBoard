@@ -1,10 +1,12 @@
 import { getLowlight } from './lowlight';
-import type { CodeToken } from './codeHighlighting';
+import type { CodeToken } from './codeTokens';
+import { normalizeLanguage } from './codeLanguages';
 
 interface Tree { type: string; value?: string; properties?: { className?: string[] }; children?: Tree[] }
 
-/** Runs only inside the code worker (or a direct engine unit test). */
+/** Runs inside code/export workers (or direct engine tests), without UI state. */
 export function tokenizeCode(code: string, language: string): CodeToken[] {
+  language = normalizeLanguage(language);
   const lowlight = getLowlight();
   if (!code || code.length > 200_000 || !lowlight.registered(language)) return [];
   const tokens: CodeToken[] = [];

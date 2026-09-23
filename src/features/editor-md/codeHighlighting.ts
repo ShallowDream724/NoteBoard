@@ -1,6 +1,6 @@
 import { normalizeLanguage } from './codeLanguages';
-
-export interface CodeToken { from: number; to: number; className: string }
+import type { CodeToken } from './codeTokens';
+export type { CodeToken } from './codeTokens';
 interface Consumer { resolve: (tokens: CodeToken[]) => void; signal?: AbortSignal; abort: () => void }
 interface Work { id: number; key: string; code: string; language: string; bytes: number; consumers: Set<Consumer> }
 interface Cached { tokens: CodeToken[]; bytes: number }
@@ -118,18 +118,6 @@ export function disposeCodeHighlighting() {
   for (const work of [...jobs.values()]) finish(work, []);
   cache.clear(); cacheBytes = 0;
 }
-if (typeof window !== 'undefined') window.addEventListener('pagehide', disposeCodeHighlighting);
-if (import.meta.hot) import.meta.hot.dispose(() => {
-  window.removeEventListener('pagehide', disposeCodeHighlighting);
-  disposeCodeHighlighting();
-});
-
-const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-export function codeTokensToHTML(code: string, tokens: CodeToken[]): string {
-  let html = '', offset = 0;
-  for (const token of tokens) {
-    html += escape(code.slice(offset, token.from)) + `<span class="${escape(token.className)}">${escape(code.slice(token.from, token.to))}</span>`;
-    offset = token.to;
-  }
-  return html + escape(code.slice(offset));
-}
+// Consumers cancel on disposal; the scheduler releases the idle worker. Avoid
+// module-load browser listeners: DOM-compatible worker windows aren't browsers.
+if (import.meta.hot) import.meta.hot.dispose(disposeCodeHighlighting);

@@ -3,7 +3,7 @@ import { resolveRelativeDocPath } from '../../core/documentPath';
 import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { renderMath } from '../editor-md/mathRendering';
 import type { MathRendering } from '../editor-md/mathRendering';
-import { highlightCode, codeTokensToHTML } from '../editor-md/codeHighlighting';
+import { codeTokensToHTML } from '../editor-md/codeTokens';
 import type { ExportDocument, ExportItem } from './model';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { matrixSource, matrixPart, type MatrixSource } from '../../core/math/structure';
@@ -78,11 +78,15 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     if (body.children.length) table.append(body);
     items.push({ id, kind: 'table', label: `表格 ${tableIndex} · ${first?.textContent?.slice(0, 40) ?? ''}` });
   }
+  let codeEngine: typeof import('../editor-md/codeHighlightEngine') | undefined;
   for (const code of container.querySelectorAll<HTMLElement>('pre > code')) {
     signal?.throwIfAborted();
     const source = code.textContent ?? '';
     const language = [...code.classList].find(name => name.startsWith('language-'))?.slice(9) ?? '';
-    code.innerHTML = codeTokensToHTML(source, await highlightCode(source, language, { signal }));
+    // Conversion already owns a disposable worker. Use the pure engine here;
+    // importing the editor scheduler would add a second worker and UI lifetime.
+    codeEngine ??= await import('../editor-md/codeHighlightEngine');
+    code.innerHTML = codeTokensToHTML(source, codeEngine.tokenizeCode(source, language));
   }
   for (const diagram of container.querySelectorAll<HTMLElement>('[data-mermaid], [data-plantuml], [data-infographic]')) {
     const source = document.createElement('pre'); source.dataset.exportSourceOnly = 'true';

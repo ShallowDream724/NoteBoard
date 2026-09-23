@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { highlightCode, codeTokensToHTML } from '../../src/features/editor-md/codeHighlighting';
+import { highlightCode } from '../../src/features/editor-md/codeHighlighting';
+import { codeTokensToHTML } from '../../src/features/editor-md/codeTokens';
 import { tokenizeCode } from '../../src/features/editor-md/codeHighlightEngine';
 
 it('代码高亮保留源码字符，已知语言着色，未知语言不猜测', async () => {
