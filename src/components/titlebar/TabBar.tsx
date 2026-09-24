@@ -3,6 +3,7 @@
 // Layout ownership: docs/architecture/settings-and-updates.md
 
 import { useRef, useState, useEffect } from 'react';
+import { TAB_EDGE_INSET } from './tabEdge';
 import { createPortal } from 'react-dom';
 import { useMenuBounds } from '../useMenuBounds';
 import { useTabOverflow } from './useTabOverflow';
@@ -126,7 +127,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
   // Only drag geometry is dynamic; appearance and hover are owned by CSS.
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform), transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.5 : undefined,
   };
 
   return (
@@ -152,6 +153,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           }}
           role="tab"
           aria-selected={isActive}
+          data-last-tab={currentIndex === tabs.length - 1 ? 'true' : undefined}
           aria-label={tab.displayName}
         >
           {/* 未保存圆点 */}
@@ -468,12 +470,14 @@ export function TabBar() {
   const { tabs, activeKey, activateTab, requestCloseTab, reorderTabs } = useWindowStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-  useTabOverflow(scrollRef, trackRef);
+  const [dragging, setDragging] = useState(false);
+  useTabOverflow(scrollRef, trackRef, tabs, dragging);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
   const handleDragEnd = (e: DragEndEvent) => {
+    setDragging(false);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const fromIndex = tabs.findIndex((t) => t.key === active.id);
@@ -526,8 +530,8 @@ export function TabBar() {
         onWheel={handleWheel}
         role="tablist"
       >
-        <div ref={trackRef} className="nb-tab-track">
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div ref={trackRef} className="nb-tab-track" style={{ '--tab-edge-inset': `${TAB_EDGE_INSET}px` } as React.CSSProperties}>
+        <DndContext sensors={sensors} onDragStart={() => setDragging(true)} onDragCancel={() => setDragging(false)} onDragEnd={handleDragEnd}>
           <SortableContext
             items={tabs.map((t) => t.key)}
             strategy={horizontalListSortingStrategy}
