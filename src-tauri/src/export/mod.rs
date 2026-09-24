@@ -46,6 +46,23 @@ struct Run {
     raw_revision: Option<u64>, report: Option<LayoutReport>,
 }
 struct Job { owner: String, cancelled: AtomicBool, payload: Mutex<Option<PdfPayload>>, directory: tempfile::TempDir, run: Mutex<Run>, files: Mutex<Vec<u64>> }
+#[derive(Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+enum PdfPhase { Resources, Layout, Printing, Finishing }
+#[derive(Clone, Serialize)]
+struct PdfProgress<'a> { id: &'a str, revision: u64, phase: PdfPhase }
+
+// Phase boundaries only: no polling, per-page traffic or locks held while
+// emitting. The owning window additionally checks the active id/revision.
+fn progress(app: &AppHandle, job: &Job, id: &str, revision: u64, phase: PdfPhase) {
+    if job.cancelled.load(Ordering::Acquire) { return; }
+    {
+        let run = job.run.lock().unwrap();
+        if run.revision != revision || run.completion.is_none()
+            || (phase == PdfPhase::Layout && run.printing) { return; }
+    }
+    let _ = app.emit_to(job.owner.as_str(), "pdf-progress", PdfProgress { id, revision, phase });
+}
 impl Job {
     fn path(&self, revision: u64) -> std::path::PathBuf { self.directory.path().join(format!("document-{revision}.pdf")) }
     fn raw_path(&self, revision: u64) -> std::path::PathBuf { self.directory.path().join(format!("raw-{revision}.pdf")) }
@@ -96,9 +113,10 @@ fn same_body_layout(a: &PdfOptions, b: &PdfOptions) -> bool {
         && a.vertical_margins_mm() == b.vertical_margins_mm()
 }
 
-fn process_pdf(job: Arc<Job>, id: String, revision: u64, raw_revision: u64, options: PdfOptions, report: LayoutReport, printed: Result<(), String>) {
+fn process_pdf(app: AppHandle, job: Arc<Job>, id: String, revision: u64, raw_revision: u64, options: PdfOptions, report: LayoutReport, printed: Result<(), String>) {
     std::thread::spawn(move || {
         if job.cancelled.load(Ordering::Acquire) { return; }
+        if printed.is_ok() { progress(&app, &job, &id, revision, PdfPhase::Finishing); }
         let result = printed.and_then(|_| pdf_document::prepare(&job.raw_path(raw_revision), &job.path(revision), &options, &job.cancelled))
             .map(|processed| PdfReceipt { id, revision, size: processed.size, pages: processed.pages,
                 issues: report.issues.clone(), adjustable: report.adjustable.clone(), locations: processed.locations });
@@ -155,7 +173,7 @@ pub async fn update_pdf(app: AppHandle, window: WebviewWindow, id: String, optio
     };
     if let Some((raw_revision, report)) = reuse {
         // Page number styling does not require another browser pagination pass.
-        process_pdf(job.clone(), id.clone(), revision, raw_revision, options, report, Ok(()));
+        process_pdf(app.clone(), job.clone(), id.clone(), revision, raw_revision, options, report, Ok(()));
     } else { match app.get_webview_window(&format!("nb-export-{id}")) {
         Some(render) => if let Err(error) = render.emit("export-options", Revision { revision, options }) { finish(&job, Err(error.to_string())); },
         None => finish(&job, Err("排版窗口已关闭".into())),
@@ -166,7 +184,17 @@ pub async fn update_pdf(app: AppHandle, window: WebviewWindow, id: String, optio
 }
 #[tauri::command]
 pub fn pdf_payload(app: AppHandle, window: WebviewWindow, id: String) -> Result<PdfPayload, String> {
-    job(&app, &id, window.label())?.payload.lock().unwrap().take().ok_or_else(|| "文档已载入排版窗口".into())
+    let job = job(&app, &id, window.label())?;
+    let payload = job.payload.lock().unwrap().take().ok_or("文档已载入排版窗口")?;
+    progress(&app, &job, &id, 0, PdfPhase::Resources);
+    Ok(payload)
+}
+#[tauri::command]
+pub fn pdf_layout_started(app: AppHandle, window: WebviewWindow, id: String, revision: u64) -> Result<(), String> {
+    if window.label() != format!("nb-export-{id}") { return Err("无效的排版窗口".into()); }
+    let job = job(&app, &id, window.label())?;
+    progress(&app, &job, &id, revision, PdfPhase::Layout);
+    Ok(())
 }
 #[tauri::command]
 pub fn pdf_ready(app: AppHandle, window: WebviewWindow, id: String, revision: Option<u64>, issues: Vec<LayoutIssue>, adjustable: Option<Vec<String>>, error: Option<String>) -> Result<(), String> {
@@ -176,8 +204,10 @@ pub fn pdf_ready(app: AppHandle, window: WebviewWindow, id: String, revision: Op
     let options = { let mut run = job.run.lock().unwrap(); if run.revision != revision || run.completion.is_none() || run.printing { return Ok(()); } run.printing = true; run.options.clone() };
     if let Some(error) = error { finish(&job, Err(error)); return Ok(()); }
     let callback_job = job.clone(); let callback_options = options.clone();
+    progress(&app, &job, &id, revision, PdfPhase::Printing);
+    let callback_app = app.clone();
     let started = pdf::print(&window, &job.raw_path(revision), &options, move |result| {
-        process_pdf(callback_job, id, revision, revision, callback_options, LayoutReport { issues, adjustable: adjustable.unwrap_or_default() }, result);
+        process_pdf(callback_app, callback_job, id, revision, revision, callback_options, LayoutReport { issues, adjustable: adjustable.unwrap_or_default() }, result);
     });
     if let Err(error) = started { finish(&job, Err(error)); }
     Ok(())

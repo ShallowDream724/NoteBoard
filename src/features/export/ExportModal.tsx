@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Download, X, FileOutput, LoaderCircle, AlertCircle } from 'lucide-react';
+import { Download, X, FileOutput, AlertCircle } from 'lucide-react';
 import { captureDocument } from './capture';
 import { DEFAULT_PDF, type ExportDocument, type ItemMode } from './model';
 import { usePdfJob } from './usePdfJob';
 import { PdfPreview } from './PdfPreview';
 import { ExportDiagnostics } from './ExportDiagnostics';
+import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import './export.css';
 
 export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () => void }) {
   const dialog = useRef<HTMLDivElement>(null);
   const [document, setDocument] = useState<ExportDocument | null>(null);
+  const [captureStartedAt, setCaptureStartedAt] = useState(() => performance.now());
   const [options, setOptions] = useState(DEFAULT_PDF);
   const [format, setFormat] = useState('pdf');
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
@@ -25,10 +27,11 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const navigateToItem = (id: string) => { setItem(id); setNavigation(value => ({ id, serial: (value?.serial ?? 0) + 1 })); };
   const [itemSearch, setItemSearch] = useState('');
   const path = useSettingsStore(s => s.settings.export?.pandocPath ?? '');
-  const pdf = usePdfJob(document, options, format === 'pdf');
+  const pdf = usePdfJob(document, options, format === 'pdf', captureStartedAt);
   useEffect(() => { setAcceptedReceipt(undefined); }, [document, pdf.receipt?.id]);
   useEffect(() => {
     let disposed = false;
+    setDocument(null); setCaptureStartedAt(performance.now());
     const controller = new AbortController();
     const current = { controller } as { controller: AbortController; pandoc?: string }; session.current = current;
     void captureDocument(docKey, controller.signal).then(value => { if (!disposed) setDocument(value); }).catch(error => { if (!disposed) setError(String(error)); });
@@ -105,7 +108,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
     <header><div><FileOutput size={18}/><strong>导出</strong><span className="export-title">{document?.title}</span></div>
       <button className="export-icon" aria-label="关闭导出" onClick={onClose}><X size={18}/></button></header>
     <div className="export-body"><aside>
-      <label className="export-field">格式<select value={format} onChange={e => setFormat(e.target.value)}><option value="pdf">PDF</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
+      <label className="export-field">格式<select value={format} onChange={e => { if (e.target.value === 'pdf') setCaptureStartedAt(performance.now()); setFormat(e.target.value); }}><option value="pdf">PDF</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
       {format === 'pdf' ? <>
         <div className="export-two"><label className="export-field">纸张<select value={options.paper} onChange={e => setOptions(o => ({ ...o, paper: e.target.value as 'A4' | 'Letter' }))}><option>A4</option><option>Letter</option></select></label>
           <label className="export-field">方向<select value={String(options.landscape)} onChange={e => setOptions(o => ({ ...o, landscape: e.target.value === 'true' }))}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
@@ -132,8 +135,10 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedReceipt(e.target.checked ? receiptKey : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
       </> : <p className="export-note">由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。</p>}
     </aside><main>{format === 'pdf' ? <>
-      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/> : <div className="export-empty">{pdf.error || error ? '暂时无法生成预览' : '正在排版…'}</div>}
-      {pdf.busy && <div className="export-updating"><LoaderCircle size={14}/>更新预览…</div>}
+      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
+        : pdf.error || (!document && error) ? <div className="export-empty">暂时无法生成预览</div>
+        : <ExportProgress progress={pdf.progress ?? { phase: document ? 'starting' : 'preparing', startedAt: captureStartedAt }}/>}
+      {pdf.receipt && pdf.busy && <div className="export-updating"><ExportProgress compact progress={pdf.progress ?? { phase: 'starting', startedAt: captureStartedAt }}/></div>}
     </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p><span>转换后用对应软件查看</span></div>}</main></div>
     <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : format === 'pdf' && pages ? `${pages} 页` : '')} details={diagnostics}/>
       <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || (blocked && !accepted)))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>

@@ -23,6 +23,7 @@ async function render() {
     const update = async (options: PdfOptions, revision: number) => {
       try {
         applyTypography(options);
+        await invoke('pdf_layout_started', { id, revision });
         const report = await layout.update(options);
         await invoke('pdf_ready', { id, revision, ...report, error: null });
       } catch (error) { await invoke('pdf_ready', { id, revision, issues: [], adjustable: [], error: String(error) }); }

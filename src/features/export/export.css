@@ -9,6 +9,18 @@
 .export-check { display:flex;gap:8px;align-items:center; }.export-item-settings { margin-top:22px;border-top:1px solid var(--editor-border);padding-top:14px; }.export-item-settings h4 { margin:0 0 10px; }.export-item-settings select { margin-bottom:12px; }
 .export-preview { flex:1;overflow:auto;min-width:0; }.export-page-number { text-align:center;font-size:11px;padding:6px;color:var(--editor-text-muted); }
 .export-updating { position:absolute;right:16px;top:12px;display:flex;align-items:center;gap:6px;background:var(--editor-bg);border:1px solid var(--editor-border);border-radius:16px;padding:6px 10px;box-shadow:var(--shadow-sm); }
+.export-progress { margin:auto;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--editor-text); }
+.export-progress-ring { position:relative;width:112px;height:112px;flex-shrink:0;display:grid;place-items:center; }
+.export-progress-ring svg { position:absolute;inset:0;width:100%;height:100%;fill:none;stroke-width:3; }
+.export-progress-track { stroke:var(--editor-border); }
+.export-progress-spin { stroke:var(--editor-accent);stroke-linecap:round;stroke-dasharray:72 217;animation:export-progress-turn .9s linear infinite;will-change:transform; }
+.export-progress-label { max-width:78px;text-align:center;text-wrap:balance;line-height:1.5;font-size:13px; }
+.export-progress-time { color:var(--editor-text-muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.export-progress-compact { margin:0;flex-direction:row;gap:8px; }
+.export-progress-compact .export-progress-ring { width:18px;height:18px; }
+.export-progress-compact .export-progress-ring svg { stroke-width:8; }
+@keyframes export-progress-turn { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .export-progress-spin { animation:none;will-change:auto; } }
 .export-empty { margin:auto;text-align:center;color:var(--editor-text-muted);padding:30px; }.export-empty > svg { margin:auto; }
 .export-dialog footer { border-top:1px solid var(--editor-border); }.export-dialog footer > span { flex:1;min-width:0;max-height:50px;overflow:auto; }
 .export-dialog button { cursor:pointer;font:inherit; }.export-icon { display:flex;background:transparent;color:inherit;border:0;padding:5px;border-radius:5px; }

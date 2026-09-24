@@ -48,6 +48,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             export::create_pdf,
             export::pdf_payload,
+            export::pdf_layout_started,
             export::pdf_ready,
             export::read_pdf,
             export::update_pdf,
