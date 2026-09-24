@@ -10,6 +10,17 @@ const tauriCliPath = resolve(repoRoot, 'node_modules', '@tauri-apps', 'cli', 'ta
 const devConfigPath = resolve(repoRoot, 'src-tauri', 'tauri.dev.conf.json');
 const cliArgs = process.argv.slice(2);
 
+// Tauri 在运行前端构建钩子前就读取版本。必须在启动 CLI 前同步，
+// 否则本次程序与安装包会分别使用新旧版本。
+if (cliArgs.some((argument) => ['dev', 'build', 'bundle'].includes(argument))) {
+  const versionSync = spawnSync(process.execPath, [resolve(repoRoot, 'scripts/sync-version.mjs')], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
+  if (versionSync.error) console.error(`[run-tauri] 版本同步失败：${versionSync.error.message}`);
+  if (versionSync.error || versionSync.status !== 0) process.exit(versionSync.status || 1);
+}
+
 // 让操作系统分配当前可用的回环端口，避免与其它项目或本机软件争用固定开发端口。
 function allocateDevPort() {
   return new Promise((resolvePort, reject) => {
