@@ -11,7 +11,10 @@
   touch-action: none; user-select: none; background: transparent;
   opacity: 0; transition: opacity 160ms ease; z-index: 1;
 }
-.nb-vertical-scroll-area:is(:hover, :focus-within) .nb-vertical-scrollbar { opacity: 1; }
+/* Mouse clicks leave focus behind. Only keyboard-visible focus should keep the
+ * thumb shown after the pointer leaves; pointer capture keeps dragging visible. */
+.nb-vertical-scroll-area:hover .nb-vertical-scrollbar,
+.nb-vertical-scroll-area:has(:focus-visible) .nb-vertical-scrollbar { opacity: 1; }
 .nb-vertical-scrollbar:active { opacity: 1; }
 .nb-vertical-scroll-thumb { flex: 1; border-radius: 5px; background: var(--scrollbar-thumb); }
 .nb-vertical-scroll-thumb:hover { background: color-mix(in srgb, var(--scrollbar-thumb) 80%, var(--editor-text)); }
