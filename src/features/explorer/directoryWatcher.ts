@@ -9,7 +9,7 @@
 
 import { watchImmediate, type UnwatchFn, type WatchEvent } from '@tauri-apps/plugin-fs';
 import * as ipc from '../../core/ipc/commands';
-import { useExplorerStore } from './explorerStore';
+import { refreshExplorerDirectory } from './explorerActions';
 // 🔴 N09：外部正文核对链——watcher 事件给受影响的已打开文档安排有界核对，
 //    确认外部修改后更新冲突状态（阻止旧 autosave 覆盖外部修改）
 import { useDocumentStore } from '../../stores/documentStore';
@@ -193,8 +193,7 @@ function scheduleRecheck(dir: string): void {
 /** 增量刷新目录（失败静默——目录可能已被删除） */
 async function refreshDirectory(dir: string): Promise<void> {
   try {
-    const children = await ipc.readDir(dir, true);
-    useExplorerStore.getState().updateChildren(dir, children);
+    await refreshExplorerDirectory(dir);
   } catch {
     // 目录不可读（被删/权限）：保持现有显示
   }

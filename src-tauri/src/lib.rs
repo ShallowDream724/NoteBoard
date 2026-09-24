@@ -98,6 +98,7 @@ pub fn run() {
             fsio::commands::open_with_default_app,
             // settings
             settings::commands::load_settings,
+            settings::commands::default_typography,
             settings::commands::save_settings,
             settings::commands::patch_settings,
             // staging

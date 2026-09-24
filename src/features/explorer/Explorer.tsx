@@ -5,8 +5,8 @@
 
 import { useState, useCallback } from 'react';
 import { FilePlus, FolderPlus, LocateFixed, RotateCw, FolderOpen } from 'lucide-react';
-import { useExplorerStore, isSubPath } from './explorerStore';
-import { useTreeData } from './useTreeData';
+import { useExplorerStore, normalizePath } from './explorerStore';
+import { refreshExplorer, revealExplorerFile } from './explorerActions';
 import { useReveal } from './useReveal';
 import { useWatcher } from './useWatcher';
 import { TreeNode } from './TreeNode';
@@ -24,8 +24,7 @@ import { VerticalScrollArea } from '../../components/VerticalScrollArea';
 // ── Explorer 组件 ──
 
 export function Explorer() {
-  const { root, children, loading, setRoot, setRevealed } = useExplorerStore();
-  const { loadChildren, revealPath } = useTreeData();
+  const { root, children, loading } = useExplorerStore();
   const [creatingType, setCreatingType] = useState<'file' | 'folder' | null>(null);
   const [creatingName, setCreatingName] = useState('');
 
@@ -35,15 +34,12 @@ export function Explorer() {
   // 文件监听
   useWatcher();
 
-  const rootChildren = root ? children.get(root.toLowerCase()) : undefined;
+  const rootChildren = root ? children.get(normalizePath(root).toLowerCase()) : undefined;
 
   // 刷新目录
   const handleRefresh = useCallback(async () => {
-    if (root) {
-      const nodes = await loadChildren(root);
-      setRoot(root, nodes);
-    }
-  }, [root, loadChildren, setRoot]);
+    try { await refreshExplorer(); } catch (error) { console.error('刷新目录失败:', error); }
+  }, []);
 
   // 一键定位当前打开的文件并在资源管理器中平滑滚动至该文件位置
   const handleLocateActive = useCallback(async () => {
@@ -55,22 +51,11 @@ export function Explorer() {
     if (!targetDir || !filePath) return;
 
     try {
-      const currentRoot = useExplorerStore.getState().root;
-      // 若当前根目录已包含该文件，则保持当前根目录树结构，直接展开路径链并滚动定位至该文件
-      if (currentRoot && isSubPath(currentRoot, filePath)) {
-        await revealPath(filePath, currentRoot);
-        setRevealed(filePath, true);
-      } else {
-        // 若当前无根目录或文件在外部目录，才将根目录切换至目标文件所在文件夹
-        const nodes = await loadChildren(targetDir);
-        setRoot(targetDir, nodes);
-        await revealPath(filePath, targetDir);
-        setRevealed(filePath, true);
-      }
+      await revealExplorerFile(filePath, targetDir, () => useWindowStore.getState().activeKey === activeKey);
     } catch (err) {
       console.error('定位当前文件失败:', err);
     }
-  }, [loadChildren, setRoot, revealPath, setRevealed]);
+  }, []);
 
   // 提交新建文件/文件夹
   const handleCreateSubmit = async () => {

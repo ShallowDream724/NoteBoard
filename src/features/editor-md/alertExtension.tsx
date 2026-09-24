@@ -37,14 +37,14 @@ function AlertComponent({ node, updateAttributes, selected }: NodeViewProps) {
           gap: 8,
           marginBottom: 6,
           fontSize: '1em',
-          fontWeight: 600,
+          fontWeight: 700,
           color: `var(--alert-${kind}-border)`,
         }}
       >
         <button type="button" className="alert-kind-toggle" title="更改提示块类型"
           aria-label={'更改提示块类型，当前 ' + meta.label} onClick={() => setChoosingKind(!choosingKind)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d={meta.icon} />
           </svg>
           <span>{meta.label}</span>

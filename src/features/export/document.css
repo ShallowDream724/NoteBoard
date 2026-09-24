@@ -70,7 +70,7 @@ tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
 .github-alert-important { --alert-color: #8051ce; --alert-bg: #f8f5ff; }
 .github-alert-warning { --alert-color: #ac7200; --alert-bg: #fffbef; }
 .github-alert-caution { --alert-color: #c53d43; --alert-bg: #fff5f5; }
-.alert-title { color: var(--alert-color); display: flex; gap: .5em; align-items: center; font-weight: 600; break-after: avoid; }
+.alert-title { color: var(--alert-color); display: flex; gap: .5em; align-items: center; font-weight: 700; break-after: avoid; }
 .alert-title svg { width: 1.2em; height: 1.2em; flex-shrink: 0; }
 .alert-body > :last-child { margin-bottom: 0; }
 .hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #8950a9; }

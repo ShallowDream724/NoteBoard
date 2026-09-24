@@ -1,5 +1,7 @@
 // Canonical settings panel; SettingsModal owns navigation and dismissal.
-import { FileText, FileCode, Folder, LayoutTemplate } from 'lucide-react';
+import { FileText, FileCode, Folder, LayoutTemplate, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { showToast } from '../../stores/toastStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { contentWidthToPercent, CONTENT_WIDTH_PERCENT_MAP } from '../../core/theme/applyTheme';
 import { FontSelect } from './FontSelect';
@@ -7,7 +9,14 @@ import { FontPackSettingsCard } from './FontPackSettingsCard';
 import { formRowStyle, labelStyle } from './SettingsControls';
 
 export function TypographyPanel() {
-  const { settings, setTypography } = useSettingsStore();
+  const { settings, setTypography, resetTypography } = useSettingsStore();
+  const [resetting, setResetting] = useState(false);
+  const reset = async () => {
+    setResetting(true);
+    try { await resetTypography(); showToast('排版与字体已恢复默认', 'success'); }
+    catch (error) { showToast(`恢复失败：${String(error)}`, 'error'); }
+    finally { setResetting(false); }
+  };
   return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
     <div>
       <h3 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)', fontWeight: 600, marginBottom: 4 }}>排版参数自定义</h3>
@@ -17,6 +26,7 @@ export function TypographyPanel() {
     </div>
 
     {/* 应用字体包独立于安装包，设置页提供下载、修复、导入和删除的长期入口。 */}
+    <div className="nb-settings-reset-row"><button className="nb-btn-secondary" type="button" disabled={resetting} onClick={() => void reset()}><RotateCcw size={14}/>{resetting ? '正在恢复…' : '全部恢复默认'}</button></div>
     <FontPackSettingsCard />
 
     {/* ── 2.1 软件界面 UI 排版 ── */}
@@ -26,8 +36,8 @@ export function TypographyPanel() {
           <LayoutTemplate size={15} color="var(--accent-strong)" />
           <span>软件界面 UI 排版 (全局界面 / 弹窗 / 提示 / 菜单)</span>
         </div>
-        <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>作用于标题栏、标签栏、设置中心、状态栏与全局 UI</span>
       </div>
+      <p className="nb-settings-section-description">调整标题栏、标签页、设置和菜单的字体与字号。</p>
 
       {/* 界面 UI 中西双字体配置 */}
       <div className="nb-settings-grid">
@@ -221,8 +231,8 @@ export function TypographyPanel() {
           <FileCode size={15} color="var(--accent-strong)" />
           <span>代码与纯文本排版 (.sql / .txt / .json / 代码块)</span>
         </div>
-        <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>支持 Ctrl + 滚轮 快速缩放</span>
       </div>
+      <p className="nb-settings-section-description">在代码或纯文本编辑区按住 Ctrl 滚动鼠标，也可以调整代码字号。</p>
 
       {/* 代码等宽中西双字体配置 */}
       <div className="nb-settings-grid">

@@ -6,7 +6,7 @@
 import * as ipc from '../../../core/ipc/commands';
 import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../../stores/windowStore';
-import { useExplorerStore, isSubPath } from '../../explorer/explorerStore';
+import { openExplorerDirectory, revealExplorerFile } from '../../explorer/explorerActions';
 import { useLayoutStore } from '../../../stores/layoutStore';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoaders';
@@ -24,28 +24,9 @@ export type OpenDocumentResult = 'opened' | 'focused' | 'failed';
  * 不覆盖用户新切换的目录。
  */
 function scheduleExplorerFollowUp(targetKey: string, dirPath: string): void {
-  void (async () => {
-    const activeKeyAtStart = useWindowStore.getState().activeKey;
-    const rootAtStart = useExplorerStore.getState().root;
-    useLayoutStore.getState().setExplorerVisible(true);
-    try {
-      const curRoot = useExplorerStore.getState().root;
-      // 同根目录已加载：仅定位目标文件
-      if (curRoot && isSubPath(curRoot, targetKey)) {
-        useExplorerStore.getState().setRevealed(targetKey, true);
-        return;
-      }
-      const nodes = await ipc.readDir(dirPath, false);
-      // 🔴 竞态校验：读取期间用户切换了活动标签或目录根则放弃旧结果
-      const now = useWindowStore.getState().activeKey;
-      const nowRoot = useExplorerStore.getState().root;
-      if (now !== activeKeyAtStart || nowRoot !== rootAtStart) return;
-      useExplorerStore.getState().setRoot(dirPath, nodes);
-      useExplorerStore.getState().setRevealed(targetKey, true);
-    } catch (e) {
-      console.error('加载父文件夹目录失败:', e);
-    }
-  })();
+  useLayoutStore.getState().setExplorerVisible(true);
+  void revealExplorerFile(targetKey, dirPath, () => useWindowStore.getState().activeKey === targetKey)
+    .catch(error => console.error('加载父文件夹目录失败:', error));
 }
 
 /** 最近记录更新延后执行（失败静默，不阻塞打开链路） */
@@ -72,11 +53,11 @@ function buildTab(key: string, displayName: string, kind: Tab['kind'], language:
 }
 
 /** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
-export async function openDocument(path: string): Promise<OpenDocumentResult> {
-  return openDocumentInternal(path, 0);
+export async function openDocument(path: string, options: { exportNotice?: Tab['exportNotice'] } = {}): Promise<OpenDocumentResult> {
+  return openDocumentInternal(path, 0, options);
 }
 
-async function openDocumentInternal(path: string, retryDepth: number): Promise<OpenDocumentResult> {
+async function openDocumentInternal(path: string, retryDepth: number, options: { exportNotice?: Tab['exportNotice'] }): Promise<OpenDocumentResult> {
   if (retryDepth > 2) {
     showToast('该文件当前处于打开状态，请稍后重试', 'warning');
     return 'failed';
@@ -119,7 +100,7 @@ async function openDocumentInternal(path: string, retryDepth: number): Promise<O
             }
           }
           // 归属可能已被注销完成 → 重新尝试完整打开（受限递归）
-          return openDocumentInternal(path, retryDepth + 1);
+          return openDocumentInternal(path, retryDepth + 1, options);
         }
       } else {
         try {
@@ -134,16 +115,8 @@ async function openDocumentInternal(path: string, retryDepth: number): Promise<O
     case 'directory': {
       // 拖入/打开的是文件夹：资源管理器定位到该目录（延后执行，不阻塞返回）
       useLayoutStore.getState().setExplorerVisible(true);
-      void (async () => {
-        const activeKeyAtStart = useWindowStore.getState().activeKey;
-        try {
-          const nodes = await ipc.readDir(prepared.path, false);
-          if (useWindowStore.getState().activeKey !== activeKeyAtStart) return;
-          useExplorerStore.getState().setRoot(prepared.path, nodes);
-        } catch (e) {
-          console.error('加载文件夹目录失败:', e);
-        }
-      })();
+      try { await openExplorerDirectory(prepared.path); }
+      catch (error) { showToast(`无法打开文件夹：${String(error)}`, 'error'); return 'failed'; }
       scheduleRecentRecord(prepared.path, true);
       return 'opened';
     }
@@ -184,7 +157,7 @@ async function openDocumentInternal(path: string, retryDepth: number): Promise<O
     }
 
     case 'unsupported': {
-      showToast(`文件格式不受支持: ${prepared.displayName}，无法直接编辑`, 'warning');
+      if (!options.exportNotice) showToast(`文件格式不受支持: ${prepared.displayName}，无法直接编辑`, 'warning');
       useDocumentStore.getState().upsertFromPayload({
         key: prepared.key,
         displayName: prepared.displayName,
@@ -198,7 +171,7 @@ async function openDocumentInternal(path: string, retryDepth: number): Promise<O
         mtime: 0,
         readonly: true,
       });
-      useWindowStore.getState().openTab(buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'));
+      useWindowStore.getState().openTab({ ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'), exportNotice: options.exportNotice });
       if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath);
       return 'opened';
     }

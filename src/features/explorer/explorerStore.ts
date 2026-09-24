@@ -10,6 +10,8 @@ import { sameKey, isSubPath, normalizePath, getPathChain } from './pathUtils';
 interface ExplorerStore {
   /** 当前根路径（null = 未打开任何目录） */
   root: string | null;
+  /** Changes even when a root is left and later revisited. */
+  rootRevision: number;
   /** 展开的目录集合（路径 → 子节点） */
   expanded: Map<string, FileTreeNode[]>;
   /** 当前定位的文件路径（高亮） */
@@ -48,6 +50,7 @@ interface ExplorerStore {
 
 export const useExplorerStore = create<ExplorerStore>((set, get) => ({
   root: null,
+  rootRevision: 0,
   expanded: new Map(),
   revealed: null,
   revealCount: 0,
@@ -93,12 +96,13 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
 
   setRoot: (root, rootChildren) => {
     const key = normalizePath(root).toLowerCase();
-    set(() => {
+    set((state) => {
       const newExpanded = new Map<string, FileTreeNode[]>();
       const newChildren = new Map<string, FileTreeNode[]>();
       newChildren.set(key, rootChildren);
       return {
         root,
+        rootRevision: state.rootRevision + 1,
         expanded: newExpanded,
         children: newChildren,
         revealed: null,
@@ -118,7 +122,15 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
     set((state) => {
       const newChildren = new Map(state.children);
       newChildren.set(key, children);
-      return { children: newChildren };
+      const newExpanded = new Map(state.expanded);
+      if (newExpanded.has(key)) newExpanded.set(key, children);
+      // Prune only cached branches that were removed from this directory.
+      const names = new Set(children.map(node => normalizePath(node.path).toLowerCase()));
+      const removed = (state.children.get(key) ?? []).filter(node => node.isDir && !names.has(normalizePath(node.path).toLowerCase()));
+      if (removed.length) for (const cached of newChildren.keys()) {
+        if (removed.some(node => isSubPath(node.path, cached))) { newChildren.delete(cached); newExpanded.delete(cached); }
+      }
+      return { children: newChildren, expanded: newExpanded };
     });
   },
 
@@ -137,14 +149,15 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
   setLoading: (loading) => set({ loading }),
 
   clear: () =>
-    set({
+    set((state) => ({
       root: null,
+      rootRevision: state.rootRevision + 1,
       expanded: new Map(),
       revealed: null,
       revealCount: 0,
       children: new Map(),
       loading: false,
-    }),
+    })),
 }));
 
 export { sameKey, isSubPath, normalizePath, getPathChain };

@@ -2,7 +2,8 @@ import { autocompletion, acceptCompletion } from '@codemirror/autocomplete';
 import { syntaxTree } from '@codemirror/language';
 import { isolateHistory } from '@codemirror/commands';
 import { Prec, type EditorState } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
+import { headingShortcut } from './headingShortcut';
 import { ALERT_META, matchAlertChoices } from './alertPresentation';
 import { formatSourceMark, setSourceHeading } from './sourceFormatting';
 
@@ -15,8 +16,14 @@ function insideCode(state: EditorState, position: number) {
 
 /** Source-mode adapters reuse the same Markdown vocabulary, with CM owning completion/focus. */
 export const sourceTypingAssist = [
+  Prec.highest(EditorView.domEventHandlers({ keydown(event, view) {
+    const level = headingShortcut(event);
+    if (level === null) return false;
+    const applied = setSourceHeading(view, level);
+    if (applied) event.preventDefault();
+    return applied;
+  } })),
   Prec.high(keymap.of([
-    ...[0, 1, 2, 3, 4, 5, 6].map(level => ({ key: `Mod-${level}`, run: (view: import('@codemirror/view').EditorView) => setSourceHeading(view, level) })),
     { key: 'Mod-u', run: view => formatSourceMark(view, 'underline') },
     { key: 'Tab', run: acceptCompletion },
     { key: 'Enter', run: view => {

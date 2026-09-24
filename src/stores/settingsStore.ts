@@ -110,6 +110,7 @@ interface SettingsStore {
 
   // ── 排版 ──
   setTypography: (patch: Partial<TypographySettings>) => Promise<void>;
+  resetTypography: () => Promise<void>;
 
   // ── 编辑器 ──
   setEditor: (patch: Partial<EditorSettings>) => Promise<void>;
@@ -232,6 +233,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setSystemLightTheme: theme => update({ appearance: { systemLightTheme: theme } }),
     setSystemDarkTheme: theme => update({ appearance: { systemDarkTheme: theme } }),
     setTypography: typography => update({ typography }),
+    resetTypography: async () => {
+      const typography = await ipc.defaultTypography();
+      const error = await submit({ typography });
+      if (error) throw new Error(error);
+    },
     setEditor: editor => update({ editor }),
     setFile: file => update({ file }),
     setLayout: layout => update({ layout }),

@@ -7,8 +7,27 @@ import { MarkdownTypingKeys } from '../../src/features/editor-md/typingAssist';
 import { completeAlert } from '../../src/features/editor-md/alertCommands';
 import { formatSourceMark, setSourceHeading } from '../../src/features/editor-md/sourceFormatting';
 import { initShortcuts } from '../../src/core/shortcuts';
+import { sourceTypingAssist } from '../../src/features/editor-md/sourceTypingAssist';
 
 describe('Markdown interactive conveniences', () => {
+  it('physical Ctrl digits work in both editors even when the input language changes event.key', () => {
+    const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<p>heading</p>' });
+    const source = new EditorView({ state: EditorState.create({ doc: 'heading', extensions: [sourceTypingAssist] }) });
+    const dispose = initShortcuts();
+    try {
+      for (const level of [1, 2, 3, 4, 5, 6, 0]) {
+        for (const dom of [editor.view.dom, source.contentDOM]) {
+          const event = new KeyboardEvent('keydown', { key: level === 0 ? '0' : 'Process', code: `Digit${level}`, ctrlKey: true, bubbles: true, cancelable: true });
+          dom.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
+        }
+        expect(editor.state.doc.firstChild?.type.name).toBe(level ? 'heading' : 'paragraph');
+        if (level) expect(editor.state.doc.firstChild?.attrs.level).toBe(level);
+        expect(source.state.doc.toString()).toBe(level ? `${'#'.repeat(level)} heading` : 'heading');
+      }
+      const composing = new KeyboardEvent('keydown', { key: 'Process', code: 'Digit1', ctrlKey: true, isComposing: true, bubbles: true, cancelable: true });
+      editor.view.dom.dispatchEvent(composing); expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    } finally { dispose(); editor.destroy(); source.destroy(); }
+  });
   it('browser shortcut fallback runs after the focused editor', () => {
     const host = document.createElement('div'); document.body.append(host);
     const editor = new Editor({ element: host, extensions: buildDocumentExtensions(), content: '<p>hello</p>' });

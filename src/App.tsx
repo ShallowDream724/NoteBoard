@@ -29,6 +29,7 @@ import { requestDrain } from './app/bootCoordinator';
 import {
   openFileDialog,
   openFolderDialog,
+  openShowcase,
 } from './features/welcome/welcomeActions';
 import { saveAs } from './features/editor-code/orchestration/saveDocument';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -133,6 +134,14 @@ export default function App() {
         }
       }
       perfMark('listeners_subscribed');
+      // Only a fresh, empty profile gets an introduction. Updates and explicit file opens keep their context.
+      const introductionKey = 'noteboard.introduction-seen';
+      if (!disposed && !localStorage.getItem(introductionKey)) {
+        localStorage.setItem(introductionKey, '1');
+        if (boot.startupMode === 'empty' && useSettingsStore.getState().settings.revision === 0 && useWindowStore.getState().tabs.length === 0) {
+          void openShowcase(true);
+        }
+      }
       // 🔴 性能诊断：启动链路完成的里程碑，批量上报一次 web spans
       void reportWebSpans('boot');
     };

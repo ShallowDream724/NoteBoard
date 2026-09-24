@@ -14,7 +14,11 @@
 
 ## 高亮与选区状态
 
-`HighlightControl` 是顶部与选区工具栏共用的分体按钮。左侧在当前选区有高亮时取消，否则应用上次颜色；右侧打开带键盘导航的颜色菜单。选色用 `setHighlight`，不会因选择相同颜色反而取消。笔尖展示当前选区颜色；无高亮时展示上次颜色。工具偏好由 `highlightPreference` 单独记忆，持久化为本地 UI 偏好，不增加正文元数据。
+数字标题键通过 `headingShortcut` 统一解析：优先读取物理 `Digit0…6`，兼容输入语言改变 `event.key` 的情况；组合输入期间不转换，Alt/Shift 组合不抢占。ProseMirror 与 CodeMirror 各自在本编辑器 DOM 边界处理，不为隐藏文档注册全局处理器。
+
+`HighlightControl` 是顶部与选区工具栏共用的单个紧凑按钮。点击在当前选区有高亮时取消，否则应用上次颜色；鼠标停留 240ms 展开色板，离开 160ms 后关闭，留出跨越菜单间隙的时间。箭头只提示可展开，不占独立点击区。使用原 Lucide Highlighter 轮廓，首条 path 对应笔头，只填充该区域。笔头展示当前选区颜色，无高亮时展示上次颜色。
+
+色板由 Radix Popover 管理定位、边界、外部点击和 Escape；鼠标展开不移动编辑器焦点，不叠加 Tooltip。键盘在按钮上 Enter/Space 应用，ArrowDown 展开，菜单内方向键/Home/End 移动，Enter 选色，Escape 返回编辑器。计时器在离开、操作及卸载时清理。选色用 `setHighlight`，同色不会反向取消。工具偏好由 `highlightPreference` 记忆，不增加正文元数据。
 
 `useFormattingUpdates` 仅订阅真实内容、选区与 stored marks 变化，一帧合并刷新格式工具栏；公式和高亮装饰的懒加载事务不触发更新，也不刷新全文 React 树。选区浮层保持稳定的 BubbleMenu 配置引用，防止 UI 更新反向触发编辑器事务循环。
 

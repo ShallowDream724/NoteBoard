@@ -6,7 +6,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import * as ipc from '../../core/ipc/commands';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../stores/windowStore';
-import { useExplorerStore } from '../explorer/explorerStore';
+import { openExplorerDirectory } from '../explorer/explorerActions';
+import { useLayoutStore } from '../../stores/layoutStore';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 // 🔴 P0-1：新建文档与打开文件同样预取编辑器资源（openDocument 打开路径有预取——
 //    新建路径此前缺失：首次新建要完整加载模块（显示 fallback 数秒）；
@@ -41,7 +42,10 @@ export async function openFileDialog(): Promise<void> {
       { name: '画板与绘图', extensions: ['excalidraw', 'drawio', 'dio', 'board'] },
       { name: '图表与信息图脚本', extensions: ['mmd', 'mermaid', 'puml', 'plantuml', 'uml', 'infographic', 'ig'] },
     ],
-  }));
+  }), async () => {
+    const selected = await open({ directory: true, multiple: false });
+    return selected ? [selected] : null;
+  });
   if (!paths || paths.length === 0) return;
 
   for (const path of paths) {
@@ -61,8 +65,8 @@ export async function openFolderDialog(): Promise<void> {
   if (!selected || Array.isArray(selected)) return;
 
   const root = selected;
-  const nodes = await ipc.readDir(root, false);
-  useExplorerStore.getState().setRoot(root, nodes);
+  useLayoutStore.getState().setExplorerVisible(true);
+  await openExplorerDirectory(root);
 
   // 推送到最近打开（非关键路径）
   try {
@@ -79,8 +83,8 @@ export async function openFolderDialog(): Promise<void> {
 export async function openStagingArea(): Promise<void> {
   try {
     const root = await ipc.ensureStagingDirectory();
-    const nodes = await ipc.readDir(root, false);
-    useExplorerStore.getState().setRoot(root, nodes);
+    useLayoutStore.getState().setExplorerVisible(true);
+    await openExplorerDirectory(root);
   } catch (error) {
     showToast(`无法打开暂存区：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
   }
@@ -102,6 +106,7 @@ function createUntitledDocument(
     | 'yaml'
     | 'sql'
     | 'xml',
+  seed?: { title: string; content: string },
 ): void {
   const key = nextUntitledKey(type);
   let kind: DocumentKind = 'code';
@@ -174,6 +179,7 @@ function createUntitledDocument(
     displayName = '未命名.txt';
   }
 
+  if (seed) { displayName = seed.title; initialContent = seed.content; }
   const docStore = useDocumentStore.getState();
   docStore.upsertFromPayload({
     key,
@@ -211,6 +217,13 @@ function createUntitledDocument(
 /** 新建 Markdown 文档 */
 export function newMarkdown(): void {
   createUntitledDocument('markdown');
+}
+
+/** Bundled content is loaded only when requested, and edited as an unsaved copy. */
+export async function openShowcase(onlyIfEmpty = false): Promise<void> {
+  const { default: content } = await import('./showcase.md?raw');
+  if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
+  createUntitledDocument('markdown', { title: '欢迎使用 NoteBoard.md', content });
 }
 
 /** 新建思维导图文档 */

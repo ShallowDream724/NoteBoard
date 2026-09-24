@@ -58,7 +58,7 @@ export const AlertNode = Node.create({
     return ['div', mergeAttributes(HTMLAttributes, { class: 'github-alert github-alert-' + kind }),
       ['div', { class: 'alert-title' },
         ['http://www.w3.org/2000/svg svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-          'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
+          'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
         ['http://www.w3.org/2000/svg path', { d: meta.icon }]], ['span', {}, meta.label]],
       ['div', { class: 'alert-body' }, 0]];
   },

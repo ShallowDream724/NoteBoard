@@ -75,7 +75,7 @@ describe('🔴 N09 外部正文修改核对链', () => {
     watchHandler = null;
     useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [] });
     useDocumentStore.setState({ documents: new Map() });
-    useExplorerStore.setState({ root: null, children: new Map() });
+    useExplorerStore.getState().setRoot(DIR, []);
     resetEditorRegistryForTest();
   });
 

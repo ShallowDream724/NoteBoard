@@ -1201,7 +1201,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   color: inherit;
   background: transparent;
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 .ProseMirror .alert-kind-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }

@@ -3,6 +3,7 @@
 // 详见 docs/07-UI布局与交互规范.md §11
 
 import React, { useState } from 'react';
+import { openShowcase } from '../features/welcome/welcomeActions';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
 //    意图信号；空闲时机发起（不占首帧），点击新建/打开文件时资源已 ready，
 //    渲染同步命中 fulfilled lazy（零 fallback、远低于 1s 目标）。
@@ -129,8 +130,8 @@ export function WelcomeScreen({
   const openActions = [
     {
       icon: FileSearch,
-      label: '打开文件',
-      desc: '打开已有文档或图表',
+      label: '打开文件或文件夹',
+      desc: '粘贴路径或浏览本地内容',
       shortcut: 'Ctrl+O',
       color: 'var(--editor-accent, #3b82f6)',
       bg: 'rgba(59, 130, 246, 0.05)',
@@ -298,6 +299,7 @@ export function WelcomeScreen({
         <span style={{ fontSize: 13, color: 'var(--editor-text-muted)' }}>
           轻量双模笔记、思维导图与专业图表工作台
         </span>
+        <button type="button" className="nb-btn-secondary" style={{ padding: '6px 12px', fontSize: 'var(--ui-font-size,13px)' }} onClick={() => void openShowcase()}>浏览功能示例</button>
       </div>
 
       {/* 第一部分：常用新建核心卡片区（3 列网格） */}

@@ -11,6 +11,12 @@ pub fn load_settings() -> Result<Settings, String> {
     Ok(model::load())
 }
 
+/// The reset UI uses the same defaults as a fresh installation.
+#[tauri::command]
+pub fn default_typography() -> model::TypographySettings {
+    model::TypographySettings::default()
+}
+
 /// 保存设置（落盘 + 广播）
 #[tauri::command]
 pub fn save_settings(

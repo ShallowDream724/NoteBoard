@@ -602,6 +602,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                             <UnsupportedView
                               filePath={tab.path ?? tab.key}
                               fileName={tab.displayName}
+                              exportNotice={tab.exportNotice}
                             />
                           ) : tab.lazySource ? (
                             // 🔴 S10：恢复标签正文加载中（点击标签触发；不挂载空编辑器）

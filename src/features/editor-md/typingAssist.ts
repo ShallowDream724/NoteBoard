@@ -1,15 +1,23 @@
 import { Extension } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
+import { Plugin } from '@tiptap/pm/state';
+import { headingShortcut } from './headingShortcut';
 
 /** Interactive conveniences only; never reinterpret imported Markdown. */
 export const MarkdownTypingKeys = Extension.create({
   name: 'markdownTypingKeys',
   priority: 1100,
+  addProseMirrorPlugins() {
+    return [new Plugin({ props: { handleDOMEvents: { keydown: (_view, event) => {
+      const level = headingShortcut(event);
+      if (level === null) return false;
+      const applied = level === 0 ? this.editor.commands.setParagraph() : this.editor.commands.setHeading({ level });
+      if (applied) event.preventDefault();
+      return applied;
+    } } } })];
+  },
   addKeyboardShortcuts() {
     return {
-      ...Object.fromEntries(([1, 2, 3, 4, 5, 6] as const).map(level =>
-        [`Mod-${level}`, () => this.editor.commands.setHeading({ level })])),
-      'Mod-0': () => this.editor.commands.setParagraph(),
       Enter: () => {
         const { state, view } = this.editor;
         const { $from, empty } = state.selection;

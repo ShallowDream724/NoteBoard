@@ -270,6 +270,10 @@ export function loadSettings(): Promise<Settings> {
   return invoke<Settings>('load_settings');
 }
 
+export function defaultTypography(): Promise<Settings['typography']> {
+  return invoke<Settings['typography']>('default_typography');
+}
+
 export function saveSettings(settings: Settings): Promise<number> {
   return invoke<number>('save_settings', { settings });
 }

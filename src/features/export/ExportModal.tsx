@@ -9,6 +9,7 @@ import { PdfPreview } from './PdfPreview';
 import { ExportDiagnostics } from './ExportDiagnostics';
 import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { presentExportedFile } from './exportCompletion';
 import './export.css';
 
 export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () => void }) {
@@ -85,17 +86,17 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
       signal.throwIfAborted();
       if (!destination) return;
+      let warnings = '';
       if (format === 'pdf' && pdf.receipt) await invoke('save_pdf', { id: pdf.receipt.id, revision: pdf.receipt.revision, path: destination });
       else {
         const id = crypto.randomUUID(); current.pandoc = id;
         await invoke('begin_pandoc', { id }); signal.throwIfAborted();
         const { preparePandoc } = await import('./documentConversion');
         const source = await preparePandoc(document.markdown, signal); signal.throwIfAborted();
-        const warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
-        signal.throwIfAborted();
-        if (warnings) { setError('已导出，请检查：' + warnings); return; }
+        warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
       }
-      setError('已导出');
+      onClose();
+      await presentExportedFile(destination, warnings || undefined);
     } catch (error) { if (!signal.aborted) setError(String(error)); } finally {
       if (current.pandoc) { void invoke('cancel_pandoc', { id: current.pandoc }).catch(() => {}); current.pandoc = undefined; }
       savingRef.current = false;

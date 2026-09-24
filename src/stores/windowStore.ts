@@ -53,6 +53,8 @@ export interface Tab {
   isDetached: boolean;
   /** 工具型视图标记（纯前端，不落盘、不进会话契约；textdiff=文本对比） */
   toolKind?: 'textdiff';
+  /** Session-only receipt for a file produced by export; never persisted as document data. */
+  exportNotice?: { warnings?: string };
   // ── S10 会话恢复轻量描述符 ──
   /** 未加载正文的恢复标签：激活时才真正打开（读盘/注册/编辑器加载） */
   lazySource?: string | null;
@@ -216,7 +218,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
       const existing = state.tabs.find((t) => t.key === tab.key);
       if (existing) {
         // 已存在，激活即可
-        return { activeKey: tab.key };
+        return { activeKey: tab.key, tabs: tab.exportNotice ? state.tabs.map(value => value.key === tab.key ? { ...value, exportNotice: tab.exportNotice } : value) : state.tabs };
       }
       return { tabs: [...state.tabs, tab], activeKey: tab.key };
     });
