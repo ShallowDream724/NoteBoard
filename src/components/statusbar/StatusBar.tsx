@@ -103,6 +103,7 @@ export function StatusBar() {
       }}
       role="status"
     >
+      {doc.kind !== 'noteboard' && <>
       {/* 光标位置 */}
       <div style={sectionStyle}>
         <span>行 1, 列 1</span>
@@ -129,6 +130,7 @@ export function StatusBar() {
       </div>
       <div style={dividerStyle} />
 
+      </>}
       {/* 类型 / Markdown 模式切换 */}
       {doc.kind === 'markdown' ? (
         <Tooltip

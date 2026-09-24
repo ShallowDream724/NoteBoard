@@ -30,7 +30,7 @@ export function parseNativeNode(content: string, schema: Schema): Node {
       || !mark && (value.type === 'text' ? value.content !== undefined : value.text !== undefined)) {
       throw new Error('文档包含当前版本不支持的内容字段，原文件未修改。');
     }
-    if (value.attrs && Object.keys(value.attrs).some(key => !(key in (spec.spec.attrs ?? {})))) {
+    if (value.attrs && Object.keys(value.attrs).some(key => !Object.hasOwn(spec.spec.attrs ?? {}, key))) {
       throw new Error('文档包含当前版本不支持的属性，原文件未修改。');
     }
   };
