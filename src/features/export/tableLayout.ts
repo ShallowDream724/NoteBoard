@@ -21,23 +21,45 @@ export function allocateTableWidths({ natural, minimum }: TableWidths, available
   return result;
 }
 
-/** A single disposable copy, two batched reads. No source serialization and no
- * whole-document query. Merged columns retain the native table layout. */
-export function measureTableWidths(table: HTMLTableElement): TableWidths | null {
-  const rows = Array.from(table.rows);
-  const count = rows[0]?.cells.length ?? 0;
-  if (!count || rows.some(row => row.cells.length !== count || Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan !== 1))) return null;
-  const clone = table.cloneNode(true) as HTMLTableElement;
-  clone.removeAttribute('data-export-item'); clone.classList.add('export-table-measure');
-  clone.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;width:max-content;max-width:none;min-width:0;table-layout:auto;zoom:1';
-  clone.querySelectorAll('colgroup').forEach(group => group.remove());
-  table.parentElement!.append(clone);
-  const widths = () => Array.from(clone.rows[0].cells, cell => Math.ceil(cell.getBoundingClientRect().width) + 2);
-  const natural = widths();
-  clone.style.width = 'min-content'; clone.classList.add('export-table-measure-min');
-  const minimum = widths();
-  clone.remove();
-  return natural.every(value => value > 2) ? { natural, minimum } : null;
+/** Measure only width-constrained automatic tables. Each bounded batch performs
+ * a natural-width read, then (only if useful) a minimum-width read. Grouping the
+ * writes avoids forcing document layout twice for every table. Temporary DOM
+ * is bounded by 10k nodes or one larger table, never a full document copy. */
+export function measureTableWidths(tables: readonly HTMLTableElement[], available: number): Map<HTMLTableElement, TableWidths> {
+  const result = new Map<HTMLTableElement, TableWidths>();
+  let batch: Array<{ table: HTMLTableElement; clone: HTMLTableElement }> = [], nodes = 0;
+  const widths = (table: HTMLTableElement) => Array.from(table.rows[0].cells, cell => Math.ceil(cell.getBoundingClientRect().width) + 2);
+  const flush = () => {
+    try {
+      const natural = batch.map(({ clone }) => widths(clone));
+      const needsMinimum = natural.map(columns => columns.reduce((sum, width) => sum + width, 0) > available
+        && columns.some(width => width > Math.min(available / 3, 160)));
+      batch.forEach(({ clone }, index) => {
+        if (needsMinimum[index]) { clone.style.width = 'min-content'; clone.classList.add('export-table-measure-min'); }
+      });
+      batch.forEach(({ table, clone }, index) => {
+        if (natural[index].every(value => value > 2)) result.set(table, {
+          natural: natural[index], minimum: needsMinimum[index] ? widths(clone) : natural[index],
+        });
+      });
+    } finally { batch.forEach(({ clone }) => clone.remove()); batch = []; nodes = 0; }
+  };
+  try {
+    for (const table of tables) {
+      const rows = Array.from(table.rows), count = rows[0]?.cells.length ?? 0;
+      if (!count || rows.some(row => row.cells.length !== count || Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan !== 1))) continue;
+      const cost = table.getElementsByTagName('*').length;
+      if (batch.length && nodes + cost > 10_000) flush();
+      const clone = table.cloneNode(true) as HTMLTableElement;
+      batch.push({ table, clone }); nodes += cost;
+      clone.removeAttribute('data-export-item'); clone.classList.add('export-table-measure');
+      clone.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;width:max-content;max-width:none;min-width:0;table-layout:auto;zoom:1';
+      clone.querySelectorAll('colgroup').forEach(group => group.remove());
+      table.parentElement!.append(clone);
+    }
+    if (batch.length) flush();
+  } finally { batch.forEach(({ clone }) => clone.remove()); }
+  return result;
 }
 
 export function setAutomaticTableWidths(table: HTMLTableElement, widths: readonly number[]) {

@@ -16,7 +16,7 @@
 .export-issue { display:flex;text-align:left;gap:6px;align-items:flex-start;border:0;background:transparent;color:var(--editor-text);padding:8px 0;font-size:12px!important;line-height:1.5; }.export-issue svg { flex-shrink:0;margin-top:2px;color:#b87913; }
 .export-note { line-height:1.7;color:var(--editor-text-muted); }
 .export-item-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 3px; margin-bottom: 12px; }
-.export-item-list button { border: 0; padding: 7px 8px; border-radius: 5px; background: transparent; color: var(--editor-text); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-item-list button { flex: 0 0 auto; min-height: 32px; line-height: 1.4; border: 0; padding: 7px 8px; border-radius: 5px; background: transparent; color: var(--editor-text); text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .export-item-list button:hover { background: var(--toolbar-hover); }
 .export-item-list button.selected { background: var(--editor-selection-background); color: var(--editor-accent); }
 .export-item-region { cursor: pointer; background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 0; }

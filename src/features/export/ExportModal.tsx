@@ -123,7 +123,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         </div>}
         {!!pdf.receipt?.adjustable.length && <section className="export-item-settings"><h4>超宽内容</h4>
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
-          <div className="export-item-list" aria-label="需要调整的公式与表格">{visibleItems.map(value => <button key={value.id} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
+          <div className="export-item-list" aria-label="需要调整的公式与表格">{visibleItems.map(value => <button key={value.id} title={value.label} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
           {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => setOptions(o => ({ ...o, items: { ...o.items, [item]: e.target.value as ItemMode } }))}>
             <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
           </select></label>}

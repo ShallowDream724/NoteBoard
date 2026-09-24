@@ -5,8 +5,8 @@ import { continueFraction, continueMatrix } from './mathLayout';
 import { createProseOverflowCheck } from './proseOverflow';
 import { allocateTableWidths, markTableEdges, measureTableWidths, resetAutomaticTableWidths, setAutomaticTableWidths } from './tableLayout';
 import { continueTableRows } from './tableContinuation';
+import { addItemLocations, clearItemLocations } from './itemLocations';
 
-const ITEM_URI = 'https://noteboard.invalid/export-item/';
 function extent(element: HTMLElement) {
   return Math.max(element.scrollWidth * renderedScale(element), element.getBoundingClientRect().width);
 }
@@ -51,41 +51,6 @@ function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: Tab
   table.replaceWith(group); return { group, original };
 }
 
-function itemLinks(elements: Iterable<HTMLElement>, adjustable: Set<string>) {
-  for (const element of elements) {
-    const id = element.dataset.exportItem!;
-    if (!adjustable.has(id) || element.querySelector(':scope > a.export-item-link')) continue;
-    const wrap = (target: HTMLElement) => {
-      if (target.querySelector(':scope > a.export-item-link')) return;
-      // Preserve actual document links and nested formula hit areas. Never nest anchors.
-      if (target.querySelector('a,.export-math')) {
-        for (const child of Array.from(target.childNodes)) {
-          if (child instanceof HTMLElement) { if (child.tagName !== 'A' && !child.classList.contains('export-math')) wrap(child); }
-          else if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
-            const link = document.createElement('a'); link.href = ITEM_URI + id; link.className = 'export-item-link'; child.replaceWith(link); link.append(child);
-          }
-        }
-        return;
-      }
-      const link = document.createElement('a'); link.href = ITEM_URI + id; link.className = 'export-item-link';
-      while (target.firstChild) link.append(target.firstChild);
-      target.append(link);
-    };
-    if (element.tagName === 'TABLE') {
-      for (const row of Array.from((element as HTMLTableElement).rows)) {
-        // Separate, non-nested link geometry survives cells containing only
-        // formulas, document links, images, or no text at all.
-        for (const cell of [row.cells[0], ...(row.cells.length > 1 ? [row.cells[row.cells.length - 1]] : [])]) {
-          if (!cell || cell.querySelector(':scope > .export-table-location')) continue;
-          const link = document.createElement('a'); link.href = ITEM_URI + id;
-          link.className = 'export-item-link export-table-location'; link.setAttribute('aria-hidden', 'true');
-          link.textContent = '\u00a0'; cell.append(link);
-        }
-      }
-    } else wrap(element);
-  }
-}
-
 /** Retained layout state. Global typography changes reset all items; an item
  * override restores/reflows that item only. No document reparse or HTML reset. */
 export function createLayoutSession(root: HTMLElement) {
@@ -126,9 +91,7 @@ export function createLayoutSession(root: HTMLElement) {
         element.querySelectorAll('.export-tall-row').forEach(row => row.classList.remove('export-tall-row'));
       }
       element.querySelector<HTMLElement>('.katex-html')?.style.removeProperty('zoom');
-      element.querySelectorAll('a.export-item-link').forEach(link => {
-        if (link.classList.contains('export-table-location')) link.remove(); else link.replaceWith(...link.childNodes);
-      });
+      clearItemLocations(element);
     });
     issues.delete(id);
   };
@@ -154,16 +117,26 @@ export function createLayoutSession(root: HTMLElement) {
     const pageHeight = (paperHeight - options.marginMm * 2 - numberBand) * 96 / 25.4;
     const issue = (id: string, message: string, blocking = true) => { if (id) adjustable.add(id); issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };
     const tables = [...changed].flatMap(elements).filter((e): e is HTMLTableElement => e.tagName === 'TABLE');
-    const tableWidths = tables.map(table => {
+    const manualTables = new Set(tables.filter(table => {
       const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
       // Fully specified schema tables already carry their exact total width.
       // Fixed layout makes that width authoritative before formula reflow.
       if (manual && table.style.width) table.classList.add('table-wrap');
-      const intrinsic = manual ? null : measureTableWidths(table);
+      return manual;
+    }));
+    const observed = tables.map(table => ({
+      width: manualTables.has(table) ? table.getBoundingClientRect().width : extent(table),
+      columns: Array.from(table.rows[0]?.cells ?? [], cell => manualTables.has(table) ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2),
+    }));
+    // A naturally narrow table already fits. Repeating intrinsic-width passes
+    // adds work without changing its layout decision.
+    const measured = measureTableWidths(tables.filter((table, index) => !manualTables.has(table) && observed[index].width >= width - 1), width);
+    const tableWidths = tables.map((table, index) => {
+      const manual = manualTables.has(table), intrinsic = measured.get(table) ?? null;
       // A scaled table rounds border/text metrics differently. A small guard on
       // natural widths prevents a final identifier character wrapping by 1 px.
-      const columns = intrinsic?.natural ?? Array.from(table.rows[0]?.cells ?? [], cell => manual ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2);
-      return { manual, intrinsic, width: Math.max(manual ? table.getBoundingClientRect().width : extent(table), columns.reduce((sum, value) => sum + value, 0)), columns };
+      const columns = intrinsic?.natural ?? observed[index].columns;
+      return { manual, intrinsic, width: Math.max(observed[index].width, columns.reduce((sum, value) => sum + value, 0)), columns };
     });
     tables.forEach((table, index) => {
       const id = table.dataset.exportItem!, mode = options.items[id] ?? 'auto';
@@ -279,7 +252,7 @@ export function createLayoutSession(root: HTMLElement) {
     const changedElements = [...changed].flatMap(elements);
     if (checkProseOverflow(!!global, changedElements)) issues.set('document-overflow', [{ id: '', message: '有正文或代码超出页面边界，请调整内容或页面设置。', blocking: true }]);
     else issues.delete('document-overflow');
-    itemLinks(changedElements, adjustable);
+    addItemLocations(changedElements, adjustable);
     previous = options;
     return { issues: [...issues.values()].flat(), adjustable: [...adjustable] };
   } };
