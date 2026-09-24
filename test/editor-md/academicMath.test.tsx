@@ -150,4 +150,48 @@ describe('定界符空白、上下文与真实输入', () => {
     expect(formulas(value)).toMatchObject([{ latex, delimiter: '\\[' }]);
     expect(serializeMarkdown(value)).toContain(latex);
   });
+  it('独立公式围栏保留错误矩阵，不把内部行距拆成另一个公式', async () => {
+    const value = editor();
+    const latex = String.raw`\begin{pmatrix}
+1 & 2 \\\[2pt\]
+3 & 4
+\end{pmatrix}`;
+    const source = '\\[\n' + latex + '\n\\]';
+    parseMarkdown(value, source);
+    expect(formulas(value)).toEqual([{ latex, delimiter: '\\[', type: 'mathBlock' }]);
+    expect((await renderMath(latex, true)).error).toBeTruthy();
+    const saved = serializeMarkdown(value);
+    expect(saved).toContain(source);
+    parseMarkdown(value, saved);
+    expect(formulas(value)).toEqual([{ latex, delimiter: '\\[', type: 'mathBlock' }]);
+  });
+  it('TeX 花括号错误不能破坏独立公式围栏及相邻正文', () => {
+    const value = editor();
+    const latex = String.raw`\frac{a}{b`;
+    for (const delimiter of ['$$', '\\['] as MathDelimiter[]) {
+      const source = writeMath({ latex, delimiter }, true);
+      parseMarkdown(value, source + '\n\n保留正文 $x$');
+      expect(formulas(value)).toEqual([
+        { latex, delimiter, type: 'mathBlock' }, { latex: 'x', delimiter: '$', type: 'mathInline' },
+      ]);
+      expect(value.state.doc.textContent).toContain('保留正文');
+      expect(serializeMarkdown(value)).toContain(source);
+    }
+  });
+  it('独立围栏支持缩进和 CRLF，忽略内部行尾闭合与注释', () => {
+    const value = editor();
+    const latex = String.raw`a \]` + '\n' + String.raw`% \]`;
+    parseMarkdown(value, '  \\[  \r\n' + latex.replaceAll('\n', '\r\n') + '\r\n  \\] \r\n\r\n后文');
+    expect(formulas(value)).toEqual([{ latex, delimiter: '\\[', type: 'mathBlock' }]);
+    expect(value.state.doc.textContent).toContain('后文');
+  });
+  it('未闭合块不借用下一块的围栏，同一行与混合行定界符保持兼容', () => {
+    const value = editor();
+    parseMarkdown(value, '\\[\n未闭合\n\n\\[\nx\n\\]');
+    expect(formulas(value)).toEqual([{ latex: 'x', delimiter: '\\[', type: 'mathBlock' }]);
+    for (const source of ['\\[x\\]', '\\[\nx\\]', '$$\nx$$']) {
+      parseMarkdown(value, source);
+      expect(formulas(value)).toEqual([{ latex: 'x', delimiter: source.startsWith('$$') ? '$$' : '\\[', type: 'mathBlock' }]);
+    }
+  });
 });

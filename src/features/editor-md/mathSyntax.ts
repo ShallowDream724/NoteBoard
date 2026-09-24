@@ -82,7 +82,33 @@ export function findMathStart(source: string): number {
   return -1;
 }
 
+/** Own-line fences delimit an opaque TeX block, even when that TeX is invalid.
+ * Do not make Markdown ownership depend on balanced TeX braces or inner \[ tokens.
+ * One forward scan; no TeX parser, line array or per-character source copies. */
+function readFencedMathBlock(source: string): MathMatch | null {
+  const opening = /^ {0,3}(\$\$|\\\[)[ \t]*\r?\n/.exec(source);
+  if (!opening) return null;
+  const delimiter = opening[1] as MathDelimiter;
+  const closing = mathClosingDelimiter(delimiter);
+  const boundaries = /^ {0,3}(\$\$|\\\[|\\\])[ \t]*(?:\r?\n|$)/gm;
+  boundaries.lastIndex = opening[0].length;
+  let boundary: RegExpExecArray | null;
+  while ((boundary = boundaries.exec(source))) {
+    if (boundary[1] === closing) {
+      const end = boundaries.lastIndex;
+      const latex = source.slice(opening[0].length, boundary.index).replace(/\r?\n$/, '');
+      return { start: 0, end, raw: source.slice(0, end), latex, delimiter };
+    }
+    // An unclosed bracket block must not consume the following bracket block.
+    if (boundary[1] === delimiter) return null;
+  }
+  return null;
+}
+
 export function readMathBlock(source: string): MathMatch | null {
+  const fenced = readFencedMathBlock(source);
+  if (fenced) return fenced;
+  // Retain compact and mixed-line syntax when there is no own-line fence pair.
   const indent = /^ {0,3}(?=\$\$|\\\[)/.exec(source)?.[0].length;
   if (indent === undefined) return null;
   const match = readMath(source, indent, true);
