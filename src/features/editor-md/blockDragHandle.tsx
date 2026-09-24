@@ -176,7 +176,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
     const handleMouseMove = (event: MouseEvent) => {
       if (dragSessionRef.current) return;
-      if (editorDom.classList.contains('nb-row-resizing')) {
+      if (editorDom.classList.contains('nb-table-resizing')) {
         setState(current => current.visible ? { ...current, visible: false } : current);
         return;
       }

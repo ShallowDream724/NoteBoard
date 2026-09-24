@@ -1,5 +1,9 @@
 .nb-large-table { contain: layout style; }
-.nb-large-table > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.nb-large-table.nb-fixed-columns > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
 /* Wide formula descendants contribute to the editor's natural scroll extent. */
 .nb-prose .math-node-display { contain: style; }
 .nb-row-resize-guide { position: fixed; left: 0; top: 0; height: 4px; background: var(--accent-500, #3b82f6); pointer-events: none; z-index: 20; }
+.nb-prose :is(td, th) { --math-white-space: normal; }
+.nb-prose :is(td, th) :is(p, a) { word-break: normal; overflow-wrap: break-word; }
+.nb-prose :is(td, th) .math-node > span { max-width: 100%; }
+.nb-prose :is(td, th) .math-preview { width: auto !important; min-width: 0 !important; max-width: 100%; }

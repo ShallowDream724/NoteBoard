@@ -12,6 +12,16 @@ export class EfficientTableView extends TableView {
   }
   private applyPolicy(node: Node) {
     this.dom.classList.toggle('nb-large-table', node.childCount >= 100 || node.childCount * (node.firstChild?.childCount ?? 0) >= 600);
+    let fixed = !!node.firstChild;
+    node.firstChild?.forEach(cell => { if (!cell.attrs.colwidth?.every((width: number) => width > 0)) fixed = false; });
+    this.table.style.tableLayout = fixed ? 'fixed' : '';
+    this.dom.classList.toggle('nb-fixed-columns', fixed);
   }
-  update(node: Node) { if (!super.update(node)) return false; this.applyPolicy(node); return true; }
+  update(node: Node) {
+    if (node === this.node) return true;
+    if (node.type !== this.node.type) return false;
+    if (node.firstChild !== this.node.firstChild) super.update(node);
+    else this.node = node;
+    this.applyPolicy(node); return true;
+  }
 }

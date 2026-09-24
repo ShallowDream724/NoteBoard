@@ -4,6 +4,7 @@ import { matrixSource } from '../../core/math/structure';
 import { mountMatrixPreview } from './matrixPreview';
 import { checkMathSource, mathMarkupNodeCount, MATH_LIMITS } from './mathLimits';
 import { registerMathPreview, type MathPreviewLease } from './mathPreviewSession';
+import '../../core/math/wrapping.css';
 
 let nextId = 0;
 type Size = { width: number; height: number };

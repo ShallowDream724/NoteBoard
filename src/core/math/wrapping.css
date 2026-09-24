@@ -1,0 +1,6 @@
+/* Consumers opt in on a containing region with --math-white-space: normal.
+ * KaTeX's base groups are indivisible; only its own operator boundaries wrap.
+ * This is CSS layout, not a second TeX render or a document transaction. */
+.katex-display > .katex,
+.katex > .katex-html { white-space: var(--math-white-space, nowrap); }
+.katex-html > .base { white-space: nowrap; }

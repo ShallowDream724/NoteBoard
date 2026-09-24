@@ -1,11 +1,13 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
+import { TableMap } from '@tiptap/pm/tables';
+import { closeHistory } from '@tiptap/pm/history';
 import type { EditorView } from '@tiptap/pm/view';
 import { SizedTableRow } from './markdownTable';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
+import { columnWidthsStep, resizedColumnPair } from './tableColumnWidths';
+import { tableGesturePreview } from './tableGesturePreview';
 
-/** The row owns its preview-only height. Ignoring that DOM attribute prevents
- * the mutation observer from committing a transaction on every pointer move. */
 export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
     return ({ node }) => {
@@ -21,165 +23,143 @@ export const ResizableTableRow = SizedTableRow.extend({
   },
 });
 
-interface Drag { row: HTMLTableRowElement; pos: number; pointer: number; y: number; height: number; scale: number; next: number; guideBottom: number; preview: ReturnType<typeof rowPreview>; restoreColumns: () => void }
-let previewId = 0;
-/** CSSOM updates avoid waking ProseMirror's MutationObserver/selection reads on
- * every frame. Only the gesture's initial marker and final transaction touch DOM. */
-function rowPreview(row: HTMLTableRowElement, height: number) {
-  const name = `nb-row-preview-${++previewId}`, style = row.ownerDocument.createElement('style');
-  style.textContent = `.${name} { height: ${height}px !important; }`;
-  row.ownerDocument.head.append(style); row.classList.add(name);
-  const rule = style.sheet!.cssRules[0] as CSSStyleRule;
-  return { paint(height: number) { rule.style.setProperty('height', `${height}px`, 'important'); },
-    dispose() { row.classList.remove(name); style.remove(); } };
+interface Edge { axis: 'row' | 'column'; side?: 'left' | 'right'; row: HTMLTableRowElement; cell: HTMLTableCellElement; table: HTMLTableElement }
+interface Drag extends Edge {
+  pos: number; pointer: number; origin: number; start: number; next: number; adjacent?: number;
+  column: number; scale: number; guideOrigin: number;
+  preview: NonNullable<ReturnType<typeof tableGesturePreview>>;
 }
-/** Fix existing geometry during a row gesture so the browser need not repeat
- * intrinsic column measurement on each frame. Read/write O(columns) once. */
-function freezeColumns(row: HTMLTableRowElement) {
-  const table = row.closest('table')!;
-  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>(':scope > colgroup > col'));
-  const layout = table.style.tableLayout, width = table.style.width;
-  const scale = table.getBoundingClientRect().width / table.offsetWidth || 1;
-  const measured = columns.map(column => ({ column, before: column.style.width, width: column.getBoundingClientRect().width / scale }));
-  if (!measured.length || measured.some(column => column.width <= 0)) return () => {};
-  const tableWidth = table.getBoundingClientRect().width / scale;
-  // Native table layout revisits every cell when one row height changes. During
-  // large, unmerged-table row gestures use the already measured column widths
-  // in independent grid rows. DOM/model/selection remain intact, and CSSOM-only
-  // height updates can skip distant rows. Merged tables retain native semantics.
-  const wrapper = table.parentElement;
-  const isolateRows = wrapper?.classList.contains('nb-large-table') && !table.querySelector('[rowspan]:not([rowspan="1"]),[colspan]:not([colspan="1"])');
-  let restoreRows = () => {};
-  if (isolateRows) {
-    const name = `nb-table-gesture-${++previewId}`;
-    const style = table.ownerDocument.createElement('style');
-    const template = measured.map(column => `${column.width}px`).join(' ');
-    style.textContent = `
-      table.${name} { display:block !important; }
-      table.${name}>colgroup { display:none; }
-      table.${name}>tbody,table.${name}>thead,table.${name}>tfoot { display:block; }
-      table.${name} tr { display:grid; grid-template-columns:${template}; content-visibility:auto; contain-intrinsic-size:auto 44px; }
-      table.${name} tr+tr { margin-top:-1px; }
-      table.${name} td,table.${name} th { display:block; min-width:0; box-sizing:border-box; }
-      table.${name} td+td,table.${name} th+th { margin-left:-1px; }
-    `;
-    table.ownerDocument.head.append(style);
-    table.classList.add(name);
-    restoreRows = () => { table.classList.remove(name); style.remove(); };
-  }
-  measured.forEach(({ column, width }) => { column.style.width = `${width}px`; });
-  table.style.width = `${tableWidth}px`; table.style.tableLayout = 'fixed';
-  return () => {
-    restoreRows();
-    measured.forEach(({ column, before }) => { column.style.width = before; });
-    table.style.width = width; table.style.tableLayout = layout;
-  };
-}
-function rowAtEdge(view: EditorView, event: PointerEvent) {
-  const target = event.target; if (!(target instanceof Element)) return null;
-  const row = target.closest<HTMLTableRowElement>('tr');
-  const cell = target.closest<HTMLElement>('td,th');
-  if (!row || !cell || !view.dom.contains(row)) return null;
-  const bounds = row.getBoundingClientRect(), cellBounds = cell.getBoundingClientRect();
-  // Column boundaries retain the existing horizontal resize gesture.
-  if (Math.abs(event.clientX - cellBounds.right) < 5 || Math.abs(event.clientY - bounds.bottom) > 5) return null;
-  return row;
-}
-function rowPosition(view: EditorView, row: HTMLElement): number | null {
-  const resolved = view.state.doc.resolve(view.posAtDOM(row, 0));
-  for (let depth = resolved.depth; depth > 0; depth--) if (resolved.node(depth).type.name === 'tableRow') return resolved.before(depth);
+
+function edgeAt(view: EditorView, event: PointerEvent): Edge | null {
+  if (!view.editable || !(event.target instanceof Element)) return null;
+  const cell = event.target.closest<HTMLTableCellElement>('td,th');
+  const row = cell?.parentElement as HTMLTableRowElement | undefined;
+  const table = cell?.closest('table');
+  if (!cell || !row || !table || !view.dom.contains(table)) return null;
+  const bounds = cell.getBoundingClientRect();
+  if (Math.abs(event.clientX - bounds.right) < 5) return { axis: 'column', side: 'right', cell, row, table };
+  if (Math.abs(event.clientX - bounds.left) < 5 && cell.previousElementSibling) return { axis: 'column', side: 'left', cell, row, table };
+  if (Math.abs(event.clientY - row.getBoundingClientRect().bottom) < 5) return { axis: 'row', cell, row, table };
   return null;
 }
 
+function modelPosition(view: EditorView, edge: Edge) {
+  const resolved = view.state.doc.resolve(view.posAtDOM(edge.cell, 0));
+  let tableDepth = resolved.depth;
+  while (tableDepth && resolved.node(tableDepth).type.spec.tableRole !== 'table') tableDepth--;
+  if (!tableDepth) return null;
+  if (edge.axis === 'row') return { pos: resolved.before(tableDepth + 1), column: -1 };
+  const table = resolved.node(tableDepth), start = resolved.start(tableDepth);
+  const cellPos = resolved.before(tableDepth + 2) - start;
+  const range = TableMap.get(table).findCell(cellPos);
+  return { pos: resolved.before(tableDepth), column: (edge.side === 'left' ? range.left : range.right) - 1 };
+}
+
+/** Rows and columns share one gesture owner. No document changes during a
+ * pointer frame; final attributes are committed once with stable positions. */
 export const TableSizing = Extension.create({
   name: 'tableSizing',
   addProseMirrorPlugins() {
-    let drag: Drag | null = null, frame = 0, activeView: EditorView | null = null;
-    let guide: HTMLElement | undefined, guideRow: HTMLTableRowElement | null = null, hoverFrame = 0;
-    let latestPointer: PointerEvent | undefined;
+    let drag: Drag | null = null, frame = 0, hoverFrame = 0, view: EditorView | undefined;
+    let guide: HTMLElement | undefined, latestPointer: PointerEvent | undefined, shown: Edge | null = null;
     const hideGuide = () => {
-      guideRow = null; if (guide) guide.hidden = true;
-      activeView?.dom.classList.remove('nb-row-resize-ready');
+      shown = null;
+      if (guide) guide.hidden = true;
+      if (view?.dom.classList.contains('nb-row-resize-ready')) view.dom.classList.remove('nb-row-resize-ready');
+      if (view?.dom.classList.contains('resize-cursor')) view.dom.classList.remove('resize-cursor');
     };
-    const showGuide = (row: HTMLTableRowElement) => {
-      if (!guide || !activeView) return;
-      const bounds = row.getBoundingClientRect(), viewport = findScrollContainer(activeView.dom).getBoundingClientRect();
-      const wrapper = row.closest('.tableWrapper')?.getBoundingClientRect();
-      const left = Math.max(bounds.left, viewport.left, wrapper?.left ?? -Infinity);
-      const right = Math.min(bounds.right, viewport.right, wrapper?.right ?? Infinity);
-      if (right <= left || bounds.bottom < viewport.top || bounds.bottom > viewport.bottom) { hideGuide(); return; }
-      guideRow = row; guide.hidden = false;
-      guide.style.transform = `translateX(${left}px)`; guide.style.top = `${bounds.bottom - 2}px`; guide.style.width = `${right - left}px`;
-      if (drag) drag.guideBottom = bounds.bottom - (drag.next - drag.height) * drag.scale;
-      activeView.dom.classList.add('nb-row-resize-ready');
+    const showGuide = (edge: Edge) => {
+      if (!guide || !view) return;
+      const bounds = edge.axis === 'row' ? edge.row.getBoundingClientRect() : edge.cell.getBoundingClientRect();
+      const viewport = findScrollContainer(view.dom).getBoundingClientRect();
+      const wrapper = edge.table.parentElement!.getBoundingClientRect();
+      const table = edge.table.getBoundingClientRect();
+      const horizontal = edge.axis === 'row';
+      const boundary = horizontal ? bounds.bottom : edge.side === 'left' ? bounds.left : bounds.right;
+      const from = horizontal ? Math.max(bounds.left, viewport.left, wrapper.left) : Math.max(table.top, viewport.top, wrapper.top);
+      const to = horizontal ? Math.min(bounds.right, viewport.right, wrapper.right) : Math.min(table.bottom, viewport.bottom, wrapper.bottom);
+      if (to <= from) { hideGuide(); return; }
+      shown = edge; guide.hidden = false;
+      guide.style.cssText = horizontal
+        ? `left:${from}px;top:${bounds.bottom - 2}px;width:${to - from}px;height:4px;background:var(--success-500,#22a06b)`
+        : `left:${boundary - 2}px;top:${from}px;width:4px;height:${to - from}px;background:var(--accent-500,#3b82f6)`;
+      view.dom.classList.toggle('nb-row-resize-ready', horizontal);
+      view.dom.classList.toggle('resize-cursor', !horizontal);
+      if (drag) drag.guideOrigin = boundary - (drag.next - drag.start) * drag.scale;
     };
     const paint = () => {
       frame = 0; if (!drag) return;
-      drag.preview.paint(drag.next);
-      if (guide) guide.style.top = `${drag.guideBottom + (drag.next - drag.height) * drag.scale - 2}px`;
+      if (drag.axis === 'row') drag.preview.rowHeight(drag.next);
+      else drag.preview.columns(drag.column, drag.next, drag.adjacent);
+      if (guide) guide.style.setProperty(drag.axis === 'row' ? 'top' : 'left', `${drag.guideOrigin + (drag.next - drag.start) * drag.scale - 2}px`);
     };
-    const finish = (view: EditorView, commit: boolean) => {
+    const finish = (editor: EditorView, commit: boolean) => {
       if (!drag) return;
       const current = drag; drag = null; latestPointer = undefined;
       cancelAnimationFrame(frame); frame = 0;
-      current.preview.dispose();
-      current.restoreColumns();
-      hideGuide();
-      view.dom.classList.remove('nb-row-resizing', 'nb-row-resize-ready');
-      if (view.dom.hasPointerCapture(current.pointer)) view.dom.releasePointerCapture(current.pointer);
-      const node = view.state.doc.nodeAt(current.pos);
-      if (commit && node?.type.name === 'tableRow' && Math.abs(current.next - current.height) >= 1) {
-        view.dispatch(view.state.tr.setNodeMarkup(current.pos, undefined, { ...node.attrs, height: current.next }));
+      current.preview.dispose(); hideGuide();
+      editor.dom.classList.remove('nb-row-resizing', 'nb-table-resizing');
+      if (editor.dom.hasPointerCapture(current.pointer)) editor.dom.releasePointerCapture(current.pointer);
+      const node = editor.state.doc.nodeAt(current.pos);
+      if (!commit || !node || Math.abs(current.next - current.start) < 1) return;
+      if (current.axis === 'row' && node.type.spec.tableRole === 'row') {
+        editor.dispatch(closeHistory(editor.state.tr).setNodeMarkup(current.pos, undefined, { ...node.attrs, height: current.next }));
+      } else if (current.axis === 'column' && node.type.spec.tableRole === 'table') {
+        const widths = current.preview.widths.map(Math.round);
+        widths[current.column] = current.next;
+        if (current.adjacent !== undefined) widths[current.column + 1] = Math.round(current.adjacent);
+        editor.dispatch(closeHistory(editor.state.tr).step(columnWidthsStep(current.pos, node, widths)));
       }
     };
     return [new Plugin({
-      // Cancel temporary DOM state before another transaction updates NodeViews.
-      filterTransaction(transaction) { if (transaction.docChanged && drag && activeView) finish(activeView, false); return true; },
+      filterTransaction(transaction) { if (transaction.docChanged && drag && view) finish(view, false); return true; },
       props: { handleDOMEvents: {
-        pointermove(view, event) {
+        pointermove(_editor, event) {
           if (drag) {
-            drag.next = Math.max(24, Math.min(10000, Math.round(drag.height + (event.clientY - drag.y) / drag.scale)));
+            if (event.pointerId !== drag.pointer) return false;
+            const delta = ((drag.axis === 'row' ? event.clientY : event.clientX) - drag.origin) / drag.scale;
+            if (drag.axis === 'row') drag.next = Math.max(24, Math.min(10000, Math.round(drag.start + delta)));
+            else [drag.next, drag.adjacent] = resizedColumnPair(drag.preview.widths, drag.column, delta);
             if (!frame) frame = requestAnimationFrame(paint);
             event.preventDefault(); return true;
           }
           latestPointer = event;
           if (!hoverFrame) hoverFrame = requestAnimationFrame(() => {
-            hoverFrame = 0; if (!latestPointer || drag || !activeView) return;
-            const row = rowAtEdge(activeView, latestPointer); if (row) showGuide(row); else hideGuide();
+            hoverFrame = 0; if (!latestPointer || drag || !view) return;
+            const edge = edgeAt(view, latestPointer); if (edge) showGuide(edge); else hideGuide();
           });
           return false;
         },
-        pointerdown(view, event) {
+        pointerdown(editor, event) {
+          if (drag) return true;
           if (event.button !== 0) return false;
-          const row = rowAtEdge(view, event); if (!row) return false;
-          const pos = rowPosition(view, row); if (pos == null) return false;
-          const bounds = row.getBoundingClientRect(), height = row.offsetHeight;
-          const restoreColumns = freezeColumns(row);
-          drag = { row, pos, pointer: event.pointerId, y: event.clientY, height, next: height, guideBottom: bounds.bottom, scale: bounds.height / height || 1, preview: rowPreview(row, height), restoreColumns };
-          view.dom.setPointerCapture(event.pointerId); view.dom.classList.add('nb-row-resizing');
-          showGuide(row);
-          event.preventDefault(); return true;
+          const edge = edgeAt(editor, event); if (!edge) return false;
+          const position = modelPosition(editor, edge); if (!position) return false;
+          const bounds = edge.row.getBoundingClientRect(), rowHeight = edge.row.offsetHeight;
+          const preview = tableGesturePreview(edge.table, edge.axis === 'row' ? edge.row : undefined); if (!preview) return false;
+          const start = edge.axis === 'row' ? rowHeight : preview.widths[position.column];
+          drag = { ...edge, ...position, preview, pointer: event.pointerId, origin: edge.axis === 'row' ? event.clientY : event.clientX,
+            start, next: start, scale: edge.axis === 'row' ? bounds.height / rowHeight || 1 : preview.scale, guideOrigin: 0 };
+          editor.dom.setPointerCapture(event.pointerId); editor.dom.classList.add('nb-table-resizing');
+          if (edge.axis === 'row') editor.dom.classList.add('nb-row-resizing');
+          showGuide(edge); event.preventDefault(); return true;
         },
-        pointerup(view) { if (!drag) return false; finish(view, true); return true; },
-        pointercancel(view) { finish(view, false); return false; },
-        lostpointercapture(view) { finish(view, false); return false; },
+        pointerup(editor, event) { if (!drag || event.pointerId !== drag.pointer) return false; finish(editor, true); return true; },
+        pointercancel(editor, event) { if (event.pointerId === drag?.pointer) finish(editor, false); return false; },
+        lostpointercapture(editor, event) { if (event.pointerId === drag?.pointer) finish(editor, false); return false; },
         pointerleave() { latestPointer = undefined; if (!drag) hideGuide(); return false; },
-        keydown(view, event) { if (!drag) return false; finish(view, false); return event.key === 'Escape'; },
+        keydown(editor, event) { if (!drag) return false; finish(editor, false); return event.key === 'Escape'; },
       } },
-      view(view) {
-        activeView = view;
-        guide = view.dom.ownerDocument.createElement('div'); guide.className = 'nb-row-resize-guide'; guide.hidden = true;
-        guide.setAttribute('aria-hidden', 'true'); view.dom.ownerDocument.body.append(guide);
-        // The editor owns one overlay outside its observed content DOM. Hover
-        // never decorates every cell or dispatches a document transaction.
-        const scroll = () => { if (drag) showGuide(drag.row); else hideGuide(); };
-        view.dom.ownerDocument.addEventListener('scroll', scroll, true);
+      view(editor) {
+        view = editor;
+        guide = editor.dom.ownerDocument.createElement('div'); guide.className = 'nb-row-resize-guide'; guide.hidden = true;
+        guide.setAttribute('aria-hidden', 'true'); editor.dom.ownerDocument.body.append(guide);
+        const scroll = () => { if (drag) showGuide(drag); else hideGuide(); };
+        editor.dom.ownerDocument.addEventListener('scroll', scroll, true);
         return {
-          update() { if (guideRow && !view.dom.contains(guideRow)) hideGuide(); },
-          destroy() {
-            finish(view, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
-            view.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; activeView = null;
-          },
+          update() { if (shown && !editor.dom.contains(shown.table)) hideGuide(); },
+          destroy() { finish(editor, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
+            editor.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; view = undefined; },
         };
       },
     })];

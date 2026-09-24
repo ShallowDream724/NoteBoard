@@ -152,7 +152,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
       mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
       infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow,
-      table: MarkdownTable.configure({ resizable: true, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
+      table: MarkdownTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
     UnifiedDocumentHistoryKeys.configure({ docKey }),
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
