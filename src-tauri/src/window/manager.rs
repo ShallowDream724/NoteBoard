@@ -32,7 +32,7 @@ fn bring_to_front_on_windows(window: &tauri::WebviewWindow) -> Result<(), String
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, SetForegroundWindow,
         SetWindowPos, ShowWindow, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOOWNERZORDER,
         SWP_NOSIZE, SWP_SHOWWINDOW, SW_RESTORE,
     };
@@ -42,7 +42,7 @@ fn bring_to_front_on_windows(window: &tauri::WebviewWindow) -> Result<(), String
     let hwnd = HWND(tauri_hwnd.0);
 
     unsafe {
-        let _ = ShowWindow(hwnd, SW_RESTORE);
+        if IsIconic(hwnd).as_bool() { let _ = ShowWindow(hwnd, SW_RESTORE); }
 
         // 临时关联当前工作线程与前台线程的输入队列，提高 SetForegroundWindow 的成功率。
         let current_thread_id = GetCurrentThreadId();

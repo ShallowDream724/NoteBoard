@@ -33,7 +33,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_window_state::Builder::new().with_filter(|label| !label.starts_with("nb-export-")).build())
+        .plugin(window::geometry::plugin())
         .manage(Mutex::new(AppState::for_startup()))
         .manage(export::ExportJobs::default())
         .manage(export::pandoc::PandocJobs::default())

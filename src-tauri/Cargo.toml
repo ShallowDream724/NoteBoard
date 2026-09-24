@@ -1,6 +1,6 @@
 [package]
 name = "noteboard"
-version = "0.3.17"
+version = "0.3.18"
 description = "Windows 桌面笔记 + 画板软件"
 authors = ["CrazyFigure"]
 license = "GPL-3.0-only"
@@ -21,7 +21,6 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-os = "2"
 tauri-plugin-single-instance = "2.4"
-tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 encoding_rs = "0.8"
@@ -49,3 +48,6 @@ zip = { version = "8.4", default-features = false, features = ["deflate-flate2-z
 windows = { version = "0.58", features = ["Win32_Foundation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 webview2-com = "0.38.2"
 windows61 = { package = "windows", version = "0.61.3" }
+
+[target."cfg(not(windows))".dependencies]
+tauri-plugin-window-state = "2"

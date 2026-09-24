@@ -2,7 +2,7 @@
 //
 // 🔴 协议要点（docs/启动性能与低内存根治计划.md §C）：
 //   - window_listeners_ready：前端订阅完成后的握手；分配 consumer 代际
-//   - window_shell_ready：只负责基础 DOM/主题已应用后的 show/focus，不等待隐藏窗口 paint
+//   - window_shell_ready：基础 DOM/主题已应用后恢复正常窗口位置并 show/focus，不等待隐藏窗口 paint
 //   - list_open_requests / ack_open_request：非破坏读取 + 幂等确认
 //   - begin_document_transfer / take_transfer_payload / prepare_transfer_complete /
 //     abort_transfer / query_transfer：迁移状态机 preparing → target-prepared → committed/aborted
@@ -26,7 +26,7 @@ pub fn window_listeners_ready(
     Ok(intent::window_listeners_ready(&state, &label))
 }
 
-/// 壳就绪：只负责窗口 show/focus（基础 DOM/主题已应用后调用）
+/// 壳就绪：恢复正常窗口位置后 show/focus（基础 DOM/主题已应用后调用）
 #[tauri::command]
 pub fn window_shell_ready(
     app: tauri::AppHandle,
@@ -35,6 +35,7 @@ pub fn window_shell_ready(
 ) -> Result<(), String> {
     manager::touch_window(&state, &label);
     if let Some(win) = app.get_webview_window(&label) {
+        if let Err(error) = crate::window::geometry::restore(&win) { log::error!("Window placement restore: {error}"); }
         let _ = win.show();
         let _ = win.set_focus();
     }
@@ -391,7 +392,7 @@ pub fn focus_window(app: tauri::AppHandle, label: String) -> Result<(), String> 
 
 /// 关闭窗口
 /// 1. 标记窗口为 closing，使 on_window_event 放行 CloseRequested
-/// 2. 使用 win.close() 走系统标准关闭管线（触发 window-state 保存并安全销毁 HWND 与 WebView2）
+/// 2. 使用 win.close() 走系统标准关闭管线（采集正常窗口位置并安全销毁 HWND 与 WebView2）
 /// 3. 所有窗口平等独立：若还有其他存活窗口，仅关闭本窗口；若为最后一个窗口，关闭后退出应用
 /// 🔴 若存在待分配打开请求（orphan），最后窗口退出前先建新窗口承接，避免 app.exit(0) 丢请求
 #[tauri::command]
