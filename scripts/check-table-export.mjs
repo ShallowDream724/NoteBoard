@@ -1,0 +1,41 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { createServer } from 'node:http';
+import { build } from 'vite';
+const require = createRequire(import.meta.url);
+const { chromium } = require('C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const root=process.cwd(), dir=path.join(root,'.tmp/table-export-check');
+await fs.mkdir(dir,{recursive:true});
+await fs.cp(path.join(root,'src'),path.join(dir,'src'),{recursive:true});
+await fs.writeFile(path.join(dir,'index.html'),'<html><head><meta charset="utf-8"></head><body><main id="document"></main><script type="module" src="./entry.ts"></script></body></html>');
+await fs.writeFile(path.join(dir,'entry.ts'),`
+import {renderDocument} from './src/features/export/renderDocument';
+import {createLayoutSession} from './src/features/export/layout';
+import {DEFAULT_PDF} from './src/features/export/model';
+import './src/features/export/document.css';
+window.tablePdf={async render(markdown){const root=document.querySelector('#document');const result=await renderDocument(markdown,'表格排版检查','');root.innerHTML=result.html;document.documentElement.style.cssText='--export-font:10.5pt;--export-line:1.4;--export-width:186mm';await document.fonts.ready;window.layout=createLayoutSession(root);return window.layout.update(DEFAULT_PDF);}};
+`);
+if(!process.argv.includes('--reuse-build')) await build({configFile:false,root:dir,base:'./',worker:{format:'es'},build:{outDir:path.join(dir,'dist'),emptyOutDir:false,minify:true},logLevel:'warn'});
+const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'};
+const server=createServer(async(req,res)=>{try{const p=new URL(req.url,'http://localhost').pathname;res.setHeader('Content-Type',mime[path.extname(p==='/'?'index.html':p)]??'application/octet-stream');res.end(await fs.readFile(path.join(dir,'dist',p==='/'?'index.html':p)));}catch{res.statusCode=404;res.end();}});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:1000,height:1100}}); const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+ await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.waitForFunction(()=>window.tablePdf);
+ const formula='F='+Array.from({length:22},(_,i)=>`\\frac{a_{${i+1}}}{1+b_{${i+1}}}`).join('+');
+ const record=Array.from({length:600},(_,i)=>`高行片段${i+1}`).join(' ');
+ const text=`# 单元格与自然宽度\n\n| 项目 | 推导 | 来源 |\n| --- | --- | --- |\n| 甲 | $a^2+b^2=c^2$ | [KaTeX](https://katex.org) |\n| 乙 | $${formula}$ | [Pandoc](https://pandoc.org) |\n\n## 连续数据\n\n| 序号 | 观测值 | 备注 |\n| --- | --- | --- |\n`+Array.from({length:100},(_,i)=>`| R${String(i).padStart(5,'0')} | ${(i/8).toFixed(3)} | 第 ${i} 次观测，边界记录 CONT |`).join('\n')+`\n\n## 跨页单行\n\n| 名称 | 记录 |\n| --- | --- |\n| HIGHEST | ${record} |`;
+ const report=await page.evaluate(md=>window.tablePdf.render(md),text);
+ const geometry=await page.evaluate(()=>{const tables=[...document.querySelectorAll('table')];const text=cell=>{const copy=cell.cloneNode(true);copy.querySelectorAll('.export-table-location').forEach(e=>e.remove());return copy.textContent;};return {width:document.querySelector('#document').getBoundingClientRect().width,tables:tables.map(t=>({width:t.getBoundingClientRect().width,columns:[...t.rows[0].cells].map(c=>c.getBoundingClientRect().width),rows:t.rows.length})),links:[...tables[0].querySelectorAll('a[href="https://katex.org"],a[href="https://pandoc.org"]')].map(a=>({text:a.textContent,rects:a.getClientRects().length})),parts:[...tables.at(-1).querySelectorAll('[data-export-row-part]')].map(r=>({label:text(r.cells[0]),text:text(r.cells[1]),height:r.getBoundingClientRect().height}))};});
+ assert.deepEqual(report.issues.filter(i=>i.blocking),[]); assert.deepEqual(errors,[]);
+ assert.ok(geometry.links.every(a=>a.rects===1));assert.ok(geometry.tables[1].width<geometry.width*.9);
+ assert.ok(geometry.parts.length>1);assert.equal(geometry.parts.map(p=>p.text).join(''),record);
+ assert.ok(geometry.parts.slice(1).every(p=>p.label.includes('HIGHEST')&&p.label.includes('续')));
+ await page.pdf({path:path.join(dir,'table-layout.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'},displayHeaderFooter:true,headerTemplate:'<span></span>',footerTemplate:'<div style="font-size:9px;text-align:center;width:100%"><span class="pageNumber"></span></div>'});
+ await page.screenshot({path:path.join(dir,'first-table.png')});
+ await fs.writeFile(path.join(dir,'results.json'),JSON.stringify({report,geometry,errors},null,2));
+ console.log(JSON.stringify({report,tables:geometry.tables,links:geometry.links,tallParts:geometry.parts.map(({label,height})=>({label,height})),errors},null,2));
+}finally{await browser.close();server.close();}

@@ -75,3 +75,16 @@ it('restores the complete table after a successful column split', async () => {
   expect(root.querySelector('thead')?.textContent?.replaceAll('\u00a0', '')).toBe('KeyAB');
   expect(root.querySelector('tbody')?.textContent?.replaceAll('\u00a0', '')).toBe('row12');
 });
+
+it('retains explicit column widths while formulas reflow inside the fixed table', async () => {
+  const root = fixture('<table data-export-item="table-1" style="width:465px"><colgroup><col style="width:85px"><col style="width:300px"><col style="width:80px"></colgroup><tbody><tr><td>Label</td><td>Formula</td><td>Source</td></tr></tbody></table>');
+  const table = root.querySelector('table')!;
+  measure(table, () => 465);
+  Array.from(table.rows[0].cells).forEach((cell, index) => measure(cell, () => [85, 300, 80][index]));
+  const report = await createLayoutSession(root).update(DEFAULT_PDF);
+  expect(table.classList.contains('table-wrap')).toBe(true);
+  expect(Array.from(table.querySelectorAll('col'), column => column.style.width)).toEqual(['85px', '300px', '80px']);
+  expect(table.style.width).toBe('465px');
+  expect(table.querySelector('colgroup[data-export-columns]')).toBeNull();
+  expect(report.issues).toEqual([]);
+});

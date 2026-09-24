@@ -3,6 +3,8 @@ import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
 import { readableScale, renderedScale } from './layoutMetrics';
 import { continueFraction, continueMatrix } from './mathLayout';
 import { createProseOverflowCheck } from './proseOverflow';
+import { allocateTableWidths, markTableEdges, measureTableWidths, resetAutomaticTableWidths, setAutomaticTableWidths } from './tableLayout';
+import { continueTableRows } from './tableContinuation';
 
 const ITEM_URI = 'https://noteboard.invalid/export-item/';
 function extent(element: HTMLElement) {
@@ -21,7 +23,7 @@ function availableWidth(element: HTMLElement, width: number) {
  * original cells multiplied by every continuation group. */
 function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: TablePlan): { group: HTMLElement; original: string } | null {
   const rows = Array.from(table.rows), count = rows[0]?.cells.length ?? 0;
-  if (count < 3 || rows.some(row => Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan > 1))) return null;
+  if (count < 3 || rows.some(row => Array.from(row.cells).some(cell => cell.colSpan > 1 || cell.rowSpan !== 1))) return null;
   const group = document.createElement('div'); group.dataset.exportTableGroup = table.dataset.exportItem;
   for (const [part, band] of plan.bands.entries()) {
     const start = band.from, end = band.to, used = columnWidths[0] + columnWidths.slice(start, end).reduce((sum, width) => sum + width, 0);
@@ -119,6 +121,10 @@ export function createLayoutSession(root: HTMLElement) {
     elements(id).forEach(element => {
       if (element.classList.contains('export-math') && formulaOriginals.has(id)) { element.innerHTML = formulaOriginals.get(id)!; delete element.dataset.mathContinued; }
       element.style.removeProperty('zoom'); element.classList.remove('wrap', 'table-wrap');
+      if (element.tagName === 'TABLE') {
+        resetAutomaticTableWidths(element);
+        element.querySelectorAll('.export-tall-row').forEach(row => row.classList.remove('export-tall-row'));
+      }
       element.querySelector<HTMLElement>('.katex-html')?.style.removeProperty('zoom');
       element.querySelectorAll('a.export-item-link').forEach(link => {
         if (link.classList.contains('export-table-location')) link.remove(); else link.replaceWith(...link.childNodes);
@@ -139,7 +145,9 @@ export function createLayoutSession(root: HTMLElement) {
       if (table) changed.add(table.dataset.exportItem!);
       if (element.tagName === 'TABLE') element.querySelectorAll<HTMLElement>('.export-math[data-export-item]').forEach(math => changed.add(math.dataset.exportItem!));
     }
-    changed.forEach(reset);
+    // Restore table structure before resetting the formulas in its restored cells.
+    const tableIds = new Set([...changed].filter(id => groups.has(id) || elements(id).some(element => element.tagName === 'TABLE')));
+    tableIds.forEach(reset); changed.forEach(id => { if (!tableIds.has(id)) reset(id); });
     const [paperWidth, paperHeight] = paperSize(options);
     const width = (paperWidth - options.marginMm * 2) * 96 / 25.4;
     const numberBand = options.pageNumbers ? Math.max(0, 8 - options.marginMm) : 0;
@@ -148,9 +156,14 @@ export function createLayoutSession(root: HTMLElement) {
     const tables = [...changed].flatMap(elements).filter((e): e is HTMLTableElement => e.tagName === 'TABLE');
     const tableWidths = tables.map(table => {
       const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
+      // Fully specified schema tables already carry their exact total width.
+      // Fixed layout makes that width authoritative before formula reflow.
+      if (manual && table.style.width) table.classList.add('table-wrap');
+      const intrinsic = manual ? null : measureTableWidths(table);
       // A scaled table rounds border/text metrics differently. A small guard on
       // natural widths prevents a final identifier character wrapping by 1 px.
-      return { manual, width: extent(table), columns: Array.from(table.rows[0]?.cells ?? [], cell => manual ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2) };
+      const columns = intrinsic?.natural ?? Array.from(table.rows[0]?.cells ?? [], cell => manual ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2);
+      return { manual, intrinsic, width: Math.max(manual ? table.getBoundingClientRect().width : extent(table), columns.reduce((sum, value) => sum + value, 0)), columns };
     });
     tables.forEach((table, index) => {
       const id = table.dataset.exportItem!, mode = options.items[id] ?? 'auto';
@@ -159,7 +172,10 @@ export function createLayoutSession(root: HTMLElement) {
       if (mode === 'fit') fit(table, width, tableWidths[index].width);
       else {
         const manual = tableWidths[index].manual;
-        if (mode === 'columns' || mode === 'auto') {
+        const allocated = !manual && mode !== 'columns' && tableWidths[index].intrinsic
+          ? allocateTableWidths(tableWidths[index].intrinsic!, width) : null;
+        if (allocated) setAutomaticTableWidths(table, allocated);
+        else if (mode === 'columns' || mode === 'auto') {
           const plan = planTableColumns(tableWidths[index].columns, width, mode === 'columns' ? 1 : readableScale(table, options.fontPt));
           if (plan?.bands.length === 1) { fit(table, width, tableWidths[index].width); return; }
           const split = plan && splitColumns(table, tableWidths[index].columns, plan);
@@ -241,8 +257,19 @@ export function createLayoutSession(root: HTMLElement) {
     });
     for (const id of changed) for (const table of elements(id).filter(e => e.tagName === 'TABLE'))
       if (extent(table) > width + 1) issue(id, '表格仍超出正文宽度，可选择缩放');
-    for (const id of changed) for (const table of elements(id).filter(e => e.tagName === 'TABLE'))
-      for (const row of table.querySelectorAll('tr')) row.classList.toggle('export-tall-row', row.getBoundingClientRect().height > pageHeight);
+    for (const id of changed) for (const table of elements(id).filter((element): element is HTMLTableElement => element.tagName === 'TABLE')) {
+      markTableEdges(table);
+      const result = continueTableRows(table, pageHeight);
+      if (result.changed) {
+        markTableEdges(table);
+        if (!originals.has(id)) { originals.set(id, result.original!); groups.set(id, table); }
+        const scope = groups.get(id)!;
+        const ids = new Set([id, ...Array.from(scope.querySelectorAll<HTMLElement>('[data-export-item]'), element => element.dataset.exportItem!)]);
+        ids.forEach(key => itemIndex.delete(key)); register(scope);
+        if (scope.dataset.exportItem) itemIndex.set(id, [scope]);
+      }
+      if (result.unsupported) issue(id, '此表含跨行合并或不可拆分的超高内容，续页保留原结构；请检查分页。', false);
+    }
     if (global) {
       for (const image of root.querySelectorAll('img')) { image.style.maxHeight = `${pageHeight}px`; image.style.objectFit = 'contain'; if (!image.complete || !image.naturalWidth) issue('', '有图片未能加载，请检查图片路径'); }
       if (root.querySelector('[data-export-source-only]')) issue('', '此图表暂按源码导出', false);
