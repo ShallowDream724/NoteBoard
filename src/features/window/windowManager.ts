@@ -561,7 +561,7 @@ export async function moveToNewWindow(docKey: string): Promise<boolean> {
     const outcome = await waitForTransferOutcome(transferId, label);
     if (outcome === 'committed') {
       // 5. 源清理（transferred 语义）：不移除目标所有权、不删暂存、不清空目标已接管的历史
-      tabStore.closeTab(docKey);
+      tabStore.closeTab(docKey, 'transferred');
       docStore.remove(docKey);
       clearDocumentRevision(docKey);
       return true;
@@ -695,7 +695,7 @@ function scheduleTransferReconcile(transferId: string, docKey: string): void {
     const tabStore = useWindowStore.getState();
     if (outcome === 'committed') {
       // 权威 committed：源清理（与 moveToNewWindow 成功路径同语义）
-      tabStore.closeTab(docKey);
+      tabStore.closeTab(docKey, 'transferred');
       useDocumentStore.getState().remove(docKey);
       clearDocumentRevision(docKey);
       tabStore.exitTransfer(docKey);

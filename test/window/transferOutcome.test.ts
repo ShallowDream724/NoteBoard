@@ -136,6 +136,7 @@ describe('🔴 N01 迁移终态判别（waitForTransferOutcome）', () => {
     expect(useDocumentStore.getState().getDocument(KEY)).toBeUndefined();
     expect(useWindowStore.getState().getTab(KEY)).toBeNull();
     expect(useWindowStore.getState().isTransferring(KEY)).toBe(false);
+    expect(ipc.unregisterDocument).not.toHaveBeenCalled();
   });
 
   it('aborted 事件驱动：源解锁且正文保留', async () => {

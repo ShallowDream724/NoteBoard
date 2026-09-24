@@ -72,7 +72,7 @@ interface WindowStore {
 
   // ── 操作 ──
   openTab: (tab: Tab) => void;
-  closeTab: (key: string) => void;
+  closeTab: (key: string, reason?: 'closed' | 'transferred') => void;
   closeOtherTabs: (key: string) => void;
   closeTabsLeft: (key: string) => void;
   closeTabsRight: (key: string) => void;
@@ -224,8 +224,8 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     });
   },
 
-  closeTab: (key) => {
-    if (get().isTransferring(key)) return;
+  closeTab: (key, reason = 'closed') => {
+    if (get().isTransferring(key) && reason !== 'transferred') return;
     set((state) => {
       const idx = state.tabs.findIndex((t) => t.key === key);
       if (idx < 0) return {};
@@ -238,7 +238,11 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
       return { tabs: newTabs, activeKey: newActive };
     });
     // 🔴 R04/R13/N04：统一清理（注销归属 + 释放会话 + 条件删除文档；幂等、恰一次）
-    disposeTabLifecycle(key);
+    if (reason === 'transferred') {
+      // Target ownership is already committed. Release only local resources.
+      markClosed(key);
+      disposeDocumentSession(key);
+    } else disposeTabLifecycle(key);
   },
 
   // 关闭除目标标签页外的所有其他标签页
