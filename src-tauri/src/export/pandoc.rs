@@ -122,15 +122,18 @@ fn formatting_warning(document: &serde_json::Value, format: &str) -> Option<&'st
     None
 }
 #[derive(Serialize)]
-pub struct PandocStatus { available: bool, version: String }
+#[serde(rename_all = "camelCase")]
+pub struct PandocStatus { available: bool, version: String, resolved_path: Option<String> }
 #[tauri::command]
 pub async fn pandoc_status(path: String) -> Result<PandocStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let job = PandocJob { owner: String::new(), cancelled: AtomicBool::new(false), started: AtomicBool::new(true), child: Mutex::new(None) };
-        match run(&job, command(&path).arg("--version"), Vec::new(), Duration::from_secs(10)) {
+        let mut cmd = command(&path);
+        let resolved_path = cmd.get_program().to_string_lossy().into_owned();
+        match run(&job, cmd.arg("--version"), Vec::new(), Duration::from_secs(10)) {
             Ok(output) if output.status.success() => Ok(PandocStatus { available: true,
-                version: String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("Pandoc").into() }),
-            _ => Ok(PandocStatus { available: false, version: String::new() }),
+                version: String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("Pandoc").into(), resolved_path: Some(resolved_path) }),
+            _ => Ok(PandocStatus { available: false, version: String::new(), resolved_path: None }),
         }
     }).await.map_err(|e| e.to_string())?
 }

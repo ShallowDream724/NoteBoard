@@ -1,6 +1,3 @@
-import { Check } from 'lucide-react';
-import { Tooltip } from '../Tooltip';
-
 export function NavBtn({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
     <button
@@ -42,81 +39,6 @@ export function NavBtn({ active, icon, label, onClick }: { active: boolean; icon
       {icon}
       <span>{label}</span>
     </button>
-  );
-}
-
-export function ThemeCard({
-  title,
-  desc,
-  bg,
-  accent,
-  codeBg,
-  codeColor,
-  selected,
-  onClick,
-}: {
-  title: string;
-  desc: string;
-  bg: string;
-  accent: string;
-  codeBg: string;
-  codeColor: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        padding: '14px 16px',
-        borderRadius: 'var(--radius-md)',
-        border: selected ? '2px solid var(--accent-strong)' : '1px solid var(--editor-border)',
-        background: 'var(--editor-surface)',
-        cursor: 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        boxShadow: selected ? 'var(--shadow-sm)' : 'none',
-        transition: 'all var(--transition-fast)',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = selected ? 'var(--accent-strong)' : 'var(--editor-border-focus)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = selected ? 'var(--accent-strong)' : 'var(--editor-border)';
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = selected ? 'var(--shadow-sm)' : 'none';
-      }}
-      onMouseDown={(e) => {
-        e.currentTarget.style.transform = 'translateY(0) scale(0.98)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-sm)';
-      }}
-      onMouseUp={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{title}</span>
-        {selected && <Check size={14} color="var(--accent-strong)" />}
-      </div>
-      <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>{desc}</span>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
-        <Tooltip content="背景色" side="top" sideOffset={4}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: bg, border: '1px solid var(--editor-border)', cursor: 'default' }} />
-        </Tooltip>
-        <Tooltip content="强调色" side="top" sideOffset={4}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: '1px solid transparent', cursor: 'default' }} />
-        </Tooltip>
-        <Tooltip content="代码块色" side="top" sideOffset={4}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: codeBg, border: '1px solid var(--editor-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: codeColor, fontSize: 9, fontWeight: 'bold', cursor: 'default' }}>
-            &lt;&gt;
-          </div>
-        </Tooltip>
-      </div>
-    </div>
   );
 }
 

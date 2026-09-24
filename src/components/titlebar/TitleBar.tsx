@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Settings as SettingsIcon, RefreshCw, FileOutput } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
-import { ThemeMenu } from './ThemeMenu';
+import { DocumentActions } from './DocumentActions';
 import { Tooltip } from '../Tooltip';
 import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -14,6 +14,7 @@ import { useUpdateStore } from '../../stores/updateStore';
 import { SidebarToggle } from '../SidebarToggle';
 import { useWindowStore } from '../../stores/windowStore';
 import { useExportStore } from '../../features/export/exportStore';
+import './titlebar.css';
 
 export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
@@ -45,6 +46,8 @@ export function TitleBar() {
         <SidebarToggle side="left" visible={explorerVisible} onToggle={toggleExplorer} />
       </div>
 
+      <DocumentActions />
+
       {/* Tab 栏 */}
       <TabBar />
 
@@ -54,7 +57,7 @@ export function TitleBar() {
         style={{
           flex: 1,
           height: '100%',
-          minWidth: 0,
+          minWidth: 32,
         }}
         onMouseDown={(e) => {
           // 若当前有菜单打开，阻止默认拖动行为并通知关闭所有标题栏浮层菜单
@@ -145,9 +148,6 @@ export function TitleBar() {
           )}
         </button>
       </Tooltip>
-
-      {/* 快捷主题切换菜单 */}
-      <ThemeMenu />
 
       {/* 设置中心按钮 */}
       <Tooltip content="设置" side="bottom" sideOffset={6}>
