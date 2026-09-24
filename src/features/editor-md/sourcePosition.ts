@@ -255,9 +255,25 @@ function clampSelection(selection: { anchor: number; head: number }, max: number
 }
 
 function mapCharacters(source: Generator<Character>, visual: Generator<Character>, direction: 'source' | 'visual', selection: { anchor: number; head: number }, start = { source: 0, visual: 0 }) {
+  const forward = selection.anchor <= selection.head;
+  const points = forward ? [selection.anchor, selection.head] : [selection.head, selection.anchor];
+  const result = mapCharacterPoints(source, visual, direction, points, start);
+  return { anchor: result[forward ? 0 : 1], head: result[forward ? 1 : 0] };
+}
+
+/** Map sorted endpoints in one semantic character walk. Formatting many ranges
+ * must not repeat a paragraph-prefix walk for each mark. */
+export function mapDocumentPositions(doc: DocumentNode, manager: { instance: { lexer: (text: string) => unknown[] } },
+  markdown: string, direction: 'source' | 'visual', sortedPoints: readonly number[]): number[] {
+  const located = sourceLocation(markdown);
+  const tokens = manager.instance.lexer(located.text) as Token[];
+  return mapCharacterPoints(sourceCharacters(tokens, located), documentCharacters(doc), direction, sortedPoints);
+}
+
+function mapCharacterPoints(source: Generator<Character>, visual: Generator<Character>, direction: 'source' | 'visual', values: readonly number[], start = { source: 0, visual: 0 }): number[] {
   const input = direction === 'source' ? visual : source;
   const output = direction === 'source' ? source : visual;
-  const values = [selection.anchor, selection.head]; const result: Array<number | undefined> = [undefined, undefined];
+  const result: number[] = []; let point = 0;
   const left: Character[] = [], right: Character[] = [];
   const fill = (buffer: Character[], stream: Generator<Character>, count: number) => {
     while (buffer.length < count) { const next = stream.next(); if (next.done) break; buffer.push(next.value); }
@@ -275,19 +291,21 @@ function mapCharacters(source: Generator<Character>, visual: Generator<Character
         if (x + y < score && [0, 1, 2].every(i => left[x + i].value === right[y + i].value)) { skipLeft = x; skipRight = y; score = x + y; }
       }
       const end = skipLeft ? left[skipLeft - 1].to : left[0].from;
-      for (let i = 0; i < values.length; i++) if (result[i] === undefined && values[i] <= end) result[i] = right[Math.min(skipRight, right.length - 1)].from;
+      while (point < values.length && values[point] <= end) { result.push(right[Math.min(skipRight, right.length - 1)].from); point++; }
       if (skipLeft) previousInput = left[skipLeft - 1].to;
       if (skipRight) previousOutput = right[skipRight - 1].to;
       left.splice(0, skipLeft); right.splice(0, skipRight); continue;
     }
     const a = left[0], b = right[0];
-    for (let i = 0; i < values.length; i++) if (result[i] === undefined && values[i] <= a.to) {
-      if (values[i] < a.from) result[i] = values[i] - previousInput <= a.from - values[i] ? previousOutput : b.from;
-      else result[i] = values[i] <= a.from ? b.from : b.to;
+    while (point < values.length && values[point] <= a.to) {
+      if (values[point] < a.from) result.push(values[point] - previousInput <= a.from - values[point] ? previousOutput : b.from);
+      else result.push(values[point] <= a.from ? b.from : b.to);
+      point++;
     }
-    if (result.every(value => value !== undefined)) break;
+    if (point === values.length) break;
     previousInput = a.to; previousOutput = b.to;
     left.shift(); right.shift();
   }
-  return { anchor: result[0] ?? previousOutput, head: result[1] ?? previousOutput };
+  while (result.length < values.length) result.push(previousOutput);
+  return result;
 }

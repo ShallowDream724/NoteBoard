@@ -31,6 +31,7 @@ import { nbEditorTheme } from '../editor-code/theme';
 import { nbSyntaxHighlighting } from '../editor-code/highlightStyle';
 import { createBaseExtensions, typographyCompartment } from '../editor-code/setup';
 import { sourceTypingAssist } from './sourceTypingAssist';
+import { readStyledSource, readSourceStyles, resetSourceStyles, sourceStylesField } from '../document-style/sourceStyleTracking';
 import { liveEditorSettings } from '../editor-code/editorSettingsBinding';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
@@ -313,7 +314,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const text = sourceViewRef.current?.state.doc;
     if (!text) return undefined;
     if (sourceContentRef.current?.text !== text) {
-      sourceContentRef.current = { text, markdown: text.toString() };
+      sourceContentRef.current = { text, markdown: readStyledSource(sourceViewRef.current!.state) };
     }
     return sourceContentRef.current.markdown;
   }, []);
@@ -333,6 +334,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
             insert: content,
           },
           annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
+          effects: resetSourceStyles.of(null),
         });
         sourceContentRef.current = { text: sourceViewRef.current.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
       }
@@ -357,6 +359,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const previousPendingExisted = hasPendingSourceSnapshot(docKey);
       stagePendingSourceSnapshot(docKey, {
         text: update.state.doc,
+        styles: readSourceStyles(update.state),
         revision: getDocumentRevision(docKey),
         isNewGroup: startsNewGroup,
         groupStartBefore: startsNewGroup || !previousPendingExisted
@@ -420,6 +423,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         liveEditorSettings,
         markdown(),
         sourceTypingAssist,
+        sourceStylesField,
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
         markdownPlainBracketExtension,
         nbSyntaxHighlighting,
@@ -494,6 +498,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
               : { from: 0, to: view.state.doc.length, insert: content },
             selection: { anchor, head },
             annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
+            effects: resetSourceStyles.of(null),
             scrollIntoView: true,
           });
           synchronizeCurrentDocumentHistoryContent(docKey, content, 'source');
@@ -783,7 +788,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const currentMode = useWindowStore.getState().getTab(docKey)?.viewMode ?? viewModeRef.current;
       const latestContent = currentMode === 'source' && sourceViewRef.current
         ? materializedSource
-          ?? sourceViewRef.current.state.doc.toString()
+          ?? readStyledSource(sourceViewRef.current.state)
         : materializedVisual
           ?? (tipTapEditorRef.current
             ? serializeMarkdown(tipTapEditorRef.current)

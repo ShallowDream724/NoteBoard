@@ -31,6 +31,7 @@ import { recordDocumentChange, type DocumentHistorySelection } from '../history/
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getMdTipTapEditor } from './editorInstances';
+import { materializeSourceStyles, type SourceStyles } from '../document-style/sourceStyleTracking';
 // 🔴 R3-03：pending 与会话代际绑定（物化前校验会话未失效）
 import { getSessionGeneration } from '../session/documentSession';
 
@@ -163,6 +164,7 @@ interface PendingSourceSnapshot {
   /** 🔴 R3-01：稳定组身份 */
   groupId: number;
   text: CodeMirrorText;
+  styles?: SourceStyles;
   revision: number;
   /** 🔴 R3-01：本组相对已提交历史是否新组（同组后续事务不覆盖） */
   isNewGroup: boolean;
@@ -189,6 +191,7 @@ export function stagePendingSourceSnapshot(
   docKey: string,
   snapshot: {
     text: CodeMirrorText;
+    styles?: SourceStyles;
     revision: number;
     isNewGroup: boolean;
     groupStartBefore?: DocumentHistorySelection;
@@ -219,7 +222,7 @@ export function flushPendingSourceSnapshot(docKey: string): string | null {
   }
 
   // CM Text 为不可变结构，toString 是对捕获快照的全量读取（不依赖活视图）
-  const content = pending.text.toString();
+  const content = materializeSourceStyles(pending.text, pending.styles);
   pendingSourceByDoc.delete(docKey);
 
   recordDocumentChange(docKey, content, {

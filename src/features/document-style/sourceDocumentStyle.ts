@@ -6,6 +6,7 @@ import { presentationBody } from './presentationMetadata';
 import { documentColor } from './colors';
 import type { TextStylePair } from './stylePreference';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
+import { readStyledSource, resetSourceStyles } from './sourceStyleTracking';
 
 const snapshots = new WeakMap<EditorView, { source: EditorView['state']['doc']; doc: DocumentNode }>();
 function sourceDocument(view: EditorView, parse: boolean) {
@@ -13,7 +14,7 @@ function sourceDocument(view: EditorView, parse: boolean) {
   if (cached?.source === view.state.doc) return cached.doc;
   if (!parse) return null;
   const { manager, schema } = documentParser();
-  const doc = schema.nodeFromJSON(manager.parse(view.state.doc.toString()));
+  const doc = schema.nodeFromJSON(manager.parse(readStyledSource(view.state)));
   snapshots.set(view, { source: view.state.doc, doc });
   return doc;
 }
@@ -38,7 +39,7 @@ export function sourceTextStyle(view: EditorView, parse = false): TextStylePair 
  * and preserve the author's Markdown spelling/spacing and selection offsets. */
 export function applySourceTextStyle(view: EditorView, change: Partial<TextStylePair>, toggleHighlight = false) {
   const selection = view.state.selection.main; if (selection.empty) return false;
-  const source = view.state.doc.toString(), { manager, schema } = documentParser();
+  const source = readStyledSource(view.state), { manager, schema } = documentParser();
   const body = presentationBody(source, manager.instance);
   if (selection.to > body.length) return false;
   const doc = sourceDocument(view, true)!;
@@ -56,7 +57,7 @@ export function applySourceTextStyle(view: EditorView, change: Partial<TextStyle
   const serialized = manager.serialize(tr.doc.toJSON()), start = serialized.lastIndexOf('\n\n<!-- noteboard-styles ');
   const next = body + (start >= 0 ? serialized.slice(start) : '');
   // The body is byte-for-byte unchanged; replace only the old footer suffix.
-  view.dispatch({ changes: { from: body.length, to: source.length, insert: next.slice(body.length) }, selection });
+  view.dispatch({ changes: { from: body.length, to: view.state.doc.length, insert: next.slice(body.length) }, selection, effects: resetSourceStyles.of(null) });
   snapshots.set(view, { source: view.state.doc, doc: tr.doc });
   return true;
 }
