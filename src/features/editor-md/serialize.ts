@@ -507,6 +507,14 @@ export function initializeMarkdownContent(editor: Editor, markdown: string): voi
   }
   catch (error) { console.error('[NoteBoard] Markdown 解析失败，保留原文:', error); }
   doc ??= editor.schema.topNodeType.create(null, editor.schema.nodes.paragraph.create(null, markdown ? editor.schema.text(markdown) : undefined));
+  doc = withEditableTail(editor, doc);
+  // Tiptap accepts a ProseMirror Node directly, despite the narrower public type.
+  editor.options.content = doc as unknown as Editor['options']['content'];
+  lastParsed.set(editor, { doc, markdown });
+}
+
+export function withEditableTail(editor: Editor, source: import('@tiptap/pm/model').Node) {
+  let doc = source;
   // TrailingNode normally normalizes after a replacement transaction. Seed the
   // same editable tail now so the first real keystroke cannot change a clean
   // document's baseline merely by appending that structural paragraph.
@@ -523,8 +531,7 @@ export function initializeMarkdownContent(editor: Editor, markdown: string): voi
   // Tiptap createDocument/createNodeFromContent accept a ProseMirror Node and
   // reuse it directly, although EditorOptions.content has a narrower TS type.
   // Keep the adaptation here; the constructor identity contract covers upgrades.
-  editor.options.content = doc as unknown as Editor['options']['content'];
-  lastParsed.set(editor, { doc, markdown });
+  return doc;
 }
 
 export function parseMarkdown(

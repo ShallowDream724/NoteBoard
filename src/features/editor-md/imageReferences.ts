@@ -2,7 +2,10 @@
  * value means decoding was uncertain and must never authorize deletion. Matching
  * filenames intentionally over-retains (including prose/reference definitions).
  * Keep the native scanner's normalize_reference_text semantics in sync. */
-export function normalizeImageReferenceText(content: string): string | null {
+export function normalizeImageReferenceText(content: string, nativeDocument = false): string | null {
+  if (nativeDocument) {
+    try { content = JSON.stringify(JSON.parse(content)); } catch { return null; }
+  }
   let uncertain = false;
   const entities: Record<string, string> = {
     amp: '&', AMP: '&', quot: '"', QUOT: '"', apos: "'", lt: '<', LT: '<', gt: '>', GT: '>',

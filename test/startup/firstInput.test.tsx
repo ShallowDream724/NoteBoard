@@ -12,6 +12,7 @@ import { getMdTipTapEditor, getMdSourceView } from '@/features/editor-md/editorI
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { TooltipProvider } from '@/components/Tooltip';
 
 vi.mock('@/core/ipc/commands', () => ({
   setDocumentDirty: vi.fn().mockResolvedValue(undefined),
@@ -80,7 +81,7 @@ describe('S08 源码首屏不创建隐藏 TipTap 实例', () => {
     document.body.appendChild(host);
     const root: Root = createRoot(host);
     act(() => {
-      root.render(<TipTapEditor docKey={KEY} />);
+      root.render(<TooltipProvider><TipTapEditor docKey={KEY} /></TooltipProvider>);
     });
     // 排空初始化 effect 的 setTimeout(0)
     for (let i = 0; i < 6; i++) {

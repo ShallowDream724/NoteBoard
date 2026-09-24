@@ -21,7 +21,7 @@ export function ColorSwatches({ kind, value, onChange, label }: {
       data-kind={kind} data-clear={kind === 'background' && item.color === null || undefined}
       style={kind === 'text' ? { color: item.color ?? 'var(--editor-text)' } : { backgroundColor: item.color ?? 'var(--editor-bg)' }}
       onPointerDown={event => event.preventDefault()} onClick={() => onChange(item.color)}>
-      {kind === 'text' ? 'A' : null}
+      {kind === 'text' ? <span aria-hidden="true">A</span> : null}
     </button>)}
   </div>;
 }

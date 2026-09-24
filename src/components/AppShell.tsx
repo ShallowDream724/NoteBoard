@@ -9,6 +9,8 @@ import type { Editor } from '@tiptap/core';
 import { TitleBar } from './titlebar/TitleBar';
 import { PanelResizeHandle } from './PanelResizeHandle';
 import './appShell.css';
+import { List } from 'lucide-react';
+import { Tooltip } from './Tooltip';
 import { StatusBar } from './statusbar/StatusBar';
 import { WelcomeScreen } from './WelcomeScreen';
 import { UnsupportedView } from './UnsupportedView';
@@ -44,6 +46,7 @@ import {
   openFolderDialog,
   openStagingArea,
   newMarkdown,
+  newNativeDocument,
   newMindmap,
   newTextDiff,
   newDrawio,
@@ -241,7 +244,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
 
   // 右把手仅 Markdown 显示（不变式 I-17）
   const activeTab = tabs.find((t) => t.key === activeKey);
-  const showOutline = activeTab?.kind === 'markdown';
+  const showOutline = isRichDocument(activeTab?.kind);
   // 仅活动画板可以接管应用外壳；切到其他格式时立即恢复常规布局
   const isBoardPresentationMode = boardPresentationMode && activeTab?.kind === 'board';
 
@@ -284,7 +287,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     const unregOutline = registerShortcut({
       key: 'Ctrl+Alt+B',
       action: () => {
-        if (useWindowStore.getState().activeTab()?.kind === 'markdown') {
+        if (isRichDocument(useWindowStore.getState().activeTab()?.kind)) {
           useLayoutStore.getState().toggleOutline();
         }
       },
@@ -514,6 +517,10 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 background: 'var(--editor-bg)',
               }}
             >
+              {!isBoardPresentationMode && showOutline && !outlineVisible && <Tooltip content="展开大纲" side="left">
+                <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开大纲"
+                  onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
+              </Tooltip>}
               {/* 编辑器内容 */}
               <div
                 style={{
@@ -542,6 +549,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                     onOpenStaging={openStagingArea}
                     onOpenFavorites={() => useFavoritesStore.getState().openFavoritesModal()}
                     onNewMarkdown={newMarkdown}
+                    onNewNativeDocument={newNativeDocument}
                     onNewText={newText}
                     onNewBoard={newBoard}
                     onNewMindmap={newMindmap}
@@ -627,7 +635,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                             <EditorActivityContext.Provider value={isTabActive}>
                               <EditorHost
                                 tab={tab}
-                                onEditorReady={tab.kind === 'markdown'
+                                onEditorReady={isRichDocument(tab.kind)
                                   ? getMarkdownEditorReadyHandler(tab.key)
                                   : undefined}
                                 unsupportedView={null}
@@ -649,7 +657,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
           {/* 大纲 */}
           {!isBoardPresentationMode && outlineVisible && showOutline && (
             <>
-              <PanelResizeHandle label="调整大纲宽度" />
               <Panel
                 id="nb-outline"
                 defaultSize={outlineWidth}
@@ -659,7 +666,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                   outlineWidthRef.current = size.inPixels;
                 }}
                 style={{
-                  background: 'var(--outline-bg)',
+                  background: 'var(--editor-bg)',
                   overflow: 'hidden',
                 }}
               >
@@ -692,3 +699,4 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     </div>
   );
 }
+import { isRichDocument } from '../core/docKind';

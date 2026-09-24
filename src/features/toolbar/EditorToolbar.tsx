@@ -23,7 +23,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
   // 若当前无激活标签页、非文本格式或为纯前端工具视图（如文本对比），不渲染操作栏
   if (
     !activeTab ||
-    (activeTab.kind !== 'markdown' && activeTab.kind !== 'code') ||
+    (!isRichDocument(activeTab.kind) && activeTab.kind !== 'code') ||
     activeTab.toolKind === 'textdiff'
   ) {
     return null;
@@ -59,7 +59,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
       }}
     >
       {/* 格式针对性工具集 */}
-      {activeTab.kind === 'markdown' ? (
+      {isRichDocument(activeTab.kind) ? (
         <MarkdownToolbar
           docKey={activeTab.key}
           editor={activeEditor}
@@ -83,3 +83,4 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
     </div>
   );
 }
+import { isRichDocument } from '../../core/docKind';

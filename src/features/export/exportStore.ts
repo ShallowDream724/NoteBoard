@@ -6,7 +6,8 @@ export const useExportStore = create<State>(set => ({
   docKey: null,
   open: () => {
     const state = useWindowStore.getState(); const tab = state.tabs.find(tab => tab.key === state.activeKey);
-    if (tab?.kind === 'markdown') set({ docKey: tab.key });
+    if (tab && isRichDocument(tab.kind)) set({ docKey: tab.key });
   },
   close: () => set({ docKey: null }),
 }));
+import { isRichDocument } from '../../core/docKind';

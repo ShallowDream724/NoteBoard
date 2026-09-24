@@ -2,7 +2,7 @@ import type { Editor } from '@tiptap/core';
 import { Fragment, Slice, type Node, type Schema } from '@tiptap/pm/model';
 import { Step, StepResult, type Mappable } from '@tiptap/pm/transform';
 import { CellSelection, isInTable, selectedRect } from '@tiptap/pm/tables';
-import { closeHistory } from '@tiptap/pm/history';
+import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
 import { documentTableStyle } from './documentPresentation';
 import { tableFill } from './tableCellPresentation';
 import { columnWidthsStep } from './tableColumnWidths';
@@ -97,14 +97,14 @@ export function fillTableSelection(editor: Editor, scope: TableFillScope, value:
     return cell.type.name === 'tableHeader' || cell.attrs.background === color ? [] : [{ pos, background: color }];
   });
   if (!patches.length) return false;
-  editor.view.dispatch(closeHistory(editor.state.tr).step(new TablePresentationStep(rect.tableStart - 1, patches)));
+  dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TablePresentationStep(rect.tableStart - 1, patches)));
   return true;
 }
 
 export function alignTableSelection(editor: Editor, change: Pick<CellPatch, 'textAlign' | 'verticalAlign'>) {
   const rect = tableSelection(editor); if (!rect || !validAlignment({ pos: 0, ...change })) return false;
   const patches = rect.map.cellsInRect(rect).map(pos => ({ pos, ...change }));
-  editor.view.dispatch(closeHistory(editor.state.tr).step(new TablePresentationStep(rect.tableStart - 1, patches)));
+  dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TablePresentationStep(rect.tableStart - 1, patches)));
   editor.view.focus(); return true;
 }
 export function distributeTableColumns(editor: Editor) {
@@ -112,9 +112,70 @@ export function distributeTableColumns(editor: Editor) {
   const dom = editor.view.nodeDOM(rect.tableStart - 1);
   const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
   if (!table) return false;
-  const width = Math.max(40, Math.round(table.offsetWidth / rect.map.width));
-  editor.view.dispatch(closeHistory(editor.state.tr).step(columnWidthsStep(rect.tableStart - 1, rect.table, Array(rect.map.width).fill(width))));
+  const columns = table.querySelector('colgroup')?.children;
+  const scale = table.getBoundingClientRect().width / table.offsetWidth || 1;
+  const widths = Array.from({ length: rect.map.width }, (_, index) => Math.round(columns?.[index] ? columns[index].getBoundingClientRect().width / scale : table.offsetWidth / rect.map.width));
+  const from = editor.state.selection instanceof CellSelection ? rect.left : 0;
+  const to = editor.state.selection instanceof CellSelection ? rect.right : rect.map.width;
+  const width = Math.max(40, Math.round(widths.slice(from, to).reduce((a, b) => a + b, 0) / (to - from)));
+  for (let index = from; index < to; index++) widths[index] = width;
+  dispatchDiscreteEdit(editor.view, editor.state.tr.step(columnWidthsStep(rect.tableStart - 1, rect.table, widths)));
   return true;
+}
+
+export function distributeTableRows(editor: Editor) {
+  const rect = tableSelection(editor); if (!rect) return false;
+  const dom = editor.view.nodeDOM(rect.tableStart - 1);
+  const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
+  if (!table) return false;
+  const from = editor.state.selection instanceof CellSelection ? rect.top : 0;
+  const to = editor.state.selection instanceof CellSelection ? rect.bottom : rect.map.height;
+  const height = Math.max(24, Math.round(Array.from(table.rows).slice(from, to).reduce((sum, row) => sum + row.offsetHeight, 0) / (to - from)));
+  const heights = Array.from({ length: to - from }, (_, index) => ({ index: from + index, height: Math.min(10000, height) }));
+  dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TableRowHeightsStep(rect.tableStart - 1, heights)));
+  return true;
+}
+
+/** Row attributes do not change positions. One table traversal avoids one
+ * whole-table copy per selected row and retains the cell selection. */
+class TableRowHeightsStep extends Step {
+  constructor(readonly pos: number, readonly heights: Array<{ index: number; height: number | null }>) { super(); }
+  apply(doc: Node) {
+    const table = doc.nodeAt(this.pos);
+    if (table?.type.spec.tableRole !== 'table') return StepResult.fail('Table moved');
+    const changes = new Map(this.heights.map(row => [row.index, row.height]));
+    if (this.heights.some(row => !Number.isInteger(row.index) || row.index < 0 || row.index >= table.childCount
+      || row.height !== null && (!Number.isFinite(row.height) || row.height < 0 || row.height > 10000))) return StepResult.fail('Invalid row height');
+    const rows: Node[] = [];
+    table.forEach((row, _pos, index) => rows.push(changes.has(index) ? row.type.create({ ...row.attrs, height: changes.get(index) }, row.content, row.marks) : row));
+    return StepResult.fromReplace(doc, this.pos, this.pos + table.nodeSize, new Slice(Fragment.from(table.copy(Fragment.fromArray(rows))), 0, 0));
+  }
+  invert(doc: Node) { const table = doc.nodeAt(this.pos)!; return new TableRowHeightsStep(this.pos, this.heights.map(row => ({ index: row.index, height: table.child(row.index).attrs.height }))); }
+  map(mapping: Mappable) { const mapped = mapping.mapResult(this.pos, 1); return mapped.deletedAcross ? null : new TableRowHeightsStep(mapped.pos, this.heights); }
+  toJSON() { return { stepType: 'noteboardTableRowHeights', pos: this.pos, heights: this.heights }; }
+  static fromJSON(_schema: Schema, json: { pos: number; heights: Array<{ index: number; height: number | null }> }) {
+    if (!Number.isInteger(json.pos) || !Array.isArray(json.heights)) throw new RangeError('Invalid row heights step');
+    return new TableRowHeightsStep(json.pos, json.heights);
+  }
+}
+Step.jsonID('noteboardTableRowHeights', TableRowHeightsStep);
+
+export function tableDeleteScope(editor: Editor): 'table' | 'row' | 'column' | 'cells' {
+  const selection = editor.state.selection;
+  if (selection instanceof CellSelection) {
+    if (selection.isRowSelection() && selection.isColSelection()) return 'table';
+    if (selection.isRowSelection()) return 'row';
+    if (selection.isColSelection()) return 'column';
+  }
+  return 'cells';
+}
+export function deleteTableSelection(editor: Editor): boolean {
+  const scope = tableDeleteScope(editor);
+  if (scope === 'row') return runDiscreteEdit(editor, chain => chain.deleteRow());
+  if (scope === 'column') return runDiscreteEdit(editor, chain => chain.deleteColumn());
+  if (scope === 'table') return runDiscreteEdit(editor, chain => chain.deleteTable());
+  if (!(editor.state.selection instanceof CellSelection)) selectTableScope(editor, 'cells');
+  return runDiscreteEdit(editor, chain => chain.deleteSelection());
 }
 
 /** Header controls exist only at the corresponding outer edge; merged cells
@@ -140,6 +201,6 @@ export function setSelectedTableHeader(editor: Editor, axis: 'row' | 'column') {
   const otherHeader = axis === 'row' ? info.columnHeader : info.rowHeader;
   const other = new Set(axis === 'row' ? info.column : info.row);
   const patches = info[axis].map(pos => ({ pos, header: enabled || (otherHeader && other.has(pos)) }));
-  editor.view.dispatch(closeHistory(editor.state.tr).step(new TablePresentationStep(info.rect.tableStart - 1, patches)));
+  dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TablePresentationStep(info.rect.tableStart - 1, patches)));
   return true;
 }

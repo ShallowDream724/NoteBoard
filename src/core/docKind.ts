@@ -38,6 +38,7 @@ export function savePolicyOf(kind: DocumentKind): SavePolicy {
   switch (kind) {
     // markdown、board、mindmap、drawio 及 bitable 多维表格均支持自动保存策略
     case 'markdown':
+    case 'noteboard':
     case 'board':
     case 'mindmap':
     case 'drawio':
@@ -48,6 +49,10 @@ export function savePolicyOf(kind: DocumentKind): SavePolicy {
     case 'unsupported':
       return 'manual';
   }
+}
+
+export function isRichDocument(kind: DocumentKind | undefined): kind is 'markdown' | 'noteboard' {
+  return kind === 'markdown' || kind === 'noteboard';
 }
 
 /** 判断是否为受支持的可编辑类型 */

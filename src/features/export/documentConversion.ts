@@ -3,7 +3,7 @@ import type { ExportDocument } from './model';
 import type { JSONContent } from '@tiptap/core';
 
 /** One conversion per disposable worker; closing the dialog immediately releases its heap. */
-function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'pandoc', signal?: AbortSignal): Promise<T> {
+function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'pandoc' | 'md' | 'nbdoc', signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./documentWorker.ts', import.meta.url), { type: 'module' });
@@ -37,4 +37,7 @@ export async function prepareDocument(content: string | JSONContent, title: stri
 }
 export function preparePandoc(markdown: string, signal?: AbortSignal) {
   return convert<string>(markdown, '', '', 'pandoc', signal);
+}
+export function prepareTextExport(content: string | JSONContent, format: 'md' | 'nbdoc', directory: string, signal?: AbortSignal) {
+  return convert<string>(content, '', directory, format, signal);
 }

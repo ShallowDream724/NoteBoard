@@ -13,13 +13,15 @@ export async function captureDocument(key: string, signal?: AbortSignal) {
   const document = useDocumentStore.getState().getDocument(key);
   const tab = useWindowStore.getState().tabs.find(tab => tab.key === key);
   if (!tab || !document) throw new Error('当前文档暂时无法导出');
-  const content = tab.kind === 'markdown' ? readMarkdownSnapshot(key) : null;
+  const content = isRichDocument(tab.kind) ? readMarkdownSnapshot(key) : null;
   const capability = getEditorCapabilities(key);
   const snapshot = content == null && capability ? await capability.flush('export') : null;
   if (content == null && capability && snapshot?.content == null) throw new Error('当前文档暂时无法导出');
   const captured = content ?? snapshot?.content ?? document.content;
   if (captured == null) throw new Error('当前文档没有可导出的文本');
-  return prepareDocument(captured, tab.displayName, document.dirPath ?? '', signal);
+  const source = tab.kind === 'noteboard' && typeof captured === 'string' ? decodeNativeDocument(captured) : captured;
+  const result = await prepareDocument(source, tab.displayName, document.dirPath ?? '', signal);
+  return { ...result, source };
 }
 export function exportFontCss() {
   const css = getComputedStyle(document.documentElement);
@@ -28,3 +30,5 @@ export function exportFontCss() {
   return `:root{--export-body-font:${css.getPropertyValue('--content-font-family') || "'Segoe UI','Microsoft YaHei',sans-serif"};--export-mono-font:${css.getPropertyValue('--mono-font-family') || 'Consolas,monospace'};}`
     + faces.map(face => `@font-face{font-family:${quoted(face.family)};font-style:${face.style};font-weight:${face.weight};src:url(${quoted(convertFileSrc(face.path))})}`).join('\n');
 }
+import { isRichDocument } from '../../core/docKind';
+import { decodeNativeDocument } from '../../core/nativeDocument';

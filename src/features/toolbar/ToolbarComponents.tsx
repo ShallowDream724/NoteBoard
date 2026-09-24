@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
 import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
+import { useHoverMenu } from '../../components/useHoverMenu';
 
 // ── 基础工具栏按钮 ──
 
@@ -70,7 +71,7 @@ export function ToolbarButton({
   }
 
   return (
-    <Tooltip content={title} shortcut={shortcut} disabled={disabled || !title} side="bottom" sideOffset={6}>
+    <Tooltip content={title} shortcut={shortcut} disabled={disabled || !title || hasDropdown} side="bottom" sideOffset={6}>
       <button
         type="button"
         aria-label={title || label}
@@ -119,6 +120,7 @@ export function ToolbarButton({
         {label && <span data-toolbar-compact-label={compactLabel || undefined} style={{ fontWeight: active ? 600 : 450, whiteSpace: 'nowrap' }}>{label}</span>}
         {hasDropdown && (
           <ChevronDown
+            className="nb-menu-chevron"
             size={12}
             strokeWidth={2}
             style={{
@@ -171,6 +173,7 @@ export function ToolbarDropdown({
   style,
 }: ToolbarDropdownProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const hover = useHoverMenu(isOpen, onOpenChange);
   const [effectiveAlign, setEffectiveAlign] = useState<'left' | 'right'>(align ?? 'left');
 
   // 计算下拉菜单对齐方式，防止超出编辑区右边界
@@ -205,12 +208,13 @@ export function ToolbarDropdown({
 
   return (
     <div ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <div onClick={() => onOpenChange(!isOpen)} style={{ display: 'inline-flex' }}>
+      <div {...hover.triggerProps} style={{ display: 'inline-flex' }}>
         {trigger}
       </div>
 
       {isOpen && (
         <div
+          {...hover.contentProps}
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: 'absolute',
@@ -269,9 +273,9 @@ export function ToolbarDropdownItem({
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [flipLeft, setFlipLeft] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
-  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasSubmenu = Boolean(submenu);
+  const hover = useHoverMenu(submenuOpen, setSubmenuOpen, disabled || !hasSubmenu, false);
 
   let background = 'transparent';
   let color = 'var(--editor-text)';
@@ -304,24 +308,18 @@ export function ToolbarDropdownItem({
   // 鼠标悬停进入
   const handleMouseEnter = () => {
     if (disabled) return;
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current);
-      closeTimeoutRef.current = null;
-    }
     setHovered(true);
     if (hasSubmenu) {
       updateSubmenuPosition();
-      setSubmenuOpen(true);
+      hover.enter();
     }
   };
 
-  // 鼠标悬停离开（120ms 防抖缓冲，防止划向子菜单时瞬间关闭）
+  // 子菜单与主菜单共用离开缓冲。
   const handleMouseLeave = () => {
     setHovered(false);
     if (hasSubmenu) {
-      closeTimeoutRef.current = setTimeout(() => {
-        setSubmenuOpen(false);
-      }, 120);
+      hover.leave();
     }
   };
 
@@ -331,7 +329,7 @@ export function ToolbarDropdownItem({
     if (hasSubmenu) {
       e.stopPropagation();
       updateSubmenuPosition();
-      setSubmenuOpen((prev) => !prev);
+      hover.change(true);
     } else if (onClick) {
       onClick();
     }
@@ -340,6 +338,14 @@ export function ToolbarDropdownItem({
   return (
     <div
       ref={itemRef}
+      role="menuitem" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
+      aria-haspopup={hasSubmenu ? 'menu' : undefined} aria-expanded={hasSubmenu ? submenuOpen : undefined}
+      onKeyDown={event => {
+        if (hasSubmenu && ['ArrowRight', 'Enter', ' '].includes(event.key)) {
+          event.preventDefault(); hover.keyboard.current = true; updateSubmenuPosition(); hover.change(true);
+        } else if (!hasSubmenu && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onClick?.(); }
+        if (event.key === 'Escape' || event.key === 'ArrowLeft') hover.change(false);
+      }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={handleClick}
@@ -379,7 +385,7 @@ export function ToolbarDropdownItem({
             strokeWidth={2}
             style={{
               opacity: 0.6,
-              transform: submenuOpen ? (flipLeft ? 'rotate(180deg)' : 'rotate(0deg)') : 'none',
+              transform: hover.expanded ? (flipLeft ? 'rotate(180deg)' : 'rotate(90deg)') : 'none',
               transition: 'transform var(--transition-fast)',
             }}
           />
@@ -389,13 +395,8 @@ export function ToolbarDropdownItem({
       {/* 二级 / 三级悬浮子菜单 */}
       {hasSubmenu && submenuOpen && (
         <div
-          onMouseEnter={() => {
-            if (closeTimeoutRef.current) {
-              clearTimeout(closeTimeoutRef.current);
-              closeTimeoutRef.current = null;
-            }
-            setSubmenuOpen(true);
-          }}
+          {...hover.contentProps}
+          onMouseEnter={hover.cancel}
           onMouseLeave={handleMouseLeave}
           style={{
             position: 'absolute',

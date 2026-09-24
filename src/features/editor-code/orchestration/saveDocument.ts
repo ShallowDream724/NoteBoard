@@ -154,7 +154,10 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
     { name: '全部文件 (*.*)', extensions: ['*'] },
   ];
 
-  if (doc?.kind === 'markdown' || originalKey.includes('markdown')) {
+  if (doc?.kind === 'noteboard') {
+    defaultExtension = 'nbdoc';
+    filters = [{ name: 'NoteBoard 文档 (*.nbdoc)', extensions: ['nbdoc'] }];
+  } else if (doc?.kind === 'markdown' || originalKey.includes('markdown')) {
     defaultExtension = 'md';
     filters = [
       { name: 'Markdown 笔记 (*.md)', extensions: ['md', 'markdown'] },
@@ -250,6 +253,10 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
     const encoding = doc?.encoding ?? 'utf8';
     const eol = doc?.eol ?? 'lf';
     const kind = kindFromPath(selectedPath);
+    if ((doc?.kind === 'noteboard') !== (kind === 'noteboard')) {
+      showToast('请在“导出”中转换 NoteBoard 文档与 Markdown 格式', 'warning');
+      return false;
+    }
     const language = languageFromPath(selectedPath);
     const label = getCurrentWindow().label;
 
@@ -320,7 +327,7 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
       //    防止旧内容迟到覆盖）。失败时保留权威内容、dirty、历史和原身份——不迁移。
       //    🔴 R3-04：失败释放本次新取得的目标归属（finally 统一处理）
       const result = await enqueueDocumentWrite(selectedPath, async () => {
-        if (doc?.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(originalKey)) {
+        if (doc?.kind === 'markdown' || doc?.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(originalKey)) {
           const { restoreImageAssetsForContent } = await import('../../editor-md/imageAssetLifecycle');
           await restoreImageAssetsForContent(originalKey, saveContent);
         }

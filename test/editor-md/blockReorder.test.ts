@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import { HeadingFolding, headingSectionEnd, foldedSectionEnd, toggleHeadingFold } from '@/features/editor-md/headingFolding';
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import {
   isTopLevelBlockMoveAllowed,
@@ -18,6 +19,7 @@ function createEditor(content: Record<string, unknown>): Editor {
   const editor = new Editor({
     extensions: [
       StarterKit,
+      HeadingFolding,
       // 与生产配置一致启用列宽调整，确保 tableWrapper NodeView 也能正确映射顶层位置。
       Table.configure({ resizable: true }),
       TableRow,
@@ -58,6 +60,40 @@ afterEach(() => {
 });
 
 describe('Markdown 顶层块安全重排序', () => {
+  it('拖拽独立于前后输入撤销，重做保留移动后的内容', () => {
+    const editor = createEditor({ type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'one' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'two' }] },
+    ] });
+    editor.view.dispatch(editor.state.tr.insertText('!', 2));
+    const typed = editor.getJSON();
+    moveTopLevelBlock(editor.view, 0, editor.state.doc.content.size);
+    const moved = editor.getJSON();
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.commands.insertContent('?');
+    editor.commands.undo(); expect(editor.getJSON()).toEqual(moved);
+    editor.commands.undo(); expect(editor.getJSON()).toEqual(typed);
+    editor.commands.redo(); expect(editor.getJSON()).toEqual(moved);
+  });
+
+  it('折叠章节包含下级标题，整体移动且拒绝落入自身，展开恢复所有子块', () => {
+    const h = (level: number, text: string) => ({ type: 'heading', attrs: { level }, content: [{ type: 'text', text }] });
+    const p = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+    const editor = createEditor({ type: 'doc', content: [h(2,'3'), p('body'), h(3,'3.1'), p('child'), h(2,'4'), p('last')] });
+    const positions = getTopLevelPositions(editor);
+    expect(headingSectionEnd(editor.state.doc, 0)).toBe(positions[4]);
+    toggleHeadingFold(editor.state, editor.view.dispatch, 0);
+    expect(foldedSectionEnd(editor.state, 0)).toBe(positions[4]);
+    expect(editor.view.dom.querySelectorAll('.nb-heading-fold-hidden')).toHaveLength(3);
+    expect(moveTopLevelBlock(editor.view, 0, positions[2])).toBeNull();
+    const moved = moveTopLevelBlock(editor.view, 0, editor.state.doc.content.size)!;
+    expect(editor.state.doc.content.content.map(node => node.textContent)).toEqual(['4','last','3','body','3.1','child']);
+    expect(foldedSectionEnd(editor.state, moved.insertedPos)).toBe(editor.state.doc.content.size);
+    toggleHeadingFold(editor.state, editor.view.dispatch, moved.insertedPos);
+    expect(editor.view.dom.querySelectorAll('.nb-heading-fold-hidden')).toHaveLength(0);
+    editor.commands.undo();
+    expect(editor.state.doc.content.content.map(node => node.textContent)).toEqual(['3','body','3.1','child','4','last']);
+  });
   it('支持将普通顶层块向下和向上移动，并保持节点内容完整', () => {
     const editor = createEditor({
       type: 'doc',

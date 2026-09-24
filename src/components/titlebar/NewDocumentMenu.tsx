@@ -11,6 +11,7 @@ import * as actions from '../../features/welcome/welcomeActions';
 
 type Action = { label: string; icon: LucideIcon; run: () => unknown };
 const primary: Action[] = [
+  { label: '新建 NoteBoard 文档 (.nbdoc)', icon: FileText, run: actions.newNativeDocument },
   { label: '新建 Markdown 笔记 (.md)', icon: FileText, run: actions.newMarkdown },
   { label: '新建文本文档 (.txt)', icon: FileText, run: actions.newText },
   { label: '新建多维表格 (.bitable)', icon: Table2, run: actions.newBitable },

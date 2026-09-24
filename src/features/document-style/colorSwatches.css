@@ -1,4 +1,5 @@
 .nb-color-swatches { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:5px; padding:2px; }
+.nb-color-swatch > span { position:absolute; inset:0; display:grid; place-items:center; font-size:1.2em; }
 .nb-color-swatch { position:relative; display:grid; place-items:center; width:100%; aspect-ratio:1; min-width:0; padding:0; border:1px solid #64748b26; border-radius:3px; font:1.05em/1 var(--ui-font-family); cursor:pointer; background:var(--editor-bg); }
 .nb-color-swatch[data-clear]::after { content:""; position:absolute; width:125%; height:1px; background:var(--editor-accent); transform:rotate(-45deg); }
 .nb-color-swatch[data-clear] { overflow:hidden; }

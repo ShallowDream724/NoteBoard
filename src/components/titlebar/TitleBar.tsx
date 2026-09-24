@@ -23,9 +23,7 @@ export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
-  const outlineVisible = useLayoutStore((s) => s.outlineVisible);
-  const toggleOutline = useLayoutStore((s) => s.toggleOutline);
-  const markdownActive = useWindowStore((s) => s.tabs.find(tab => tab.key === s.activeKey)?.kind === 'markdown');
+  const markdownActive = useWindowStore((s) => isRichDocument(s.tabs.find(tab => tab.key === s.activeKey)?.kind));
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
@@ -99,10 +97,10 @@ export function TitleBar() {
           {hasUpdate && <span className="titlebar-update-dot" aria-label="有可用更新" />}
         </button>
       </Tooltip>
-      {markdownActive && <SidebarToggle className="titlebar-action" side="right" visible={outlineVisible} onToggle={toggleOutline} />}
       </div>
       <WindowControls />
       <UpdateNotice anchor={settingsButton} />
     </div>
   );
 }
+import { isRichDocument } from '../../core/docKind';

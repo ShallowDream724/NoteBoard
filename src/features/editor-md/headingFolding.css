@@ -1,0 +1,16 @@
+.tiptap :is(h1,h2,h3,h4,h5,h6) { position: relative; }
+.nb-heading-fold-toggle {
+  position: absolute; left: -22px; top: .15em; width: 22px; height: 1.3em;
+  min-height: 24px; border: 0; border-radius: 4px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--text-secondary); background: transparent; cursor: pointer; opacity: 0;
+}
+.nb-heading-fold-toggle svg { transform: rotate(90deg); transition: transform 160ms ease; }
+.nb-heading-fold-toggle[aria-expanded="false"] { opacity: 1; }
+.nb-heading-fold-toggle[aria-expanded="false"] svg { transform: rotate(0); }
+.tiptap :is(h1,h2,h3,h4,h5,h6):hover > .nb-heading-fold-toggle,
+.nb-heading-fold-toggle:focus-visible { opacity: 1; }
+.nb-heading-fold-toggle:hover { background: var(--editor-hover-background, #64748b15); }
+.nb-heading-fold-hidden { display: none !important; }
+@media (prefers-reduced-motion: reduce) { .nb-heading-fold-toggle svg { transition: none; } }
+@media print { .nb-heading-fold-toggle { display: none !important; } .nb-heading-fold-hidden { display: revert !important; } }

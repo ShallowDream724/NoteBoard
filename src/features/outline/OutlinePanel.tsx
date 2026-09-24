@@ -5,12 +5,14 @@
 // 详见 docs/09-开发路线图.md 9.2-9.10
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ChevronsRight } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { HeadingGeometry } from './headingGeometry';
+import { useLayoutStore } from '../../stores/layoutStore';
+import './outlinePanel.css';
 
 interface OutlinePanelProps {
   editor: Editor | null;
@@ -29,7 +31,7 @@ function getIndent(level: number): number {
 
 export function OutlinePanel({ editor }: OutlinePanelProps) {
   const { headings, activeId, setActiveId } = useHeadings(editor);
-  const [searchQuery, setSearchQuery] = useState('');
+  const toggleOutline = useLayoutStore(state => state.toggleOutline);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -52,13 +54,6 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     });
   }, [headings]);
 
-  // 搜索过滤
-  const filteredHeadings = useMemo(() => {
-    if (!searchQuery.trim()) return headings;
-    const q = searchQuery.toLowerCase().trim();
-    return headings.filter((h) => h.text.toLowerCase().includes(q));
-  }, [headings, searchQuery]);
-
   // 计算每个标题是否含有子标题（在文档顺序中，紧随其后的下一标题 level 更大）
   const hasChildrenMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -73,11 +68,6 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
 
   // 计算当前被折叠隐藏的标题 ID 集合（基于直系父祖先的折叠状态进行单调栈判定）
   const hiddenIds = useMemo(() => {
-    // 处于搜索状态时展示所有匹配项，不进行折叠隐藏
-    if (searchQuery.trim()) {
-      return new Set<string>();
-    }
-
     const hidden = new Set<string>();
     // 祖先单调栈：记录各级父祖先节点的 level 以及折叠/隐藏传递状态
     const ancestorStack: { level: number; isHiddenOrCollapsed: boolean }[] = [];
@@ -105,7 +95,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     }
 
     return hidden;
-  }, [headings, collapsed, searchQuery]);
+  }, [headings, collapsed]);
 
   // 点击跳转
   const handleHeadingClick = useCallback(
@@ -186,6 +176,12 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     invalidateGeometryRef.current = invalidate;
     const handleUpdate = () => geometry.invalidateStructure();
     editor.on('update', handleUpdate);
+    let folding = headingFoldingKey.getState(editor.state);
+    const handleTransaction = () => {
+      const next = headingFoldingKey.getState(editor.state);
+      if (folding !== next) { folding = next; geometry.invalidateStructure(); }
+    };
+    editor.on('transaction', handleTransaction);
     const handleScroll = () => {
       if (frame) return;
       frame = requestAnimationFrame(() => {
@@ -199,6 +195,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
       editor.off('update', handleUpdate);
+      editor.off('transaction', handleTransaction);
       if (invalidateGeometryRef.current === invalidate) invalidateGeometryRef.current = null;
       geometry.destroy();
       cancelAnimationFrame(frame);
@@ -229,49 +226,8 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   }, []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--outline-bg)' }}>
-      {/* 大纲标题栏 */}
-      <div
-        style={{
-          height: 28,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 10px',
-          borderBottom: '1px solid var(--editor-border)',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--editor-text)' }}>
-          文档大纲
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>
-          {headings.length} 项
-        </span>
-      </div>
-
-      {/* 搜索框 */}
-      {headings.length > 0 && (
-        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--editor-border)', flexShrink: 0 }}>
-          <input
-            type="text"
-            placeholder="搜索大纲标题"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '4px 8px',
-              fontSize: 12,
-              border: '1px solid var(--editor-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--editor-surface)',
-              color: 'var(--editor-text)',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-      )}
+    <nav className="nb-document-outline" aria-label="文档大纲">
+      <Tooltip content="收起大纲" side="left"><button className="nb-outline-toggle" type="button" aria-label="收起大纲" onClick={toggleOutline}><ChevronsRight size={18}/></button></Tooltip>
 
       {/* 标题列表 */}
       {headings.length === 0 ? (
@@ -290,10 +246,10 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
       ) : (
         <div
           ref={scrollContainerRef}
-          style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}
+          className="nb-outline-list"
         >
           <div ref={listRef}>
-            {filteredHeadings.map((h) => {
+            {headings.map((h) => {
               const isHidden = hiddenIds.has(h.id);
               if (isHidden) return null;
 
@@ -420,6 +376,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
           </div>
         </div>
       )}
-    </div>
+    </nav>
   );
 }
+import { headingFoldingKey } from '../editor-md/headingFolding';

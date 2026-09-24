@@ -50,6 +50,11 @@
     ],
     "fileAssociations": [
       {
+        "ext": ["nbdoc"],
+        "name": "NoteBoard.Document",
+        "description": "NoteBoard 文档"
+      },
+      {
         "ext": [
           "md",
           "markdown"

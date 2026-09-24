@@ -18,7 +18,11 @@ import {
   resolveTopLevelDropTarget,
   type TopLevelDropTarget,
 } from './blockReorder';
-import { Tooltip } from '../../components/Tooltip';
+import * as Popover from '@radix-ui/react-popover';
+import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
+import { BlockContextMenu, BlockTypeIcon } from './BlockContextMenu';
+import { selectBlock } from './blockActions';
+import { foldedSectionEnd } from './headingFolding';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -123,6 +127,19 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const isHoveringHandleRef = useRef(false);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dropTargetRef = useRef<TopLevelDropTarget | null>(null);
+  const suppressMenuClick = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuOpenRef = useRef(false); menuOpenRef.current = menuOpen;
+  const menuHover = useHoverMenu(menuOpen, open => {
+    if (open && (!editor || state.nodePos === null || dragSessionRef.current?.dragging)) return;
+    editor?.view.dom.classList.toggle('nb-block-menu-open', open);
+    if (open) {
+      selectBlock(editor!, state.nodePos!);
+      editor!.view.dispatch(editor!.state.tr.setMeta('bubbleMenu', 'hide'));
+    }
+    setMenuOpen(open);
+  });
+  useEffect(() => () => { editor?.view.dom.classList.remove('nb-block-menu-open'); }, [editor]);
 
   const clearHideTimer = useCallback(() => {
     if (!hideTimerRef.current) return;
@@ -165,7 +182,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     const scrollParent = findScrollParent(editorDom);
 
     const scheduleHide = () => {
-      if (hideTimerRef.current || dragSessionRef.current) return;
+      if (hideTimerRef.current || dragSessionRef.current || menuOpenRef.current) return;
       hideTimerRef.current = setTimeout(() => {
         hideTimerRef.current = null;
         if (!isHoveringHandleRef.current && !dragSessionRef.current) {
@@ -175,7 +192,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (dragSessionRef.current) return;
+      if (dragSessionRef.current || menuOpenRef.current) return;
       if (editorDom.classList.contains('nb-table-resizing')) {
         setState(current => current.visible ? { ...current, visible: false } : current);
         return;
@@ -203,7 +220,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       const blockRect = blockElement.getBoundingClientRect();
       const scrollRect = scrollParent.getBoundingClientRect();
       const top = blockRect.top - scrollRect.top + scrollParent.scrollTop;
-      const left = blockRect.left - scrollRect.left + scrollParent.scrollLeft - 24;
+      const left = blockRect.left - scrollRect.left + scrollParent.scrollLeft - (blockInfo.node.type.name === 'heading' ? 70 : 48);
 
       setState({
         visible: true,
@@ -220,7 +237,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
     const handleScroll = () => {
       // 普通滚动时隐藏旧坐标把手；拖动过程由指针坐标持续刷新落点，不受这里影响。
-      if (!dragSessionRef.current) {
+      if (!dragSessionRef.current && !menuOpenRef.current) {
         setState((current) => ({ ...current, visible: false }));
       }
     };
@@ -297,7 +314,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     const target = resolveTopLevelDropTarget(editor.view, clientY);
     const valid = Boolean(
       target
-      && isTopLevelBlockMoveAllowed(editor.state.doc, session.sourcePos, target.insertPos),
+      && isTopLevelBlockMoveAllowed(editor.state.doc, session.sourcePos, target.insertPos, foldedSectionEnd(editor.state, session.sourcePos)),
     );
 
     dropTargetRef.current = valid ? target : null;
@@ -369,6 +386,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       if (distance < DRAG_START_DISTANCE) return;
 
       session.dragging = true;
+      menuHover.change(false);
       session.sourceElement.classList.add('nb-block-drag-source');
       document.body.style.cursor = 'grabbing';
       document.body.style.userSelect = 'none';
@@ -387,6 +405,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     event.stopPropagation();
 
     const target = dropTargetRef.current;
+    suppressMenuClick.current = session.dragging;
     const result = session.dragging && target && editor
       ? moveTopLevelBlock(editor.view, session.sourcePos, target.insertPos)
       : null;
@@ -433,11 +452,17 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   return (
     <>
-      <Tooltip content={`按住并拖动以移动${blockLabel}`} side="left" sideOffset={6}>
+      <Popover.Root open={menuOpen && !isDragging} onOpenChange={menuHover.change}>
+      <Popover.Anchor asChild>
         <button
           ref={handleRef}
           type="button"
-          className={`nb-block-drag-handle${isHoveringHandle ? ' is-hovered' : ''}${isDragging ? ' is-dragging' : ''}`}
+          className={`nb-block-drag-handle nb-block-with-menu${isHoveringHandle ? ' is-hovered' : ''}${isDragging ? ' is-dragging' : ''}`}
+          onPointerEnter={menuHover.enter}
+          onPointerLeave={menuHover.leave}
+          onClick={() => { if (suppressMenuClick.current) { suppressMenuClick.current = false; return; } if (!isDragging) menuHover.change(true); }}
+          onKeyDown={menuHover.triggerProps.onKeyDown}
+          aria-haspopup="menu" aria-expanded={menuOpen}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -460,9 +485,14 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
           }}
           aria-label={`拖动${blockLabel}`}
         >
-          ⠿
+          <BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span aria-hidden="true">⠿</span>
         </button>
-      </Tooltip>
+      </Popover.Anchor>
+      <Popover.Portal><Popover.Content {...menuHover.contentProps} className="nb-block-menu-popover" side="left" align="start" sideOffset={5} collisionPadding={10}
+        onOpenAutoFocus={menuHover.onOpenAutoFocus} onCloseAutoFocus={menuHover.onCloseAutoFocus}
+        onInteractOutside={event => { if (event.target instanceof Element && event.target.closest('[data-nb-editor-menu]')) event.preventDefault(); }}>
+        <HoverMenuContext.Provider value={menuHover}>{editor && state.nodePos !== null && <BlockContextMenu editor={editor} pos={state.nodePos} close={() => menuHover.change(false)}/>}</HoverMenuContext.Provider>
+      </Popover.Content></Popover.Portal></Popover.Root>
 
       {dragFeedback?.valid && dragFeedback.indicatorTop !== null && (
         <div

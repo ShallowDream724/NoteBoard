@@ -3,7 +3,6 @@
 // 详见 docs/09-开发路线图.md 8.8, 8.9
 
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { TextSelection, type Transaction } from '@tiptap/pm/state';
 import { isEmbeddedEditing } from './embeddedEditor';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -21,8 +20,6 @@ import {
   Trash2,
   Merge,
   Split,
-  ChevronDown,
-  X,
   ExternalLink,
   Rows3, Columns3,
 } from 'lucide-react';
@@ -34,9 +31,12 @@ import { HighlightControl } from '../toolbar/HighlightControl';
 import { setTextColor, applyTextStyle } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { useFormattingUpdates } from './useFormattingUpdates';
+import { useEditorOverlayDismiss } from './useEditorOverlayDismiss';
+import { runDiscreteEdit } from './discreteEdit';
+import { TableInsertMenu } from './TableInsertMenu';
 import { TableFillMenu } from './TableFillMenu';
 import { documentTableStyle } from './documentPresentation';
-import { selectTableScope, tableHeaderState, setSelectedTableHeader, distributeTableColumns } from './tablePresentationCommands';
+import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -162,6 +162,21 @@ export function EditorBubbleMenu({
     if (!enabled && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
   }, [editor, enabled]);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const bubbleRoot = useRef<HTMLDivElement>(null);
+  const dismissed = useRef(false);
+  useEditorOverlayDismiss(editor, bubbleRoot, () => {
+    dismissed.current = true;
+    setShowColorPicker(false);
+    if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
+  });
+  useEffect(() => {
+    const resume = () => { dismissed.current = false; };
+    const selection = () => { if (editor.view.hasFocus()) resume(); };
+    editor.view.dom.addEventListener('pointerdown', resume);
+    editor.on('focus', resume);
+    editor.on('selectionUpdate', selection);
+    return () => { editor.view.dom.removeEventListener('pointerdown', resume); editor.off('focus', resume); editor.off('selectionUpdate', selection); };
+  }, [editor]);
   useFormattingUpdates(editor, enabled);
   const preferredPosition = useSettingsStore(state => state.settings.editor.selectionToolbarPosition ?? 'below');
 
@@ -182,7 +197,7 @@ export function EditorBubbleMenu({
     state: { selection: { empty: boolean } };
   }) => {
     const { selection } = state;
-    if (!enabledRef.current || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
+    if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
     // 不在代码块中显示浮层菜单
@@ -211,6 +226,7 @@ export function EditorBubbleMenu({
     },
     // 监听编辑器真实滚动容器，滚动时即时更新定位与翻转。
     scrollTarget: scrollParent ?? undefined,
+    hide: { boundary: scrollParent ?? undefined, padding: 2 },
   }), [scrollParent, preferredPosition]);
 
   if (!scrollParent) return null;
@@ -218,12 +234,14 @@ export function EditorBubbleMenu({
   return (
     <BubbleMenu
       editor={editor}
+      pluginKey="bubbleMenu"
       appendTo={editor.view.dom.ownerDocument.body}
       shouldShow={shouldShow}
       options={bubbleMenuOptions}
       style={{ zIndex: 1000 }}
     >
       <div
+        ref={bubbleRoot} role="toolbar" aria-label="文字工具栏"
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -280,7 +298,7 @@ export function EditorBubbleMenu({
           active={editor.isActive('highlight')} currentColor={editor.getAttributes('highlight').color}
           onApply={color => editor.chain().focus().setHighlight({ color }).run()}
           onReturnToEditor={() => editor.commands.focus()}
-          onRemove={() => { editor.chain().focus().unsetHighlight().run(); setShowColorPicker(false); }}/>
+          onRemove={() => { editor.chain().focus().unsetHighlight().run(); }}/>
         <AlignmentMenu editor={editor}/>
 
         <MenuDivider />
@@ -332,78 +350,6 @@ export function EditorBubbleMenu({
 
 // ── 表格操作定制矢量图标 ──
 
-/** 向左插入列图标 */
-function InsertColumnLeftIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="7" y="3" width="14" height="18" rx="2" />
-      <path d="M14 3v18" />
-      <path d="M4 12h-2" strokeWidth="2.5" />
-      <path d="M3 10l-2 2 2 2" strokeWidth="2" />
-    </svg>
-  );
-}
-
-/** 向右插入列图标 */
-function InsertColumnRightIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="14" height="18" rx="2" />
-      <path d="M10 3v18" />
-      <path d="M20 12h2" strokeWidth="2.5" />
-      <path d="M21 10l2 2-2 2" strokeWidth="2" />
-    </svg>
-  );
-}
-
-/** 删除列图标 */
-function DeleteColumnIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
-      <rect x="8" y="3" width="8" height="18" fill="rgba(239, 68, 68, 0.15)" stroke="currentColor" />
-      <line x1="10" y1="10" x2="14" y2="14" />
-      <line x1="14" y1="10" x2="10" y2="14" />
-    </svg>
-  );
-}
-
-/** 向上插入行图标 */
-function InsertRowAboveIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="18" height="14" rx="2" />
-      <path d="M3 14h18" />
-      <path d="M12 4v-2" strokeWidth="2.5" />
-      <path d="M10 3l2-2 2 2" strokeWidth="2" />
-    </svg>
-  );
-}
-
-/** 向下插入行图标 */
-function InsertRowBelowIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="14" rx="2" />
-      <path d="M3 10h18" />
-      <path d="M12 20v2" strokeWidth="2.5" />
-      <path d="M10 21l2 2 2-2" strokeWidth="2" />
-    </svg>
-  );
-}
-
-/** 删除行图标 */
-function DeleteRowIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
-      <rect x="3" y="8" width="18" height="8" fill="rgba(239, 68, 68, 0.15)" stroke="currentColor" />
-      <line x1="10" y1="10" x2="14" y2="14" />
-      <line x1="14" y1="10" x2="10" y2="14" />
-    </svg>
-  );
-}
-
 /** 表头列图标 */
 function HeaderColumnIcon() {
   return (
@@ -435,6 +381,8 @@ export function TableToolbar({ editor }: { editor: Editor }) {
   const toolbar = useRef<HTMLDivElement>(null);
   const refresh = useRef<() => void>(() => {});
   const [show, setShow] = useState(false);
+  const dismissed = useRef(false);
+  useEditorOverlayDismiss(editor, toolbar, () => { dismissed.current = true; setShow(false); });
   const [position, setPosition] = useState({ top: 0, left: 0 });
   useFormattingUpdates(editor, show);
   useLayoutEffect(() => {
@@ -453,7 +401,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     let lastCell: HTMLElement | null = null;
     const updateToolbar = () => {
       frame = 0;
-      if (editor.isDestroyed || isEmbeddedEditing(editor)) {
+      if (dismissed.current || editor.isDestroyed || !editorDom.isConnected || editorDom.classList.contains('nb-block-menu-open') || isEmbeddedEditing(editor)) {
         setShow(false);
         return;
       }
@@ -520,9 +468,11 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         // Near the first rows, use the table's outer edge so the toolbar cannot
         // cover the header or the boundary the user is about to resize.
         const tableTop = tableDom.getBoundingClientRect().top;
-        const anchorTop = rect.top - tableTop < height * 2 && tableTop - height - 6 >= containerRect.top + 6 ? tableTop : rect.top;
-        const topPos = anchorTop - height - 6 >= containerRect.top + 6
-          ? anchorTop - height - 6
+        const useOuterEdge = rect.top - tableTop < height * 2 && tableTop - height - 28 >= containerRect.top + 6;
+        const anchorTop = useOuterEdge ? tableTop : rect.top;
+        const gap = useOuterEdge ? 28 : 6;
+        const topPos = anchorTop - height - gap >= containerRect.top + 6
+          ? anchorTop - height - gap
           : Math.min(rect.bottom + 6, containerRect.bottom - height - 6);
 
         // 计算水平居中位置，并施加容器边界安全约束（工具条宽约 420px，半宽约 210px，留安全边距）
@@ -540,17 +490,21 @@ export function TableToolbar({ editor }: { editor: Editor }) {
 
     const schedule = () => { if (!frame) frame = requestAnimationFrame(updateToolbar); };
     const pointerAnchor = (event: PointerEvent) => {
+      dismissed.current = false;
       const cell = event.target instanceof Element ? event.target.closest<HTMLElement>('td,th') : null;
       if (cell && editorDom.contains(cell)) { lastCell = cell; schedule(); }
     };
     refresh.current = schedule;
+    const resume = () => { dismissed.current = false; schedule(); };
     let embeddedEditing = isEmbeddedEditing(editor);
     const onTransaction = ({ transaction }: { transaction: Transaction }) => {
+      if (transaction.selectionSet && editor.view.hasFocus()) dismissed.current = false;
       const editing = isEmbeddedEditing(editor);
       if (transaction.docChanged || transaction.selectionSet || transaction.storedMarksSet || editing !== embeddedEditing) schedule();
       embeddedEditing = editing;
     };
     editor.on('transaction', onTransaction);
+    editor.on('focus', resume);
     editorDom.addEventListener('pointerdown', pointerAnchor);
     editorDom.addEventListener('pointerup', pointerAnchor);
     scrollParent.addEventListener('scroll', schedule, { passive: true });
@@ -561,6 +515,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     return () => {
       cancelAnimationFrame(frame);
       editor.off('transaction', onTransaction);
+      editor.off('focus', resume);
       editorDom.removeEventListener('pointerdown', pointerAnchor);
       editorDom.removeEventListener('pointerup', pointerAnchor);
       scrollParent.removeEventListener('scroll', schedule);
@@ -598,51 +553,18 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         transition: 'opacity 120ms ease',
       }}
     >
-      {/* ── 列操作组（左右插列、删列） ── */}
       <AlignmentMenu editor={editor} cells/>
+      <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
+      <MenuDivider />
       <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>
-      <BubbleButton
-        title="向左插入列"
-        icon={<InsertColumnLeftIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addColumnBefore().run()}
-      />
-      <BubbleButton
-        title="向右插入列"
-        icon={<InsertColumnRightIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addColumnAfter().run()}
-      />
-      <BubbleButton
-        title="删除当前列"
-        icon={<DeleteColumnIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteColumn().run()}
-        danger
-      />
-
+      <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>
+      {isCellSelection(editor.state.selection) && editor.can().mergeCells() && <BubbleButton
+        title="合并选中单元格" icon={<Merge size={16}/>}
+        onClick={() => runDiscreteEdit(editor, chain => chain.mergeCells())}/>}
+      {editor.can().splitCell() && <BubbleButton
+        title="拆分合并单元格" icon={<Split size={16}/>}
+        onClick={() => runDiscreteEdit(editor, chain => chain.splitCell())}/>}
       <MenuDivider />
-
-      {/* ── 行操作组（上下插行、删行） ── */}
-      <BubbleButton
-        title="在上方插入行"
-        icon={<InsertRowAboveIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addRowBefore().run()}
-      />
-      <BubbleButton
-        title="在下方插入行"
-        icon={<InsertRowBelowIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addRowAfter().run()}
-      />
-      <BubbleButton
-        title="删除当前行"
-        icon={<DeleteRowIcon />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteRow().run()}
-        danger
-      />
-
-      <MenuDivider />
-
-      {/* ── 表头与单元格操作 ── */}
-      <BubbleButton title="选择当前行" icon={<Rows3 size={16}/>} onClick={() => selectTableScope(editor, 'row')}/>
-      <BubbleButton title="选择当前列" icon={<Columns3 size={16}/>} onClick={() => selectTableScope(editor, 'column')}/>
       {headers?.canRow && <BubbleButton
         title={headers.rowHeader ? '取消表头行' : '首行设为表头'}
         icon={<HeaderRowIcon />}
@@ -655,31 +577,16 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         active={headers.columnHeader}
         onClick={() => setSelectedTableHeader(editor, 'column')}
       />}
-      <BubbleButton
-        title="合并选中单元格"
-        disabled={!editor.can().mergeCells()}
-        icon={<Merge size={16} />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).mergeCells().run()}
-      />
-      <BubbleButton
-        title={editor.can().splitCell() ? '拆分合并单元格' : '先选中一个合并单元格'}
-        disabled={!editor.can().splitCell()}
-        icon={<Split size={16} />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).splitCell().run()}
-      />
-
-      <MenuDivider />
-
+      <TableInsertMenu editor={editor}/>
       <TableAppearanceMenu editor={editor}/>
-      <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
 
       <MenuDivider />
 
       {/* ── 删除表格 ── */}
       <BubbleButton
-        title="删除整个表格"
+        title={({ table: '删除整个表格', row: '删除选中行', column: '删除选中列', cells: '清空选中单元格' })[tableDeleteScope(editor)]}
         icon={<Trash2 size={16} />}
-        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteTable().run()}
+        onClick={() => deleteTableSelection(editor)}
         danger
       />
     </div>

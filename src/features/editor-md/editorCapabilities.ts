@@ -23,7 +23,7 @@ import {
   getSelectedText,
   type EditorTarget,
 } from '../search/searchController';
-import { serializeMarkdown } from './serialize';
+import { serializeEditorDocument } from './editorDocumentCodec';
 import { readStyledSource } from '../document-style/sourceStyleTracking';
 import {
   handleExpandJson,
@@ -136,7 +136,7 @@ export function createMarkdownEditorCapabilities(
       const editor = getMdTipTapEditor(docKey);
       if (!editor) return null;
       try {
-        const content = serializeMarkdown(editor);
+        const content = serializeEditorDocument(editor);
         submitCapturedContent(docKey, { instanceId, revision: getDocumentRevision(docKey), content }, sessionGeneration);
         return { docKey, instanceId, revision: getDocumentRevision(docKey), content };
       } catch {

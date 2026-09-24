@@ -11,6 +11,7 @@ import { resetSuspensionForTest } from '@/features/session/editorSuspension';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import { useLayoutStore } from '@/stores/layoutStore';
+import { TooltipProvider } from '@/components/Tooltip';
 
 // Tauri IPC 内存替身（不访问正式数据/磁盘）
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'review' }) }));
@@ -87,7 +88,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 it('新建 MD（真实顺序：空壳渲染 → 点击新建）：首次挂载即可编辑，无须切换', { timeout: 30000 }, async () => {
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   try {
-    await act(async () => root.render(<AppShell />));
+    await act(async () => root.render(<TooltipProvider><AppShell /></TooltipProvider>));
     // 🔴 真实用户操作顺序：应用已渲染（空 tabs）→ 点击"新建 Markdown"
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-testid="new-md"]')!.click();
@@ -114,7 +115,7 @@ it('🔴 P0-1b 预取后新建：资源已 ready 的挂载不提交模块加载 
     // 本文件的 WelcomeScreen 是替身（无预取 effect）——直接调用预取模拟
     // "欢迎页空闲预取已完成"（真实组件的预取行为由 src 代码保证）
     prefetchEditor('markdown');
-    await act(async () => root.render(<AppShell />));
+    await act(async () => root.render(<TooltipProvider><AppShell /></TooltipProvider>));
     await vi.waitFor(() => {
       expect(getEditorResourceStatus('markdown').status).toBe('ready');
     }, { timeout: 10000 });

@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
-import { TableMap } from '@tiptap/pm/tables';
-import { closeHistory } from '@tiptap/pm/history';
+import { TableMap, CellSelection } from '@tiptap/pm/tables';
+import { dispatchDiscreteEdit } from './discreteEdit';
 import type { EditorView } from '@tiptap/pm/view';
 import { SizedTableRow } from './markdownTable';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
@@ -32,6 +32,7 @@ interface Drag extends Edge {
 }
 
 function edgeAt(view: EditorView, event: PointerEvent): Edge | null {
+  if (view.state.selection instanceof CellSelection) return null;
   if (!view.editable || !(event.target instanceof Element)) return null;
   const cell = event.target.closest<HTMLTableCellElement>('td,th');
   const row = cell?.parentElement as HTMLTableRowElement | undefined;
@@ -113,12 +114,12 @@ export const TableSizing = Extension.create({
       const node = editor.state.doc.nodeAt(current.pos);
       if (!commit || !node || Math.abs(current.next - current.start) < 1) return;
       if (current.axis === 'row' && node.type.spec.tableRole === 'row') {
-        editor.dispatch(closeHistory(editor.state.tr).setNodeMarkup(current.pos, undefined, { ...node.attrs, height: current.next }));
+        dispatchDiscreteEdit(editor, editor.state.tr.setNodeMarkup(current.pos, undefined, { ...node.attrs, height: current.next }));
       } else if (current.axis === 'column' && node.type.spec.tableRole === 'table') {
         const widths = current.preview.widths.map(Math.round);
         widths[current.column] = current.next;
         if (current.adjacent !== undefined) widths[current.column + 1] = Math.round(current.adjacent);
-        editor.dispatch(closeHistory(editor.state.tr).step(columnWidthsStep(current.pos, node, widths)));
+        dispatchDiscreteEdit(editor, editor.state.tr.step(columnWidthsStep(current.pos, node, widths)));
       }
     };
     return [new Plugin({
@@ -148,6 +149,7 @@ export const TableSizing = Extension.create({
             if (!frame) frame = requestAnimationFrame(paint);
             event.preventDefault(); return true;
           }
+          if (event.buttons || _editor.state.selection instanceof CellSelection) { latestPointer = undefined; hideGuide(); return false; }
           latestPointer = event;
           if (!hoverFrame) hoverFrame = requestAnimationFrame(() => {
             hoverFrame = 0; if (!latestPointer || drag || !view) return;
@@ -178,7 +180,7 @@ export const TableSizing = Extension.create({
         const scroll = () => { if (drag) showGuide(drag); else hideGuide(); };
         editor.dom.ownerDocument.addEventListener('scroll', scroll, true);
         return {
-          update() { if (shown && !editor.dom.contains(shown.table)) hideGuide(); },
+          update() { if (editor.state.selection instanceof CellSelection || shown && !editor.dom.contains(shown.table)) hideGuide(); },
           destroy() { finish(editor, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
             editor.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; view = undefined; },
         };

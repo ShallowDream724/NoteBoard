@@ -20,12 +20,12 @@ import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
 
+import { getBaseline } from './serialize';
 import {
-  serializeMarkdown,
-  parseMarkdown,
-  getBaseline,
-  hasMarkdownContentChanged,
-} from './serialize';
+  serializeEditorDocument,
+  parseEditorDocument,
+  hasEditorDocumentChanged as hasMarkdownContentChanged,
+} from './editorDocumentCodec';
 import { judgeLargeDoc } from './largeDoc';
 import { nbEditorTheme } from '../editor-code/theme';
 import { nbSyntaxHighlighting } from '../editor-code/highlightStyle';
@@ -105,11 +105,12 @@ interface TipTapEditorProps {
 }
 
 export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
+  const nativeDocument = useDocumentStore(s => s.getDocument(docKey)?.kind === 'noteboard');
   const initialView = useMemo(() => {
     const document = useDocumentStore.getState().getDocument(docKey);
     const verdict = judgeLargeDoc(document?.content ?? '', document?.size);
     const requested = useWindowStore.getState().getTab(docKey)?.viewMode ?? useSettingsStore.getState().settings.editor.defaultViewMode;
-    return { verdict, mode: verdict.isLarge ? 'source' as const : requested };
+    return { verdict, mode: document?.kind === 'noteboard' ? 'visual' as const : verdict.isLarge ? 'source' as const : requested };
   }, [docKey]);
   const [viewMode, setViewMode] = useState<'visual' | 'source'>(initialView.mode);
   // 始终记录最新模式，供只在真正卸载时执行的清理逻辑读取
@@ -512,9 +513,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         const previousVisualDocument = editor.state.doc;
         if (hasMarkdownContentChanged(editor, entry.content)) {
           // 统一历史应用属于导航而非新编辑，整篇替换明确排除出 TipTap 原生历史
-          parseMarkdown(editor, entry.content, 'history');
+          parseEditorDocument(editor, entry.content, 'history');
         }
-        const content = serializeMarkdown(editor);
+        const content = serializeEditorDocument(editor);
         synchronizeCurrentDocumentHistoryContent(docKey, content, 'visual');
         publish(content);
         const preferredSelection = navigation.selectionMode === 'visual'
@@ -559,10 +560,10 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     //    合并后只应用一次，分支间不得互相覆盖。大文档强制 source（visual 内核
     //    不挂载）；resolvedMode 决定后续全部初始化（内核/历史/基线），不再被
     //    tab 恢复的 initialMode 二次改写。
-    const resolvedMode: 'visual' | 'source' = verdict.isLarge ? 'source' : requestedMode;
+    const resolvedMode: 'visual' | 'source' = nativeDocument ? 'visual' : verdict.isLarge ? 'source' : requestedMode;
     const historyInitialContent = content;
 
-    if (verdict.isLarge) {
+    if (verdict.isLarge && !nativeDocument) {
       setShowLargeBanner(true);
       // 强制 source 模式；大文档不设置内容到 TipTap（太大会卡）→ visual 内核保持未挂载
       setViewMode('source');
@@ -593,6 +594,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     //    历史与 source 内核按 resolvedMode 初始化——不再被 initialMode 覆盖）
     viewModeRef.current = resolvedMode;
     setViewMode(resolvedMode);
+    if (nativeDocument) useWindowStore.getState().setTabViewMode(docKey, resolvedMode);
     initializeDocumentHistory(docKey, historyInitialContent, resolvedMode);
     if (resolvedMode === 'source') {
       const baseline = getBaseline(docKey);
@@ -626,11 +628,11 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     isInitializingRef.current = true;
     try {
       const baseline = getBaseline(docKey);
-      parseMarkdown(editor, content);
+      parseEditorDocument(editor, content);
 
       // 与初始解析序列化结果严格对齐，消除格式化差异导致的假脏态；
       // visual 表示下历史首节点采用序列化结果
-      const initialSerialized = serializeMarkdown(editor);
+      const initialSerialized = serializeEditorDocument(editor);
       synchronizeCurrentDocumentHistoryContent(docKey, initialSerialized, 'visual');
       if (!currentDoc.isDirty) {
         baseline.setBaseline(initialSerialized);
@@ -657,13 +659,14 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
   const toggleViewMode = useCallback((targetMode?: 'visual' | 'source') => {
+    if (nativeDocument) return;
     const nextMode = targetMode ?? (viewModeRef.current === 'visual' ? 'source' : 'visual');
     if (nextMode === viewModeRef.current) return;
 
     if (nextMode === 'source') {
       // 可视化 → 源码模式
       const md = editor
-        ? (getCurrentDocumentHistoryContent(docKey) ?? serializeMarkdown(editor))
+        ? (getCurrentDocumentHistoryContent(docKey) ?? serializeEditorDocument(editor))
         : (getCurrentDocumentHistoryContent(docKey) ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '');
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
@@ -722,7 +725,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         isInitializingRef.current = true;
         try {
           // 只同步目标视图，明确不加入 TipTap 局部历史
-          parseMarkdown(editor, md);
+          parseEditorDocument(editor, md);
         } finally {
           isInitializingRef.current = false;
         }
@@ -730,7 +733,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       // 不变式 I-14 检查：切回 visual 后内容是否与基线一致
       const baseline = getBaseline(docKey);
-      const serialized = hasCrossModeChanges ? serializeMarkdown(editor) : md;
+      const serialized = hasCrossModeChanges ? serializeEditorDocument(editor) : md;
       // Markdown 等价格式的规范化只更新当前节点表示，不得伪造成新的编辑步骤
       if (hasCrossModeChanges) synchronizeCurrentDocumentHistoryContent(docKey, serialized, 'visual');
       if (baseline.isClean(serialized)) {
@@ -748,7 +751,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const visualSelection = mapModeSelection(editor, md, 'visual', sourceSelection);
       scheduleModeSelection('visual', visualSelection);
     }
-  }, [editor, docKey, initSourceEditor, readSourceContent, scheduleModeSelection]);
+  }, [editor, docKey, nativeDocument, initSourceEditor, readSourceContent, scheduleModeSelection]);
 
   // 监听来自状态栏或外部的模式切换请求
   useEffect(() => {
@@ -767,7 +770,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   useEffect(() => {
     const unreg = registerShortcut({
       key: 'Ctrl+/',
-      when: () => useWindowStore.getState().activeKey === docKey,
+      when: () => !nativeDocument && useWindowStore.getState().activeKey === docKey,
       action: () => toggleViewMode(),
       stopPropagation: true,
       scope: 'global',
@@ -791,7 +794,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           ?? readStyledSource(sourceViewRef.current.state)
         : materializedVisual
           ?? (tipTapEditorRef.current
-            ? serializeMarkdown(tipTapEditorRef.current)
+            ? serializeEditorDocument(tipTapEditorRef.current)
             : useDocumentStore.getState().getDocument(docKey)?.content ?? '');
       if (materializedVisual === null && materializedSource === null) {
         useDocumentStore.getState().setContent(docKey, latestContent);
@@ -866,7 +869,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       </div>
 
       {/* 底部左侧模式切换器：可视化 / 源码模式，具备热区靠近唤出与 Hover、Active 状态反馈，仅对当前文档生效 */}
-      <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
+      {!nativeDocument && <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />}
       </div>
     </div>
   );

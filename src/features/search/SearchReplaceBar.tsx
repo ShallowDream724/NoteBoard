@@ -54,7 +54,7 @@ export function SearchReplaceBar() {
   // 当前活动文档的搜索能力（code / markdown visual / markdown source 由注册表分派）
   const getSearch = useCallback((): SearchCapabilities | null => {
     if (!activeTab || !activeKey) return null;
-    if (activeTab.kind !== 'code' && activeTab.kind !== 'markdown') return null;
+    if (activeTab.kind !== 'code' && !isRichDocument(activeTab.kind)) return null;
     return getEditorCapabilities(activeKey)?.search ?? null;
   }, [activeTab, activeKey]);
 
@@ -674,3 +674,4 @@ export function SearchReplaceBar() {
     </div>
   );
 }
+import { isRichDocument } from '../../core/docKind';

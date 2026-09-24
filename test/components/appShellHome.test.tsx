@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
+import { TooltipProvider } from '@/components/Tooltip';
 
 // ── 子组件替身（隔离 Tauri IPC 与编辑器内核；记录真实挂载/卸载生命周期） ──
 const hostLog: string[] = [];
@@ -40,7 +41,7 @@ vi.mock('@/features/external/MissingFileDialog', () => ({ MissingFileDialog: () 
 // AppShell 依赖的编排模块（避免真实 Tauri 调用链）
 vi.mock('@/features/welcome/welcomeActions', () => ({
   openFileDialog: vi.fn(), openFolderDialog: vi.fn(), openStagingArea: vi.fn(),
-  newMarkdown: vi.fn(), newMindmap: vi.fn(), newDrawio: vi.fn(), newBitable: vi.fn(),
+  newNativeDocument: vi.fn(), newMarkdown: vi.fn(), newMindmap: vi.fn(), newDrawio: vi.fn(), newBitable: vi.fn(),
   newBoard: vi.fn(), newMermaid: vi.fn(), newPlantUml: vi.fn(), newInfographic: vi.fn(),
   newJson: vi.fn(), newYaml: vi.fn(), newSql: vi.fn(), newXml: vi.fn(), newText: vi.fn(),
   newTextDiff: vi.fn(),
@@ -115,7 +116,7 @@ describe('🔴 N08 Home 不卸载已打开编辑器（宿主级断言）', () =>
       useWindowStore.setState({ tabs: [tab], activeKey: 'doc-a' });
     });
     await act(async () => {
-      root.render(<AppShell />);
+      root.render(<TooltipProvider><AppShell /></TooltipProvider>);
     });
     expect(hostLog).toContain('mount:doc-a');
     const mountedCount = hostLog.length;
@@ -151,7 +152,7 @@ describe('🔴 N08 Home 不卸载已打开编辑器（宿主级断言）', () =>
       useWindowStore.setState({ tabs, activeKey: 'code-c' });
     });
     await act(async () => {
-      root.render(<AppShell />);
+      root.render(<TooltipProvider><AppShell /></TooltipProvider>);
     });
     expect(hostLog.filter((e) => e.startsWith('mount:')).length).toBeGreaterThanOrEqual(1);
 
@@ -171,7 +172,7 @@ describe('🔴 N08 Home 不卸载已打开编辑器（宿主级断言）', () =>
     useWindowStore.setState({ tabs: [mockTab('doc-a')], activeKey: 'doc-a' });
     const dispose = initShortcuts();
     try {
-      await act(async () => root.render(<AppShell />));
+      await act(async () => root.render(<TooltipProvider><AppShell /></TooltipProvider>));
       const editorSurface = container.querySelector<HTMLElement>('[data-host="doc-a"]')!;
       const received = vi.fn();
       editorSurface.addEventListener('keydown', received);

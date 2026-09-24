@@ -17,6 +17,7 @@ import type { DocumentKind, LanguageId } from '../../core/ipc/types';
 import { showToast } from '../../stores/toastStore';
 import { createDefaultBitableDocument, serializeBitableDocument } from '../bitable/bitableConverter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
+import { EMPTY_NATIVE_DOCUMENT } from '../../core/nativeDocument';
 
 let untitledCounter = 0;
 
@@ -37,6 +38,7 @@ export async function openFileDialog(): Promise<void> {
     filters: [
       { name: '全部文件', extensions: ['*'] },
       { name: 'Markdown', extensions: ['md', 'markdown'] },
+      { name: 'NoteBoard 文档', extensions: ['nbdoc'] },
       { name: '多维表格', extensions: ['bitable', 'table'] },
       { name: '思维导图', extensions: ['mindmap', 'xmind', 'mm'] },
       { name: '画板与绘图', extensions: ['excalidraw', 'drawio', 'dio', 'board'] },
@@ -94,6 +96,7 @@ export async function openStagingArea(): Promise<void> {
 function createUntitledDocument(
   type:
     | 'markdown'
+    | 'noteboard'
     | 'board'
     | 'txt'
     | 'mindmap'
@@ -115,7 +118,12 @@ function createUntitledDocument(
   let initialContent = '';
 
   // 根据新建类型决定文档模型、语言标识与默认文件名
-  if (type === 'markdown') {
+  if (type === 'noteboard') {
+    kind = 'noteboard';
+    language = 'json';
+    displayName = '未命名.nbdoc';
+    initialContent = EMPTY_NATIVE_DOCUMENT;
+  } else if (type === 'markdown') {
     kind = 'markdown';
     language = 'markdown';
     displayName = '未命名.md';
@@ -217,6 +225,10 @@ function createUntitledDocument(
 /** 新建 Markdown 文档 */
 export function newMarkdown(): void {
   createUntitledDocument('markdown');
+}
+
+export function newNativeDocument(): void {
+  createUntitledDocument('noteboard');
 }
 
 /** Bundled content is loaded only when requested, and edited as an unsaved copy. */

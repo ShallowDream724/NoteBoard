@@ -12,6 +12,8 @@ import { useWindowStore } from '@/stores/windowStore';
 import { getMdTipTapEditor } from '@/features/editor-md/editorInstances';
 import { resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { clearAllDocumentHistories } from '@/features/history/documentHistory';
+import { encodeNativeDocument, decodeNativeDocument } from '@/core/nativeDocument';
+import { flushPendingVisualSnapshot } from '@/features/editor-md/visualSnapshot';
 vi.mock('@/features/editor-md/extensions', async () => {
   const { default: StarterKit } = await import('@tiptap/starter-kit');
   const { Markdown } = await import('@tiptap/markdown');
@@ -34,6 +36,9 @@ beforeEach(() => {
   if (!Range.prototype.getClientRects) {
     Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
   }
+  if (!Range.prototype.getBoundingClientRect) {
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+  }
   useDocumentStore.setState({ documents: new Map() }); useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [] });
   resetEditorRegistryForTest(); clearAllDocumentHistories();
 });
@@ -54,6 +59,29 @@ function seedUntitled(n: number): string {
 }
 
 describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
+  it('原生文档忽略恢复的源码模式，直接编辑并捕获结构化样式', async () => {
+    const key = 'untitled:native';
+    useDocumentStore.getState().upsertFromPayload({
+      key, displayName: '未命名.nbdoc', dirPath: '', kind: 'noteboard', language: 'plaintext',
+      content: encodeNativeDocument({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '红色文字', marks: [{ type: 'bold' }] }] }] }),
+      encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false,
+    });
+    useWindowStore.getState().openTab({ key, displayName: '未命名.nbdoc', path: null, kind: 'noteboard', language: 'plaintext',
+      isDirty: false, isPreview: false, viewMode: 'source', externalStatus: null, isDetached: false });
+    const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+    try {
+      await act(async () => { root.render(<TipTapEditor docKey={key} />); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+      const editor = getMdTipTapEditor(key)!;
+      expect(editor.isEditable).toBe(true);
+      expect(host.querySelector('.cm-editor')).toBeNull();
+      expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
+      await act(async () => { editor.view.dispatch(editor.state.tr.insertText('新', 3)); });
+      const snapshot = flushPendingVisualSnapshot(key)!;
+      const native = decodeNativeDocument(snapshot);
+      expect(native.content![0].content![0]).toMatchObject({ text: '红色新文字', marks: [{ type: 'bold' }] });
+    } finally { await act(async () => root.unmount()); host.remove(); }
+  });
   it('新建文档（空正文、viewMode=null）：挂载后无需切换即可输入', async () => {
     const key = seedUntitled(1);
     const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);

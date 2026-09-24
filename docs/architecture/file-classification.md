@@ -1,5 +1,7 @@
 # 文件格式判定
 
+`.nbdoc` 归类 `noteboard`，使用原生 JSON codec 与可视化富文本内核。它不经过 Markdown 解析，也不提供源码模式。自动保存、导出和大纲等共同行为使用 `isRichDocument` 判断；格式契约见 [native-documents.md](native-documents.md)。
+
 `core/docKind.json` 与 `core/languageByExt.json` 是前后端共用映射。TypeScript 导入，Rust `dto::kind_by_ext` 通过 include_str 和 OnceLock 读取，不再维护第二份 match。大小写统一，未知扩展名默认纯文本候选，磁盘读取仍通过内容嗅探识别二进制。
 
 DOCX、PDF、PPTX、XLSX、压缩包、媒体和程序等已知外部格式明确归类 Unsupported；即使它们最初是无扩展名空文件，也不会因内容恰为文本继续使用文字编辑器。`.dot` 保留为文本候选，兼容 Graphviz，实际二进制由读取层判定。

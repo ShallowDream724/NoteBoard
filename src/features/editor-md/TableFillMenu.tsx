@@ -4,15 +4,17 @@ import * as Popover from '@radix-ui/react-popover';
 import { PaintBucket, ChevronDown } from 'lucide-react';
 import { ColorSwatches } from '../document-style/ColorSwatches';
 import { fillTableSelection, type TableFillScope } from './tablePresentationCommands';
+import { useHoverMenu } from '../../components/useHoverMenu';
 
 export function TableFillMenu({ editor, disabled }: { editor: Editor; disabled: boolean }) {
   const [open, setOpen] = useState(false), [scope, setScope] = useState<TableFillScope>('cells');
+  const hover = useHoverMenu(open, setOpen, disabled);
   const fill = (color: string | null) => { fillTableSelection(editor, scope, color); setOpen(false); };
-  return <Popover.Root open={open && !disabled} onOpenChange={setOpen}>
-    <Popover.Trigger className="nb-table-style-trigger" disabled={disabled} aria-label={disabled ? '三线表不使用底色' : '表格底色'}
-      title={disabled ? '三线表不使用底色' : '表格底色'}><PaintBucket size={16}/><ChevronDown size={11}/></Popover.Trigger>
+  return <Popover.Root open={open && !disabled} onOpenChange={hover.change}>
+    <Popover.Trigger {...hover.triggerProps} className="nb-table-style-trigger" disabled={disabled} aria-label={disabled ? '三线表不使用底色' : '表格底色'}
+      title={disabled ? '三线表不使用底色' : undefined}><PaintBucket size={16}/><ChevronDown className="nb-menu-chevron" size={11}/></Popover.Trigger>
     <Popover.Portal><Popover.Content className="nb-table-fill-menu" sideOffset={8} collisionPadding={10}
-      onCloseAutoFocus={event => { event.preventDefault(); editor.view.focus(); }}>
+      {...hover.contentProps} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
       <div className="nb-table-fill-heading">表格底色</div>
       <div className="nb-table-fill-scopes" role="group" aria-label="填色范围">
         {([{ value: 'cells', label: '选中格' }, { value: 'row', label: '整行' }, { value: 'column', label: '整列' }] as const).map(item =>

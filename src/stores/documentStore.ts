@@ -93,7 +93,7 @@ function normalizeEol(text: string | null | undefined): string {
 export function resolveSavePolicy(kind: DocumentPayload['kind']): 'auto' | 'manual' {
   const fileSettings = useSettingsStore.getState().settings.file;
   if (!fileSettings) return 'manual';
-  if (kind === 'markdown') {
+  if (kind === 'markdown' || kind === 'noteboard') {
     return fileSettings.autoSaveMarkdown ? 'auto' : 'manual';
   }
   if (kind === 'board') {

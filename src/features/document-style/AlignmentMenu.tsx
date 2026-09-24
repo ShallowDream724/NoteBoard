@@ -5,18 +5,20 @@ import { AlignLeft, AlignCenter, AlignRight, ArrowUpToLine, ArrowDownToLine, Ali
 import { setParagraphPresentation } from './documentStyles';
 import { alignTableSelection } from '../editor-md/tablePresentationCommands';
 import './alignmentMenu.css';
+import { useHoverMenu } from '../../components/useHoverMenu';
 
 export function AlignmentMenu({ editor, cells = false }: { editor: Editor; cells?: boolean }) {
   const [open, setOpen] = useState(false);
+  const hover = useHoverMenu(open, setOpen);
   const attrs = cells ? { ...editor.getAttributes('tableCell'), ...editor.getAttributes('tableHeader') }
     : { ...editor.getAttributes('paragraph'), ...editor.getAttributes('heading') };
   const horizontal = [ ['left','左对齐',AlignLeft], ['center','居中',AlignCenter], ['right','右对齐',AlignRight] ] as const;
   const vertical = [ ['top','顶部对齐',ArrowUpToLine], ['middle','垂直居中',AlignVerticalJustifyCenter], ['bottom','底部对齐',ArrowDownToLine] ] as const;
   const apply = (action: () => void) => { action(); setOpen(false); };
-  return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger className="nb-alignment-trigger" aria-label={cells ? '单元格对齐' : '对齐与缩进'}><AlignLeft size={17}/><ChevronDown size={10}/></Popover.Trigger>
+  return <Popover.Root open={open} onOpenChange={hover.change}>
+    <Popover.Trigger {...hover.triggerProps} className="nb-alignment-trigger" aria-label={cells ? '单元格对齐' : '对齐与缩进'}><AlignLeft size={17}/><ChevronDown className="nb-menu-chevron" size={10}/></Popover.Trigger>
     <Popover.Portal><Popover.Content className="nb-alignment-menu" sideOffset={6} collisionPadding={8}
-      onCloseAutoFocus={event => { event.preventDefault(); editor.view.focus(); }}>
+      {...hover.contentProps} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
       {horizontal.map(([value,label,Icon]) => <button type="button" key={value} onClick={() => apply(() => {
         if (cells) alignTableSelection(editor, { textAlign: value }); else setParagraphPresentation(editor, { textAlign: value });
       })}><Icon size={16}/><span>{label}</span>{(attrs.textAlign ?? attrs.align ?? 'left') === value && <Check size={14}/>}</button>)}

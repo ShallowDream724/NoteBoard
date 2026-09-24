@@ -4,6 +4,8 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
+import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
+import { BLOCK_MOVE_META, foldedSectionEnd } from './headingFolding';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
 export interface TopLevelBlockInfo {
@@ -84,7 +86,8 @@ export function resolveTopLevelDropTarget(
     const info = getTopLevelBlockInfo(view, child);
     if (!info || seenPositions.has(info.pos)) continue;
     seenPositions.add(info.pos);
-    entries.push({ ...info, rect: child.getBoundingClientRect() });
+    const rect = child.getBoundingClientRect();
+    if (rect.height > 0) entries.push({ ...info, rect });
   }
 
   if (entries.length === 0) return null;
@@ -104,7 +107,7 @@ export function resolveTopLevelDropTarget(
 
   const last = entries[entries.length - 1];
   return {
-    insertPos: last.pos + last.node.nodeSize,
+    insertPos: foldedSectionEnd(view.state, last.pos) ?? last.pos + last.node.nodeSize,
     indicatorClientY: last.rect.bottom,
     targetPos: last.pos,
     edge: 'after',
@@ -120,6 +123,7 @@ export function isTopLevelBlockMoveAllowed(
   doc: ProseMirrorNode,
   sourcePos: number,
   insertPos: number,
+  sourceEnd?: number,
 ): boolean {
   if (!Number.isInteger(sourcePos) || !Number.isInteger(insertPos)) return false;
   if (sourcePos < 0 || insertPos < 0 || insertPos > doc.content.size) return false;
@@ -132,8 +136,9 @@ export function isTopLevelBlockMoveAllowed(
     if ($source.depth !== 0 || $insert.depth !== 0 || !sourceNode?.isBlock || sourceNode.type.name === 'documentPresentation') return false;
     if (insertPos === 0 && doc.firstChild?.type.name === 'documentPresentation') return false;
 
-    const sourceEnd = sourcePos + sourceNode.nodeSize;
-    if (insertPos >= sourcePos && insertPos <= sourceEnd) return false;
+    const end = sourceEnd ?? sourcePos + sourceNode.nodeSize;
+    if (end < sourcePos + sourceNode.nodeSize || end > doc.content.size || doc.resolve(end).depth !== 0) return false;
+    if (insertPos >= sourcePos && insertPos <= end) return false;
 
     return $insert.parent.canReplaceWith(
       $insert.index(),
@@ -159,32 +164,33 @@ export function moveTopLevelBlock(
   const { state } = view;
   const sourceNode = state.doc.nodeAt(sourcePos);
 
-  if (!sourceNode || !isTopLevelBlockMoveAllowed(state.doc, sourcePos, insertPos)) {
+  const sourceEnd = foldedSectionEnd(state, sourcePos) ?? sourcePos + (sourceNode?.nodeSize ?? 0);
+  if (!sourceNode || !isTopLevelBlockMoveAllowed(state.doc, sourcePos, insertPos, sourceEnd)) {
     return null;
   }
 
-  const sourceEnd = sourcePos + sourceNode.nodeSize;
+  const fragment = state.doc.slice(sourcePos, sourceEnd).content;
   const mappedInsertPos = insertPos > sourceEnd
-    ? insertPos - sourceNode.nodeSize
+    ? insertPos - (sourceEnd - sourcePos)
     : insertPos;
 
   try {
-    const tr = state.tr.delete(sourcePos, sourceEnd);
+    const tr = discreteTransaction(state.tr).delete(sourcePos, sourceEnd);
     const $mappedInsert = tr.doc.resolve(mappedInsertPos);
 
     if (
       $mappedInsert.depth !== 0
-      || !$mappedInsert.parent.canReplaceWith(
+      || !$mappedInsert.parent.canReplace(
         $mappedInsert.index(),
         $mappedInsert.index(),
-        sourceNode.type,
-        sourceNode.marks,
+        fragment,
       )
     ) {
       return null;
     }
 
-    tr.insert(mappedInsertPos, sourceNode);
+    tr.insert(mappedInsertPos, fragment);
+    tr.setMeta(BLOCK_MOVE_META, { from: sourcePos, to: sourceEnd, inserted: mappedInsertPos });
 
     // 普通块使用 NodeSelection 保留清晰的移动结果；极少数不可选节点回退到邻近文本选区。
     const selection = NodeSelection.isSelectable(sourceNode)
@@ -192,7 +198,7 @@ export function moveTopLevelBlock(
       : TextSelection.near(tr.doc.resolve(mappedInsertPos), 1);
     tr.setSelection(selection).scrollIntoView();
 
-    view.dispatch(tr);
+    dispatchDiscreteEdit(view, tr);
     view.focus();
     return { insertedPos: mappedInsertPos };
   } catch {

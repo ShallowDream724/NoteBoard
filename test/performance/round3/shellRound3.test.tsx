@@ -4,6 +4,7 @@
 import { it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
+import { TooltipProvider } from '@/components/Tooltip';
 
 // ── 子组件替身（隔离 Tauri IPC 与编辑器内核；记录真实挂载/卸载生命周期） ──
 const hostLog: string[] = [];
@@ -43,7 +44,7 @@ vi.mock('@/features/external/MissingFileDialog', () => ({ MissingFileDialog: () 
 // AppShell 依赖的编排模块（避免真实 Tauri 调用链）
 vi.mock('@/features/welcome/welcomeActions', () => ({
   openFileDialog: vi.fn(), openFolderDialog: vi.fn(), openStagingArea: vi.fn(),
-  newMarkdown: vi.fn(), newMindmap: vi.fn(), newDrawio: vi.fn(), newBitable: vi.fn(),
+  newNativeDocument: vi.fn(), newMarkdown: vi.fn(), newMindmap: vi.fn(), newDrawio: vi.fn(), newBitable: vi.fn(),
   newBoard: vi.fn(), newMermaid: vi.fn(), newPlantUml: vi.fn(), newInfographic: vi.fn(),
   newJson: vi.fn(), newYaml: vi.fn(), newSql: vi.fn(), newXml: vi.fn(), newText: vi.fn(),
   newTextDiff: vi.fn(),
@@ -100,7 +101,7 @@ it('C15：已打开的四个标签切换及脏态更新均保持实例，关闭�
   useLayoutStore.setState({ explorerVisible: false, outlineVisible: false, statusBarVisible: false });
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   try {
-    await act(async () => { root.render(<AppShell />); });
+    await act(async () => { root.render(<TooltipProvider><AppShell /></TooltipProvider>); });
     for (const key of ['a', 'b', 'c', 'd']) {
       await act(async () => { useWindowStore.getState().openTab(mockTab(key)); });
     }

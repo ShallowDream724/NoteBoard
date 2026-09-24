@@ -12,6 +12,7 @@ use std::path::PathBuf;
 pub enum DocumentKind {
     #[default]
     Markdown,
+    Noteboard,
     Code,
     Board,
     Image,
@@ -388,7 +389,7 @@ pub fn kind_from_path(path: &str) -> (DocumentKind, LanguageId) {
 
 pub fn save_policy_of(kind: DocumentKind) -> SavePolicy {
     match kind {
-        DocumentKind::Markdown | DocumentKind::Board | DocumentKind::Mindmap | DocumentKind::Drawio | DocumentKind::Bitable => SavePolicy::Auto,
+        DocumentKind::Markdown | DocumentKind::Noteboard | DocumentKind::Board | DocumentKind::Mindmap | DocumentKind::Drawio | DocumentKind::Bitable => SavePolicy::Auto,
         DocumentKind::Code | DocumentKind::Image | DocumentKind::Unsupported => SavePolicy::Manual,
     }
 }

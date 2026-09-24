@@ -236,7 +236,7 @@ fn scan_references(
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_lowercase();
-            if !["md", "markdown", "mdown", "mdx", "html", "htm"].contains(&ext.as_str()) {
+            if !["md", "markdown", "mdown", "mdx", "html", "htm", "nbdoc"].contains(&ext.as_str()) {
                 continue;
             }
             scanned += 1;
@@ -246,6 +246,10 @@ fn scan_references(
             }
             let text = std::fs::read_to_string(&path)
                 .map_err(|e| format!("无法核对文档引用，图片已保留：{e}"))?;
+            let text = if ext == "nbdoc" {
+                serde_json::from_str::<serde_json::Value>(&text)
+                    .map_err(|_| "无法读取 NoteBoard 文档引用，图片已保留")?.to_string()
+            } else { text };
             let text = normalize_reference_text(&text)?;
             for (image_key, filename) in &filenames {
                 if text.contains(filename) {
@@ -370,6 +374,7 @@ fn check_other_windows(app: &tauri::AppHandle, label: &str) -> Result<(), String
     if state.documents.values().any(|doc| {
         doc.owner_window != label
             && (doc.kind == crate::dto::DocumentKind::Markdown
+                || doc.kind == crate::dto::DocumentKind::Noteboard
                 || ["html", "htm", "mdx"].contains(
                     &Path::new(&doc.key)
                         .extension()

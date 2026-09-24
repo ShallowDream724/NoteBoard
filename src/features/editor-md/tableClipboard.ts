@@ -16,15 +16,57 @@ import {
   isInTable,
   selectionCell,
   tableNodeTypes,
-  __clipCells,
+  selectedRect, deleteRow, deleteColumn, deleteTable,
   __insertCells,
   __pastedCells,
 } from '@tiptap/pm/tables';
 import type { EditorView } from '@tiptap/pm/view';
 // 共用原样的纯 TSV/CSV 解析，不让 Markdown 首开依赖多维表格通用模块。
 import { parseClipboardMatrix } from '../../core/clipboardMatrix';
+import { dispatchDiscreteEdit } from './discreteEdit';
+import { insertTablePart } from './tableStructure';
 
 export const tableClipboardPluginKey = new PluginKey('tableClipboard');
+const TABLE_SELECTION_MIME = 'application/x-noteboard-table-selection';
+type ClipboardScope = 'row' | 'column' | 'table' | 'cells';
+
+function cellsTable(schema: Schema, cells: NonNullable<ReturnType<typeof __pastedCells>>, slice?: Slice) {
+  if (slice?.content.childCount === 1 && slice.content.firstChild?.type.spec.tableRole === 'table') return slice.content.firstChild;
+  if (slice?.content.childCount) {
+    let rows = true; slice.content.forEach(node => { if (node.type.spec.tableRole !== 'row') rows = false; });
+    if (rows) return schema.nodes.table.create(null, slice.content);
+  }
+  return schema.nodes.table.create(null, cells.rows.map(content => schema.nodes.tableRow.create(null, content)));
+}
+
+export function writeTableClipboard(view: EditorView, event: ClipboardEvent, cut: boolean): boolean {
+  const selection = view.state.selection, data = event.clipboardData;
+  if (!(selection instanceof CellSelection) || !data) return false;
+  const scope: ClipboardScope = selection.isRowSelection() && selection.isColSelection() ? 'table'
+    : selection.isRowSelection() ? 'row' : selection.isColSelection() ? 'column' : 'cells';
+  const slice = selection.content(), serialized = view.serializeForClipboard(slice);
+  data.setData('text/plain', customClipboardTextSerializer(slice, view));
+  data.setData('text/html', serialized.dom.innerHTML);
+  data.setData(TABLE_SELECTION_MIME, JSON.stringify({ version: 1, scope, slice: slice.toJSON() }));
+  event.preventDefault();
+  if (cut) {
+    const dispatch = (tr: import('@tiptap/pm/state').Transaction) => dispatchDiscreteEdit(view, tr);
+    if (scope === 'row') deleteRow(view.state, dispatch);
+    else if (scope === 'column') deleteColumn(view.state, dispatch);
+    else if (scope === 'table') deleteTable(view.state, dispatch);
+    else dispatch(view.state.tr.deleteSelection());
+  }
+  return true;
+}
+
+function internalSelection(view: EditorView, event: ClipboardEvent): { scope: ClipboardScope; slice: Slice } | null {
+  const raw = event.clipboardData?.getData(TABLE_SELECTION_MIME); if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    if (value.version !== 1 || !['row','column','table','cells'].includes(value.scope)) return null;
+    return { scope: value.scope, slice: Slice.fromJSON(view.state.schema, value.slice) };
+  } catch { return null; }
+}
 
 /**
  * 提取单元格节点的纯文本内容，将内部多余换行与制表符规整化
@@ -265,20 +307,14 @@ export function executeTableMatrixPaste(
       const start = sel.$anchorCell.start(-1);
       const map = TableMap.get(table);
       const rect = map.rectBetween(sel.$anchorCell.pos - start, sel.$headCell.pos - start);
-      const isSingleCell = sel.$anchorCell.pos === sel.$headCell.pos;
-
-      const cellsToInsert = isSingleCell
-        ? pmCells
-        : __clipCells(pmCells, rect.right - rect.left, rect.bottom - rect.top);
-
-      __insertCells(view.state, view.dispatch, start, rect, cellsToInsert);
+      __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, rect, pmCells);
       return true;
     }
 
     const $cell = selectionCell(view.state);
     const start = $cell.start(-1);
     const map = TableMap.get($cell.node(-1));
-    __insertCells(view.state, view.dispatch, start, map.findCell($cell.pos - start), pmCells);
+    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, map.findCell($cell.pos - start), pmCells);
     return true;
   }
 
@@ -294,18 +330,10 @@ export function executeTableMatrixPaste(
     const map = TableMap.get(table);
     const rect = map.rectBetween(sel.$anchorCell.pos - start, sel.$headCell.pos - start);
 
-    const selRows = rect.bottom - rect.top;
-    const selCols = rect.right - rect.left;
-    const isSingleCell = sel.$anchorCell.pos === sel.$headCell.pos;
+    // Preserve source dimensions; never silently repeat or truncate a matrix.
+    const cells = matrixToPastedCells(view.state.schema, matrix);
 
-    // 单格选区直接按矩阵尺寸填入，多选区域按选区尺寸平铺
-    const targetRows = isSingleCell ? mRows : selRows;
-    const targetCols = isSingleCell ? mCols : selCols;
-
-    const finalMatrix = isSingleCell ? matrix : tileMatrix(matrix, targetRows, targetCols);
-    const cells = matrixToPastedCells(view.state.schema, finalMatrix);
-
-    __insertCells(view.state, view.dispatch, start, rect, cells);
+    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, rect, cells);
     return true;
   }
 
@@ -317,7 +345,7 @@ export function executeTableMatrixPaste(
     const cellRect = map.findCell($cell.pos - start);
     const cells = matrixToPastedCells(view.state.schema, matrix);
 
-    __insertCells(view.state, view.dispatch, start, cellRect, cells);
+    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, cellRect, cells);
     return true;
   }
 
@@ -329,10 +357,22 @@ export function executeTableMatrixPaste(
  * 拦截粘贴事件并增强表格粘贴
  */
 export function handleTablePaste(view: EditorView, event: ClipboardEvent, slice: Slice): boolean {
+  const internal = internalSelection(view, event);
+  if (internal) slice = internal.slice;
+  const pmCells = __pastedCells(slice);
+  if (pmCells && !isInTable(view.state)) {
+    dispatchDiscreteEdit(view, view.state.tr.replaceSelectionWith(cellsTable(view.state.schema, pmCells, slice)));
+    return true;
+  }
   if (!isInTable(view.state)) return false;
+  if (pmCells && (internal?.scope === 'row' || internal?.scope === 'column')) {
+    const rect = selectedRect(view.state), pos = rect.tableStart - 1;
+    const next = insertTablePart(rect.table, cellsTable(view.state.schema, pmCells, slice), internal.scope, internal.scope === 'row' ? rect.top : rect.left);
+    dispatchDiscreteEdit(view, view.state.tr.replaceWith(pos, pos + rect.table.nodeSize, next));
+    return true;
+  }
 
   // 优先检查是否带有 ProseMirror 原生结构
-  const pmCells = __pastedCells(slice);
   const text = event.clipboardData?.getData('text/plain') ?? '';
 
   if (pmCells) {
@@ -372,6 +412,10 @@ export const TableClipboard = Extension.create({
       new Plugin({
         key: tableClipboardPluginKey,
         props: {
+          handleDOMEvents: {
+            copy: (view, event) => writeTableClipboard(view, event, false),
+            cut: (view, event) => writeTableClipboard(view, event, true),
+          },
           clipboardTextSerializer: (slice, view) => {
             return customClipboardTextSerializer(slice, view);
           },

@@ -194,7 +194,6 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
   // ── 高亮操作 ──
   const handleSelectHighlightColor = (color: string) => {
-    setHighlightDropdownOpen(false);
     if (isSourceMode) {
       executeSourceAction(view => formatSourceMark(view, 'highlight', color));
       return;
@@ -204,7 +203,6 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   };
 
   const handleRemoveHighlight = () => {
-    setHighlightDropdownOpen(false);
     if (isSourceMode) { executeSourceAction(view => formatSourceMark(view, 'highlight', undefined, true)); return; }
     if (!editor) return;
     editor.chain().focus().unsetHighlight().run();

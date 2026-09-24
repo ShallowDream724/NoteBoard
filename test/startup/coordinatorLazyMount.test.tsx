@@ -11,6 +11,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Editor } from '@tiptap/core';
 import { emit } from '@/core/emitter';
+import { TooltipProvider } from '@/components/Tooltip';
 
 // ── 模块级 mock（vi.mock 提升）：内核替身与序列化替身 ──
 
@@ -23,9 +24,12 @@ vi.mock('@/features/editor-md/VisualKernel', () => ({
   VisualKernel: ({ onReady }: { onReady: (e: Editor | null) => void }) => {
     React.useEffect(() => {
       kernelMounts += 1;
+      const chain = { setTextSelection: () => chain, focus: () => chain, scrollIntoView: () => chain, run: () => true };
       // 替身内核：挂载即 ready；提供 prosemirrorUndoDepth 所需的最小 history 插件状态
       const fake = {
         isFakeKernel: true,
+        storage: {},
+        chain: () => chain,
         state: { history$: { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$1': { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$2': { done: { eventCount: 0 }, undone: { eventCount: 0 } } },
       } as unknown as Editor;
       onReady(fake);
@@ -77,7 +81,7 @@ async function mountCoordinator(): Promise<{ root: Root; host: HTMLDivElement }>
   document.body.appendChild(host);
   const root = createRoot(host);
   await act(async () => {
-    root.render(React.createElement(TipTapEditor, { docKey: KEY }));
+    root.render(<TooltipProvider><TipTapEditor docKey={KEY} /></TooltipProvider>);
   });
   return { root, host };
 }
@@ -157,17 +161,10 @@ describe('S08 协调器惰性挂载（内核替身）', () => {
     await seedDocument('source');
     const { root, host } = await mountCoordinator();
     await settle();
-    // 模拟源码模式中用户修改：经真实编辑链（统一历史 + 镜像）记录 EDITED
-    const { useDocumentStore } = await import('@/stores/documentStore');
-    const { recordDocumentChange } = await import(
-      '@/features/history/documentHistory'
-    );
-    recordDocumentChange(KEY, EDITED, {
-      mode: 'source',
-      startsNewGroup: true,
-      selection: { anchor: 0, head: 0 },
-    });
-    useDocumentStore.getState().setContent(KEY, EDITED);
+    // The active CodeMirror document is authoritative, not its delayed store mirror.
+    const { getMdSourceView } = await import('@/features/editor-md/editorInstances');
+    const source = getMdSourceView(KEY)!;
+    act(() => source.dispatch({ changes: { from: 0, to: source.state.doc.length, insert: EDITED } }));
     act(() => {
       emit('toggle-md-view-mode', { key: KEY, mode: 'visual' });
     });

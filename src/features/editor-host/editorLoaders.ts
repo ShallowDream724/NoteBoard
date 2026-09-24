@@ -46,6 +46,7 @@ export function resolveEditorKind(tab: Pick<Tab, 'kind' | 'language' | 'toolKind
   }
   switch (tab.kind) {
     case 'markdown':
+    case 'noteboard':
       return 'markdown';
     case 'board':
       return 'board';

@@ -12,7 +12,7 @@ export const DEFAULT_PDF: PdfOptions = {
 };
 export interface ExportItem { id: string; kind: 'formula' | 'table'; label: string }
 export interface LayoutIssue { id: string; message: string; blocking: boolean }
-export interface ExportDocument { title: string; html: string; items: ExportItem[]; baseDirectory: string; markdown: string }
+export interface ExportDocument { title: string; html: string; items: ExportItem[]; baseDirectory: string; markdown: string; source?: string | import('@tiptap/core').JSONContent }
 export interface PdfPayload { html: string; options: PdfOptions; title: string; fontCss: string }
 export interface ItemLocation { id: string; page: number; rect: [number, number, number, number] }
 export interface LayoutReport { issues: LayoutIssue[]; adjustable: string[] }

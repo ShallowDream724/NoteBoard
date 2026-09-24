@@ -71,7 +71,7 @@ export function StatusBar() {
 
   // 类型显示
   const typeLabel =
-    doc.kind === 'markdown'
+    doc.kind === 'noteboard' ? 'NoteBoard 文档' : doc.kind === 'markdown'
       ? 'Markdown'
       : doc.kind === 'board'
         ? '画板'

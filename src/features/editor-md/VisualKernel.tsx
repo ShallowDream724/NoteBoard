@@ -14,7 +14,8 @@ import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
 import { on, off, emit } from '../../core/emitter';
 import { registerShortcut } from '../../core/shortcuts';
 import { buildExtensions } from './extensions';
-import { getMarkdownManager, initializeMarkdownContent } from './serialize';
+import { getMarkdownManager } from './serialize';
+import { initializeEditorDocument, editorDocumentFormat, editorDocumentDirectory } from './editorDocumentCodec';
 // 🔴 J2：输入热路径只暂存不可变快照（O(1)）；序列化按历史组延迟执行
 import {
   stagePendingVisualSnapshot,
@@ -24,6 +25,8 @@ import {
 import { handlePastedImageFile } from './imagePaste';
 import { EditorBubbleMenu, TableToolbar } from './bubbleMenu';
 import { BlockDragHandle } from './blockDragHandle';
+import { BLOCK_MOVE_META } from './headingFolding';
+import { DISCRETE_EDIT_META } from './discreteEdit';
 import { EditorContextMenu } from './EditorContextMenu';
 import { LinkModal } from './LinkModal';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -71,7 +74,8 @@ function makeLinkModalOpener(docKey: string): () => void {
 
 function makeInitialContentLoader(docKey: string) {
   return ({ editor }: { editor: Editor }) => {
-    initializeMarkdownContent(editor, useDocumentStore.getState().getDocument(docKey)?.content ?? '');
+    const document = useDocumentStore.getState().getDocument(docKey);
+    initializeEditorDocument(editor, document?.content ?? '', document?.kind === 'noteboard' ? 'noteboard' : 'markdown', document?.dirPath);
   };
 }
 
@@ -124,7 +128,7 @@ export function VisualKernel({
 
       // 🔴 J2：输入热路径零全文工作——只捕获不可变 ProseMirror 文档根引用（O(1)）
       const nativeUndoDepth = prosemirrorUndoDepth(editor.state);
-      const startsNewGroup = nativeUndoDepth > visualUndoDepthRef.current;
+      const startsNewGroup = Boolean(transaction.getMeta(DISCRETE_EDIT_META) || transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current;
 
       // 新历史组开始：立即物化上一组末端（组内合并结束，跨组节点全部保留——
       // 不因延迟序列化把多组丢成一组）
@@ -139,6 +143,8 @@ export function VisualKernel({
         ? transactionStart(transaction.mapping.maps)
         : undefined;
       stagePendingVisualSnapshot(docKey, {
+        format: editorDocumentFormat(editor),
+        directory: editorDocumentDirectory(editor),
         doc: transaction.doc,
         revision: getDocumentRevision(docKey),
         manager: getMarkdownManager(editor),

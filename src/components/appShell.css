@@ -21,6 +21,7 @@
   background: var(--editor-bg);
   border-radius: var(--workspace-corner-radius) var(--workspace-corner-radius) 0 0;
 }
+.nb-workspace::before { content:""; position:absolute; inset:0 0 auto; height:1px; background:var(--editor-border); pointer-events:none; z-index:20; }
 
 .nb-app-shell[data-presentation] > .nb-workspace {
   border-radius: 0;

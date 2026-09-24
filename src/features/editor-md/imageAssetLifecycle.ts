@@ -81,7 +81,7 @@ async function restore(record: Removal) {
  * History callers may enqueue it without awaiting and report its rejection. */
 export function restoreImageAssetsForContent(docKey: string, content: string): Promise<void> {
   if (!removals.size || !useDocumentStore.getState().getDocument(docKey)) return Promise.resolve();
-  const normalized = normalizeImageReferenceText(content);
+  const normalized = normalizeImageReferenceText(content, useDocumentStore.getState().getDocument(docKey)?.kind === 'noteboard');
   // A peer may paste a reference after cleanup. The same save barrier restores
   // its asset too; ownership belongs to the receipt, not the active editor view.
   const referenced = [...removals.values()].filter(record => mayReferenceImage(normalized, record.path));
@@ -120,7 +120,7 @@ function evidenceCurrent(evidence: Evidence): boolean {
 
 function referenceDocuments() {
   return [...useDocumentStore.getState().documents.values()]
-    .filter(doc => doc.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(doc.key));
+    .filter(doc => doc.kind === 'markdown' || doc.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(doc.key));
 }
 
 function allEvidenceCurrent(evidence: Evidence[]): boolean {
@@ -150,7 +150,7 @@ async function captureReferences(): Promise<Evidence[]> {
     } else if (hasPendingSnapshot(doc.key)) {
       content = null;
     }
-    const normalized = content === null ? null : normalizeImageReferenceText(content);
+    const normalized = content === null ? null : normalizeImageReferenceText(content, doc.kind === 'noteboard');
     if (content === null || normalized === null) throw new Error('文档正文或图片引用尚无法确认，已保留文件');
     const item = { key: doc.key, generation, revision, capabilities, content, normalized };
     if (!evidenceCurrent(item)) throw new Error('文档在引用检查期间发生变化，已保留文件');

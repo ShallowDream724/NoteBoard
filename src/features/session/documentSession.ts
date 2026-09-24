@@ -408,7 +408,7 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
     if (!doc) return;
     if (doc.savePolicy !== 'auto') return;
     if (doc.externalStatus === 'modified' || doc.externalStatus === 'deleted') return;
-    if (doc.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(docKey)) {
+    if (doc.kind === 'markdown' || doc.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(docKey)) {
       const { restoreImageAssetsForContent } = await import('../editor-md/imageAssetLifecycle');
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return;
@@ -460,7 +460,7 @@ export async function writeDocumentWithBarrier(
     if (!isSessionCurrent(docKey, generation)) return false;
     const current = useDocumentStore.getState().getDocument(docKey);
     if (!current) return false;
-    if (current.kind === 'markdown' || /\.(?:html?|mdx)$/i.test(docKey)) {
+    if (current.kind === 'markdown' || current.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(docKey)) {
       const { restoreImageAssetsForContent } = await import('../editor-md/imageAssetLifecycle');
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return false;

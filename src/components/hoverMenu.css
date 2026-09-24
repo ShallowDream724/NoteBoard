@@ -1,0 +1,3 @@
+.nb-menu-chevron { transition: transform 180ms ease; transform: rotate(0deg); flex-shrink: 0; }
+[data-menu-expanded="true"] .nb-menu-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .nb-menu-chevron { transition: none; } }

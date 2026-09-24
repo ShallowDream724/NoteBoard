@@ -37,6 +37,7 @@ interface WelcomeScreenProps {
   onOpenStaging?: () => void;
   onOpenFavorites?: () => void;
   onNewMarkdown?: () => void;
+  onNewNativeDocument?: () => void;
   onNewText?: () => void;
   onNewMindmap?: () => void;
   onTextDiff?: () => void;
@@ -58,6 +59,7 @@ export function WelcomeScreen({
   onOpenStaging,
   onOpenFavorites,
   onNewMarkdown,
+  onNewNativeDocument,
   onNewText,
   onNewMindmap,
   onTextDiff,
@@ -76,6 +78,14 @@ export function WelcomeScreen({
 
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
   const primaryCreateActions = [
+    {
+      icon: FilePlus,
+      label: '新建 NoteBoard 文档 (.nbdoc)',
+      desc: '完整保留文字与表格排版',
+      shortcut: '',
+      color: 'var(--editor-accent, #3b82f6)',
+      onClick: onNewNativeDocument,
+    },
     {
       icon: FilePlus,
       label: '新建 Markdown 笔记 (.md)',

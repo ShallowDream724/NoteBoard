@@ -16,7 +16,7 @@ class FragmentDOMParser {
 }
 Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
 
-type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'pandoc' }
+type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'pandoc' | 'md' | 'nbdoc' }
   | { type: 'asset-urls'; urls: string[] };
 let started = false;
 let receiveAssetUrls: ((urls: string[]) => void) | undefined;
@@ -25,6 +25,17 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
   if (started) return;
   started = true;
   try {
+    if (data.format === 'md' || data.format === 'nbdoc') {
+      const { parseMarkdownDocument } = await import('../editor-md/documentExtensions');
+      const json = typeof data.markdown === 'string' ? parseMarkdownDocument(data.markdown).toJSON() : data.markdown;
+      const { rebaseDocumentReferences } = await import('../../core/documentReferences');
+      rebaseDocumentReferences(json, data.directory);
+      const result = data.format === 'md'
+        ? (await import('./portableMarkdown')).portableMarkdown(json)
+        : (await import('../../core/nativeDocument')).encodeNativeDocument(json);
+      self.postMessage({ type: 'result', result });
+      return;
+    }
     const snapshot = typeof data.markdown === 'string' ? { markdown: data.markdown, doc: null }
       : (await import('../editor-md/documentExtensions')).materializeDocument(data.markdown);
     if (data.format === 'pandoc') {

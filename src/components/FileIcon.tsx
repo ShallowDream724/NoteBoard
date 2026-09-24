@@ -94,6 +94,8 @@ export function getFileIcon(
     case 'md':
     case 'markdown':
       return <MarkdownFileIcon {...iconProps} />;
+    case 'nbdoc':
+      return <FileText {...iconProps} color="#3b82f6" />;
 
     // ── 思维导图与大纲（XMind / MindMap，活力珊瑚橙）──
     case 'mindmap':

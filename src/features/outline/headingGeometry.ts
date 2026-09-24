@@ -62,6 +62,7 @@ export class HeadingGeometry {
       nodes.set(heading.id, element);
       let block = element;
       while (block.parentElement && block.parentElement !== this.root) block = block.parentElement;
+      if (block.classList.contains('nb-heading-fold-hidden')) continue;
       let group = groups.get(block);
       if (!group) {
         group = { element: block, headings: [], offsets: [], dirty: true };

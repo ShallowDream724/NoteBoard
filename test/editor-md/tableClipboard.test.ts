@@ -214,7 +214,7 @@ describe('Markdown 表格剪贴板粘贴与填充 (Table Clipboard Paste)', () =
     expect(cellTexts).toEqual(['NewA1', 'NewB1', 'C1', 'NewA2', 'NewB2', 'C2']);
   });
 
-  it('向表格多选 2x2 区域粘贴 1x1 文本时，应自动平铺填满 2x2 区域', () => {
+  it('向表格多选 2x2 区域粘贴 1x1 文本时，只替换源矩阵范围', () => {
     const editor = createTableEditor();
     const doc = editor.state.doc;
 
@@ -243,7 +243,7 @@ describe('Markdown 表格剪贴板粘贴与填充 (Table Clipboard Paste)', () =
       }
     });
 
-    expect(cellTexts).toEqual(['Filled', 'Filled', 'C1', 'Filled', 'Filled', 'C2']);
+    expect(cellTexts).toEqual(['Filled', 'B1', 'C1', 'A2', 'B2', 'C2']);
   });
 
   it('在单元格内粘贴多行纯文本 (换行分隔) 时，应纵向填入多行单元格而不是在单格内堆叠空行', () => {
