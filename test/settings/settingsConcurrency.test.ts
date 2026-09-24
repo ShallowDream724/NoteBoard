@@ -47,3 +47,13 @@ it('a later remote change to the same field wins after the local write is acknow
   replica.settle(id, { ...initial, revision: 1, editor: { ...initial.editor, tabSize: 4 } });
   expect(replica.view().editor.tabSize).toBe(8);
 });
+
+it('a failed ignored-version preference rolls back without losing concurrent settings', () => {
+  const initial = base(), replica = new SettingsReplica(initial);
+  const id = replica.enqueue({ updates: { ignoredVersion: '1.2.3' } });
+  expect(replica.view().updates?.ignoredVersion).toBe('1.2.3');
+  replica.receive({ ...initial, revision: 1, file: { ...initial.file, showHiddenFiles: true } });
+  replica.settle(id);
+  expect(replica.view().updates?.ignoredVersion ?? '').toBe('');
+  expect(replica.view().file.showHiddenFiles).toBe(true);
+});

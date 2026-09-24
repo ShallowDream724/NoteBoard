@@ -2,9 +2,33 @@
 // 基于 @radix-ui/react-tooltip 封装，自适应晨光/琥珀/墨夜主题，支持自定义延迟与微动效
 // 详见 docs/07-UI布局与交互规范.md
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
+import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
+
+const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
+
+function CursorBubble({ point, side, align, gap, children }: { point: { x: number; y: number }; side: TooltipSide; align: 'start' | 'center' | 'end'; gap: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const position = useRef(() => {});
+  position.current = () => {
+    const element = ref.current; if (!element) return;
+    const box = element.getBoundingClientRect();
+    const next = placeCursorTooltip(point, box, { width: window.innerWidth, height: window.innerHeight }, side, align, gap + 8);
+    element.style.left = `${next.x}px`; element.style.top = `${next.y}px`; element.style.visibility = 'visible';
+  };
+  useLayoutEffect(() => position.current(), [point, side, align, gap]);
+  useLayoutEffect(() => {
+    const update = () => position.current();
+    const observer = new ResizeObserver(update); if (ref.current) observer.observe(ref.current);
+    window.addEventListener('resize', update);
+    return () => { observer.disconnect(); window.removeEventListener('resize', update); };
+  }, []);
+  return <div ref={ref} role="tooltip" style={{ position: 'fixed', left: 0, top: 0, visibility: 'hidden', zIndex: 1000001, pointerEvents: 'none' }}>
+    <div className="nb-tooltip-content" style={boundedContent}>{children}</div>
+  </div>;
+}
 
 export interface TooltipProps {
   /** 提示文本或节点 */
@@ -68,21 +92,30 @@ function FollowCursorTooltip({
   children,
   delayDuration,
   disabled,
+  side,
+  align,
+  sideOffset,
 }: {
   content: React.ReactNode;
   shortcut?: string;
   children: React.ReactNode;
   delayDuration: number;
   disabled: boolean;
+  side: TooltipSide;
+  align: 'start' | 'center' | 'end';
+  sideOffset: number;
 }) {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
   const timerRef = useRef<number | null>(null);
+  const frameRef = useRef(0);
+  const latestPoint = useRef({ x: 0, y: 0 });
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    cancelAnimationFrame(frameRef.current); frameRef.current = 0;
   }, []);
 
   // 卸载时清理未触发的延迟计时，避免对已卸载组件 setState
@@ -108,16 +141,20 @@ function FollowCursorTooltip({
     if (disabled) return;
     clearTimer();
     const { clientX, clientY } = e;
+    latestPoint.current = { x: clientX, y: clientY };
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      setPoint({ x: clientX, y: clientY });
+      setPoint(latestPoint.current);
     }, delayDuration);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     originalProps.onMouseMove?.(e);
     // 已显示时实时跟随指针；尚未显示则不重置延迟计时，保证 100ms 后按时出现
-    setPoint((prev) => (prev ? { x: e.clientX, y: e.clientY } : prev));
+    latestPoint.current = { x: e.clientX, y: e.clientY };
+    if (point && !frameRef.current) frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = 0; setPoint(latestPoint.current);
+    });
   };
 
   const handleMouseLeave = (e: React.MouseEvent) => {
@@ -129,7 +166,6 @@ function FollowCursorTooltip({
   if (!child) return <>{children}</>;
 
   const hasContent = Boolean(content) || Boolean(shortcut);
-  const clampedX = point ? Math.min(Math.max(point.x, 90), window.innerWidth - 90) : 0;
 
   return (
     <>
@@ -141,41 +177,10 @@ function FollowCursorTooltip({
       {point &&
         hasContent &&
         createPortal(
-          // 外层负责定位，内层承载动画：动画 keyframes 会覆盖 transform，写在同一个节点上会让定位失效
-          <div
-            style={{
-              position: 'fixed',
-              left: clampedX,
-              top: point.y - 14,
-              transform: 'translate(-50%, -100%)',
-              zIndex: 1000001,
-              pointerEvents: 'none',
-            }}
-          >
-            <div
-              className="nb-tooltip-content"
-              style={{
-                position: 'relative',
-                animation: 'nb-tooltip-slide-down-and-fade 120ms cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
-              {typeof content === 'string' ? <span>{content}</span> : content}
-              {shortcut && <kbd className="nb-tooltip-kbd">{shortcut}</kbd>}
-              <span
-                style={{
-                  position: 'absolute',
-                  bottom: -3.5,
-                  left: '50%',
-                  width: 6,
-                  height: 6,
-                  transform: 'translateX(-50%) rotate(45deg)',
-                  background: 'var(--editor-surface)',
-                  borderRight: '1px solid var(--editor-border)',
-                  borderBottom: '1px solid var(--editor-border)',
-                }}
-              />
-            </div>
-          </div>,
+          <CursorBubble point={point} side={side} align={align} gap={sideOffset}>
+            <span style={{ minWidth: 0 }}>{content}</span>
+            {shortcut && <kbd className="nb-tooltip-kbd">{shortcut}</kbd>}
+          </CursorBubble>,
           document.body,
         )}
     </>
@@ -197,6 +202,9 @@ export function Tooltip({
   delayDuration = 100,
   followCursor = false,
 }: TooltipProps) {
+  const [open, setOpen] = useState(false);
+  const blocked = disabled || (!content && !shortcut);
+  useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
   // 跟随指针模式必须始终使用同一组件形态，否则 disabled 切换会重建子元素 DOM
   if (followCursor) {
     return (
@@ -205,19 +213,17 @@ export function Tooltip({
         shortcut={shortcut}
         delayDuration={delayDuration}
         disabled={disabled}
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
       >
         {children}
       </FollowCursorTooltip>
     );
   }
 
-  // 无内容或显式禁用时，直接返回子节点
-  if (disabled || (!content && !shortcut)) {
-    return <>{children}</>;
-  }
-
   return (
-    <RadixTooltip.Root delayDuration={delayDuration}>
+    <RadixTooltip.Root delayDuration={delayDuration} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
       <RadixTooltip.Trigger asChild={asChild}>
         {children}
       </RadixTooltip.Trigger>
@@ -226,6 +232,8 @@ export function Tooltip({
           side={side}
           align={align}
           sideOffset={sideOffset}
+          collisionPadding={8}
+          style={boundedContent}
           className="nb-tooltip-content"
         >
           {typeof content === 'string' ? <span>{content}</span> : content}

@@ -2,6 +2,7 @@
 // 支持新版本展示、Release Notes 渲染、下载进度条、代理与错误提示及一键安装
 
 import { useState, useEffect, useMemo } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   Download,
@@ -61,13 +62,15 @@ export function UpdateModal({
     }
 
     let unlisten: UnlistenFn | undefined;
+    let disposed = false;
     listen<UpdateDownloadProgress>('noteboard-update-download-progress', (event) => {
-      setDownloadProgress(event.payload);
+      if (!disposed) setDownloadProgress(event.payload);
     }).then((fn) => {
-      unlisten = fn;
-    });
+      if (disposed) fn(); else unlisten = fn;
+    }).catch(error => { if (!disposed) setInstallError(`无法读取下载进度：${String(error)}`); });
 
     return () => {
+      disposed = true;
       if (unlisten) {
         unlisten();
       }
@@ -126,7 +129,9 @@ export function UpdateModal({
   const showDetail = Boolean(result?.updateAvailable && !checkError && !checking);
 
   return (
-    <div
+    <Dialog.Root open={isOpen} onOpenChange={open => { if (!open && !downloading) onClose(); }}>
+    <Dialog.Portal>
+    <Dialog.Overlay
       style={{
         position: 'fixed',
         top: 0,
@@ -142,7 +147,10 @@ export function UpdateModal({
       }}
       onClick={downloading ? undefined : onClose}
     >
-      <div
+      <Dialog.Content asChild aria-describedby={undefined}
+        onEscapeKeyDown={event => { if (downloading) event.preventDefault(); }}
+        onPointerDownOutside={event => { if (downloading) event.preventDefault(); }}>
+      <div data-shortcuts-suspended
         style={{
           width: 520,
           maxWidth: '92vw',
@@ -173,13 +181,13 @@ export function UpdateModal({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Sparkles size={18} color="var(--accent-strong)" />
-            <span style={{ fontWeight: 600, fontSize: 14 }}>
+            <Dialog.Title asChild><span style={{ fontWeight: 600, fontSize: 14 }}>
               {checking
                 ? '检查更新'
                 : showDetail
                 ? '发现新版本 NoteBoard'
                 : '软件更新'}
-            </span>
+            </span></Dialog.Title>
           </div>
           <Tooltip content="关闭" shortcut="Esc" side="bottom" sideOffset={4}>
             <button
@@ -284,7 +292,7 @@ export function UpdateModal({
                 }}
               >
                 <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
-                <div>{checkError}</div>
+                <div style={{ userSelect: 'text', overflowWrap: 'anywhere' }}>{checkError}</div>
               </div>
             </div>
           )}
@@ -526,6 +534,9 @@ export function UpdateModal({
           )}
         </div>
       </div>
-    </div>
+      </Dialog.Content>
+    </Dialog.Overlay>
+    </Dialog.Portal>
+    </Dialog.Root>
   );
 }

@@ -3,10 +3,11 @@
 // 详见 docs/07-UI布局与交互规范.md §2
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Settings as SettingsIcon, RefreshCw, FileOutput } from 'lucide-react';
+import { useRef } from 'react';
+import { Settings as SettingsIcon, FileOutput, Home } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
-import { DocumentActions } from './DocumentActions';
+import { NewDocumentMenu } from './NewDocumentMenu';
 import { Tooltip } from '../Tooltip';
 import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -14,9 +15,11 @@ import { useUpdateStore } from '../../stores/updateStore';
 import { SidebarToggle } from '../SidebarToggle';
 import { useWindowStore } from '../../stores/windowStore';
 import { useExportStore } from '../../features/export/exportStore';
+import { UpdateNotice } from '../UpdateNotice';
 import './titlebar.css';
 
 export function TitleBar() {
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
@@ -26,7 +29,7 @@ export function TitleBar() {
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
-  const { hasUpdate, checking: checkingUpdate, checkForUpdates } = useUpdateStore();
+  const hasUpdate = useUpdateStore(s => s.hasUpdate);
 
   const titleBarStyle: React.CSSProperties = {
     height: 36,
@@ -42,13 +45,20 @@ export function TitleBar() {
   return (
     <div style={titleBarStyle} role="banner">
       <div style={{ width: 36, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-        <SidebarToggle side="left" visible={explorerVisible} onToggle={toggleExplorer} />
+        <SidebarToggle className="titlebar-action" side="left" visible={explorerVisible} onToggle={toggleExplorer} />
       </div>
 
-      <DocumentActions />
+      <div className="titlebar-document-actions">
+        <Tooltip content="回到主界面" side="bottom">
+          <button type="button" className="titlebar-action" aria-label="回到主界面" onClick={() => {
+            emit('close-titlebar-menus', undefined);
+            useWindowStore.setState({ activeKey: null });
+          }}><Home size={15} /></button>
+        </Tooltip>
+      </div>
 
       {/* Tab 栏 */}
-      <TabBar />
+      <div className="titlebar-tab-group"><TabBar /><NewDocumentMenu /></div>
 
       {/* 拖拽空白区：当有菜单打开时临时解除 drag-region，点击直接关闭菜单且避免触发原生窗口拖动；无菜单时保留原生拖拽，双击最大化 */}
       <div
@@ -70,131 +80,29 @@ export function TitleBar() {
         }}
       />
 
-      {/* 检测更新按钮（主动检测更新，有新版本时标上小红点） */}
+      {/* 文档导出 */}
+      <div className="titlebar-utility-actions">
       <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
-        <button aria-label="导出" disabled={!markdownActive} onClick={() => useExportStore.getState().open()}
-          style={{ width: 36, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            border: 0, background: 'transparent', color: 'var(--editor-text-secondary)', cursor: markdownActive ? 'pointer' : 'default', opacity: markdownActive ? 1 : .4 }}><FileOutput size={16}/></button>
+        <button type="button" className="titlebar-action" aria-label="导出" disabled={!markdownActive}
+          onClick={() => useExportStore.getState().open()}><FileOutput size={16}/></button>
       </Tooltip>
-      <Tooltip content={hasUpdate ? '发现新版本 NoteBoard (点击查看)' : '检测更新'} side="bottom" sideOffset={6}>
-        <button
-          type="button"
-          onClick={() => checkForUpdates(false)}
-          style={{
-            width: 36,
-            height: 36,
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: 'none',
-            background: 'transparent',
-            color: hasUpdate ? 'var(--accent-strong)' : 'var(--editor-text-secondary)',
-            cursor: checkingUpdate ? 'not-allowed' : 'pointer',
-            flexShrink: 0,
-            transition: 'all var(--transition-fast)',
-          }}
-          onMouseEnter={(e) => {
-            if (!checkingUpdate) {
-              e.currentTarget.style.background = 'var(--toolbar-hover)';
-              e.currentTarget.style.color = 'var(--editor-text)';
-              e.currentTarget.style.transform = 'scale(1.05)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!checkingUpdate) {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = hasUpdate
-                ? 'var(--accent-strong)'
-                : 'var(--editor-text-secondary)';
-              e.currentTarget.style.transform = 'scale(1)';
-            }
-          }}
-          onMouseDown={(e) => {
-            if (!checkingUpdate) {
-              e.currentTarget.style.background = 'var(--toolbar-active)';
-              e.currentTarget.style.transform = 'scale(0.92)';
-            }
-          }}
-          onMouseUp={(e) => {
-            if (!checkingUpdate) {
-              e.currentTarget.style.background = 'var(--toolbar-hover)';
-              e.currentTarget.style.transform = 'scale(1.05)';
-            }
-          }}
-          aria-label="检测更新"
-        >
-          <RefreshCw
-            size={14}
-            className={checkingUpdate ? 'spin' : ''}
-            style={checkingUpdate ? { animation: 'spin 1s linear infinite' } : undefined}
-          />
-          {/* 新版本小红点提示 */}
-          {hasUpdate && (
-            <span
-              style={{
-                position: 'absolute',
-                top: 7,
-                right: 7,
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: '#ef4444',
-                boxShadow: '0 0 0 1.5px var(--titlebar-bg)',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-        </button>
-      </Tooltip>
-
       {/* 设置中心按钮 */}
-      <Tooltip content="设置" side="bottom" sideOffset={6}>
+      <Tooltip content={hasUpdate ? '设置 · 有可用更新' : '设置'} side="bottom" sideOffset={6}>
         <button
+          ref={settingsButton}
+          className="titlebar-action"
           type="button"
           onClick={toggleSettingsModal}
-          style={{
-            width: 36,
-            height: 36,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: 'none',
-            background: 'transparent',
-            color: 'var(--editor-text-secondary)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            transition: 'all var(--transition-fast)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-hover)';
-            e.currentTarget.style.color = 'var(--editor-text)';
-            e.currentTarget.style.transform = 'scale(1.05)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
-            e.currentTarget.style.color = 'var(--editor-text-secondary)';
-            e.currentTarget.style.transform = 'scale(1)';
-          }}
-          onMouseDown={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-active)';
-            e.currentTarget.style.transform = 'scale(0.92)';
-          }}
-          onMouseUp={(e) => {
-            e.currentTarget.style.background = 'var(--toolbar-hover)';
-            e.currentTarget.style.transform = 'scale(1.05)';
-          }}
           aria-label="打开设置"
         >
           <SettingsIcon size={15} />
+          {hasUpdate && <span className="titlebar-update-dot" aria-label="有可用更新" />}
         </button>
       </Tooltip>
-
-      {/* 窗口控制按钮 */}
-      {markdownActive && <div style={{ width: 36, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
-        <SidebarToggle side="right" visible={outlineVisible} onToggle={toggleOutline} />
-      </div>}
+      {markdownActive && <SidebarToggle className="titlebar-action" side="right" visible={outlineVisible} onToggle={toggleOutline} />}
+      </div>
       <WindowControls />
+      <UpdateNotice anchor={settingsButton} />
     </div>
   );
 }

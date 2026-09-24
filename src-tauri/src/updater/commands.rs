@@ -38,6 +38,9 @@ struct GitHubReleaseAsset {
 const UPDATE_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 // HTTP 数据分块读取超时限制（40秒提升慢速网络容忍度）
 const UPDATE_HTTP_READ_TIMEOUT: Duration = Duration::from_secs(40);
+// Metadata checks are small and interactive; installer downloads keep their own budget.
+const UPDATE_CHECK_ATTEMPT_TIMEOUT: Duration = Duration::from_secs(6);
+const UPDATE_CHECK_TOTAL_TIMEOUT: Duration = Duration::from_secs(12);
 // 安装包下载全局超时上限（10分钟）
 const UPDATE_INSTALLER_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
 // 下载进度事件名称，与前端监听保持一致
@@ -354,9 +357,9 @@ fn spawn_update_installer(installer_path: &Path) -> std::io::Result<()> {
 /// 请求 GitHub Release 元数据；支持系统代理与直连双模式
 async fn fetch_latest_release(use_system_proxy: bool) -> Result<reqwest::Response, String> {
     let client = if use_system_proxy {
-        build_update_http_client(UPDATE_HTTP_READ_TIMEOUT)?
+        build_update_http_client(UPDATE_CHECK_ATTEMPT_TIMEOUT)?
     } else {
-        build_direct_http_client(UPDATE_HTTP_READ_TIMEOUT)?
+        build_direct_http_client(UPDATE_CHECK_ATTEMPT_TIMEOUT)?
     };
 
     client
@@ -370,40 +373,41 @@ async fn fetch_latest_release(use_system_proxy: bool) -> Result<reqwest::Respons
 /// 检查应用更新：优先系统代理，遇到 403 或网络异常自动回退直连重试
 #[tauri::command]
 pub async fn check_for_updates() -> Result<UpdateCheckResult, String> {
+    tokio::time::timeout(UPDATE_CHECK_TOTAL_TIMEOUT, check_latest_release()).await
+        .map_err(|_| "update_error:network:timeout".to_string())?
+}
+
+fn rate_limit_error(response: &reqwest::Response) -> Option<String> {
+    let exhausted = response.headers().get("x-ratelimit-remaining").and_then(|value| value.to_str().ok()) == Some("0");
+    if response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS
+        && !(response.status() == reqwest::StatusCode::FORBIDDEN && exhausted) { return None; }
+    let reset = response.headers().get("x-ratelimit-reset").and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<u64>().ok());
+    let reset = reset.or_else(|| {
+        let seconds = response.headers().get("retry-after")?.to_str().ok()?.parse::<u64>().ok()?;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+        Some(now.saturating_add(seconds))
+    });
+    Some(reset.map(|value| format!("update_error:rate_limited:{value}")).unwrap_or_else(|| "update_error:rate_limited".into()))
+}
+
+async fn check_latest_release() -> Result<UpdateCheckResult, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     let release_url = GITHUB_REPO_URL.to_string();
 
     // 首次走系统代理；若代理不可达或返回 403，则自动回退直连重试
-    let mut response = match fetch_latest_release(true).await {
-        Ok(response) => response,
-        Err(_) => fetch_latest_release(false).await?,
+    let (mut response, used_direct) = match fetch_latest_release(true).await {
+        Ok(response) => (response, false),
+        Err(_) => (fetch_latest_release(false).await?, true),
     };
-    if response.status() == reqwest::StatusCode::FORBIDDEN {
+    if let Some(error) = rate_limit_error(&response) { return Err(error); }
+    if response.status() == reqwest::StatusCode::FORBIDDEN && !used_direct {
         response = fetch_latest_release(false).await?;
     }
 
+    if let Some(error) = rate_limit_error(&response) { return Err(error); }
+
     // 处理 403 限流或拒绝访问
     if response.status() == reqwest::StatusCode::FORBIDDEN {
-        let rate_limited = response
-            .headers()
-            .get("x-ratelimit-remaining")
-            .and_then(|value| value.to_str().ok())
-            .and_then(|value| value.parse::<u32>().ok())
-            == Some(0);
-        if rate_limited {
-            // 解析 GitHub 配额重置时间戳（Unix 秒）
-            let reset_ts = response
-                .headers()
-                .get("x-ratelimit-reset")
-                .and_then(|value| value.to_str().ok())
-                .filter(|value| value.parse::<i64>().is_ok())
-                .unwrap_or_default();
-            return Err(if reset_ts.is_empty() {
-                "update_error:rate_limited".to_string()
-            } else {
-                format!("update_error:rate_limited:{reset_ts}")
-            });
-        }
         return Err("update_error:forbidden".to_string());
     }
 

@@ -17,6 +17,7 @@ export const EVENTS = {
   EXPLORER_REFRESH: 'nb://explorer-refresh',
   EXPLORER_RESCAN: 'nb://explorer-rescan',
   SETTINGS_CHANGED: 'nb://settings-changed',
+  UPDATE_NOTICE_DISMISSED: 'nb://update-notice-dismissed',
   BEFORE_QUIT: 'nb://before-quit',
   CLOSE_REQUESTED: 'nb://close-requested',
   FONT_PACK_DOWNLOAD_PROGRESS: 'noteboard-font-pack-download-progress',
@@ -62,6 +63,10 @@ export function onExplorerRescan(cb: (p: { root: string }) => void): Promise<Unl
 
 export function onSettingsChanged(cb: (s: Settings) => void): Promise<UnlistenFn> {
   return listen<Settings>(EVENTS.SETTINGS_CHANGED, (e) => cb(e.payload));
+}
+
+export function onUpdateNoticeDismissed(cb: (version: string) => void): Promise<UnlistenFn> {
+  return listen<string>(EVENTS.UPDATE_NOTICE_DISMISSED, e => cb(e.payload));
 }
 
 export function onBeforeQuit(cb: () => void): Promise<UnlistenFn> {

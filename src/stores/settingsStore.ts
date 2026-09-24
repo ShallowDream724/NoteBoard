@@ -13,6 +13,7 @@ import type {
   FileSettings,
   LayoutSettings,
   ExportSettings,
+  UpdateSettings,
 } from '../core/ipc/types';
 import * as ipc from '../core/ipc/commands';
 import { onSettingsChanged } from '../core/ipc/events';
@@ -119,6 +120,7 @@ interface SettingsStore {
   // ── 布局 ──
   setLayout: (patch: Partial<LayoutSettings>) => Promise<void>;
   setExport: (patch: Partial<ExportSettings>) => Promise<void>;
+  setUpdates: (patch: Partial<UpdateSettings>) => Promise<void>;
 
   // ── 内部：从广播更新 ──
   _applyRemoteUpdate: (s: Settings) => void;
@@ -135,6 +137,7 @@ function applyPatch(settings: Settings, patch: SettingsPatch): Settings {
     ...(patch.file && { file: { ...settings.file, ...patch.file } }),
     ...(patch.layout && { layout: { ...settings.layout, ...patch.layout } }),
     ...(patch.export && { export: { pandocPath: '', ...settings.export, ...patch.export } }),
+    ...(patch.updates && { updates: { ignoredVersion: '', ...settings.updates, ...patch.updates } }),
   };
 }
 
@@ -233,6 +236,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setFile: file => update({ file }),
     setLayout: layout => update({ layout }),
     setExport: async patch => { const error = await submit({ export: patch }); if (error) throw new Error(error); },
+    setUpdates: async patch => { const error = await submit({ updates: patch }); if (error) throw new Error(error); },
     _applyRemoteUpdate: remote => { replica.receive(remote); publish(); },
   };
 });

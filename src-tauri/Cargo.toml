@@ -1,6 +1,6 @@
 [package]
 name = "noteboard"
-version = "0.3.15"
+version = "0.3.16"
 description = "Windows 桌面笔记 + 画板软件"
 authors = ["CrazyFigure"]
 license = "GPL-3.0-only"
@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2.11", features = ["protocol-asset"] }
+tokio = { version = "1", features = ["time"] }
 tauri-plugin-fs = { version = "2", features = ["watch"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

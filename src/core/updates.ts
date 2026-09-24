@@ -32,7 +32,7 @@ export function translateUpdateCheckError(reason: string): string {
     case 'forbidden':
       return 'GitHub API 访问被拒绝（可能为代理 IP 被拦截）。建议检查代理网络或前往 Release 页面手动下载。';
     case 'network':
-      return `网络连接失败，请检查网络设置或代理：${params}`;
+      return '无法连接 GitHub，请检查网络或代理后重试。';
     case 'http_status':
       return `GitHub 请求异常返回：${params}`;
     case 'parse':

@@ -128,6 +128,8 @@ pub fn run() {
             font_pack::remove_font_pack,
             // updater
             updater::commands::check_for_updates,
+            updater::notice::get_dismissed_update_notices,
+            updater::notice::dismiss_update_notice,
             updater::commands::download_and_install_update,
             updater::commands::open_external_url,
             // 性能诊断（未启用时为 no-op）

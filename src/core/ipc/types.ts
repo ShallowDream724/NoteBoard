@@ -238,14 +238,16 @@ export interface Settings {
   file: FileSettings;
   layout: LayoutSettings;
   export?: ExportSettings;
+  updates?: UpdateSettings;
 }
 
 /** Only changed leaf fields; revision/schema ownership stays in Rust. */
 export type SettingsPatch = {
-  [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export']?: Partial<NonNullable<Settings[Section]>>;
+  [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export' | 'updates']?: Partial<NonNullable<Settings[Section]>>;
 };
 
 export interface ExportSettings { pandocPath: string }
+export interface UpdateSettings { ignoredVersion: string }
 
 export interface AppearanceSettings {
   themeMode: ThemeMode;

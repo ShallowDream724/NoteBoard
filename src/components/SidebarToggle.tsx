@@ -6,10 +6,11 @@ interface SidebarToggleProps {
   side: 'left' | 'right';
   visible: boolean;
   onToggle: () => void;
+  className?: string;
 }
 
 /** Layout control only: shares no state with the document or its undo history. */
-export function SidebarToggle({ side, visible, onToggle }: SidebarToggleProps) {
+export function SidebarToggle({ side, visible, onToggle, className = '' }: SidebarToggleProps) {
   const left = side === 'left';
   const label = (visible ? '收起' : '展开') + (left ? '左侧栏' : '右侧栏');
   const Icon = left ? PanelLeft : PanelRight;
@@ -17,7 +18,7 @@ export function SidebarToggle({ side, visible, onToggle }: SidebarToggleProps) {
     <Tooltip content={label} shortcut={left ? 'Ctrl+Shift+B' : 'Ctrl+Alt+B'} side="bottom" sideOffset={6}>
       <button
         type="button"
-        className="nb-sidebar-toggle"
+        className={`nb-sidebar-toggle ${className}`}
         aria-label={label}
         aria-expanded={visible}
         aria-keyshortcuts={left ? 'Control+Shift+B' : 'Control+Alt+B'}

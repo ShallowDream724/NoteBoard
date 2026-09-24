@@ -96,7 +96,7 @@ export default function App() {
 
   useEffect(() => {
     let disposed = false;
-    // 启动自动检测更新定时任务（启动 3 秒后首次检测，随后每 5 分钟轮询一次）
+    // Background update scheduling owns its success interval and failure backoff.
     const stopAutoUpdate = initAutoUpdateTimer();
     const cleanup = initShortcuts();
     // 增量暂存覆盖任务管理器直接终止进程、来不及执行关闭回调的系统边界。

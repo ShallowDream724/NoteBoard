@@ -11,6 +11,7 @@ import { ShortcutsPanel } from './ShortcutsPanel';
 import { AboutPanel } from './AboutPanel';
 import { ExportPanel } from './ExportPanel';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useUpdateStore } from '../../stores/updateStore';
 
 const PANELS = [
   { key: 'appearance', label: '外观主题', icon: Palette, content: AppearancePanel },
@@ -25,6 +26,7 @@ const PANELS = [
 /** The single settings entry: this shell owns navigation and dismissal only. */
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const saveError = useSettingsStore(state => state.saveError);
+  const hasUpdate = useUpdateStore(state => state.hasUpdate);
   const [activeTab, setActiveTab] = useState<(typeof PANELS)[number]['key']>('appearance');
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -84,7 +86,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             background: 'var(--editor-surface)', padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: 6
           }}>
             {PANELS.map(({ key, label, icon: Icon }) => (
-              <NavBtn key={key} active={activeTab === key} icon={<Icon size={15} />} label={label} onClick={() => setActiveTab(key)} />
+              <NavBtn key={key} active={activeTab === key} icon={<Icon size={15} />} label={key === 'about' && hasUpdate ? '关于 · 有更新' : label} onClick={() => setActiveTab(key)} />
             ))}
           </nav>
           <div ref={contentRef} style={{ flex: 1, minWidth: 0, padding: '24px 30px', overflowY: 'auto' }}>

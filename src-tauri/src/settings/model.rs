@@ -40,6 +40,8 @@ pub struct Settings {
     pub layout: LayoutSettings,
     #[serde(default)]
     pub export: ExportSettings,
+    #[serde(default)]
+    pub updates: UpdateSettings,
 }
 
 impl Default for Settings {
@@ -53,6 +55,7 @@ impl Default for Settings {
             file: FileSettings::default(),
             layout: LayoutSettings::default(),
             export: ExportSettings::default(),
+            updates: UpdateSettings::default(),
         }
     }
 }
@@ -60,6 +63,10 @@ impl Default for Settings {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSettings { #[serde(default)] pub pandoc_path: String }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSettings { #[serde(default)] pub ignored_version: String }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -372,7 +379,7 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
     let sections = patch.as_object().ok_or("设置修改必须是对象")?;
     let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
     for (section, fields) in sections {
-        if !["appearance", "typography", "editor", "file", "layout", "export"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
+        if !["appearance", "typography", "editor", "file", "layout", "export", "updates"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
         let fields = fields.as_object().ok_or("设置分组修改必须是对象")?;
         let target = value[section].as_object_mut().ok_or("设置分组无效")?;
         for (field, field_value) in fields {

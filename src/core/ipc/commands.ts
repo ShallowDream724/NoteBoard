@@ -386,6 +386,14 @@ export function checkForUpdates(): Promise<UpdateCheckResult> {
   return invoke<UpdateCheckResult>('check_for_updates');
 }
 
+export function getDismissedUpdateNotices(): Promise<string[]> {
+  return invoke<string[]>('get_dismissed_update_notices');
+}
+
+export function dismissUpdateNotice(version: string): Promise<void> {
+  return invoke<void>('dismiss_update_notice', { version });
+}
+
 // 下载更新安装包并在落盘后启动安装器
 export function downloadAndInstallUpdate(params: {
   downloadUrl: string;

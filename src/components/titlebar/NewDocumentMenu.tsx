@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { Home, Plus, FileText, Table2, PencilRuler, Network, GitCompare, Layout,
+import { Plus, FileText, Table2, PencilRuler, Network, GitCompare, Layout,
   ChartColumn, Workflow, GitMerge, Braces, Database, FileCode, CodeXml,
   FolderOpen, Star, Archive, ChevronRight, type LucideIcon } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
-import { on, off, emit } from '../../core/emitter';
+import { on, off } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
-import { useWindowStore } from '../../stores/windowStore';
 import { useFavoritesStore } from '../../features/favorites/favoritesStore';
 import * as actions from '../../features/welcome/welcomeActions';
 
@@ -42,8 +41,8 @@ function Items({ items }: { items: Action[] }) {
     </Menu.Item>);
 }
 
-/** Navigation is fixed before tabs; menu lifecycle never belongs to the tab list. */
-export function DocumentActions() {
+/** The titlebar positions this menu; tab scrolling never owns its lifecycle. */
+export function NewDocumentMenu() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -55,15 +54,9 @@ export function DocumentActions() {
       useLayoutStore.getState().decrementActiveMenu();
     };
   }, [open]);
-  return <div className="titlebar-document-actions">
-    <Tooltip content="回到主界面" side="bottom">
-      <button type="button" className="titlebar-action" aria-label="回到主界面" onClick={() => {
-        emit('close-titlebar-menus', undefined);
-        useWindowStore.setState({ activeKey: null });
-      }}><Home size={15} /></button>
-    </Tooltip>
+  return <div className="titlebar-new-document">
     <Menu.Root open={open} onOpenChange={setOpen} modal={false}>
-      <Tooltip content="新建或打开" side="bottom" followCursor disabled={open}>
+      <Tooltip content="新建或打开" side="bottom" disabled={open}>
         <Menu.Trigger asChild>
           <button type="button" className="titlebar-action" aria-label="新建或打开"
             onContextMenu={event => { event.preventDefault(); setOpen(true); }}><Plus size={16} /></button>

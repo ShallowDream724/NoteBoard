@@ -5,7 +5,7 @@ import { useUpdateStore } from '../../stores/updateStore';
 import { APP_VERSION } from '../../core/version';
 
 export function AboutPanel() {
-  const { checking: checkingUpdate, checkForUpdates } = useUpdateStore();
+  const { checking: checkingUpdate, checkForUpdates, hasUpdate, updateResult, checkError, openModal } = useUpdateStore();
   const handleCheckForUpdates = () => {
     checkForUpdates(false);
   };
@@ -26,6 +26,10 @@ export function AboutPanel() {
     <div style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>
       版本 v{APP_VERSION} · GPL-3.0 License
     </div>
+
+    {hasUpdate && <button type="button" className="nb-btn-secondary" onClick={openModal}
+      style={{ color: 'var(--editor-accent)' }}>发现新版本 v{updateResult?.latestVersion} · 查看更新</button>}
+    {!checkingUpdate && checkError && <p role="status" style={{ fontSize: 12, color: 'var(--editor-text-secondary)', maxWidth: 420, margin: 0 }}>{checkError}</p>}
 
     {/* 快捷操作：检测更新与 GitHub 仓库 */}
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
