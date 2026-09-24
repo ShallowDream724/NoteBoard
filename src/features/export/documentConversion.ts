@@ -35,7 +35,7 @@ export async function prepareDocument(content: string | JSONContent, title: stri
   const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown'>>(content, title, directory, 'html', signal);
   return { ...result, title, baseDirectory: directory };
 }
-export function preparePandoc(markdown: string, signal?: AbortSignal) {
+export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal) {
   return convert<string>(markdown, '', '', 'pandoc', signal);
 }
 export function prepareTextExport(content: string | JSONContent, format: 'md' | 'nbdoc', directory: string, signal?: AbortSignal) {

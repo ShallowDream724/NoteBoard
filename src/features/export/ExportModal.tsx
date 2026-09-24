@@ -100,7 +100,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         const id = crypto.randomUUID(); current.pandoc = id;
         await invoke('begin_pandoc', { id }); signal.throwIfAborted();
         const { preparePandoc } = await import('./documentConversion');
-        const source = await preparePandoc(document.markdown, signal); signal.throwIfAborted();
+        const source = await preparePandoc(document.source ?? document.markdown, signal); signal.throwIfAborted();
         warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
       }
       onClose();

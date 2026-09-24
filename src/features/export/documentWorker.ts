@@ -36,13 +36,15 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
       self.postMessage({ type: 'result', result });
       return;
     }
-    const snapshot = typeof data.markdown === 'string' ? { markdown: data.markdown, doc: null }
-      : (await import('../editor-md/documentExtensions')).materializeDocument(data.markdown);
     if (data.format === 'pandoc') {
       const { pandocSource } = await import('./pandocDocument');
-      self.postMessage({ type: 'result', result: pandocSource(snapshot.markdown) });
+      const source = typeof data.markdown === 'string' ? data.markdown
+        : (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(data.markdown);
+      self.postMessage({ type: 'result', result: pandocSource(source) });
       return;
     }
+    const snapshot = typeof data.markdown === 'string' ? { markdown: data.markdown, doc: null }
+      : (await import('../editor-md/documentExtensions')).materializeDocument(data.markdown);
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
     const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup,
       paths => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); }));

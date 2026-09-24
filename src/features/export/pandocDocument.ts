@@ -89,7 +89,8 @@ function block(value: DocumentNode, cellFills = true): Ast[] {
   }
 }
 /** Pass math as semantic AST nodes; Pandoc never re-interprets currency/delimiters. */
-export function pandocSource(markdown: string): string {
-  const doc = parseMarkdownDocument(markdown), fills = documentTableStyle(doc) !== 'three-line';
+export function pandocSource(source: string | DocumentNode): string {
+  const doc = typeof source === 'string' ? parseMarkdownDocument(source) : source;
+  const fills = documentTableStyle(doc) !== 'three-line';
   return JSON.stringify({ blocks: children(doc, value => block(value, fills)), meta: {} });
 }

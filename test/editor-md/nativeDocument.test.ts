@@ -5,6 +5,7 @@ import { initializeEditorDocument, serializeEditorDocument, parseEditorDocument,
 import { encodeNativeDocument, decodeNativeDocument } from '@/core/nativeDocument';
 import { portableMarkdown } from '@/features/export/portableMarkdown';
 import { kindFromPath, savePolicyOf } from '@/core/docKind';
+import { pandocSource } from '@/features/export/pandocDocument';
 
 const editors: Editor[] = [];
 const p = (text: string): JSONContent => ({ type: 'paragraph', content: [{ type: 'text', text }] });
@@ -67,14 +68,27 @@ describe('Native document storage and portable export', () => {
     expect(sample.content![0].content![0].marks).toHaveLength(2);
   });
   it('keeps multiline code, lists and formulas in complex cells as standard HTML', () => {
-    const output = portableMarkdown({ type: 'doc', content: [{ type: 'table', content: [{ type: 'tableRow', content: [
+    const complex: JSONContent = { type: 'doc', content: [{ type: 'table', content: [{ type: 'tableRow', content: [
       { type: 'tableCell', content: [p('第一段'), { type: 'codeBlock', content: [{ type: 'text', text: 'a < b\nkeep  spaces' }] },
         { type: 'mathBlock', attrs: { latex: 'x_1' } }, { type: 'mermaidBlock', attrs: { code: 'A-->B' } }] },
-    ] }] }] });
+    ] }] }] };
+    const output = portableMarkdown(complex);
     const host = document.createElement('div'); host.innerHTML = output;
     expect(host.textContent).toContain('a < b\nkeep  spaces');
     expect(host.textContent).toContain('x_1');
     expect(host.textContent).toContain('A-->B');
     expect(output).not.toContain('noteboard');
+    const { schema, manager } = documentParser();
+    const parse = vi.spyOn(manager, 'parse'), serialize = vi.spyOn(manager, 'serialize');
+    const ast = JSON.parse(pandocSource(schema.nodeFromJSON(complex)));
+    const values: string[] = [];
+    const collect = (value: unknown): void => {
+      if (typeof value === 'string') values.push(value);
+      else if (Array.isArray(value)) value.forEach(collect);
+      else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+    };
+    collect(ast);
+    expect(values).toEqual(expect.arrayContaining(['第一段', 'a < b\nkeep  spaces', 'x_1', 'A-->B']));
+    expect(parse).not.toHaveBeenCalled(); expect(serialize).not.toHaveBeenCalled();
   });
 });
