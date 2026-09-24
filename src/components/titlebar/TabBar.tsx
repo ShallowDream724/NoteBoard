@@ -1,8 +1,11 @@
 // NoteBoard TabBar
 // tab 栏 + dnd-kit 排序 + 横向滚动 + 右键上下文操作菜单
-// 详见 docs/07-UI布局与交互规范.md §3
+// Layout ownership: docs/architecture/settings-and-updates.md
 
 import { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useMenuBounds } from '../useMenuBounds';
+import { useTabOverflow } from './useTabOverflow';
 import {
   DndContext,
   PointerSensor,
@@ -80,6 +83,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  useMenuBounds(menuRef, Boolean(menuPos), menuPos?.x ?? 0, menuPos?.y ?? 0);
   const { tabs, requestCloseOther, requestCloseLeft, requestCloseRight, requestCloseAll } = useWindowStore();
 
   // 计算当前标签页索引与各方向关闭操作可用状态
@@ -119,70 +123,18 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
     };
   }, [menuPos]);
 
-  // 单个 Tab 的外观样式（采用现代圆角卡片设计，短标题自动紧凑缩短，长标题受限截断）
+  // Only drag geometry is dynamic; appearance and hover are owned by CSS.
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+    transform: CSS.Transform.toString(transform), transition,
     opacity: isDragging ? 0.5 : 1,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    // 短标题自动紧凑自适应，长标题限制在 200px 并在末端以省略号截断
-    minWidth: 80,
-    maxWidth: 200,
-    width: 'max-content',
-    flex: '0 0 auto',
-    height: 28,
-    padding: '0 6px 0 10px',
-    // 左右留出充足的间距，防止任何边缘遮挡
-    margin: '0 3px',
-    borderRadius: 6,
-    background: isActive
-      ? 'var(--tab-active-bg)'
-      : 'var(--tab-inactive-bg)',
-    color: isActive
-      ? 'var(--editor-text)'
-      : 'var(--editor-text-secondary)',
-    // 独立清晰的卡片边界线，确保左右与四周边界一目了然
-    border: '1px solid var(--tab-border)',
-    borderBottom: isActive
-      ? '2px solid var(--tab-active-indicator)'
-      : '1px solid var(--tab-border)',
-    boxShadow: isActive
-      ? '0 1px 3px rgba(0, 0, 0, 0.08)'
-      : 'none',
-    cursor: 'pointer',
-    flexShrink: 0,
-    userSelect: 'none',
-    position: 'relative',
-    boxSizing: 'border-box',
-    fontFamily: 'var(--ui-font-family, inherit)',
-    fontSize: 'var(--ui-font-size, 13px)',
-    fontWeight: isActive ? 500 : 400,
-  };
-
-  // 关闭按钮样式（位于 Tab 最右侧）
-  const closeBtnStyle: React.CSSProperties = {
-    display: isActive ? 'flex' : 'none',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    flexShrink: 0,
-    marginLeft: 'auto',
-    color: 'inherit',
-    transition: 'background var(--transition-fast)',
   };
 
   return (
     <>
-      <Tooltip content={tab.path ?? tab.displayName} disabled={Boolean(menuPos)} side="bottom" sideOffset={6}>
+      <Tooltip content={tab.path ?? tab.displayName} followCursor disabled={Boolean(menuPos)} side="bottom" sideOffset={6}>
         <div
           ref={setNodeRef}
+          className="nb-tab"
           style={style}
           {...attributes}
           {...listeners}
@@ -200,26 +152,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           }}
           role="tab"
           aria-selected={isActive}
-          onMouseEnter={(e) => {
-            if (!isActive) {
-              e.currentTarget.style.background = 'var(--tab-hover-bg)';
-              e.currentTarget.style.color = 'var(--editor-text)';
-            }
-            const closeBtn = e.currentTarget.querySelector('.tab-close') as HTMLElement;
-            if (closeBtn) {
-              closeBtn.style.display = 'flex';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isActive) {
-              e.currentTarget.style.background = 'var(--tab-inactive-bg)';
-              e.currentTarget.style.color = 'var(--editor-text-secondary)';
-              const closeBtn = e.currentTarget.querySelector('.tab-close') as HTMLElement;
-              if (closeBtn) {
-                closeBtn.style.display = 'none';
-              }
-            }
-          }}
+          aria-label={tab.displayName}
         >
           {/* 未保存圆点 */}
           {tab.isDirty && (
@@ -237,43 +170,22 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           {/* 类型图标 */}
           {getTabIcon(tab)}
 
-          {/* 文件名（自适应占满中间区域，超出以省略号展示） */}
+          {/* Trailing padding keeps short titles outside the fade without measuring each tab. */}
           <span
-            style={{
-              flex: 1,
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              fontStyle: tab.isPreview ? 'italic' : 'normal',
-            }}
+            className="nb-tab-title"
+            style={{ fontStyle: tab.isPreview ? 'italic' : 'normal' }}
           >
             {tab.displayName}
           </span>
 
           {/* 关闭按钮（固定靠在 Tab 最右侧） */}
           <button
-            className="tab-close"
-            style={closeBtnStyle}
+            type="button"
+            className="nb-tab-close"
+            onPointerDown={event => event.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
               onClose();
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--toolbar-hover)';
-              e.currentTarget.style.transform = 'scale(1.1)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-            onMouseDown={(e) => {
-              e.currentTarget.style.background = 'var(--toolbar-active)';
-              e.currentTarget.style.transform = 'scale(0.9)';
-            }}
-            onMouseUp={(e) => {
-              e.currentTarget.style.background = 'var(--toolbar-hover)';
-              e.currentTarget.style.transform = 'scale(1.1)';
             }}
             aria-label={`关闭 ${tab.displayName}`}
           >
@@ -283,7 +195,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
       </Tooltip>
 
       {/* Tab 右键上下文菜单 */}
-      {menuPos && (
+      {menuPos && createPortal(
         <div
           ref={menuRef}
           style={{
@@ -494,7 +406,7 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
               </button>
             </>
           )}
-        </div>
+        </div>, document.body
       )}
     </>
   );
@@ -555,6 +467,8 @@ function handleMenuItemMouseUp(e: React.MouseEvent<HTMLButtonElement>) {
 export function TabBar() {
   const { tabs, activeKey, activateTab, requestCloseTab, reorderTabs } = useWindowStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  useTabOverflow(scrollRef, trackRef);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -570,22 +484,22 @@ export function TabBar() {
 
   // 滚轮横滚
   const handleWheel = (e: React.WheelEvent) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollLeft += e.deltaY;
+    if (e.shiftKey) return; // Chromium already maps Shift+wheel to horizontal scrolling.
+    if (scrollRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? scrollRef.current.clientWidth : 1;
+      scrollRef.current.scrollLeft += e.deltaY * unit;
     }
   };
 
   // Tab 栏横向滚动容器
   const containerStyle: React.CSSProperties = {
     display: 'flex',
-    alignItems: 'center',
     height: '100%',
     overflowX: 'auto',
     overflowY: 'hidden',
     scrollbarWidth: 'none',
     flex: '0 1 auto',
     minWidth: 0,
-    padding: '0 4px',
     boxSizing: 'border-box',
   };
 
@@ -607,10 +521,12 @@ export function TabBar() {
     <div style={{ display: 'flex', alignItems: 'center', height: '100%', minWidth: 0, flex: '0 1 auto' }}>
       <div
         ref={scrollRef}
+        className="nb-tab-viewport"
         style={containerStyle}
         onWheel={handleWheel}
         role="tablist"
       >
+        <div ref={trackRef} className="nb-tab-track">
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <SortableContext
             items={tabs.map((t) => t.key)}
@@ -627,6 +543,7 @@ export function TabBar() {
             ))}
           </SortableContext>
         </DndContext>
+        </div>
       </div>
 
     </div>

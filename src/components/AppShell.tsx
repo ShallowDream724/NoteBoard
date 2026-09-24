@@ -7,6 +7,7 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import type { PanelSize } from 'react-resizable-panels';
 import type { Editor } from '@tiptap/core';
 import { TitleBar } from './titlebar/TitleBar';
+import './appShell.css';
 import { StatusBar } from './statusbar/StatusBar';
 import { WelcomeScreen } from './WelcomeScreen';
 import { UnsupportedView } from './UnsupportedView';
@@ -457,24 +458,15 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     };
   }, []);
 
-  const handleStyle: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    background: 'var(--editor-bg)',
-  };
-
   return (
-    <div style={handleStyle}>
+    <div className="nb-app-shell" data-presentation={isBoardPresentationMode || undefined}>
       {/* 标题栏 */}
       {!isBoardPresentationMode && <TitleBar key="app-titlebar" />}
 
       {/* 主区域 */}
       <div
         key="app-main"
-        style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}
+        className="nb-workspace"
       >
         <Group
           id="nb-layout"

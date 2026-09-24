@@ -1,0 +1,27 @@
+/* Window chrome owns the shared boundary; individual panes retain square geometry. */
+.nb-app-shell {
+  --workspace-corner-radius: 12px;
+  --window-chrome-bg: color-mix(in srgb, var(--editor-accent) 6%, var(--titlebar-bg));
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--window-chrome-bg);
+}
+
+.nb-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  background: var(--editor-bg);
+  border-top: 1px solid var(--editor-border);
+  border-radius: var(--workspace-corner-radius) var(--workspace-corner-radius) 0 0;
+}
+
+.nb-app-shell[data-presentation] > .nb-workspace {
+  border-top: 0;
+  border-radius: 0;
+}
