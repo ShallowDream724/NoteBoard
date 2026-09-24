@@ -3,6 +3,7 @@
 // 详见 docs/09-开发路线图.md
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { matchesShortcut } from '../../core/shortcutBindings';
 import {
   ListTree,
   Network,
@@ -219,18 +220,9 @@ export function MindmapEditor({ docKey }: MindmapEditorProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // 避免在普通文本框输入时拦截默认行为（除非在非输入区域或大纲整树操作）
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        if (e.shiftKey) {
-          e.preventDefault();
-          redoDocumentHistory(docKey);
-        } else {
-          e.preventDefault();
-          undoDocumentHistory(docKey);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        redoDocumentHistory(docKey);
-      }
+      if (e.defaultPrevented || (e.target as HTMLElement | null)?.closest('[data-shortcuts-suspended]')) return;
+      if (matchesShortcut('edit.undo', e)) { e.preventDefault(); undoDocumentHistory(docKey); }
+      else if (matchesShortcut('edit.redo', e)) { e.preventDefault(); redoDocumentHistory(docKey); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);

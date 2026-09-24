@@ -3,9 +3,9 @@ import { syntaxTree } from '@codemirror/language';
 import { isolateHistory } from '@codemirror/commands';
 import { Prec, type EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { headingShortcut } from './headingShortcut';
+import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 import { ALERT_META, matchAlertChoices } from './alertPresentation';
-import { formatSourceMark, setSourceHeading } from './sourceFormatting';
+import { formatSourceMark, setSourceHeading, runSourceFormatCommand } from './sourceFormatting';
 
 function insideCode(state: EditorState, position: number) {
   for (let node = syntaxTree(state).resolveInner(position, -1); node; node = node.parent!) {
@@ -16,13 +16,11 @@ function insideCode(state: EditorState, position: number) {
 
 /** Source-mode adapters reuse the same Markdown vocabulary, with CM owning completion/focus. */
 export const sourceTypingAssist = [
-  Prec.highest(EditorView.domEventHandlers({ keydown(event, view) {
-    const level = headingShortcut(event);
-    if (level === null) return false;
-    const applied = setSourceHeading(view, level);
-    if (applied) event.preventDefault();
-    return applied;
-  } })),
+  customCodeMirrorShortcuts('source', (view, id) => {
+    const level = /^markdown\.heading([0-6])$/.exec(id)?.[1];
+    if (level !== undefined) return setSourceHeading(view, Number(level));
+    return runSourceFormatCommand(view, id);
+  }),
   Prec.high(keymap.of([
     { key: 'Mod-u', run: view => formatSourceMark(view, 'underline') },
     { key: 'Tab', run: acceptCompletion },

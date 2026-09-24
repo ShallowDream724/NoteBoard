@@ -62,6 +62,9 @@ import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
 import { HighlightControl } from './HighlightControl';
+import { setTextColor, applyTextStyle } from '../document-style/documentStyles';
+import { AlignmentMenu } from '../document-style/AlignmentMenu';
+import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -79,6 +82,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   useSourceFormattingUpdates(docKey, isSourceMode);
   const sourceView = isSourceMode ? getActiveSourceView(docKey) : undefined;
   const sourceHighlight = sourceView ? sourceMarkRange(sourceView, 'highlight') : null;
+  const sourceStyle = sourceView ? sourceTextStyle(sourceView) : null;
 
   // 下拉菜单开闭状态
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
@@ -602,14 +606,18 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       />
 
       <HighlightControl
+        onApplyStyle={pair => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
+        textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('textColor').color}
+        onTextColor={color => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
         collapsePriority={40}
         open={highlightDropdownOpen}
-        onOpenChange={setHighlightDropdownOpen}
-        active={isSourceMode ? sourceHighlight !== null : Boolean(editor?.isActive('highlight'))}
-        currentColor={isSourceMode ? sourceHighlight?.color : editor?.getAttributes('highlight').color}
+        onOpenChange={open => { if (open && sourceView) sourceTextStyle(sourceView, true); setHighlightDropdownOpen(open); }}
+        active={isSourceMode ? !!sourceStyle?.background || sourceHighlight !== null : Boolean(editor?.isActive('highlight'))}
+        currentColor={isSourceMode ? sourceStyle?.background ?? sourceHighlight?.color : editor?.getAttributes('highlight').color}
         onApply={handleSelectHighlightColor} onRemove={handleRemoveHighlight}
         onReturnToEditor={() => { if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.commands.focus(); }}
       />
+      {!isSourceMode && editor && <AlignmentMenu editor={editor}/>}
 
       <ToolbarDivider />
 

@@ -117,7 +117,7 @@ interface PositionIndex {
 // One index per live editor, replaced after either representation changes. The
 // immutable root identity makes selection-only transactions a cheap cache hit;
 // weak ownership never keeps a closed editor or older document history alive.
-const positionIndexes = new WeakMap<Editor, PositionIndex>();
+const positionIndexes = new WeakMap<object, PositionIndex>();
 
 /** Marked normalizes newlines. Keep only line spans to recover original UTF-16
  * offsets, including CRLF; LF input reuses the supplied string without copying. */
@@ -206,16 +206,20 @@ function mapBlock(block: Block, direction: 'source' | 'visual', selection: { anc
  * only selected known blocks get a character walk, never preceding blocks. */
 export function mapModeSelection(editor: Editor, markdown: string, direction: 'source' | 'visual', selection: { anchor: number; head: number }) {
   const manager = editor.storage.markdown?.manager as unknown as (MarkdownManagerLike & { instance?: { lexer: (text: string) => Token[] } }) | undefined;
+  return mapDocumentSelection(editor.state.doc, manager, markdown, direction, selection, editor);
+}
+export function mapDocumentSelection(doc: DocumentNode, manager: { instance?: { lexer: (text: string) => unknown[] } } | undefined,
+  markdown: string, direction: 'source' | 'visual', selection: { anchor: number; head: number }, owner: object = doc) {
   if (!manager?.instance) return { anchor: 0, head: 0 };
-  let index = positionIndexes.get(editor);
-  if (index?.doc !== editor.state.doc || index.markdown !== markdown) {
+  let index = positionIndexes.get(owner);
+  if (index?.doc !== doc || index.markdown !== markdown) {
     const located = sourceLocation(markdown);
-    const tokens = manager.instance.lexer(located.text);
-    index = { doc: editor.state.doc, markdown, located, tokens, blocks: locateBlocks(tokens, located, editor.state.doc) };
-    positionIndexes.set(editor, index);
+    const tokens = (manager.instance.lexer(located.text) as Token[]).filter(token => !(token.type === 'html' && token.raw?.startsWith('<!-- noteboard-styles ')));
+    index = { doc, markdown, located, tokens, blocks: locateBlocks(tokens, located, doc) };
+    positionIndexes.set(owner, index);
   }
   const { located, tokens, blocks } = index;
-  const maximum = direction === 'source' ? markdown.length : editor.state.doc.content.size;
+  const maximum = direction === 'source' ? markdown.length : doc.content.size;
   if (blocks?.length) {
     const selectBlock = (point: number, affinity: 'left' | 'right') => {
       const endOf = (block: Block) => direction === 'source' ? block.visualStart + block.node.nodeSize : block.sourceEnd;
@@ -243,7 +247,7 @@ export function mapModeSelection(editor: Editor, markdown: string, direction: 's
       head: mapBlock(headBlock, direction, { anchor: selection.head, head: selection.head }).head,
     }, maximum);
   }
-  return clampSelection(mapCharacters(sourceCharacters(tokens, located), documentCharacters(editor.state.doc), direction, selection), maximum);
+  return clampSelection(mapCharacters(sourceCharacters(tokens, located), documentCharacters(doc), direction, selection), maximum);
 }
 
 function clampSelection(selection: { anchor: number; head: number }, max: number) {

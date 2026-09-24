@@ -35,6 +35,10 @@ import type {
 } from './types';
 
 // ── 窗口（S04 打开队列 + 迁移协议） ──
+export interface ShortcutProbe { binding: string; status: 'unclaimed' | 'occupied' | 'unknown'; errorCode: number | null }
+export function probeShortcuts(bindings: string[]): Promise<ShortcutProbe[]> {
+  return invoke<ShortcutProbe[]>('probe_shortcuts', { bindings });
+}
 
 /** 监听就绪握手：返回 consumer 代际与启动模式；不显示窗口、不消费请求 */
 export function windowListenersReady(label: string): Promise<WindowBootDto> {

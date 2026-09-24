@@ -1,3 +1,4 @@
+import { matchesShortcut } from '../../core/shortcutBindings';
 import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 资源管理器：树节点
 // 24px 行高、depth*12+8 缩进、缩进导线、图标、悬停、当前 tab 高亮、行内重命名与右键菜单
@@ -194,7 +195,7 @@ export const TreeNode = memo(function TreeNode({
       else void openDocument(node.path);
       return;
     }
-    if (e.key === 'F2') {
+    if (matchesShortcut('explorer.rename', e.nativeEvent)) {
       e.preventDefault();
       e.stopPropagation();
       setIsRenaming(true);

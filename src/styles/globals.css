@@ -1071,7 +1071,6 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 
 /* 单元格多选与跨行跨列选区高亮 */
 .ProseMirror .selectedCell {
-  background: rgba(59, 130, 246, 0.12) !important;
   position: relative;
 }
 .ProseMirror .selectedCell::after {

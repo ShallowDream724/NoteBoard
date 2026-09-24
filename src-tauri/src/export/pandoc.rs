@@ -108,6 +108,10 @@ fn formatting_warning(document: &serde_json::Value, format: &str) -> Option<&'st
     if !["docx", "latex"].contains(&format) { return None; }
     let mut pending = vec![document];
     while let Some(value) = pending.pop() {
+        if value.get(1).and_then(|classes| classes.as_array())
+            .is_some_and(|classes| classes.iter().any(|class| matches!(class.as_str(), Some("noteboard-cell-fill" | "noteboard-presentation")))) {
+            return Some("部分颜色、对齐或缩进样式未映射到 Word/LaTeX；需要完整保留时请使用 HTML 或 PDF。");
+        }
         if value.get("t").and_then(|kind| kind.as_str()) == Some("Span")
             && value.pointer("/c/0/1").and_then(|classes| classes.as_array())
                 .is_some_and(|classes| classes.iter().any(|class| class.as_str() == Some("highlight"))) {

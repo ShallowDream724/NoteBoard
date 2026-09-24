@@ -26,6 +26,8 @@ const kernel = vi.hoisted(() => ({
     state: { depth: 0, selection: { anchor: 1, head: 1 } },
     storage: { markdown: { manager: {} } },
     schema: {},
+    view: { dom: document.createElement('div') },
+    on: () => {}, off: () => {},
   },
 }));
 vi.mock('@tiptap/react', () => ({
@@ -99,6 +101,8 @@ it('输入热路径零全文工作：同组多次输入只序列化组末，跨�
         editor: kernel.editor,
         transaction: {
           docChanged: true,
+          getMeta: () => undefined,
+          mapping: { maps: [] },
           before: { content: { findDiffStart: () => 1 } },
           doc: { content: {}, __text: text },
         },
@@ -167,6 +171,8 @@ it('防抖物化：500ms 静默后组末自动进历史与镜像（连续输入�
           editor: kernel.editor,
           transaction: {
             docChanged: true,
+            getMeta: () => undefined,
+            mapping: { maps: [] },
             before: { content: { findDiffStart: () => 1 } },
             doc: { content: {}, __text: text },
           },

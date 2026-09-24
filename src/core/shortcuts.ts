@@ -1,10 +1,12 @@
 // NoteBoard 快捷键框架
 // 注册表 + 作用域（编辑器聚焦 vs 全局）
 // 详见 docs/07-UI布局与交互规范.md §9
+import { commandBindings, commandForDefault, shortcutFromEvent } from './shortcutBindings';
 
 type ShortcutScope = 'global' | 'editor' | 'explorer' | 'outline';
 
 interface ShortcutEntry {
+  id?: string;
   /** 如 'Ctrl+S'、'Ctrl+K Ctrl+O'（chord） */
   key: string;
   action: () => void;
@@ -119,11 +121,15 @@ export function shouldPreventBrowserDefault(e: KeyboardEvent): boolean {
 /** 初始化全局键盘监听 */
 export function initShortcuts(): () => void {
   const handler = (e: KeyboardEvent) => {
-    const key = eventToKey(e);
+    const key = shortcutFromEvent(e) ?? eventToKey(e);
+    if (e.isComposing || e.defaultPrevented) return;
     if ((e.target as HTMLElement | null)?.closest?.('[data-shortcuts-suspended]')) return;
     // 按作用域优先级查找：当前作用域 > global
     const entries = registry.filter(
-      (entry) => entry.key === key && (entry.scope === activeScope || entry.scope === 'global') && (entry.when?.() ?? true),
+      (entry) => {
+        const id = entry.id ?? commandForDefault(entry.key);
+        return (id ? commandBindings(id).includes(key) : entry.key === key) && (entry.scope === activeScope || entry.scope === 'global') && (entry.when?.() ?? true);
+      },
     );
     // 作用域优先：editor/explorer/outline > global
     const scoped = entries.find((entry) => entry.scope === activeScope);

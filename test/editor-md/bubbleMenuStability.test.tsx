@@ -35,6 +35,7 @@ it('父组件重复渲染时 BubbleMenu 的事务配置引用应保持稳定', a
     view: { dom: editorDom },
     isActive: () => false,
     getAttributes: () => ({}),
+    on: () => {}, off: () => {},
   } as unknown as Editor;
 
   const host = document.createElement('div');

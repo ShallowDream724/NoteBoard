@@ -42,6 +42,8 @@ pub struct Settings {
     pub export: ExportSettings,
     #[serde(default)]
     pub updates: UpdateSettings,
+    #[serde(default)]
+    pub shortcuts: ShortcutSettings,
 }
 
 impl Default for Settings {
@@ -56,6 +58,7 @@ impl Default for Settings {
             layout: LayoutSettings::default(),
             export: ExportSettings::default(),
             updates: UpdateSettings::default(),
+            shortcuts: ShortcutSettings::default(),
         }
     }
 }
@@ -63,6 +66,12 @@ impl Default for Settings {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportSettings { #[serde(default)] pub pandoc_path: String }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ShortcutSettings {
+    #[serde(default)]
+    pub overrides: std::collections::BTreeMap<String, Vec<String>>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -379,15 +388,29 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
     let sections = patch.as_object().ok_or("设置修改必须是对象")?;
     let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
     for (section, fields) in sections {
-        if !["appearance", "typography", "editor", "file", "layout", "export", "updates"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
+        if !["appearance", "typography", "editor", "file", "layout", "export", "updates", "shortcuts"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
         let fields = fields.as_object().ok_or("设置分组修改必须是对象")?;
         let target = value[section].as_object_mut().ok_or("设置分组无效")?;
         for (field, field_value) in fields {
             if !target.contains_key(field) { return Err(format!("未知设置字段: {section}.{field}")); }
+            if section == "shortcuts" && field == "overrides" {
+                let changes = field_value.as_object().ok_or("快捷键修改必须是对象")?;
+                let bindings = target.get_mut(field).and_then(|value| value.as_object_mut()).ok_or("快捷键配置无效")?;
+                for (id, value) in changes {
+                    if id.is_empty() || id.len() > 96 || !id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'.') { return Err("快捷键命令标识无效".into()); }
+                    if value.is_null() { bindings.remove(id); continue; }
+                    let keys = value.as_array().ok_or("快捷键必须是组合键数组")?;
+                    if keys.len() > 4 || keys.iter().any(|key| key.as_str().is_none_or(|key| key.is_empty() || key.len() > 64 || !key.is_ascii())) { return Err("快捷键组合无效".into()); }
+                    bindings.insert(id.clone(), value.clone());
+                }
+                if bindings.len() > 512 { return Err("快捷键配置过多".into()); }
+                continue;
+            }
             target.insert(field.clone(), field_value.clone());
         }
     }
     let mut updated: Settings = serde_json::from_value(value).map_err(|e| format!("设置值无效: {e}"))?;
+    crate::shortcut_probe::validate_overrides(&updated.shortcuts.overrides)?;
     updated.revision = next_revision(current)?;
     Ok(updated)
 }
@@ -407,6 +430,7 @@ pub fn patch(patch: serde_json::Value) -> Result<Settings, String> {
 /// Legacy whole-document callers must match the authoritative revision. New
 /// clients use patch() so unrelated edits from another window are retained.
 pub fn save(settings: &mut Settings) -> Result<u64, String> {
+    crate::shortcut_probe::validate_overrides(&settings.shortcuts.overrides)?;
     let mut state = SETTINGS.lock().unwrap();
     let current = state.get_or_insert_with(read_from_disk);
     if settings.revision != current.revision { return Err("设置已在其他窗口更新，请重新载入后保存".into()); }
@@ -419,6 +443,17 @@ pub fn save(settings: &mut Settings) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortcuts_merge_by_command_reset_and_validate_conflicts() {
+        let first = patched(&Settings::default(), &serde_json::json!({"shortcuts":{"overrides":{"markdown.heading1":["Ctrl+F8"]}}})).unwrap();
+        let second = patched(&first, &serde_json::json!({"shortcuts":{"overrides":{"file.save":["Ctrl+Alt+S"]}}})).unwrap();
+        assert_eq!(second.shortcuts.overrides.len(), 2);
+        assert!(patched(&second, &serde_json::json!({"shortcuts":{"overrides":{"file.save":["Ctrl+F8"]}}})).is_err());
+        let reset = patched(&second, &serde_json::json!({"shortcuts":{"overrides":{"markdown.heading1":null}}})).unwrap();
+        assert!(!reset.shortcuts.overrides.contains_key("markdown.heading1"));
+        assert_eq!(reset.shortcuts.overrides.get("file.save").unwrap(), &vec!["Ctrl+Alt+S".to_owned()]);
+    }
 
     /// 旧版 settings.json 不含暂存字段时必须无损迁移到默认目录，不能导致整份设置解析失败。
     #[test]

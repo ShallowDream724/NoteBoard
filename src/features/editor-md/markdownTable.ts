@@ -1,6 +1,7 @@
 import { Table, TableRow } from '@tiptap/extension-table';
 import type { JSONContent, MarkdownToken } from '@tiptap/core';
 import { buildLogicalTableGrid, type TableCellPlacement } from './tableGrid';
+import { tableFill } from './tableCellPresentation';
 
 const PREFIX = '<!-- noteboard-table ';
 const tokenizer = Table.config.markdownTokenizer!;
@@ -9,6 +10,7 @@ interface TableLayout {
   widths: number[]; heights: Record<string, number>; noHeader?: boolean; grid?: true; rowCount?: number;
   rows?: Record<string, { count: number; cells: Record<string, { colspan: number; rowspan: number; header: boolean; column?: number }> }>;
   blocks?: Record<string, Record<string, { markdown: string; preview: string }>>;
+  fills?: Record<string, Record<string, string>>;
 }
 function isTableLayout(value: unknown): value is TableLayout {
   if (!value || typeof value !== 'object') return false;
@@ -41,6 +43,13 @@ function isTableLayout(value: unknown): value is TableLayout {
       }
     }
   }
+  if (layout.fills !== undefined) {
+    if (!record(layout.fills)) return false;
+    for (const [row, cells] of Object.entries(layout.fills)) {
+      if (!/^\d+$/.test(row) || !record(cells)) return false;
+      if (Object.entries(cells).some(([column, color]) => !/^\d+$/.test(column) || !tableFill(color))) return false;
+    }
+  }
   return true;
 }
 
@@ -56,6 +65,7 @@ export const SizedTableRow = TableRow.extend({
 function dimensions(node: JSONContent, grid: { width: number; rows: TableCellPlacement<JSONContent>[][] }): TableLayout | null {
   const widths: number[] = Array(grid.width).fill(0), heights: Record<number, number> = {};
   const rows: NonNullable<TableLayout['rows']> = {};
+  const fills: NonNullable<TableLayout['fills']> = {};
   const hasHeader = node.content?.[0]?.content?.some(cell => cell.type === 'tableHeader');
   node.content?.forEach((row, index) => {
     if (size(row.attrs?.height)) heights[index] = size(row.attrs?.height);
@@ -66,11 +76,13 @@ function dimensions(node: JSONContent, grid: { width: number; rows: TableCellPla
       const header = cell.type === 'tableHeader';
       for (let col = 0; col < colspan; col++) widths[column + col] ||= size(cell.attrs?.colwidth?.[col]);
       if (structured) cells[cellIndex] = { colspan, rowspan, header, column };
+      const color = tableFill(cell.attrs?.background);
+      if (color) (fills[index] ??= {})[cellIndex] = color;
     });
     if (structured) rows[index] = { count: placements.length, cells };
   });
-  return widths.some(Boolean) || Object.keys(heights).length || Object.keys(rows).length || !hasHeader
-    ? { widths, heights, grid: true, rowCount: node.content?.length ?? 0, ...(Object.keys(rows).length ? { rows } : {}), ...(!hasHeader ? { noHeader: true } : {}) } : null;
+  return widths.some(Boolean) || Object.keys(heights).length || Object.keys(rows).length || Object.keys(fills).length || !hasHeader
+    ? { widths, heights, grid: true, rowCount: node.content?.length ?? 0, ...(Object.keys(rows).length ? { rows } : {}), ...(Object.keys(fills).length ? { fills } : {}), ...(!hasHeader ? { noHeader: true } : {}) } : null;
 }
 
 /** Covered GFM slots are empty placeholders, never a second source of content.
@@ -163,6 +175,8 @@ export const MarkdownTable = Table.extend({
       let column = 0;
       row.content?.forEach((cell, cellIndex) => {
         const original = structure?.cells?.[cellIndex];
+        const background = tableFill(layout.fills?.[index]?.[cellIndex]);
+        if (background) cell.attrs = { ...cell.attrs, background };
         if (original) {
           cell.type = original.header ? 'tableHeader' : 'tableCell';
           cell.attrs = { ...cell.attrs, colspan: size(original.colspan) || 1, rowspan: size(original.rowspan) || 1 };

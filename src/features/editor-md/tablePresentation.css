@@ -1,4 +1,11 @@
 /* Shared read-only styling; no document-node or HTML regeneration. */
+[data-table-style] table td[data-cell-background] {
+  background-color: var(--nb-cell-background);
+  color: #172033;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+[data-table-style="three-line"] table td[data-cell-background] { background-color: transparent; color: inherit; }
 [data-table-style="three-line"] table {
   border-top: 2px solid var(--editor-text-secondary, #526174);
   border-bottom: 2px solid var(--editor-text-secondary, #526174);

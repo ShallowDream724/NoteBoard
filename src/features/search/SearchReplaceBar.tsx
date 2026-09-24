@@ -12,6 +12,7 @@ import {
   Grid2X2,
 } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
+import { matchesShortcut, isRetiredShortcut } from '../../core/shortcutBindings';
 import { useSearchStore } from '../../stores/searchStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { showToast } from '../../stores/toastStore';
@@ -219,6 +220,10 @@ export function SearchReplaceBar() {
   return (
     <div
       role="search"
+      onKeyDown={event => {
+        if (matchesShortcut('search.replaceAll', event.nativeEvent)) { event.preventDefault(); event.stopPropagation(); void handleReplaceAll(); }
+        else if (isRetiredShortcut(event.nativeEvent, 'search')) { event.preventDefault(); event.stopPropagation(); }
+      }}
       aria-label="查找与替换"
       style={{
         position: 'absolute',
@@ -274,7 +279,7 @@ export function SearchReplaceBar() {
             placeholder="搜索..."
             onChange={(e) => setSearchText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 if (e.shiftKey) {
                   handleFindPrev();
@@ -479,13 +484,9 @@ export function SearchReplaceBar() {
             value={replaceText}
             onChange={(e) => setReplaceText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
-                if (e.ctrlKey || e.altKey) {
-                  handleReplaceAll();
-                } else {
-                  handleReplace();
-                }
+                handleReplace();
               } else if (e.key === 'ArrowUp') {
                 searchInputRef.current?.focus();
               }

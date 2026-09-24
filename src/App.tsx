@@ -17,6 +17,7 @@ import {
   settingsReferencePackagedFonts,
 } from './app/fontPack';
 import { initShortcuts, registerShortcut } from './core/shortcuts';
+import { useShortcutMonitor } from './app/shortcutMonitor';
 import { perfMark, perfNow } from './core/perf/perfMarks';
 import { reportWebSpans } from './core/perf/reportWebSpans';
 import {
@@ -71,6 +72,7 @@ function useEverOpened(open: boolean): boolean {
 
 export default function App() {
   const { init, initialized, settings, setTypography } = useSettingsStore();
+  useShortcutMonitor(initialized);
   const fontPackInitialized = useFontPackStore((s) => s.initialized);
   const fontPackStatus = useFontPackStore((s) => s.status);
   const [fontPackPromptOpen, setFontPackPromptOpen] = useState(false);

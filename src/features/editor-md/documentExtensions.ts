@@ -4,7 +4,7 @@ import { Code } from '@tiptap/extension-code';
 import CodeBlock from '@tiptap/extension-code-block';
 import Blockquote from '@tiptap/extension-blockquote';
 import { TaskItem } from '@tiptap/extension-list';
-import { TableCell, TableHeader } from '@tiptap/extension-table';
+import { PresentedTableCell, PresentedTableHeader } from './tableCellPresentation';
 import { MarkdownTable, SizedTableRow } from './markdownTable';
 import { MarkdownHighlight } from './markdownHighlight';
 import { Markdown, MarkdownManager } from '@tiptap/markdown';
@@ -13,10 +13,18 @@ import { MathInlineNode, MathBlockNode, AlertNode, ImageNode, MermaidNode, Plant
 import { serializeMarkdownFromDoc, type MarkdownManagerLike } from './serialize';
 import { createMarkdownLexer } from './markdownLexer';
 import { MarkdownOrderedList, MarkdownTaskList } from './markdownLists';
+import { TextColor, BlockPresentation } from '../document-style/documentStyles';
+import { installPresentationCodec } from '../document-style/presentationMetadata';
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
 const MarkdownCode = Code.extend({ excludes: '', addKeyboardShortcuts() { return {}; } });
 const MarkdownBlockquote = Blockquote.extend({ addKeyboardShortcuts() { return {}; } });
+const PresentedMarkdown = Markdown.extend({ onBeforeCreate(event) {
+  const content = this.editor.options.content, contentType = this.editor.options.contentType;
+  this.parent?.(event);
+  installPresentationCodec(this.storage.manager, this.editor.schema);
+  if (contentType === 'markdown' && typeof content === 'string') this.editor.options.content = this.storage.manager.parse(content);
+} });
 
 /** One document grammar for editing, worker conversion and external formats. */
 export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}): Extensions {
@@ -29,19 +37,20 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     }),
     // Highlight must wrap inline code; serializing its markup inside backticks
     // would turn the mark into literal code and discard the highlight on reload.
-    MarkdownHighlight.configure({ multicolor: true }), MarkdownCode, MarkdownBlockquote, ImageNode,
+    MarkdownHighlight.configure({ multicolor: true }), TextColor, BlockPresentation, MarkdownCode, MarkdownBlockquote, ImageNode,
     MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
-    MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, TableCell, TableHeader,
+    MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
     MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation,
-    Markdown.configure({ marked: createMarkdownLexer() }),
+    PresentedMarkdown.configure({ marked: createMarkdownLexer() }),
   ].map(extension => views[extension.name] ?? extension);
 }
 
 let parser: { manager: MarkdownManager; schema: ReturnType<typeof getSchema> } | undefined;
-function documentParser() {
+export function documentParser() {
   if (!parser) {
     const extensions = buildDocumentExtensions();
     parser = { manager: new MarkdownManager({ extensions, marked: createMarkdownLexer() }), schema: getSchema(extensions) };
+    installPresentationCodec(parser.manager, parser.schema);
   }
   return parser;
 }

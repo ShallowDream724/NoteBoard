@@ -6,6 +6,7 @@ import React, { createContext, useContext, useCallback, useEffect, useLayoutEffe
 import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
+import { useResolvedShortcutLabel } from '../core/useShortcutBindings';
 
 const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
 const TooltipInput = createContext<React.RefObject<'pointer' | 'keyboard' | null> | null>(null);
@@ -215,7 +216,7 @@ function FollowCursorTooltip({
  */
 export function Tooltip({
   content,
-  shortcut,
+  shortcut: defaultShortcut,
   children,
   side = 'bottom',
   align = 'center',
@@ -225,6 +226,7 @@ export function Tooltip({
   delayDuration = 100,
   followCursor = false,
 }: TooltipProps) {
+  const shortcut = useResolvedShortcutLabel(defaultShortcut);
   const input = useContext(TooltipInput);
   const [open, setOpen] = useState(false);
   const blocked = disabled || (!content && !shortcut);

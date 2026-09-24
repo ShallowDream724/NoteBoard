@@ -239,11 +239,12 @@ export interface Settings {
   layout: LayoutSettings;
   export?: ExportSettings;
   updates?: UpdateSettings;
+  shortcuts?: { overrides: Record<string, string[] | null> };
 }
 
 /** Only changed leaf fields; revision/schema ownership stays in Rust. */
 export type SettingsPatch = {
-  [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export' | 'updates']?: Partial<NonNullable<Settings[Section]>>;
+  [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export' | 'updates' | 'shortcuts']?: Partial<NonNullable<Settings[Section]>>;
 };
 
 export interface ExportSettings { pandocPath: string }

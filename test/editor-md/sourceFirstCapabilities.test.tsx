@@ -32,7 +32,8 @@ vi.mock('@codemirror/view', async (original) => {
   return { ...actual, EditorView: FakeView as unknown as typeof actual.EditorView };
 });
 // CM State 也替身（真实 EditorState.create 会校验扩展集——FakeView 的静态替身不满足）
-vi.mock('@codemirror/state', () => ({
+vi.mock('@codemirror/state', async original => ({
+  ...await original<typeof import('@codemirror/state')>(),
   Text: { of(parts: unknown[]) { return { toString: () => parts.join('') }; } },
   EditorState: {
     create(config: { doc: unknown }) { return { doc: config.doc }; },
@@ -43,6 +44,9 @@ vi.mock('@codemirror/state', () => ({
 vi.mock('@codemirror/commands', () => ({ undoDepth: () => 0 }));
 vi.mock('@codemirror/lang-markdown', () => ({ markdown: () => ({}) }));
 vi.mock('@/features/editor-md/sourcePlainBracket', () => ({ markdownPlainBracketExtension: {} }));
+// This host test replaces CM itself; real typing/keymap behavior is covered by typingAssist.test.
+vi.mock('@/features/editor-md/sourceTypingAssist', () => ({ sourceTypingAssist: [] }));
+vi.mock('@/features/editor-code/editorSettingsBinding', () => ({ liveEditorSettings: [] }));
 vi.mock('@/features/editor-code/setup', () => ({
   createBaseExtensions: () => [],
   typographyCompartment: { reconfigure: () => ({}) },
@@ -128,6 +132,7 @@ describe('🔴 R3-02 Markdown source 首开能力注册（宿主级）', () => {
       kind: 'markdown',
       selection: { anchor: 4, head: 9 },
       scrollTop: 321,
+      scrollLeft: 0,
       mode: 'source',
     });
 

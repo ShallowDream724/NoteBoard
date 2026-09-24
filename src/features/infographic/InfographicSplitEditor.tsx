@@ -1,3 +1,4 @@
+import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // NoteBoard 信息图独立文件编辑器（.infographic / .ig）
 // 左侧声明式源码（YAML / JSON）+ 右侧实时渲染预览 + 模板填充 + 缩放平移 + SVG/PNG 复制导出
 // 与 Markdown 内嵌 ```infographic 块共用同一套解析器与渲染器，源码可双向复用
@@ -150,6 +151,7 @@ export function InfographicSplitEditor({ docKey }: InfographicSplitEditorProps) 
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),
+        customCodeMirrorShortcuts('diagram'),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         languageCompartmentRef.current.of([]),
         EditorView.updateListener.of((update: ViewUpdate) => {

@@ -4,6 +4,15 @@ import type { Settings } from '../../src/core/ipc/types';
 
 const base = (): Settings => structuredClone(useSettingsStore.getState().settings);
 
+it('shortcut patches preserve other commands edited by another window', () => {
+  const initial = base(), replica = new SettingsReplica(initial);
+  const id = replica.enqueue({ shortcuts: { overrides: { 'markdown.heading1': ['Ctrl+F8'] } } });
+  replica.receive({ ...initial, revision: 2, shortcuts: { overrides: { 'file.save': ['Ctrl+Alt+S'] } } });
+  expect(replica.view().shortcuts?.overrides).toEqual({ 'file.save': ['Ctrl+Alt+S'], 'markdown.heading1': ['Ctrl+F8'] });
+  replica.settle(id);
+  expect(replica.view().shortcuts?.overrides).toEqual({ 'file.save': ['Ctrl+Alt+S'] });
+});
+
 it('an earlier acknowledgement preserves later local intent and unrelated remote fields', () => {
   const initial = base(), replica = new SettingsReplica(initial);
   const first = replica.enqueue({ editor: { softWrap: false } });

@@ -1,3 +1,4 @@
+import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // NoteBoard 图表双栏编辑器 (Mermaid / PlantUML / UML)
 // 左侧代码编辑 + 右侧实时渲染预览 + 缩放平移 + SVG/PNG 复制与导出
 // 详见 docs/09-开发路线图.md
@@ -205,6 +206,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
         lineNumbers(),
         highlightActiveLineGutter(),
         history(),
+        customCodeMirrorShortcuts('diagram'),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.updateListener.of((update: ViewUpdate) => {
           if (update.docChanged) {

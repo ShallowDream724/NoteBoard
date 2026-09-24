@@ -24,13 +24,19 @@ import {
   ChevronDown,
   X,
   ExternalLink,
+  Rows3, Columns3,
 } from 'lucide-react';
 import { handleLinkClick } from './linkHandler';
 import { useWindowStore } from '../../stores/windowStore';
 import { Tooltip } from '../../components/Tooltip';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
+import { setTextColor, applyTextStyle } from '../document-style/documentStyles';
+import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { useFormattingUpdates } from './useFormattingUpdates';
+import { TableFillMenu } from './TableFillMenu';
+import { documentTableStyle } from './documentPresentation';
+import { selectTableScope, tableHeaderState, setSelectedTableHeader, distributeTableColumns } from './tablePresentationCommands';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -38,10 +44,11 @@ interface BubbleButtonProps {
   active?: boolean;
   title?: string;
   danger?: boolean;
+  disabled?: boolean;
 }
 
 /** 悬浮菜单基础按钮组件（舒适 32px 尺寸与精美悬停/按压动效） */
-function BubbleButton({ icon, onClick, active, title, danger }: BubbleButtonProps) {
+function BubbleButton({ icon, onClick, active, title, danger, disabled }: BubbleButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -65,6 +72,7 @@ function BubbleButton({ icon, onClick, active, title, danger }: BubbleButtonProp
   const btn = (
     <button
       type="button"
+      disabled={disabled}
       onMouseDown={(e) => {
         e.preventDefault();
         setPressed(true);
@@ -84,7 +92,8 @@ function BubbleButton({ icon, onClick, active, title, danger }: BubbleButtonProp
         border: 'none',
         background,
         color,
-        cursor: 'pointer',
+        cursor: disabled ? 'default' : 'pointer',
+        opacity: disabled ? 0.35 : 1,
         fontSize: 14,
         borderRadius: 6,
         display: 'inline-flex',
@@ -266,10 +275,13 @@ export function EditorBubbleMenu({
         />
 
         <HighlightControl open={showColorPicker} onOpenChange={setShowColorPicker}
+          onApplyStyle={pair => applyTextStyle(editor, pair)}
+          textColor={editor.getAttributes('textColor').color} onTextColor={color => setTextColor(editor, color)}
           active={editor.isActive('highlight')} currentColor={editor.getAttributes('highlight').color}
           onApply={color => editor.chain().focus().setHighlight({ color }).run()}
           onReturnToEditor={() => editor.commands.focus()}
           onRemove={() => { editor.chain().focus().unsetHighlight().run(); setShowColorPicker(false); }}/>
+        <AlignmentMenu editor={editor}/>
 
         <MenuDivider />
 
@@ -421,8 +433,15 @@ function HeaderRowIcon() {
 /** 表格浮动工具条（精美分类与方向直观区分，支持滚动实时跟随与智能避让） */
 export function TableToolbar({ editor }: { editor: Editor }) {
   const toolbar = useRef<HTMLDivElement>(null);
+  const refresh = useRef<() => void>(() => {});
   const [show, setShow] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  useFormattingUpdates(editor, show);
+  useLayoutEffect(() => {
+    if (!toolbar.current) return;
+    const observer = new ResizeObserver(() => refresh.current());
+    observer.observe(toolbar.current); return () => observer.disconnect();
+  }, [show]);
 
   useEffect(() => {
     if (!editor) return;
@@ -431,6 +450,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     const scrollParent = findScrollContainer(editorDom);
 
     let frame = 0;
+    let lastCell: HTMLElement | null = null;
     const updateToolbar = () => {
       frame = 0;
       if (editor.isDestroyed || isEmbeddedEditing(editor)) {
@@ -465,7 +485,22 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       }
 
       if (tableDom) {
-        const rect = tableDom.getBoundingClientRect();
+        let anchor = tableDom;
+        const selected = selection as typeof selection & { $headCell?: { pos: number } };
+        if (selected.$headCell) {
+          const cell = editor.view.nodeDOM(selected.$headCell.pos);
+          if (lastCell && tableDom.contains(lastCell)) anchor = lastCell;
+          else if (cell instanceof HTMLElement) anchor = cell;
+        } else {
+          for (let depth = $from.depth; depth > 0; depth--) {
+            if (['cell', 'header_cell'].includes($from.node(depth).type.spec.tableRole ?? '')) {
+              const cell = editor.view.nodeDOM($from.before(depth));
+              if (cell instanceof HTMLElement) { anchor = cell; lastCell = cell; }
+              break;
+            }
+          }
+        }
+        const rect = anchor.getBoundingClientRect();
         const containerRect = scrollParent.getBoundingClientRect();
 
         // 表格完全滚出编辑容器可视区域时隐藏
@@ -482,9 +517,13 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         const toolbarBounds = toolbar.current?.getBoundingClientRect();
         const height = toolbarBounds?.height ?? 40;
         const halfWidth = Math.min(toolbarBounds?.width ?? 490, containerRect.width - 16) / 2;
-        const topPos = rect.top - height - 6 >= containerRect.top + 6
-          ? rect.top - height - 6
-          : Math.max(rect.top + 8, containerRect.top + 8);
+        // Near the first rows, use the table's outer edge so the toolbar cannot
+        // cover the header or the boundary the user is about to resize.
+        const tableTop = tableDom.getBoundingClientRect().top;
+        const anchorTop = rect.top - tableTop < height * 2 && tableTop - height - 6 >= containerRect.top + 6 ? tableTop : rect.top;
+        const topPos = anchorTop - height - 6 >= containerRect.top + 6
+          ? anchorTop - height - 6
+          : Math.min(rect.bottom + 6, containerRect.bottom - height - 6);
 
         // 计算水平居中位置，并施加容器边界安全约束（工具条宽约 420px，半宽约 210px，留安全边距）
         const targetLeft = rect.left + rect.width / 2;
@@ -500,6 +539,11 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     };
 
     const schedule = () => { if (!frame) frame = requestAnimationFrame(updateToolbar); };
+    const pointerAnchor = (event: PointerEvent) => {
+      const cell = event.target instanceof Element ? event.target.closest<HTMLElement>('td,th') : null;
+      if (cell && editorDom.contains(cell)) { lastCell = cell; schedule(); }
+    };
+    refresh.current = schedule;
     let embeddedEditing = isEmbeddedEditing(editor);
     const onTransaction = ({ transaction }: { transaction: Transaction }) => {
       const editing = isEmbeddedEditing(editor);
@@ -507,6 +551,8 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       embeddedEditing = editing;
     };
     editor.on('transaction', onTransaction);
+    editorDom.addEventListener('pointerdown', pointerAnchor);
+    editorDom.addEventListener('pointerup', pointerAnchor);
     scrollParent.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
     window.addEventListener('scroll', schedule, { passive: true });
@@ -515,17 +561,22 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     return () => {
       cancelAnimationFrame(frame);
       editor.off('transaction', onTransaction);
+      editorDom.removeEventListener('pointerdown', pointerAnchor);
+      editorDom.removeEventListener('pointerup', pointerAnchor);
       scrollParent.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule);
+      refresh.current = () => {};
     };
   }, [editor]);
 
   if (!show) return null;
+  const headers = tableHeaderState(editor);
 
   return (
     <div
       ref={toolbar}
+      role="toolbar" aria-label="表格工具栏"
       style={{
         position: 'fixed',
         top: position.top,
@@ -544,24 +595,26 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         zIndex: 1000,
         gap: 2,
         userSelect: 'none',
-        transition: 'top 80ms ease, opacity 120ms ease',
+        transition: 'opacity 120ms ease',
       }}
     >
       {/* ── 列操作组（左右插列、删列） ── */}
+      <AlignmentMenu editor={editor} cells/>
+      <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>
       <BubbleButton
         title="向左插入列"
         icon={<InsertColumnLeftIcon />}
-        onClick={() => editor.chain().focus().addColumnBefore().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addColumnBefore().run()}
       />
       <BubbleButton
         title="向右插入列"
         icon={<InsertColumnRightIcon />}
-        onClick={() => editor.chain().focus().addColumnAfter().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addColumnAfter().run()}
       />
       <BubbleButton
         title="删除当前列"
         icon={<DeleteColumnIcon />}
-        onClick={() => editor.chain().focus().deleteColumn().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteColumn().run()}
         danger
       />
 
@@ -571,47 +624,54 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       <BubbleButton
         title="在上方插入行"
         icon={<InsertRowAboveIcon />}
-        onClick={() => editor.chain().focus().addRowBefore().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addRowBefore().run()}
       />
       <BubbleButton
         title="在下方插入行"
         icon={<InsertRowBelowIcon />}
-        onClick={() => editor.chain().focus().addRowAfter().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).addRowAfter().run()}
       />
       <BubbleButton
         title="删除当前行"
         icon={<DeleteRowIcon />}
-        onClick={() => editor.chain().focus().deleteRow().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteRow().run()}
         danger
       />
 
       <MenuDivider />
 
       {/* ── 表头与单元格操作 ── */}
-      <BubbleButton
-        title="切换表头行"
+      <BubbleButton title="选择当前行" icon={<Rows3 size={16}/>} onClick={() => selectTableScope(editor, 'row')}/>
+      <BubbleButton title="选择当前列" icon={<Columns3 size={16}/>} onClick={() => selectTableScope(editor, 'column')}/>
+      {headers?.canRow && <BubbleButton
+        title={headers.rowHeader ? '取消表头行' : '首行设为表头'}
         icon={<HeaderRowIcon />}
-        onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-      />
-      <BubbleButton
-        title="切换表头列"
+        active={headers.rowHeader}
+        onClick={() => setSelectedTableHeader(editor, 'row')}
+      />}
+      {headers?.canColumn && <BubbleButton
+        title={headers.columnHeader ? '取消表头列' : '首列设为表头'}
         icon={<HeaderColumnIcon />}
-        onClick={() => editor.chain().focus().toggleHeaderColumn().run()}
-      />
+        active={headers.columnHeader}
+        onClick={() => setSelectedTableHeader(editor, 'column')}
+      />}
       <BubbleButton
         title="合并选中单元格"
+        disabled={!editor.can().mergeCells()}
         icon={<Merge size={16} />}
-        onClick={() => editor.chain().focus().mergeCells().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).mergeCells().run()}
       />
       <BubbleButton
-        title="拆分单元格"
+        title={editor.can().splitCell() ? '拆分合并单元格' : '先选中一个合并单元格'}
+        disabled={!editor.can().splitCell()}
         icon={<Split size={16} />}
-        onClick={() => editor.chain().focus().splitCell().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).splitCell().run()}
       />
 
       <MenuDivider />
 
       <TableAppearanceMenu editor={editor}/>
+      <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
 
       <MenuDivider />
 
@@ -619,7 +679,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       <BubbleButton
         title="删除整个表格"
         icon={<Trash2 size={16} />}
-        onClick={() => editor.chain().focus().deleteTable().run()}
+        onClick={() => editor.chain().focus(undefined, { scrollIntoView: false }).deleteTable().run()}
         danger
       />
     </div>

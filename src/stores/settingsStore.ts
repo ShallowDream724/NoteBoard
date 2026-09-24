@@ -25,12 +25,14 @@ import {
   stopSystemThemeListener,
 } from '../core/theme/applyTheme';
 import { useFontPackStore } from './fontPackStore';
+import { setShortcutOverrides, type ShortcutOverrides } from '../core/shortcutBindings';
 
 // ── 默认值 ──
 
 const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
   revision: 0,
+  shortcuts: { overrides: {} },
   appearance: {
     themeMode: 'system',
     systemLightTheme: 'chen-guang',
@@ -122,6 +124,7 @@ interface SettingsStore {
   setLayout: (patch: Partial<LayoutSettings>) => Promise<void>;
   setExport: (patch: Partial<ExportSettings>) => Promise<void>;
   setUpdates: (patch: Partial<UpdateSettings>) => Promise<void>;
+  setShortcuts: (overrides: ShortcutOverrides) => Promise<void>;
 
   // ── 内部：从广播更新 ──
   _applyRemoteUpdate: (s: Settings) => void;
@@ -139,6 +142,7 @@ function applyPatch(settings: Settings, patch: SettingsPatch): Settings {
     ...(patch.layout && { layout: { ...settings.layout, ...patch.layout } }),
     ...(patch.export && { export: { pandocPath: '', ...settings.export, ...patch.export } }),
     ...(patch.updates && { updates: { ignoredVersion: '', ...settings.updates, ...patch.updates } }),
+    ...(patch.shortcuts && { shortcuts: { overrides: { ...settings.shortcuts?.overrides, ...patch.shortcuts.overrides } } }),
   };
 }
 
@@ -176,6 +180,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
       applyTheme(resolvedTheme);
     }
     if (force || settings.typography !== previous.typography) applyTypography(settings.typography);
+    if (force || settings.shortcuts !== previous.shortcuts) setShortcutOverrides(settings.shortcuts?.overrides ?? {});
     set({ settings, resolvedTheme });
     const { themeMode, systemLightTheme, systemDarkTheme } = settings.appearance;
     const binding = `${themeMode}:${systemLightTheme}:${systemDarkTheme}`;
@@ -214,6 +219,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
   };
   const update = async (patch: SettingsPatch) => { await submit(patch); };
   return {
+    setShortcuts: async overrides => { const error = await submit({ shortcuts: { overrides } }); if (error) throw new Error(error); },
     settings: DEFAULT_SETTINGS, resolvedTheme: 'chen-guang', initialized: false, saveError: null,
     init: () => {
       if (initialization) return initialization;

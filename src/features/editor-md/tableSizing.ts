@@ -24,6 +24,7 @@ export const ResizableTableRow = SizedTableRow.extend({
 });
 
 interface Edge { axis: 'row' | 'column'; side?: 'left' | 'right'; row: HTMLTableRowElement; cell: HTMLTableCellElement; table: HTMLTableElement }
+interface Pending extends Edge { pos: number; column: number; pointer: number; origin: number }
 interface Drag extends Edge {
   pos: number; pointer: number; origin: number; start: number; next: number; adjacent?: number;
   column: number; scale: number; guideOrigin: number;
@@ -39,7 +40,14 @@ function edgeAt(view: EditorView, event: PointerEvent): Edge | null {
   const bounds = cell.getBoundingClientRect();
   if (Math.abs(event.clientX - bounds.right) < 5) return { axis: 'column', side: 'right', cell, row, table };
   if (Math.abs(event.clientX - bounds.left) < 5 && cell.previousElementSibling) return { axis: 'column', side: 'left', cell, row, table };
-  if (Math.abs(event.clientY - row.getBoundingClientRect().bottom) < 5) return { axis: 'row', cell, row, table };
+  const rowBounds = row.getBoundingClientRect();
+  if (Math.abs(event.clientY - rowBounds.bottom) < 5) return { axis: 'row', cell, row, table };
+  // Collapsed borders may hit the following row. Both sides own the same
+  // boundary, so a one-pixel difference must not turn resizing into selection.
+  const previous = row.previousElementSibling;
+  if (Math.abs(event.clientY - rowBounds.top) < 5 && previous instanceof HTMLTableRowElement && previous.cells[0]) {
+    return { axis: 'row', cell: previous.cells[0], row: previous, table };
+  }
   return null;
 }
 
@@ -60,7 +68,7 @@ function modelPosition(view: EditorView, edge: Edge) {
 export const TableSizing = Extension.create({
   name: 'tableSizing',
   addProseMirrorPlugins() {
-    let drag: Drag | null = null, frame = 0, hoverFrame = 0, view: EditorView | undefined;
+    let pending: Pending | null = null, drag: Drag | null = null, frame = 0, hoverFrame = 0, view: EditorView | undefined;
     let guide: HTMLElement | undefined, latestPointer: PointerEvent | undefined, shown: Edge | null = null;
     const hideGuide = () => {
       shown = null;
@@ -94,8 +102,10 @@ export const TableSizing = Extension.create({
       if (guide) guide.style.setProperty(drag.axis === 'row' ? 'top' : 'left', `${drag.guideOrigin + (drag.next - drag.start) * drag.scale - 2}px`);
     };
     const finish = (editor: EditorView, commit: boolean) => {
-      if (!drag) return;
-      const current = drag; drag = null; latestPointer = undefined;
+      const pointer = pending?.pointer ?? drag?.pointer;
+      const current = drag; drag = null; pending = null; latestPointer = undefined;
+      if (pointer !== undefined && editor.dom.hasPointerCapture(pointer)) editor.dom.releasePointerCapture(pointer);
+      if (!current) { hideGuide(); return; }
       cancelAnimationFrame(frame); frame = 0;
       current.preview.dispose(); hideGuide();
       editor.dom.classList.remove('nb-row-resizing', 'nb-table-resizing');
@@ -112,9 +122,24 @@ export const TableSizing = Extension.create({
       }
     };
     return [new Plugin({
-      filterTransaction(transaction) { if (transaction.docChanged && drag && view) finish(view, false); return true; },
+      filterTransaction(transaction) { if (transaction.docChanged && (drag || pending) && view) finish(view, false); return true; },
       props: { handleDOMEvents: {
         pointermove(_editor, event) {
+          if (pending && !drag) {
+            if (event.pointerId !== pending.pointer) return false;
+            const coordinate = pending.axis === 'row' ? event.clientY : event.clientX;
+            if (Math.abs(coordinate - pending.origin) < 3) { event.preventDefault(); return true; }
+            const bounds = pending.row.getBoundingClientRect(), height = pending.row.offsetHeight;
+            const preview = tableGesturePreview(pending.table, pending.axis === 'row' ? pending.row : undefined);
+            if (!preview) { finish(_editor, false); return false; }
+            const start = pending.axis === 'row' ? height : preview.widths[pending.column];
+            drag = { ...pending, preview, start, next: start,
+              scale: pending.axis === 'row' ? bounds.height / height || 1 : preview.scale, guideOrigin: 0 };
+            pending = null;
+            _editor.dom.classList.add('nb-table-resizing');
+            if (drag.axis === 'row') _editor.dom.classList.add('nb-row-resizing');
+            showGuide(drag);
+          }
           if (drag) {
             if (event.pointerId !== drag.pointer) return false;
             const delta = ((drag.axis === 'row' ? event.clientY : event.clientX) - drag.origin) / drag.scale;
@@ -131,24 +156,20 @@ export const TableSizing = Extension.create({
           return false;
         },
         pointerdown(editor, event) {
-          if (drag) return true;
+          if (drag || pending) return true;
           if (event.button !== 0) return false;
           const edge = edgeAt(editor, event); if (!edge) return false;
           const position = modelPosition(editor, edge); if (!position) return false;
-          const bounds = edge.row.getBoundingClientRect(), rowHeight = edge.row.offsetHeight;
-          const preview = tableGesturePreview(edge.table, edge.axis === 'row' ? edge.row : undefined); if (!preview) return false;
-          const start = edge.axis === 'row' ? rowHeight : preview.widths[position.column];
-          drag = { ...edge, ...position, preview, pointer: event.pointerId, origin: edge.axis === 'row' ? event.clientY : event.clientX,
-            start, next: start, scale: edge.axis === 'row' ? bounds.height / rowHeight || 1 : preview.scale, guideOrigin: 0 };
-          editor.dom.setPointerCapture(event.pointerId); editor.dom.classList.add('nb-table-resizing');
-          if (edge.axis === 'row') editor.dom.classList.add('nb-row-resizing');
+          // A press is not a resize. Preserve automatic layout until actual movement.
+          pending = { ...edge, ...position, pointer: event.pointerId, origin: edge.axis === 'row' ? event.clientY : event.clientX };
+          editor.dom.setPointerCapture(event.pointerId);
           showGuide(edge); event.preventDefault(); return true;
         },
-        pointerup(editor, event) { if (!drag || event.pointerId !== drag.pointer) return false; finish(editor, true); return true; },
-        pointercancel(editor, event) { if (event.pointerId === drag?.pointer) finish(editor, false); return false; },
-        lostpointercapture(editor, event) { if (event.pointerId === drag?.pointer) finish(editor, false); return false; },
-        pointerleave() { latestPointer = undefined; if (!drag) hideGuide(); return false; },
-        keydown(editor, event) { if (!drag) return false; finish(editor, false); return event.key === 'Escape'; },
+        pointerup(editor, event) { if (event.pointerId !== (drag?.pointer ?? pending?.pointer)) return false; finish(editor, true); return true; },
+        pointercancel(editor, event) { if (event.pointerId === (drag?.pointer ?? pending?.pointer)) finish(editor, false); return false; },
+        lostpointercapture(editor, event) { if (event.pointerId === (drag?.pointer ?? pending?.pointer)) finish(editor, false); return false; },
+        pointerleave() { latestPointer = undefined; if (!drag && !pending) hideGuide(); return false; },
+        keydown(editor, event) { if (!drag && !pending) return false; finish(editor, false); return event.key === 'Escape'; },
       } },
       view(editor) {
         view = editor;

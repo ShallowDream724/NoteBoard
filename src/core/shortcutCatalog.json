@@ -1,0 +1,788 @@
+[
+  { "id": "search.replaceAll", "label": "替换全部匹配", "group": "查找与编辑", "contexts": ["search"], "defaults": ["Ctrl+Alt+Enter", "Ctrl+Enter", "Alt+Enter"] },
+  {
+    "id": "file.open",
+    "label": "打开文件或文件夹",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+O"
+    ]
+  },
+  {
+    "id": "file.openFolder",
+    "label": "浏览文件夹",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+Shift+O"
+    ]
+  },
+  {
+    "id": "window.new",
+    "label": "新建窗口",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+Shift+N"
+    ]
+  },
+  {
+    "id": "file.save",
+    "label": "保存当前文档",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+S"
+    ]
+  },
+  {
+    "id": "file.saveAs",
+    "label": "另存为",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+Shift+S"
+    ]
+  },
+  {
+    "id": "file.export",
+    "label": "导出文档",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+E"
+    ]
+  },
+  {
+    "id": "file.print",
+    "label": "PDF 排版预览",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+P"
+    ]
+  },
+  {
+    "id": "tab.close",
+    "label": "关闭当前标签页",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+W"
+    ]
+  },
+  {
+    "id": "layout.explorer",
+    "label": "显示或隐藏资源管理器",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+Shift+B"
+    ]
+  },
+  {
+    "id": "layout.outline",
+    "label": "显示或隐藏大纲",
+    "group": "文件与窗口",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+Alt+B"
+    ]
+  },
+  {
+    "id": "search.find",
+    "label": "查找文本",
+    "group": "查找与编辑",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+F"
+    ]
+  },
+  {
+    "id": "search.replace",
+    "label": "替换文本",
+    "group": "查找与编辑",
+    "contexts": [
+      "app"
+    ],
+    "defaults": [
+      "Ctrl+H"
+    ]
+  },
+  {
+    "id": "edit.undo",
+    "label": "撤销",
+    "group": "查找与编辑",
+    "contexts": [
+      "markdown",
+      "source",
+      "code",
+      "diagram",
+      "mindmap"
+    ],
+    "defaults": [
+      "Ctrl+Z"
+    ]
+  },
+  {
+    "id": "edit.redo",
+    "label": "重做",
+    "group": "查找与编辑",
+    "contexts": [
+      "markdown",
+      "source",
+      "code",
+      "diagram",
+      "mindmap"
+    ],
+    "defaults": [
+      "Ctrl+Y",
+      "Ctrl+Shift+Z"
+    ]
+  },
+  {
+    "id": "markdown.mode",
+    "label": "切换源码与可视化",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+/"
+    ]
+  },
+  {
+    "id": "markdown.link",
+    "label": "插入或编辑链接",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+K"
+    ]
+  },
+  {
+    "id": "markdown.bold",
+    "label": "加粗",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+B"
+    ]
+  },
+  {
+    "id": "markdown.italic",
+    "label": "斜体",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+I"
+    ]
+  },
+  {
+    "id": "markdown.underline",
+    "label": "下划线",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+U"
+    ]
+  },
+  {
+    "id": "markdown.strike",
+    "label": "删除线",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Shift+X"
+    ]
+  },
+  {
+    "id": "markdown.highlight",
+    "label": "文本高亮",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Shift+H"
+    ]
+  },
+  {
+    "id": "markdown.heading0",
+    "label": "正文段落",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+0",
+      "Ctrl+Alt+0"
+    ]
+  },
+  {
+    "id": "markdown.heading1",
+    "label": "1 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+1",
+      "Ctrl+Alt+1"
+    ]
+  },
+  {
+    "id": "markdown.heading2",
+    "label": "2 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+2",
+      "Ctrl+Alt+2"
+    ]
+  },
+  {
+    "id": "markdown.heading3",
+    "label": "3 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+3",
+      "Ctrl+Alt+3"
+    ]
+  },
+  {
+    "id": "markdown.heading4",
+    "label": "4 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+4",
+      "Ctrl+Alt+4"
+    ]
+  },
+  {
+    "id": "markdown.heading5",
+    "label": "5 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+5",
+      "Ctrl+Alt+5"
+    ]
+  },
+  {
+    "id": "markdown.heading6",
+    "label": "6 级标题",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+6",
+      "Ctrl+Alt+6"
+    ]
+  },
+  {
+    "id": "markdown.codeBlock",
+    "label": "代码块",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Alt+C"
+    ]
+  },
+  {
+    "id": "markdown.bulletList",
+    "label": "无序列表",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Shift+8"
+    ]
+  },
+  {
+    "id": "markdown.orderedList",
+    "label": "有序列表",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Shift+7"
+    ]
+  },
+  {
+    "id": "markdown.taskList",
+    "label": "任务列表",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Shift+9"
+    ]
+  },
+  {
+    "id": "markdown.rule",
+    "label": "分隔线",
+    "group": "Markdown",
+    "contexts": [
+      "markdown",
+      "source"
+    ],
+    "defaults": [
+      "Ctrl+Alt+-"
+    ]
+  },
+  {
+    "id": "json.format",
+    "label": "JSON 展开或格式化",
+    "group": "JSON 与代码",
+    "contexts": [
+      "source",
+      "code"
+    ],
+    "defaults": [
+      "Shift+Alt+F",
+      "Ctrl+Alt+L",
+      "Ctrl+Alt+F"
+    ]
+  },
+  {
+    "id": "json.minify",
+    "label": "JSON 压缩",
+    "group": "JSON 与代码",
+    "contexts": [
+      "source",
+      "code"
+    ],
+    "defaults": [
+      "Shift+Alt+M",
+      "Ctrl+Alt+M"
+    ]
+  },
+  {
+    "id": "json.validate",
+    "label": "JSON 校验",
+    "group": "JSON 与代码",
+    "contexts": [
+      "source",
+      "code"
+    ],
+    "defaults": [
+      "Shift+Alt+V",
+      "Ctrl+Alt+V",
+      "Ctrl+Alt+J"
+    ]
+  },
+  {
+    "id": "explorer.rename",
+    "label": "重命名",
+    "group": "资源管理器",
+    "contexts": [
+      "explorer"
+    ],
+    "defaults": [
+      "F2"
+    ]
+  },
+  {
+    "id": "code.syntaxLeft",
+    "label": "向左移动到语法边界",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+ArrowLeft"
+    ]
+  },
+  {
+    "id": "code.syntaxRight",
+    "label": "向右移动到语法边界",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+ArrowRight"
+    ]
+  },
+  {
+    "id": "code.selectSyntaxLeft",
+    "label": "向左选择语法结构",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Shift+Alt+ArrowLeft"
+    ]
+  },
+  {
+    "id": "code.selectSyntaxRight",
+    "label": "向右选择语法结构",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Shift+Alt+ArrowRight"
+    ]
+  },
+  {
+    "id": "code.moveLineUp",
+    "label": "上移当前行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+ArrowUp"
+    ]
+  },
+  {
+    "id": "code.moveLineDown",
+    "label": "下移当前行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+ArrowDown"
+    ]
+  },
+  {
+    "id": "code.copyLineUp",
+    "label": "向上复制行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Shift+Alt+ArrowUp"
+    ]
+  },
+  {
+    "id": "code.copyLineDown",
+    "label": "向下复制行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Shift+Alt+ArrowDown"
+    ]
+  },
+  {
+    "id": "code.cursorAbove",
+    "label": "在上方添加光标",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Alt+ArrowUp"
+    ]
+  },
+  {
+    "id": "code.cursorBelow",
+    "label": "在下方添加光标",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Alt+ArrowDown"
+    ]
+  },
+  {
+    "id": "code.blankLine",
+    "label": "在下方插入空行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Enter"
+    ]
+  },
+  {
+    "id": "code.selectLine",
+    "label": "选择当前行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+L"
+    ]
+  },
+  {
+    "id": "code.indentLess",
+    "label": "减少缩进",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+["
+    ]
+  },
+  {
+    "id": "code.indentMore",
+    "label": "增加缩进",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+]"
+    ]
+  },
+  {
+    "id": "code.indentSelection",
+    "label": "重新缩进选区",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Alt+\\"
+    ]
+  },
+  {
+    "id": "code.deleteLine",
+    "label": "删除当前行",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Shift+K"
+    ]
+  },
+  {
+    "id": "code.matchingBracket",
+    "label": "跳到配对括号",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Shift+\\"
+    ]
+  },
+  {
+    "id": "code.tabFocus",
+    "label": "切换 Tab 焦点导航",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+M"
+    ]
+  },
+  {
+    "id": "code.fold",
+    "label": "折叠代码",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Shift+["
+    ]
+  },
+  {
+    "id": "code.unfold",
+    "label": "展开代码",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Shift+]"
+    ]
+  },
+  {
+    "id": "code.foldAll",
+    "label": "折叠全部",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Alt+["
+    ]
+  },
+  {
+    "id": "code.unfoldAll",
+    "label": "展开全部",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+Alt+]"
+    ]
+  },
+  {
+    "id": "code.redoSelection",
+    "label": "重做选区",
+    "group": "代码编辑",
+    "contexts": [
+      "source",
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Alt+U"
+    ]
+  },
+  {
+    "id": "code.selectParent",
+    "label": "选择父级语法结构",
+    "group": "代码编辑",
+    "contexts": [
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+I"
+    ]
+  },
+  {
+    "id": "code.undoSelection",
+    "label": "撤销选区",
+    "group": "代码编辑",
+    "contexts": [
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+U"
+    ]
+  },
+  {
+    "id": "code.comment",
+    "label": "切换行注释",
+    "group": "代码编辑",
+    "contexts": [
+      "code",
+      "diagram"
+    ],
+    "defaults": [
+      "Ctrl+/"
+    ]
+  }
+]

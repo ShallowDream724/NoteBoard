@@ -1,0 +1,7 @@
+.nb-alignment-trigger { display:inline-flex; align-items:center; gap:2px; padding:4px; height:28px; color:var(--editor-text-secondary); border:0; border-radius:5px; background:transparent; cursor:pointer; }
+.nb-alignment-trigger:hover,.nb-alignment-trigger[data-state=open] { background:var(--toolbar-hover); }
+.nb-alignment-menu { z-index:10010; min-width:170px; max-width:calc(100vw - 16px); padding:5px; background:var(--editor-bg); color:var(--editor-text); border:1px solid var(--editor-border); border-radius:8px; box-shadow:var(--shadow-lg); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); }
+.nb-alignment-menu button { display:flex; width:100%; align-items:center; gap:10px; padding:7px 10px; border:0; border-radius:4px; background:transparent; color:inherit; cursor:pointer; font:inherit; }
+.nb-alignment-menu button span { flex:1; text-align:left; }
+.nb-alignment-menu button:hover,.nb-alignment-menu button:focus-visible { background:var(--toolbar-hover); }
+.nb-alignment-menu hr { border:0; border-top:1px solid var(--editor-border); margin:4px; }

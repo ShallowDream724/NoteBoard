@@ -18,6 +18,7 @@ pub mod staging;
 pub mod favorites;
 pub mod perf;
 pub mod export;
+mod shortcut_probe;
 
 use state::AppState;
 use std::sync::Mutex;
@@ -46,6 +47,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            shortcut_probe::probe_shortcuts,
             export::create_pdf,
             export::pdf_payload,
             export::pdf_layout_started,

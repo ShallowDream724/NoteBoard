@@ -143,6 +143,7 @@ const UnifiedDocumentHistoryKeys = Extension.create<{ docKey: string }>({
 
 import { EnhancedImageBlock } from '../imageNodeView';
 import { ImageAssetLifecycle } from '../imageAssetExtension';
+import { TableSelectionHandles } from '../tableSelectionHandles';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -159,7 +160,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
-    CharacterCount, TableClipboard, TableSizing, CodeHighlight, searchReplaceExtension(),
+    CharacterCount, TableClipboard, TableSizing, TableSelectionHandles, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
       addOptions() { return { suggestion: slashSuggestion }; },

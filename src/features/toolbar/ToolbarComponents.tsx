@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
+import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
 
 // ── 基础工具栏按钮 ──
 
@@ -256,13 +257,14 @@ export interface ToolbarDropdownItemProps {
 export function ToolbarDropdownItem({
   icon,
   label,
-  shortcut,
+  shortcut: defaultShortcut,
   active,
   disabled,
   danger,
   onClick,
   submenu,
 }: ToolbarDropdownItemProps) {
+  const shortcut = useResolvedShortcutLabel(defaultShortcut);
   const [hovered, setHovered] = useState(false);
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [flipLeft, setFlipLeft] = useState(false);

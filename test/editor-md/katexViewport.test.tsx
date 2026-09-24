@@ -1,5 +1,5 @@
 // NoteBoard KaTeX 视口门控集成测试
-// 验证屏外公式不执行 KaTeX，进入预加载范围后才按节点分别渲染。
+// 大文档超出后台预热预算后，进入预加载范围才按节点分别渲染。
 
 import React, { act, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -22,6 +22,7 @@ class ManualIntersectionObserver {
 
   public observe(target: Element): void {
     this.targets.add(target);
+    target.getBoundingClientRect = () => new DOMRect(0, 3000, 80, 30);
   }
 
   public unobserve(target: Element): void {
@@ -38,6 +39,7 @@ class ManualIntersectionObserver {
 
   /** 只激活指定公式节点，其他屏外节点应继续保持 LaTeX 原文占位。 */
   public activate(target: Element): void {
+    target.getBoundingClientRect = () => new DOMRect(0, 40, 80, 30);
     this.callback([
       {
         target,
@@ -47,11 +49,12 @@ class ManualIntersectionObserver {
     ], this as unknown as IntersectionObserver);
   }
   public deactivate(target: Element): void {
+    target.getBoundingClientRect = () => new DOMRect(0, 3000, 80, 30);
     this.callback([{ target, isIntersecting: false, intersectionRatio: 0 } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
   }
 }
 
-it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
+it('超出小文档预热预算的屏外公式延迟到进入预加载范围后渲染', async () => {
   const originalObserver = globalThis.IntersectionObserver;
   const originalAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
@@ -83,11 +86,11 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
     await act(async () => root.render(<Host />));
     expect(activeEditor).not.toBeNull();
     await act(async () => {
-      parseMarkdown(activeEditor as Editor, '首个 $x^2$，第二个 $y^2$。');
+      parseMarkdown(activeEditor as Editor, '首个 $x^2$，第二个 $y^2$。' + Array.from({ length: 511 }, (_, index) => ` $z_{${index}}$`).join(''));
     });
 
     const observer = ManualIntersectionObserver.current;
-    expect(observer?.targets.size).toBe(2);
+    expect(observer?.targets.size).toBe(513);
     expect(host.querySelectorAll('.katex')).toHaveLength(0);
 
     const [firstTarget, secondTarget] = [...observer!.targets];
@@ -113,7 +116,9 @@ it('屏外公式应延迟到进入预加载范围后再渲染', async () => {
     expect(host.querySelector('.katex')).toBe(firstMarkup);
     await act(async () => observer!.deactivate(firstTarget));
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 220)); });
-    expect(host.querySelectorAll('.katex')).toHaveLength(1);
+    // Staying below the resident DOM budget retains already prepared formulas.
+    expect(host.querySelectorAll('.katex')).toHaveLength(2);
+    expect(host.querySelector('.katex')).toBe(firstMarkup);
   } finally {
     await act(async () => root.unmount());
     host.remove();

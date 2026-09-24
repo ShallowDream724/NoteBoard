@@ -1,3 +1,4 @@
+import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // NoteBoard CodeMirror 6 编辑器组件
 // 裸 CM6（new EditorView / EditorState.create），挂载到 DOM
 // 详见 docs/09-开发路线图.md 4.1
@@ -268,6 +269,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     const state = EditorState.create({
       doc: currentDoc.content ?? '',
       extensions: [
+        customCodeMirrorShortcuts('code'),
         unifiedHistoryKeymap,
         ...createBaseExtensions(initialEditorSettings),
         liveEditorSettings,
