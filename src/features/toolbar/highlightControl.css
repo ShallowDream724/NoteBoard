@@ -2,7 +2,7 @@
 .nb-highlight-control button { display:flex; align-items:center; justify-content:center; border:1px solid transparent; background:transparent; color:inherit; cursor:pointer; padding:0; }
 .nb-text-style-group { display:inline-flex; height:28px; border-radius:5px; overflow:hidden; }
 .nb-highlight-apply { width:25px; border-radius:5px 0 0 5px; }
-.nb-text-style-expand { width:15px; border-radius:0 5px 5px 0; }
+.nb-text-style-expand { width:22px; border-radius:0 5px 5px 0; }
 .nb-text-style-expand svg { transition:transform 180ms cubic-bezier(.4,0,.2,1); }
 .nb-highlight-control[data-open] .nb-text-style-expand svg { transform:rotate(180deg); }
 .nb-highlight-control:hover,.nb-highlight-control[data-open],.nb-highlight-control:focus-within { background:var(--toolbar-hover); }
