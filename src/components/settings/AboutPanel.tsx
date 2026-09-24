@@ -17,22 +17,22 @@ export function AboutPanel() {
   return (<div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 18, padding: '24px 0' }}>
     <img src="/logo.ico" alt="NoteBoard Logo" width={56} height={56} />
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 600, margin: '4px 0' }}>NoteBoard</h2>
-      <span style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>Windows 优雅桌面笔记 + 自由画板</span>
+      <h2 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 18 / 13)', fontWeight: 600, margin: '4px 0' }}>NoteBoard</h2>
+      <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)' }}>Windows 优雅桌面笔记 + 自由画板</span>
     </div>
-    <p style={{ fontSize: 12, color: 'var(--editor-text-secondary)', maxWidth: 420, lineHeight: 1.6, margin: '4px 0' }}>
+    <p style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-secondary)', maxWidth: 420, lineHeight: 1.6, margin: '4px 0' }}>
       采用 Rust Tauri v2 原生高性能底座与 TipTap / CodeMirror 6 / Excalidraw 多核驱动。
     </p>
-    <div style={{ fontSize: 12, color: 'var(--editor-text-muted)' }}>
+    <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)' }}>
       版本 v{APP_VERSION} · GPL-3.0 License
     </div>
 
     {hasUpdate && <button type="button" className="nb-btn-secondary" onClick={openModal}
       style={{ color: 'var(--editor-accent)' }}>发现新版本 v{updateResult?.latestVersion} · 查看更新</button>}
-    {!checkingUpdate && checkError && <p role="status" style={{ fontSize: 12, color: 'var(--editor-text-secondary)', maxWidth: 420, margin: 0 }}>{checkError}</p>}
+    {!checkingUpdate && checkError && <p role="status" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-secondary)', maxWidth: 420, margin: 0 }}>{checkError}</p>}
 
     {/* 快捷操作：检测更新与 GitHub 仓库 */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+    <div className="nb-settings-actions" style={{ justifyContent: 'center', gap: 12, marginTop: 8 }}>
       <button
         type="button"
         className="nb-btn-secondary"
@@ -43,7 +43,7 @@ export function AboutPanel() {
           alignItems: 'center',
           gap: 8,
           padding: '8px 18px',
-          fontSize: 13,
+          fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)',
           fontWeight: 500,
           borderRadius: 8,
           border: '1px solid var(--editor-border)',
@@ -97,7 +97,7 @@ export function AboutPanel() {
           alignItems: 'center',
           gap: 8,
           padding: '8px 18px',
-          fontSize: 13,
+          fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)',
           fontWeight: 500,
           borderRadius: 8,
           border: '1px solid var(--editor-border)',

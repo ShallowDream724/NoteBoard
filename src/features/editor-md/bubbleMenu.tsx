@@ -16,7 +16,6 @@ import {
   Underline,
   Strikethrough,
   Code,
-  Highlighter,
   Link2,
   RemoveFormatting,
   Trash2,
@@ -30,6 +29,8 @@ import { handleLinkClick } from './linkHandler';
 import { useWindowStore } from '../../stores/windowStore';
 import { Tooltip } from '../../components/Tooltip';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
+import { HighlightControl } from '../toolbar/HighlightControl';
+import { useFormattingUpdates } from './useFormattingUpdates';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -125,113 +126,7 @@ function MenuDivider() {
   );
 }
 
-/** 高亮预设颜色列表 */
-const HIGHLIGHT_COLORS = [
-  { name: '柠檬黄', color: '#fef08a', border: '#facc15' },
-  { name: '清新绿', color: '#bbf7d0', border: '#4ade80' },
-  { name: '天空蓝', color: '#bfdbfe', border: '#60a5fa' },
-  { name: '浅紫', color: '#e9d5ff', border: '#c084fc' },
-  { name: '蜜桃粉', color: '#fbcfe8', border: '#f472b6' },
-  { name: '暖阳橙', color: '#fed7aa', border: '#fb923c' },
-  { name: '珊瑚红', color: '#fecaca', border: '#f87171' },
-  { name: '湖水青', color: '#a5f3fc', border: '#22d3ee' },
-];
 
-/** 多色高亮调色盘组件 */
-function HighlightPalette({
-  editor,
-  onClose,
-}: {
-  editor: Editor;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      onMouseDown={(e) => e.stopPropagation()}
-      style={{
-        background: 'var(--editor-surface, #ffffff)',
-        border: '1px solid var(--editor-border, rgba(0,0,0,0.12))',
-        borderRadius: 8,
-        boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.15), 0 2px 6px -1px rgba(0, 0, 0, 0.08)',
-        padding: '8px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        minWidth: 180,
-        maxWidth: 'calc(100vw - 16px)',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--editor-text-secondary, #64748b)', paddingLeft: 2 }}>
-        选择高亮背景颜色
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-        {HIGHLIGHT_COLORS.map((item) => (
-          <Tooltip key={item.color} content={item.name} side="top" sideOffset={4}>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                editor.chain().focus().toggleHighlight({ color: item.color }).run();
-                onClose();
-              }}
-              style={{
-                width: 32,
-                height: 26,
-                background: item.color,
-                border: `1px solid ${item.border}`,
-                borderRadius: 4,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'transform 100ms ease',
-              }}
-              aria-label={item.name}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'scale(1.1)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              {editor.isActive('highlight', { color: item.color }) && (
-                <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.6)', fontWeight: 'bold' }}>✓</span>
-              )}
-            </button>
-          </Tooltip>
-        ))}
-      </div>
-      <button
-        type="button"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => {
-          editor.chain().focus().unsetHighlight().run();
-          onClose();
-        }}
-        style={{
-          marginTop: 2,
-          padding: '4px 8px',
-          border: '1px solid var(--editor-border, rgba(0,0,0,0.1))',
-          borderRadius: 4,
-          background: 'transparent',
-          color: 'var(--editor-text-secondary, #64748b)',
-          cursor: 'pointer',
-          fontSize: 12,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 4,
-        }}
-      >
-        <X size={13} />
-        <span>清除高亮</span>
-      </button>
-    </div>
-  );
-}
-
-/** 从编辑器向外查找真正承载滚动的容器 */
 
 /** 判断当前选区是否为表格跨单元格多选（CellSelection） */
 function isCellSelection(selection: unknown): boolean {
@@ -258,6 +153,7 @@ export function EditorBubbleMenu({
     if (!enabled && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
   }, [editor, enabled]);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  useFormattingUpdates(editor, enabled);
   const preferredPosition = useSettingsStore(state => state.settings.editor.selectionToolbarPosition ?? 'below');
 
   // TipTap 3.30 的 BubbleMenu 会在 shouldShow/options 引用变化时派发更新事务。
@@ -369,44 +265,11 @@ export function EditorBubbleMenu({
           active={editor.isActive('code')}
         />
 
-        {/* 多色高亮按钮与调色盘 */}
-        <DropdownMenu.Root open={showColorPicker} onOpenChange={setShowColorPicker} modal={false}>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              style={{
-                height: 32,
-                padding: '0 6px',
-                border: 'none',
-                background: editor.isActive('highlight')
-                  ? 'var(--editor-selection-background, rgba(59, 130, 246, 0.15))'
-                  : showColorPicker
-                  ? 'var(--editor-hover-background, rgba(0,0,0,0.06))'
-                  : 'transparent',
-                color: editor.isActive('highlight') ? 'var(--accent-500, #3b82f6)' : 'var(--editor-text)',
-                cursor: 'pointer',
-                borderRadius: 6,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 2,
-                transition: 'all 120ms ease',
-              }}
-              aria-label="文本多色高亮"
-              title="文本多色高亮"
-            >
-              <Highlighter size={16} />
-              <ChevronDown size={12} style={{ opacity: 0.7 }} />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content side="bottom" align="center" sideOffset={6} collisionPadding={8}
-              onCloseAutoFocus={(event) => event.preventDefault()}
-              style={{ zIndex: 1010, maxHeight: 'var(--radix-dropdown-menu-content-available-height)', overflowY: 'auto', outline: 'none' }}>
-              <HighlightPalette editor={editor} onClose={() => setShowColorPicker(false)} />
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <HighlightControl open={showColorPicker} onOpenChange={setShowColorPicker}
+          active={editor.isActive('highlight')} currentColor={editor.getAttributes('highlight').color}
+          onApply={color => editor.chain().focus().setHighlight({ color }).run()}
+          onReturnToEditor={() => editor.commands.focus()}
+          onRemove={() => { editor.chain().focus().unsetHighlight().run(); setShowColorPicker(false); }}/>
 
         <MenuDivider />
 

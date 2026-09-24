@@ -39,7 +39,7 @@ export function ExportPanel() {
     <div role="status" style={{ marginTop: 16, lineHeight: 1.6, userSelect: 'text' }}>
       {detection.checking ? '正在查找 Pandoc…' : detection.error || (detection.result?.available
         ? <><span>{path ? '当前程序' : '自动找到'} · {detection.result.version}</span>
-          <code style={{ display: 'block', marginTop: 4, fontSize: 12, color: 'var(--editor-text-secondary)', overflowWrap: 'anywhere' }}>{detection.result.resolvedPath}</code></>
+          <code style={{ display: 'block', marginTop: 4, fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-secondary)', overflowWrap: 'anywhere' }}>{detection.result.resolvedPath}</code></>
         : path ? '所选程序无法运行，请检查路径。' : '未找到 Pandoc，请选择程序或安装。')}
     </div>
     {error && <p role="alert" style={{ color: 'var(--error-500)', overflowWrap: 'anywhere', userSelect: 'text' }}>{error}</p>}

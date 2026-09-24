@@ -7,7 +7,7 @@
 
 import { AlertNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
-import { TextSelection } from '@tiptap/pm/state';
+import { completeAlert } from './alertCommands';
 import { useState } from 'react';
 import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
 
@@ -93,12 +93,7 @@ export const GitHubAlert = AlertNode.extend({
           || $from.node(-1).type.name !== 'blockquote' || $from.node(-1).childCount !== 1) return false;
         const match = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/i.exec($from.parent.textContent.trim());
         if (!match) return false;
-        const pos = $from.before($from.depth - 1);
-        const tr = state.tr.replaceWith(pos, $from.after($from.depth - 1),
-          this.type.create({ kind: match[1].toLowerCase() }, this.editor.schema.nodes.paragraph.create()));
-        tr.setSelection(TextSelection.create(tr.doc, pos + 2));
-        view.dispatch(tr.scrollIntoView());
-        return true;
+        return completeAlert(this.editor, match[1].toLowerCase() as AlertKind);
       },
     };
   },

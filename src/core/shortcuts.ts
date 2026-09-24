@@ -119,11 +119,6 @@ export function shouldPreventBrowserDefault(e: KeyboardEvent): boolean {
 /** 初始化全局键盘监听 */
 export function initShortcuts(): () => void {
   const handler = (e: KeyboardEvent) => {
-    // 优先阻止浏览器默认行为
-    if (shouldPreventBrowserDefault(e)) {
-      e.preventDefault();
-    }
-
     const key = eventToKey(e);
     if ((e.target as HTMLElement | null)?.closest?.('[data-shortcuts-suspended]')) return;
     // 按作用域优先级查找：当前作用域 > global
@@ -141,8 +136,18 @@ export function initShortcuts(): () => void {
     }
   };
 
+  // Editor keymaps must see an unconsumed event (Ctrl+U is underline there).
+  // Shell commands still run in capture; browser-only fallbacks are cancelled
+  // after the focused editor has had a chance to handle the key.
+  const preventBrowserFallback = (event: KeyboardEvent) => {
+    if (shouldPreventBrowserDefault(event)) event.preventDefault();
+  };
   window.addEventListener('keydown', handler, true);
-  return () => window.removeEventListener('keydown', handler, true);
+  window.addEventListener('keydown', preventBrowserFallback);
+  return () => {
+    window.removeEventListener('keydown', handler, true);
+    window.removeEventListener('keydown', preventBrowserFallback);
+  };
 }
 
 /** 获取全部已注册的快捷键（用于设置界面只读列表） */

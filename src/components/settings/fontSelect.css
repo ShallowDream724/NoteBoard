@@ -1,0 +1,21 @@
+.nb-font-select { display:flex; min-width:0; width:100%; box-sizing:border-box; border:1px solid var(--editor-border); border-radius:var(--radius-sm); background:var(--editor-surface); }
+.nb-font-select[data-open], .nb-font-select:focus-within { border-color:var(--editor-accent); }
+.nb-font-trigger { display:flex; flex:1; align-items:center; min-width:0; gap:6px; padding:6px 10px; background:transparent; color:var(--editor-text); border:0; border-radius:inherit; font:inherit; text-align:left; cursor:pointer; }
+.nb-font-name { display:block; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nb-font-select svg, .nb-font-menu svg { flex-shrink:0; }
+.nb-font-reset { display:flex; align-items:center; align-self:center; flex-shrink:0; margin-right:5px; padding:4px; border:0; border-radius:50%; color:var(--editor-text-muted); background:transparent; cursor:pointer; }
+.nb-font-reset:hover { background:var(--toolbar-hover); color:var(--editor-text); }
+.nb-font-menu { z-index:10002; display:flex; flex-direction:column; width:max(var(--radix-popover-trigger-width),20em); max-width:calc(100vw - 24px); height:min(22em,var(--radix-popover-content-available-height)); max-height:calc(100dvh - 24px); min-height:0; border:1px solid var(--editor-border); border-radius:var(--radius-md); background:var(--editor-bg); box-shadow:var(--shadow-lg); overflow:hidden; }
+.nb-font-search { display:flex; align-items:center; gap:8px; padding:8px 10px; flex-shrink:0; border-bottom:1px solid var(--editor-border); }
+.nb-font-search input { flex:1; min-width:0; width:100%; border:0; outline:0; background:transparent; color:inherit; font:inherit; }
+.nb-font-categories { display:flex; flex-wrap:wrap; gap:4px; padding:6px; flex-shrink:0; border-bottom:1px solid var(--editor-border); }
+.nb-font-categories button { flex:1; min-width:0; padding:3px 6px; border:0; border-radius:4px; font:inherit; background:transparent; color:var(--editor-text-secondary); cursor:pointer; }
+.nb-font-categories button[aria-pressed="true"] { background:var(--editor-selection); color:var(--accent-strong); }
+.nb-font-list { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.nb-font-option { display:flex; align-items:center; gap:8px; width:100%; box-sizing:border-box; min-height:2.6em; padding:6px 12px; border:0; background:transparent; color:inherit; text-align:left; font:inherit; cursor:pointer; }
+.nb-font-option:hover, .nb-font-option[data-active] { background:var(--toolbar-hover); }
+.nb-font-option[aria-selected="true"] { color:var(--accent-strong); }
+.nb-font-option small { flex-shrink:0; color:var(--editor-text-muted); }
+.nb-font-status { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:8px 12px; font-size:var(--settings-font-sm); }
+.nb-font-custom { flex-shrink:0; max-width:100%; padding:8px 12px; border:0; border-top:1px solid var(--editor-border); background:var(--editor-surface); color:var(--accent-strong); font:inherit; cursor:pointer; overflow-wrap:anywhere; }
+.nb-font-menu :where(button,input):focus-visible { outline:2px solid var(--editor-accent); outline-offset:-2px; }

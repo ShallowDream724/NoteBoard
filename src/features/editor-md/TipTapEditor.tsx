@@ -30,6 +30,7 @@ import { judgeLargeDoc } from './largeDoc';
 import { nbEditorTheme } from '../editor-code/theme';
 import { nbSyntaxHighlighting } from '../editor-code/highlightStyle';
 import { createBaseExtensions, typographyCompartment } from '../editor-code/setup';
+import { sourceTypingAssist } from './sourceTypingAssist';
 import { liveEditorSettings } from '../editor-code/editorSettingsBinding';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
@@ -341,6 +342,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
     // 源码模式输入监听与自动标脏
     const updateListener = EditorView.updateListener.of((update) => {
+      if (update.docChanged || update.selectionSet) emit('md-source-selection-changed', { key: docKey });
       if (!update.docChanged || update.transactions.some(transaction => transaction.annotation(sourceReplacement))) return;
       // 🔴 内容版本递增：源码模式真实修改同样推进 revision
       bumpDocumentRevision(docKey);
@@ -417,6 +419,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         ...createBaseExtensions(useSettingsStore.getState().settings.editor),
         liveEditorSettings,
         markdown(),
+        sourceTypingAssist,
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
         markdownPlainBracketExtension,
         nbSyntaxHighlighting,

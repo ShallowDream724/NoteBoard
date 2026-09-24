@@ -2,9 +2,10 @@
 // 适用于 Markdown 可视化与源码模式
 // 支持多级下拉菜单、实时 Active/Hover 状态同步、撤销/重做与丰富排版格式化工具
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { Editor } from '@tiptap/core';
-import type { Transaction } from '@tiptap/pm/state';
+import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
+import { formatSourceMark, setSourceHeading, sourceMarkRange } from '../editor-md/sourceFormatting';
 import {
   Undo2,
   Redo2,
@@ -21,7 +22,6 @@ import {
   Underline,
   Strikethrough,
   Code,
-  Highlighter,
   List,
   ListOrdered,
   CheckSquare,
@@ -49,7 +49,6 @@ import {
   ToolbarDivider,
   ToolbarDropdown,
   ToolbarDropdownItem,
-  HighlightColorPicker,
 } from './ToolbarComponents';
 import {
   undoDocumentHistory,
@@ -62,6 +61,7 @@ import { getMdTipTapEditor as getActiveTipTapEditor, getMdSourceView as getActiv
 import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
+import { HighlightControl } from './HighlightControl';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -75,26 +75,10 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const isSourceMode = viewMode === 'source';
   const { canUndo, canRedo } = useDocumentHistory(docKey);
 
-  // 状态更新标识（促使 TipTap 选区变化时刷新 Active 状态）
-  const [, setTick] = useState(0);
-  const forceUpdate = useCallback(() => setTick((t) => (t + 1) % 100000), []);
-
-  // 监听 TipTap 编辑器事务与选区变化
-  useEffect(() => {
-    if (!editor || isSourceMode) return;
-    let frame = 0;
-    const handleTransaction = ({ transaction }: { transaction: Transaction }) => {
-      // Highlight/viewport decorations carry no formatting state. Do not make
-      // every lazy preview update rebuild the full toolbar React tree.
-      if (!transaction.docChanged && !transaction.selectionSet && !transaction.storedMarksSet) return;
-      if (!frame) frame = requestAnimationFrame(() => { frame = 0; forceUpdate(); });
-    };
-    editor.on('transaction', handleTransaction);
-    return () => {
-      cancelAnimationFrame(frame);
-      editor.off('transaction', handleTransaction);
-    };
-  }, [editor, isSourceMode, forceUpdate]);
+  useFormattingUpdates(editor, !isSourceMode);
+  useSourceFormattingUpdates(docKey, isSourceMode);
+  const sourceView = isSourceMode ? getActiveSourceView(docKey) : undefined;
+  const sourceHighlight = sourceView ? sourceMarkRange(sourceView, 'highlight') : null;
 
   // 下拉菜单开闭状态
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
@@ -126,17 +110,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleSetHeading = (level: number | 'paragraph') => {
     setHeadingDropdownOpen(false);
     if (isSourceMode) {
-      executeSourceAction((view) => {
-        const { from } = view.state.selection.main;
-        const line = view.state.doc.lineAt(from);
-        const lineText = line.text;
-        const cleaned = lineText.replace(/^#{1,6}\s+/, '');
-        const newPrefix = level === 'paragraph' ? '' : '#'.repeat(level) + ' ';
-        view.dispatch({
-          changes: { from: line.from, to: line.to, insert: newPrefix + cleaned },
-          scrollIntoView: true,
-        });
-      });
+      executeSourceAction(view => setSourceHeading(view, level === 'paragraph' ? 0 : level));
       return;
     }
     if (!editor) return;
@@ -162,11 +136,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         const { from, to, empty } = view.state.selection.main;
         const selText = view.state.sliceDoc(from, to);
         if (mark === 'underline') {
-          const insert = `<u>${selText}</u>`;
-          view.dispatch({
-            changes: { from, to, insert },
-            selection: empty ? { anchor: from + 3 } : { anchor: from, head: from + insert.length },
-          });
+          formatSourceMark(view, 'underline');
         } else {
           const insert = `${sym}${selText}${sym}`;
           view.dispatch({
@@ -222,21 +192,17 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleSelectHighlightColor = (color: string) => {
     setHighlightDropdownOpen(false);
     if (isSourceMode) {
-      executeSourceAction((view) => {
-        const { from, to } = view.state.selection.main;
-        const selText = view.state.sliceDoc(from, to);
-        const insert = `<mark style="background: ${color}">${selText}</mark>`;
-        view.dispatch({ changes: { from, to, insert } });
-      });
+      executeSourceAction(view => formatSourceMark(view, 'highlight', color));
       return;
     }
     if (!editor) return;
-    editor.chain().focus().toggleHighlight({ color }).run();
+    editor.chain().focus().setHighlight({ color }).run();
   };
 
   const handleRemoveHighlight = () => {
     setHighlightDropdownOpen(false);
-    if (!editor || isSourceMode) return;
+    if (isSourceMode) { executeSourceAction(view => formatSourceMark(view, 'highlight', undefined, true)); return; }
+    if (!editor) return;
     editor.chain().focus().unsetHighlight().run();
   };
 
@@ -544,49 +510,49 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Pilcrow size={14} />}
           label="正文段落"
-          shortcut="Ctrl+Alt+0"
+          shortcut="Ctrl+0"
           active={currentHeadingLabel === '正文'}
           onClick={() => handleSetHeading('paragraph')}
         />
         <ToolbarDropdownItem
           icon={<Heading1 size={14} />}
           label="一级标题 (H1)"
-          shortcut="Ctrl+Alt+1"
+          shortcut="Ctrl+1"
           active={currentHeadingLabel === 'H1'}
           onClick={() => handleSetHeading(1)}
         />
         <ToolbarDropdownItem
           icon={<Heading2 size={14} />}
           label="二级标题 (H2)"
-          shortcut="Ctrl+Alt+2"
+          shortcut="Ctrl+2"
           active={currentHeadingLabel === 'H2'}
           onClick={() => handleSetHeading(2)}
         />
         <ToolbarDropdownItem
           icon={<Heading3 size={14} />}
           label="三级标题 (H3)"
-          shortcut="Ctrl+Alt+3"
+          shortcut="Ctrl+3"
           active={currentHeadingLabel === 'H3'}
           onClick={() => handleSetHeading(3)}
         />
         <ToolbarDropdownItem
           icon={<Heading4 size={14} />}
           label="四级标题 (H4)"
-          shortcut="Ctrl+Alt+4"
+          shortcut="Ctrl+4"
           active={currentHeadingLabel === 'H4'}
           onClick={() => handleSetHeading(4)}
         />
         <ToolbarDropdownItem
           icon={<Heading5 size={14} />}
           label="五级标题 (H5)"
-          shortcut="Ctrl+Alt+5"
+          shortcut="Ctrl+5"
           active={currentHeadingLabel === 'H5'}
           onClick={() => handleSetHeading(5)}
         />
         <ToolbarDropdownItem
           icon={<Heading6 size={14} />}
           label="六级标题 (H6)"
-          shortcut="Ctrl+Alt+6"
+          shortcut="Ctrl+6"
           active={currentHeadingLabel === 'H6'}
           onClick={() => handleSetHeading(6)}
         />
@@ -635,25 +601,15 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         onClick={() => toggleMark('code')}
       />
 
-      {/* ── 文本高亮与调色盘下拉（二级调色盘） ── */}
-      <ToolbarDropdown
+      <HighlightControl
         collapsePriority={40}
-        isOpen={highlightDropdownOpen}
+        open={highlightDropdownOpen}
         onOpenChange={setHighlightDropdownOpen}
-        trigger={
-          <ToolbarButton
-            icon={<Highlighter size={15} />}
-            title="文本高亮"
-            hasDropdown
-            active={!isSourceMode && Boolean(editor?.isActive('highlight'))}
-          />
-        }
-      >
-        <HighlightColorPicker
-          onSelectColor={handleSelectHighlightColor}
-          onRemoveHighlight={handleRemoveHighlight}
-        />
-      </ToolbarDropdown>
+        active={isSourceMode ? sourceHighlight !== null : Boolean(editor?.isActive('highlight'))}
+        currentColor={isSourceMode ? sourceHighlight?.color : editor?.getAttributes('highlight').color}
+        onApply={handleSelectHighlightColor} onRemove={handleRemoveHighlight}
+        onReturnToEditor={() => { if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.commands.focus(); }}
+      />
 
       <ToolbarDivider />
 

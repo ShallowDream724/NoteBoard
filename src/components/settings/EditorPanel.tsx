@@ -7,24 +7,24 @@ export function EditorPanel() {
   const { settings, setEditor } = useSettingsStore();
   return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
     <div>
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>编辑器与代码设置</h3>
-      <p style={{ fontSize: 12, color: 'var(--editor-text-muted)', margin: 0 }}>
+      <h3 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)', fontWeight: 600, marginBottom: 4 }}>编辑器与代码设置</h3>
+      <p style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', margin: 0 }}>
         配置纯文本、SQL、JSON 等代码编辑器的显示效果及 Markdown 增强选项。
       </p>
     </div>
 
     {/* ── 3.1 代码与纯文本展示 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
         <FileCode size={15} color="var(--accent-strong)" />
         <span>代码与纯文本展示 (.txt / .sql / .json / .yaml 等)</span>
       </div>
 
       {/* 显示空格（显示为点） */}
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
         <div>
           <div>显示空格（点）</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>将文本中的空格显示为轻柔圆点标记，制表符显示为箭头</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>将文本中的空格显示为轻柔圆点标记，制表符显示为箭头</div>
         </div>
         <input
           type="checkbox"
@@ -34,10 +34,10 @@ export function EditorPanel() {
       </label>
 
       {/* 显示换行符（↵） */}
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
         <div>
           <div>显示换行符号 (↵)</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>在各行末尾显示 ↵ 换行指示符号</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在各行末尾显示 ↵ 换行指示符号</div>
         </div>
         <input
           type="checkbox"
@@ -47,10 +47,10 @@ export function EditorPanel() {
       </label>
 
       {/* 显示行号 */}
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
         <div>
           <div>显示行号</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>在左侧边栏展示代码行号及活动行高亮</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在左侧边栏展示代码行号及活动行高亮</div>
         </div>
         <input
           type="checkbox"
@@ -60,10 +60,10 @@ export function EditorPanel() {
       </label>
 
       {/* 软换行 */}
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
         <div>
           <div>软换行 (自动折行)</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>超出编辑器可视宽度时自动折行，避免横向滚动</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>超出编辑器可视宽度时自动折行，避免横向滚动</div>
         </div>
         <input
           type="checkbox"
@@ -73,10 +73,10 @@ export function EditorPanel() {
       </label>
 
       {/* 缩进导线 */}
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
         <div>
           <div>缩进参考导线</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>在代码层级之间显示垂直虚线导线</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在代码层级之间显示垂直虚线导线</div>
         </div>
         <input
           type="checkbox"
@@ -88,15 +88,15 @@ export function EditorPanel() {
 
     {/* ── 3.2 缩进与编辑参数 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
         <FileText size={15} color="var(--accent-strong)" />
         <span>缩进与通用选项</span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+      <div className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', padding: '2px 0' }}>
         <div>
           <div>Tab 缩进宽度</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>每个 Tab 对应的空格数量</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>每个 Tab 对应的空格数量</div>
         </div>
         <input
           type="number"
@@ -104,14 +104,14 @@ export function EditorPanel() {
           max="8"
           value={settings.editor.tabSize}
           onChange={(e) => setEditor({ tabSize: Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 2)) })}
-          style={{ ...inputStyle, width: 60, textAlign: 'center' }}
+          style={{ ...inputStyle, width: '5em', textAlign: 'center' }}
         />
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '2px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
         <div>
           <div>空格代替 Tab</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>按下 Tab 键时插入对应数量的空格</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>按下 Tab 键时插入对应数量的空格</div>
         </div>
         <input
           type="checkbox"
@@ -120,15 +120,15 @@ export function EditorPanel() {
         />
       </label>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, padding: '2px 0' }}>
+      <div className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', padding: '2px 0' }}>
         <div>
           <div>Markdown 默认视图模式</div>
-          <div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>新打开 Markdown 文档时的初始模式</div>
+          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>新打开 Markdown 文档时的初始模式</div>
         </div>
         <select
           value={settings.editor.defaultViewMode}
           onChange={(e) => setEditor({ defaultViewMode: e.target.value as 'visual' | 'source' })}
-          style={{ ...inputStyle, width: 110 }}
+          style={{ ...inputStyle, width: '10em' }}
         >
           <option value="visual">可视化模式</option>
           <option value="source">源码模式</option>
@@ -138,20 +138,20 @@ export function EditorPanel() {
 
     {/* ── 3.3 Markdown 渲染增强 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--accent-strong)' }}>
+      <div style={{ fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', color: 'var(--accent-strong)' }}>
         Markdown 增强功能
       </div>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
         <span>选区工具栏位置</span>
         <select value={settings.editor.selectionToolbarPosition ?? 'below'}
           onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })}
-          style={{ ...inputStyle, width: 110 }}>
+          style={{ ...inputStyle, width: '10em' }}>
           <option value="below">选区下方</option><option value="above">选区上方</option>
         </select>
       </label>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '2px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
         <span>LaTeX 数学公式渲染 (KaTeX)</span>
         <input
           type="checkbox"
@@ -160,7 +160,7 @@ export function EditorPanel() {
         />
       </label>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '2px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
         <span>Mermaid 图表实时渲染</span>
         <input
           type="checkbox"
@@ -169,7 +169,7 @@ export function EditorPanel() {
         />
       </label>
 
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13, cursor: 'pointer', padding: '2px 0' }}>
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
         <span>悬浮块把手 (拖拽与菜单)</span>
         <input
           type="checkbox"

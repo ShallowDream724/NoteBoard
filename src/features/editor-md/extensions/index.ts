@@ -18,6 +18,8 @@ import { PlantUmlBlock } from '../../plantuml/plantumlExtension';
 import { InfographicBlock } from '../infographicExtension';
 import { GitHubAlert } from '../alertExtension';
 import { slashSuggestion } from '../slashCommand';
+import { MarkdownTypingKeys } from '../typingAssist';
+import { AlertCompletion } from '../alertCompletion';
 
 import { handleLinkClick } from '../linkHandler';
 import { TableClipboard } from '../tableClipboard';
@@ -153,7 +155,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
       mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
       infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow,
       table: MarkdownTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
-    UnifiedDocumentHistoryKeys.configure({ docKey }),
+    UnifiedDocumentHistoryKeys.configure({ docKey }), MarkdownTypingKeys, AlertCompletion,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),

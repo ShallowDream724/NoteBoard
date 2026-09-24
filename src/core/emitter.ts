@@ -17,6 +17,7 @@ export type AppEvents = {
   'panel-toggled': { panel: 'explorer' | 'outline'; visible: boolean };
   // 编辑器模式切换
   'view-mode-changed': { key: string; mode: 'visual' | 'source' };
+  'md-source-selection-changed': { key: string };
   // 请求切换 Markdown 编辑器模式（可视化 / 源码）
   'toggle-md-view-mode': { key?: string; mode?: 'visual' | 'source' };
   // 请求唤起超链接插入/编辑弹窗

@@ -3,38 +3,8 @@ export function NavBtn({ active, icon, label, onClick }: { active: boolean; icon
     <button
       type="button"
       onClick={onClick}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '9px 12px',
-        border: 'none',
-        borderRadius: 'var(--radius-sm)',
-        background: active ? 'var(--editor-selection)' : 'transparent',
-        color: active ? 'var(--accent-strong)' : 'var(--editor-text)',
-        fontWeight: active ? 600 : 400,
-        fontSize: 13,
-        cursor: 'pointer',
-        textAlign: 'left',
-        transition: 'all var(--transition-fast)',
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = 'var(--toolbar-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.background = 'transparent';
-        }
-        e.currentTarget.style.transform = 'scale(1)';
-      }}
-      onMouseDown={(e) => {
-        e.currentTarget.style.transform = 'scale(0.97)';
-      }}
-      onMouseUp={(e) => {
-        e.currentTarget.style.transform = 'scale(1)';
-      }}
+      className="nb-settings-nav-button"
+      aria-current={active ? 'page' : undefined}
     >
       {icon}
       <span>{label}</span>
@@ -44,30 +14,9 @@ export function NavBtn({ active, icon, label, onClick }: { active: boolean; icon
 
 export function ShortcutItem({ keyCombo, label }: { keyCombo: string; label: string }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 12px',
-        background: 'var(--editor-surface)',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--editor-border)',
-        fontSize: 12,
-      }}
-    >
+    <div className="nb-settings-shortcut">
       <span style={{ color: 'var(--editor-text)' }}>{label}</span>
-      <kbd
-        style={{
-          padding: '2px 6px',
-          background: 'var(--editor-bg)',
-          border: '1px solid var(--editor-border)',
-          borderRadius: 3,
-          fontFamily: 'var(--mono-font-family)',
-          fontSize: 11,
-          color: 'var(--editor-text-secondary)',
-        }}
-      >
+      <kbd>
         {keyCombo}
       </kbd>
     </div>
@@ -75,25 +24,27 @@ export function ShortcutItem({ keyCombo, label }: { keyCombo: string; label: str
 }
 
 export const formRowStyle: React.CSSProperties = {
+  minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
   gap: 6,
 };
 
 export const labelStyle: React.CSSProperties = {
-  fontSize: 12.5,
+  fontSize: 'calc(var(--ui-font-size, 13px) * 12.5 / 13)',
   fontWeight: 500,
   color: 'var(--editor-text)',
 };
 
 export const inputStyle: React.CSSProperties = {
+  minWidth: 0,
+  maxWidth: '100%',
   padding: '6px 10px',
-  fontSize: 12,
+  fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)',
   border: '1px solid var(--editor-border)',
   borderRadius: 'var(--radius-sm)',
   background: 'var(--editor-surface)',
   color: 'var(--editor-text)',
-  outline: 'none',
   width: '100%',
   boxSizing: 'border-box',
 };

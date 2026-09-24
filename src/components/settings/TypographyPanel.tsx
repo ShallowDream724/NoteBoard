@@ -10,8 +10,8 @@ export function TypographyPanel() {
   const { settings, setTypography } = useSettingsStore();
   return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
     <div>
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>排版参数自定义</h3>
-      <p style={{ fontSize: 12, color: 'var(--editor-text-muted)', margin: 0 }}>
+      <h3 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)', fontWeight: 600, marginBottom: 4 }}>排版参数自定义</h3>
+      <p style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', margin: 0 }}>
         独立配置软件界面、Markdown 正文、代码与纯文本以及文件树的排版与版心宽度参数。
       </p>
     </div>
@@ -21,19 +21,20 @@ export function TypographyPanel() {
 
     {/* ── 2.1 软件界面 UI 排版 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div className="nb-settings-section-heading">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
           <LayoutTemplate size={15} color="var(--accent-strong)" />
           <span>软件界面 UI 排版 (全局界面 / 弹窗 / 提示 / 菜单)</span>
         </div>
-        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>作用于标题栏、标签栏、设置中心、状态栏与全局 UI</span>
+        <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>作用于标题栏、标签栏、设置中心、状态栏与全局 UI</span>
       </div>
 
       {/* 界面 UI 中西双字体配置 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>界面西文字体 (英文/数字)</label>
           <FontSelect
+            label="界面西文字体"
             value={settings.typography.uiFontFamily ?? ''}
             filterType="en"
             placeholder="系统默认西文字体 (如: Segoe UI, Inter)"
@@ -43,6 +44,7 @@ export function TypographyPanel() {
         <div style={formRowStyle}>
           <label style={labelStyle}>界面中文字体 (汉字/全角)</label>
           <FontSelect
+            label="界面中文字体"
             value={settings.typography.uiFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统默认中文字体 (如: Microsoft YaHei UI, 苹方)"
@@ -64,7 +66,7 @@ export function TypographyPanel() {
             onChange={(e) => setTypography({ uiFontSize: parseInt(e.target.value, 10) })}
             style={{ flex: 1, cursor: 'pointer' }}
           />
-          <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', minWidth: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
             {settings.typography.uiFontSize ?? 13}px
           </span>
         </div>
@@ -73,16 +75,17 @@ export function TypographyPanel() {
 
     {/* ── 2.2 Markdown 正文排版 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
         <FileText size={15} color="var(--accent-strong)" />
         <span>Markdown 正文排版</span>
       </div>
 
       {/* 正文中西双字体配置 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>正文西文字体 (英文/数字)</label>
           <FontSelect
+            label="正文西文字体"
             value={settings.typography.contentFontFamily}
             filterType="en"
             placeholder="系统默认西文字体 (如: Georgia, Inter, Segoe UI)"
@@ -92,6 +95,7 @@ export function TypographyPanel() {
         <div style={formRowStyle}>
           <label style={labelStyle}>正文中文字体 (汉字/全角)</label>
           <FontSelect
+            label="正文中文字体"
             value={settings.typography.contentFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统默认中文字体 (如: 微软雅黑, 霞鹜文楷, 楷体)"
@@ -101,7 +105,7 @@ export function TypographyPanel() {
       </div>
 
       {/* 正文字号与行高 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>正文字号 ({settings.typography.contentFontSize}px)</label>
           <input
@@ -133,7 +137,7 @@ export function TypographyPanel() {
         <label style={labelStyle}>Markdown 编辑区最大宽度 (默认宽屏 92%)</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
           {/* 预设档位按钮 */}
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="nb-settings-presets">
             {(['narrow', 'standard', 'wide', 'full'] as const).map((w) => {
               const labels: Record<string, string> = {
                 narrow: '窄 (65%)',
@@ -153,7 +157,7 @@ export function TypographyPanel() {
                   style={{
                     flex: 1,
                     padding: '7px 10px',
-                    fontSize: 12,
+                    fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)',
                     borderRadius: 'var(--radius-sm)',
                     border: isSelected ? '1px solid var(--accent-strong)' : '1px solid var(--editor-border)',
                     background: isSelected ? 'var(--editor-selection)' : 'var(--editor-bg)',
@@ -202,7 +206,7 @@ export function TypographyPanel() {
               }}
               style={{ flex: 1, cursor: 'pointer' }}
             />
-            <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {contentWidthToPercent(settings.typography.contentWidth ?? 'wide')}%
             </span>
           </div>
@@ -212,19 +216,20 @@ export function TypographyPanel() {
 
     {/* ── 2.3 代码与纯文本排版 ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div className="nb-settings-section-heading">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
           <FileCode size={15} color="var(--accent-strong)" />
           <span>代码与纯文本排版 (.sql / .txt / .json / 代码块)</span>
         </div>
-        <span style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>支持 Ctrl + 滚轮 快速缩放</span>
+        <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>支持 Ctrl + 滚轮 快速缩放</span>
       </div>
 
       {/* 代码等宽中西双字体配置 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>代码西文等宽字体</label>
           <FontSelect
+            label="代码西文字体"
             value={settings.typography.monoFontFamily}
             placeholder="Consolas, Cascadia Code, JetBrains Mono"
             filterType="mono"
@@ -235,6 +240,7 @@ export function TypographyPanel() {
         <div style={formRowStyle}>
           <label style={labelStyle}>代码中文等宽/中文字体</label>
           <FontSelect
+            label="代码中文字体"
             value={settings.typography.monoFontFamilyZh ?? ''}
             placeholder="Microsoft YaHei UI, 微软雅黑, 等宽中文"
             filterType="zh"
@@ -244,7 +250,7 @@ export function TypographyPanel() {
       </div>
 
       {/* 代码字号与行高 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>代码字号 ({settings.typography.monoFontSize ?? 14}px)</label>
           <input
@@ -276,7 +282,7 @@ export function TypographyPanel() {
         <label style={labelStyle}>代码 / 纯文本编辑区最大宽度 (默认全宽 100%)</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
           {/* 预设档位按钮 */}
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="nb-settings-presets">
             {(['narrow', 'standard', 'wide', 'full'] as const).map((w) => {
               const labels: Record<string, string> = {
                 narrow: '窄 (65%)',
@@ -296,7 +302,7 @@ export function TypographyPanel() {
                   style={{
                     flex: 1,
                     padding: '7px 10px',
-                    fontSize: 12,
+                    fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)',
                     borderRadius: 'var(--radius-sm)',
                     border: isSelected ? '1px solid var(--accent-strong)' : '1px solid var(--editor-border)',
                     background: isSelected ? 'var(--editor-selection)' : 'var(--editor-bg)',
@@ -345,7 +351,7 @@ export function TypographyPanel() {
               }}
               style={{ flex: 1, cursor: 'pointer' }}
             />
-            <span style={{ fontSize: 12, color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', minWidth: 42, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               {contentWidthToPercent(settings.typography.monoContentWidth ?? 'full')}%
             </span>
           </div>
@@ -355,18 +361,19 @@ export function TypographyPanel() {
 
     {/* ── 2.5 文件树排版（资源管理器） ── */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 13 }}>
+      <div className="nb-settings-section-heading">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
           <Folder size={15} color="var(--accent-strong)" />
           <span>文件树排版 (左侧资源管理器)</span>
         </div>
       </div>
 
       {/* 文件树中西双字体配置 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>文件树西文字体</label>
           <FontSelect
+            label="文件树西文字体"
             value={settings.typography.explorerFontFamily ?? ''}
             filterType="en"
             placeholder="系统界面默认 (如: Segoe UI, Arial)"
@@ -376,6 +383,7 @@ export function TypographyPanel() {
         <div style={formRowStyle}>
           <label style={labelStyle}>文件树中文字体</label>
           <FontSelect
+            label="文件树中文字体"
             value={settings.typography.explorerFontFamilyZh ?? ''}
             filterType="zh"
             placeholder="系统界面默认 (如: Microsoft YaHei UI, 苹方)"
@@ -385,7 +393,7 @@ export function TypographyPanel() {
       </div>
 
       {/* 文件树字号与行高 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="nb-settings-grid">
         <div style={formRowStyle}>
           <label style={labelStyle}>文件树字号 ({settings.typography.explorerFontSize ?? 13}px)</label>
           <input
@@ -429,10 +437,10 @@ export function TypographyPanel() {
       >
         {/* 软件界面 UI 效果预览 */}
         <div>
-          <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+          <p style={{ margin: '0 0 6px', fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)' }}>
             软件界面 UI 与提示效果 (中英文混合测试: NoteBoard 2026 Ready)：
           </p>
-          <div
+          <div className="nb-settings-preview-row"
             style={{
               fontFamily: 'var(--ui-font-family)',
               fontSize: settings.typography.uiFontSize ?? 13,
@@ -487,7 +495,7 @@ export function TypographyPanel() {
 
         {/* 代码文件预览 */}
         <div>
-          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)' }}>
             SQL / 代码 / 纯文本效果：
           </p>
           <pre className="nb-typography-code-preview" style={{
@@ -507,7 +515,7 @@ export function TypographyPanel() {
 
         {/* 文件树条目预览 */}
         <div>
-          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 12, color: 'var(--editor-text-muted)' }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)' }}>
             文件树目录条目效果：
           </p>
           <div

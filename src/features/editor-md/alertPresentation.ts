@@ -11,3 +11,11 @@ export function alertKind(value: unknown): AlertKind {
   const kind = String(value ?? '').toLowerCase();
   return kind in ALERT_META ? kind as AlertKind : 'note';
 }
+
+/** Stable common-use order; completion never needs history scans or network ranking. */
+export const ALERT_CHOICES: ReadonlyArray<{ kind: AlertKind; description: string }> = [
+  { kind: 'note', description: '备注与补充信息' }, { kind: 'tip', description: '建议与小技巧' },
+  { kind: 'important', description: '重要信息' }, { kind: 'warning', description: '需要注意的风险' },
+  { kind: 'caution', description: '谨慎操作' },
+];
+export const matchAlertChoices = (query: string) => ALERT_CHOICES.filter(item => item.kind.startsWith(query.toLowerCase()));

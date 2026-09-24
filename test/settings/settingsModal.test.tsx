@@ -18,9 +18,9 @@ describe('canonical settings dialog', () => {
     const render = (isOpen: boolean) => root.render(<TooltipProvider><SettingsModal isOpen={isOpen} onClose={() => {}}/></TooltipProvider>);
     try {
       await act(async () => render(true));
-      const fileButton = Array.from(host.querySelectorAll('nav button')).find(button => button.textContent === '文件与保存')!;
+      const fileButton = Array.from(document.querySelectorAll('nav button')).find(button => button.textContent === '文件与保存')!;
       await act(async () => { fileButton.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
-      const label = Array.from(host.querySelectorAll('label')).find(item => item.textContent === '从正文移除图片时')!;
+      const label = Array.from(document.querySelectorAll('label')).find(item => item.textContent === '从正文移除图片时')!;
       const select = document.getElementById(label.htmlFor) as HTMLSelectElement;
       expect(select.value).toBe('ask');
       await act(async () => { select.value = 'trash'; select.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -28,8 +28,8 @@ describe('canonical settings dialog', () => {
       expect(patchSettings).toHaveBeenCalledWith({ file: { imageDeletionPolicy: 'trash' } });
       await act(async () => render(false));
       await act(async () => render(true));
-      expect(host.querySelector('select')?.value).toBe('trash');
-      expect(host.textContent).toContain('不会替你保存正文');
+      expect(document.querySelector('select')?.value).toBe('trash');
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain('不会替你保存正文');
     } finally { await act(async () => root.unmount()); host.remove(); }
   });
 });

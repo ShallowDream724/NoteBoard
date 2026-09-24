@@ -5,15 +5,15 @@ export function ShortcutsPanel() {
 
   return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
     <div>
-      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>快捷键一览</h3>
-      <p style={{ fontSize: 12, color: 'var(--editor-text-muted)', margin: 0 }}>
+      <h3 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)', fontWeight: 600, marginBottom: 4 }}>快捷键一览</h3>
+      <p style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', margin: 0 }}>
         支持选中文本局部操作或全文操作，兼容 VS Code 与 JetBrains 常用快捷键。
       </p>
     </div>
 
     {/* JSON 与代码快捷操作 */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
         JSON 与纯文本快捷处理 (.json / .txt / 源码模式)
       </div>
       <ShortcutItem keyCombo="Shift + Alt + F / Ctrl + Alt + L" label="JSON 展开 / 格式化（支持选区 / 全文）" />
@@ -23,7 +23,7 @@ export function ShortcutsPanel() {
 
     {/* 代码与纯文本编辑器快捷操作 */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
         代码与纯文本编辑器 (.json / .txt / .sql 等)
       </div>
       <ShortcutItem keyCombo="Ctrl + 滚轮" label="实时缩放编辑器字号" />
@@ -31,7 +31,7 @@ export function ShortcutsPanel() {
 
     {/* 查找与替换 */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
         查找与替换
       </div>
       <ShortcutItem keyCombo="Ctrl + F" label="查找文本" />
@@ -40,7 +40,7 @@ export function ShortcutsPanel() {
 
     {/* 全局与文件操作 */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
         全局与文件操作
       </div>
       <ShortcutItem keyCombo="Ctrl + O" label="打开文件" />
@@ -57,11 +57,16 @@ export function ShortcutsPanel() {
 
     {/* Markdown 编辑 */}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
+      <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', fontWeight: 600, color: 'var(--accent-strong)', marginBottom: 4 }}>
         Markdown 编辑
       </div>
       <ShortcutItem keyCombo="/" label="Markdown 中触发斜杠快捷插入" />
       <ShortcutItem keyCombo="Ctrl + B" label="加粗" />
+      <ShortcutItem keyCombo="Ctrl + U" label="切换下划线" />
+      <ShortcutItem keyCombo="Ctrl + 1 … 6" label="设置一级至六级标题" />
+      <ShortcutItem keyCombo="Ctrl + 0" label="恢复正文段落" />
+      <ShortcutItem keyCombo="> [!" label="提示块补全（方向键选择，回车确认，Esc 关闭）" />
+      <ShortcutItem keyCombo="··· + Enter" label="独立新行创建代码块" />
     </div>
   </div>);
 }

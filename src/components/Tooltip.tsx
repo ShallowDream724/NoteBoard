@@ -2,12 +2,13 @@
 // 基于 @radix-ui/react-tooltip 封装，自适应晨光/琥珀/墨夜主题，支持自定义延迟与微动效
 // 详见 docs/07-UI布局与交互规范.md
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
 
 const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
+const TooltipInput = createContext<React.RefObject<'pointer' | 'keyboard' | null> | null>(null);
 
 function CursorBubble({ point, side, align, gap, children }: { point: { x: number; y: number }; side: TooltipSide; align: 'start' | 'center' | 'end'; gap: number; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -70,7 +71,23 @@ export function TooltipProvider({
   delayDuration?: number;
   skipDelayDuration?: number;
 }) {
+  const input = useRef<'pointer' | 'keyboard' | null>(null);
+  useEffect(() => {
+    const pointer = () => { input.current = 'pointer'; };
+    const keyboard = (event: KeyboardEvent) => {
+      input.current = event.key === 'Tab' || event.key.startsWith('Arrow') ? 'keyboard' : null;
+    };
+    // One pair of listeners per provider, no state updates or per-trigger listeners.
+    // Restoring focus after a pointer dismissal is navigation, not a tooltip request.
+    document.addEventListener('pointerdown', pointer, true);
+    document.addEventListener('keydown', keyboard, true);
+    return () => {
+      document.removeEventListener('pointerdown', pointer, true);
+      document.removeEventListener('keydown', keyboard, true);
+    };
+  }, []);
   return (
+    <TooltipInput.Provider value={input}>
     <RadixTooltip.Provider
       delayDuration={delayDuration}
       skipDelayDuration={skipDelayDuration}
@@ -78,6 +95,7 @@ export function TooltipProvider({
     >
       {children}
     </RadixTooltip.Provider>
+    </TooltipInput.Provider>
   );
 }
 
@@ -134,6 +152,7 @@ function FollowCursorTooltip({
     onMouseEnter?: (e: React.MouseEvent) => void;
     onMouseMove?: (e: React.MouseEvent) => void;
     onMouseLeave?: (e: React.MouseEvent) => void;
+    onPointerDown?: (e: React.PointerEvent) => void;
   };
 
   const handleMouseEnter = (e: React.MouseEvent) => {
@@ -173,6 +192,10 @@ function FollowCursorTooltip({
         onMouseEnter: handleMouseEnter,
         onMouseMove: handleMouseMove,
         onMouseLeave: handleMouseLeave,
+        onPointerDown: (event: React.PointerEvent) => {
+          originalProps.onPointerDown?.(event);
+          clearTimer(); setPoint(null);
+        },
       })}
       {point &&
         hasContent &&
@@ -202,6 +225,7 @@ export function Tooltip({
   delayDuration = 100,
   followCursor = false,
 }: TooltipProps) {
+  const input = useContext(TooltipInput);
   const [open, setOpen] = useState(false);
   const blocked = disabled || (!content && !shortcut);
   useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
@@ -224,7 +248,9 @@ export function Tooltip({
 
   return (
     <RadixTooltip.Root delayDuration={delayDuration} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
-      <RadixTooltip.Trigger asChild={asChild}>
+      <RadixTooltip.Trigger asChild={asChild} onFocus={event => {
+        if (input ? input.current !== 'keyboard' : !event.currentTarget.matches(':focus-visible')) event.preventDefault();
+      }}>
         {children}
       </RadixTooltip.Trigger>
       <RadixTooltip.Portal>

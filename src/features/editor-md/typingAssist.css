@@ -1,0 +1,5 @@
+.nb-alert-completion { z-index:10000; width:280px; max-width:calc(100vw - 24px); max-height:min(320px,calc(100dvh - 24px)); overflow:auto; padding:6px; border:1px solid var(--editor-border); border-radius:10px; background:var(--editor-bg); color:var(--editor-text); box-shadow:var(--shadow-lg); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); }
+.nb-assist-title { padding:5px 9px; color:var(--editor-text-muted); font-size:.9em; }
+.nb-alert-completion button { display:flex; flex-direction:column; gap:1px; width:100%; padding:7px 9px; border:0; border-radius:6px; background:transparent; font:inherit; color:inherit; text-align:left; cursor:pointer; }
+.nb-alert-completion button[aria-selected=true] { background:var(--toolbar-hover); }
+.nb-alert-completion button span { font-size:.9em; color:var(--editor-text-secondary); }
