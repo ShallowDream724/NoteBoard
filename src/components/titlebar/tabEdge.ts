@@ -1,5 +1,5 @@
 export interface TabBounds { start: number; end: number }
-export const TAB_EDGE_INSET = 8;
+export const TAB_EDGE_INSET = 12;
 const MIN_EXPOSED_TAB = 48;
 
 /** Sorted, untransformed geometry; O(log n) reads, no scan during scrolling. */

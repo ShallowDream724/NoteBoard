@@ -19,6 +19,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { ExplorerBreadcrumb } from './ExplorerBreadcrumb';
 import { Tooltip } from '../../components/Tooltip';
 import { ExplorerHeader } from './ExplorerHeader';
+import { VerticalScrollArea } from '../../components/VerticalScrollArea';
 
 // ── Explorer 组件 ──
 
@@ -291,14 +292,7 @@ export function Explorer() {
       )}
 
       {/* 树内容 */}
-      <div
-        onWheel={handleTreeWheel}
-        style={{
-          flex: 1,
-          overflow: 'auto',
-          position: 'relative',
-        }}
-      >
+      <VerticalScrollArea label="文件列表" onWheel={handleTreeWheel}>
         {loading && (
           <div
             style={{
@@ -332,7 +326,7 @@ export function Explorer() {
             空文件夹
           </div>
         )}
-      </div>
+      </VerticalScrollArea>
     </div>
   );
 }

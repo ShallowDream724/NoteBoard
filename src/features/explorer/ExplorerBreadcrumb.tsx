@@ -134,7 +134,7 @@ export function ExplorerBreadcrumb({ root, onRefresh }: ExplorerBreadcrumbProps)
         overflowY: 'hidden',
         scrollbarWidth: 'none',
         flexShrink: 0,
-        borderBottom: '1px solid var(--editor-border)',
+        borderBottom: '1px solid color-mix(in srgb, var(--explorer-border) 55%, transparent)',
         background: 'var(--explorer-bg)',
         userSelect: 'none',
         boxSizing: 'border-box',

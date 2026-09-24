@@ -3,10 +3,11 @@
 // 详见 docs/07-UI布局与交互规范.md §1
 
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel } from 'react-resizable-panels';
 import type { PanelSize } from 'react-resizable-panels';
 import type { Editor } from '@tiptap/core';
 import { TitleBar } from './titlebar/TitleBar';
+import { PanelResizeHandle } from './PanelResizeHandle';
 import './appShell.css';
 import { StatusBar } from './statusbar/StatusBar';
 import { WelcomeScreen } from './WelcomeScreen';
@@ -67,29 +68,6 @@ import {
 } from '../features/session/closedWindowSession';
 import { MissingFileDialog } from '../features/external/MissingFileDialog';
 import { checkActiveDocumentStillExists } from '../features/external/missingFileGuard';
-
-// ── 分隔条样式 ──
-
-function ResizeHandle() {
-  return (
-    <Separator
-      style={{
-        width: 4,
-        height: '100%',
-        background: 'var(--editor-border)',
-        cursor: 'col-resize',
-        transition: 'background var(--transition-fast)',
-        flexShrink: 0,
-      }}
-      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-        e.currentTarget.style.background = 'var(--editor-border-focus)';
-      }}
-      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-        e.currentTarget.style.background = 'var(--editor-border)';
-      }}
-    />
-  );
-}
 
 // ── AppShell ──
 
@@ -504,13 +482,12 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 }}
                 style={{
                   background: 'var(--explorer-bg)',
-                  borderRight: '1px solid var(--explorer-border)',
                   overflow: 'hidden',
                 }}
               >
                 <Explorer />
               </Panel>
-              <ResizeHandle />
+              <PanelResizeHandle label="调整资源管理器宽度" />
             </>
           )}
 
@@ -671,7 +648,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
           {/* 大纲 */}
           {!isBoardPresentationMode && outlineVisible && showOutline && (
             <>
-              <ResizeHandle />
+              <PanelResizeHandle label="调整大纲宽度" />
               <Panel
                 id="nb-outline"
                 defaultSize={outlineWidth}
@@ -682,7 +659,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 }}
                 style={{
                   background: 'var(--outline-bg)',
-                  borderLeft: '1px solid var(--editor-border)',
                   overflow: 'hidden',
                 }}
               >

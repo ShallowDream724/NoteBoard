@@ -1,0 +1,18 @@
+.nb-vertical-scroll-area { flex: 1; min-height: 0; min-width: 0; position: relative; overflow: hidden; }
+.nb-vertical-scroll-viewport { width: 100%; height: 100%; position: relative; scrollbar-width: none; }
+.nb-vertical-scroll-viewport::-webkit-scrollbar { display: none; width: 0; height: 0; }
+/* Radix's intrinsic table measurement is for two-axis content. This vertical-only
+ * primitive constrains long file names to the viewport so ellipsis remains usable. */
+.nb-vertical-scroll-viewport > div { display: block !important; }
+.nb-vertical-scroll-viewport:focus-visible { outline: 1px solid var(--editor-accent); outline-offset: -1px; }
+.nb-vertical-scrollbar {
+  /* Keep the visible thumb clear of an adjacent panel separator's hit target. */
+  display: flex; width: 12px; padding: 0 4px 0 2px; box-sizing: border-box;
+  touch-action: none; user-select: none; background: transparent;
+  opacity: 0; transition: opacity 160ms ease; z-index: 1;
+}
+.nb-vertical-scroll-area:is(:hover, :focus-within) .nb-vertical-scrollbar { opacity: 1; }
+.nb-vertical-scrollbar:active { opacity: 1; }
+.nb-vertical-scroll-thumb { flex: 1; border-radius: 5px; background: var(--scrollbar-thumb); }
+.nb-vertical-scroll-thumb:hover { background: color-mix(in srgb, var(--scrollbar-thumb) 80%, var(--editor-text)); }
+@media (prefers-reduced-motion: reduce) { .nb-vertical-scrollbar { transition: none; } }

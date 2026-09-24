@@ -9,7 +9,7 @@ const edge = (tabs: TabBounds[], left: number, width: number) => trailingTabEdge
 
 it('removes a tiny trailing tab together with its gap but preserves the previous shoulder', () => {
   const tabs = boxes([200, 200, 200]);
-  expect(edge(tabs, 0, 222)).toEqual({ hidden: 1, last: 0, trim: 6 });
+  expect(edge(tabs, 0, 222)).toEqual({ hidden: 1, last: 0, trim: 2 });
   expect(edge(tabs, 0, 211)).toEqual({ hidden: 1, last: 0, trim: 0 });
 });
 
@@ -26,7 +26,7 @@ it('works for different title widths and a scrolled viewport without shortening 
   const tabs = boxes([80, 170, 100, 200]);
   const snapshot = structuredClone(tabs);
   expect(edge(tabs, 85, 289)).toEqual({ hidden: 3, last: 2, trim: 0 });
-  expect(edge(tabs, 85, 310)).toEqual({ hidden: 3, last: 2, trim: 21 });
+  expect(edge(tabs, 85, 310)).toEqual({ hidden: 3, last: 2, trim: 17 });
   expect(tabs).toEqual(snapshot);
   expect(edge(tabs, 200, 500).hidden).toBe(-1);
 });

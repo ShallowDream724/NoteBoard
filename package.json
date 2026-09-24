@@ -1,6 +1,6 @@
 {
   "name": "noteboard",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "Windows 桌面笔记 + 画板软件",
   "type": "module",
   "license": "GPL-3.0-only",
@@ -42,6 +42,7 @@
     "@radix-ui/react-context-menu": "^2.2.0",
     "@radix-ui/react-dialog": "^1.1.0",
     "@radix-ui/react-dropdown-menu": "^2.1.0",
+    "@radix-ui/react-scroll-area": "1.2.18",
     "@radix-ui/react-tooltip": "^1.1.0",
     "@sereneinserenade/tiptap-search-and-replace": "^0.1.1",
     "@tanstack/react-virtual": "^3.14.0",

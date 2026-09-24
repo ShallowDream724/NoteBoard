@@ -3,7 +3,7 @@
 // Layout ownership: docs/architecture/settings-and-updates.md
 
 import { useRef, useState, useEffect } from 'react';
-import { TAB_EDGE_INSET } from './tabEdge';
+import { TAB_SHAPE_STYLE } from './tabShape';
 import { createPortal } from 'react-dom';
 import { useMenuBounds } from '../useMenuBounds';
 import { useTabOverflow } from './useTabOverflow';
@@ -530,7 +530,7 @@ export function TabBar() {
         onWheel={handleWheel}
         role="tablist"
       >
-        <div ref={trackRef} className="nb-tab-track" style={{ '--tab-edge-inset': `${TAB_EDGE_INSET}px` } as React.CSSProperties}>
+        <div ref={trackRef} className="nb-tab-track" style={TAB_SHAPE_STYLE}>
         <DndContext sensors={sensors} onDragStart={() => setDragging(true)} onDragCancel={() => setDragging(false)} onDragEnd={handleDragEnd}>
           <SortableContext
             items={tabs.map((t) => t.key)}

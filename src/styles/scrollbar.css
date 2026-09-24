@@ -1,6 +1,6 @@
 /* NoteBoard 滚动条主题化
  * 详见 docs/07-UI布局与交互规范.md
- * One native scrollbar implementation for editor and side panels.
+ * Native scrollbars for editors and outline. Explorer uses VerticalScrollArea.
  */
 
 /* Animate the inherited color itself: scrollbar pseudo-elements do not
@@ -13,12 +13,12 @@
 
 :root { --nb-scrollbar-thumb: var(--scrollbar-thumb); }
 
-#nb-explorer, #nb-outline {
+#nb-outline {
   --nb-scrollbar-thumb: transparent;
   transition: --nb-scrollbar-thumb 220ms ease;
 }
 
-#nb-explorer:hover, #nb-outline:hover {
+#nb-outline:hover {
   --nb-scrollbar-thumb: var(--scrollbar-thumb);
 }
 
@@ -94,5 +94,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #nb-explorer, #nb-outline { transition: none; }
+  #nb-outline { transition: none; }
 }
