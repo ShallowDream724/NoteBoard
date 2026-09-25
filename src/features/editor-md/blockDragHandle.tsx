@@ -54,6 +54,8 @@ const BLOCK_TYPE_LABELS: Record<string, string> = {
   codeBlock: '代码块',
   horizontalRule: '分隔线',
   image: '图片',
+  imageCollection: '图片组合',
+  disclosure: '折叠块',
   mermaidBlock: 'Mermaid 图表',
   mathBlock: '公式块',
   githubAlert: '提示块',

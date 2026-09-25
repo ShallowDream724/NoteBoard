@@ -15,6 +15,8 @@ import { createMarkdownLexer } from './markdownLexer';
 import { MarkdownOrderedList, MarkdownTaskList } from './markdownLists';
 import { TextColor, BlockPresentation } from '../document-style/documentStyles';
 import { installPresentationCodec } from '../document-style/presentationMetadata';
+import { richContentGrammar } from './rich-content/schema';
+import { annotationSchemaExtensions } from './annotations/schema';
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
 const MarkdownCode = Code.extend({ excludes: '', addKeyboardShortcuts() { return {}; } });
@@ -40,7 +42,7 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     MarkdownHighlight.configure({ multicolor: true }), TextColor, BlockPresentation, MarkdownCode, MarkdownBlockquote, ImageNode,
     MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
-    MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation,
+    MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, ...richContentGrammar, ...annotationSchemaExtensions,
     PresentedMarkdown.configure({ marked: createMarkdownLexer() }),
   ].map(extension => views[extension.name] ?? extension);
 }

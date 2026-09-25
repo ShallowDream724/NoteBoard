@@ -4,10 +4,12 @@ import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { foldedSectionEnd } from './headingFolding';
 import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
 import { isListItem, listItemRemovalRange } from './listItemActions';
+import { DOCUMENT_SLICE_MIME } from './clipboard/constants';
+import { documentSliceClipboardData } from './clipboard/structured';
 
 export function blockRange(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || editor.state.doc.resolve(pos).depth !== 0 && !isListItem(node)) return null;
+  if (!node || ['documentPresentation', 'annotationStore'].includes(node.type.name) || editor.state.doc.resolve(pos).depth !== 0 && !isListItem(node)) return null;
   return { node, from: pos, to: foldedSectionEnd(editor.state, pos) ?? pos + node.nodeSize };
 }
 export function selectBlock(editor: Editor, pos: number, titleOnly = false): boolean {
@@ -48,12 +50,14 @@ export function insertAfterBlock(editor: Editor, pos: number) {
 /** Native copy keeps HTML/schema styles alongside plain text. Delete only after successful copy. */
 export function copyBlock(editor: Editor, pos: number, cut = false): boolean {
   const range = blockRange(editor, pos); if (!range) return false;
-  const serialized = editor.view.serializeForClipboard(editor.state.doc.slice(range.from, range.to));
+  const slice = editor.state.doc.slice(range.from, range.to);
+  const serialized = editor.view.serializeForClipboard(slice);
   let copied = false;
   const write = (event: ClipboardEvent) => {
     if (!event.clipboardData) return;
     event.clipboardData.setData('text/html', serialized.dom.innerHTML);
     event.clipboardData.setData('text/plain', serialized.text);
+    event.clipboardData.setData(DOCUMENT_SLICE_MIME, documentSliceClipboardData(editor.state.doc, slice));
     event.preventDefault(); event.stopImmediatePropagation(); copied = true;
   };
   document.addEventListener('copy', write, true);

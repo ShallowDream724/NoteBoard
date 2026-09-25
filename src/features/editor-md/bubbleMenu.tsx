@@ -37,6 +37,7 @@ import { TableInsertMenu } from './TableInsertMenu';
 import { TableFillMenu } from './TableFillMenu';
 import { documentTableStyle } from './documentPresentation';
 import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDistributionState, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
+import { RichSelectionMenu } from './rich-content/menus';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -99,8 +100,8 @@ function BubbleButton({ icon, onClick, active, title, danger, disabled }: Bubble
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transform: pressed ? 'scale(0.92)' : hovered ? 'scale(1.06)' : 'scale(1)',
-        transition: 'all var(--transition-fast)',
+        transform: pressed ? 'scale(0.97)' : 'scale(1)',
+        transition: 'background 120ms ease, color 120ms ease, transform 120ms ease',
         userSelect: 'none',
       }}
       aria-label={title}
@@ -301,6 +302,7 @@ export function EditorBubbleMenu({
           onReturnToEditor={() => editor.commands.focus()}
           onRemove={() => { setHighlightColor(editor, null); }}/>
         <AlignmentMenu editor={editor}/>
+        <RichSelectionMenu editor={editor}/>
 
         <MenuDivider />
 

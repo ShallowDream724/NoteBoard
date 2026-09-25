@@ -43,6 +43,7 @@ import {
   RemoveFormatting,
   PlusSquare,
   BarChart3,
+  PanelTopClose,
 } from 'lucide-react';
 import {
   ToolbarButton,
@@ -65,6 +66,11 @@ import { HighlightControl } from './HighlightControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
+import { ImageInsertItems, ImageInsertMenu, RichSelectionMenu } from '../editor-md/rich-content/menus';
+import { insertDisclosure } from '../editor-md/rich-content/commands';
+import { editorDocumentFormat } from '../editor-md/editorDocumentCodec';
+import { requestImageLink } from '../editor-md/rich-content/imageLinkDialog';
+import { captureVisualImageInsertion, captureSourceImageInsertion } from '../editor-md/imageInsertionLease';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -354,23 +360,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     }
   };
 
-  const handleInsertNetworkImage = () => {
+  const handleInsertNetworkImage = async () => {
     setInsertDropdownOpen(false);
-    const url = window.prompt('请输入图片网络 URL:');
-    if (!url) return;
-    if (isSourceMode) {
-      executeSourceAction((view) => {
-        const { from, to } = view.state.selection.main;
-        const snippet = `![图片](${url})`;
-        view.dispatch({
-          changes: { from, to, insert: snippet },
-          selection: { anchor: from + snippet.length },
-        });
-      });
-      return;
-    }
-    if (!editor) return;
-    editor.chain().focus().setImage({ src: url }).run();
+    const source = isSourceMode ? getActiveSourceView(docKey) : null;
+    const lease = source ? captureSourceImageInsertion(source, docKey) : editor ? captureVisualImageInsertion(editor, docKey) : null;
+    if (!lease) return;
+    try { const url = await requestImageLink(); if (url) lease.commit({ src: url, alt: '' }); }
+    finally { lease.dispose(); }
   };
 
   // ── 日期时间插入处理 ──
@@ -710,6 +706,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           label="引用块 (Quote)"
           onClick={handleInsertQuote}
         />
+        {!isSourceMode && editor && editorDocumentFormat(editor) === 'noteboard' && <ToolbarDropdownItem icon={<PanelTopClose size={14}/>} label="折叠块"
+          onClick={() => { setInsertDropdownOpen(false); insertDisclosure(editor); }}/>}
 
         {/* 4. 表格二级菜单 */}
         <ToolbarDropdownItem
@@ -768,18 +766,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           icon={<ImageIcon size={14} />}
           label="图片"
           submenu={
-            <>
-              <ToolbarDropdownItem
-                icon={<ImageIcon size={14} />}
-                label="插入本地图片"
-                onClick={handleInsertLocalImage}
-              />
-              <ToolbarDropdownItem
-                icon={<ImageIcon size={14} style={{ opacity: 0.7 }} />}
-                label="插入网络图片"
-                onClick={handleInsertNetworkImage}
-              />
-            </>
+            <ImageInsertItems editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} onDone={() => setInsertDropdownOpen(false)}/>
           }
         />
 
@@ -833,12 +820,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
       />
-      <ToolbarButton
-        icon={<ImageIcon size={15} />}
-        title="插入本地图片"
-        collapsePriority={70}
-        onClick={handleInsertLocalImage}
-      />
+      <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70}/>
+      {!isSourceMode && editor && <RichSelectionMenu editor={editor}/>}
 
       <ToolbarDivider />
 

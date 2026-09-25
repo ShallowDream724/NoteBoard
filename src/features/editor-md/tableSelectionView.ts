@@ -2,6 +2,20 @@ import { Plugin, type EditorState } from '@tiptap/pm/state';
 import type { Node } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
+import type { EditorView } from '@tiptap/pm/view';
+
+function cellBounds(view: EditorView, position: number) {
+  const cell = view.nodeDOM(position);
+  if (cell instanceof Element && cell.matches('td,th')) return cell.getBoundingClientRect();
+  const resolved = view.state.doc.resolve(position);
+  if (resolved.parent.type.spec.tableRole !== 'row') return null;
+  const row = view.nodeDOM(resolved.before());
+  if (!(row instanceof HTMLTableRowElement)) return null;
+  const column = row.closest('table')?.querySelector('colgroup')?.children[resolved.index()];
+  if (!(column instanceof Element)) return null;
+  const vertical = row.getBoundingClientRect(), horizontal = column.getBoundingClientRect();
+  return { left: horizontal.left, right: horizontal.right, top: vertical.top, bottom: vertical.bottom };
+}
 
 const rectangular = new WeakMap<Node, boolean>();
 function overlaySelection(state: EditorState): CellSelection | null {
@@ -38,9 +52,9 @@ export function withTableSelectionView(plugin: Plugin): Plugin {
       const owner = findScrollContainer(view.dom);
       if (owner !== host) { if (host) observer?.unobserve(host); host = owner; observer?.observe(host); }
       if (!host.clientHeight) { overlay.hidden = true; return; }
-      const first = view.nodeDOM(selection.$anchorCell.pos), last = view.nodeDOM(selection.$headCell.pos);
-      if (!(first instanceof Element) || !(last instanceof Element)) { overlay.hidden = true; return; }
-      const a = first.getBoundingClientRect(), b = last.getBoundingClientRect(), clip = host.getBoundingClientRect();
+      const a = cellBounds(view, selection.$anchorCell.pos), b = cellBounds(view, selection.$headCell.pos);
+      if (!a || !b) { overlay.hidden = true; return; }
+      const clip = host.getBoundingClientRect();
       const left = Math.max(0, clip.left, Math.min(a.left, b.left)), right = Math.min(innerWidth, clip.right, Math.max(a.right, b.right));
       const top = Math.max(0, clip.top, Math.min(a.top, b.top)), bottom = Math.min(innerHeight, clip.bottom, Math.max(a.bottom, b.bottom));
       overlay.hidden = right <= left || bottom <= top;

@@ -29,11 +29,13 @@ export const TableSelectionHandles = Extension.create({
     const hide = () => { cancelHide(); visible = false; overlay.hidden = true; };
     const deferHide = () => { if (!gesture && !hideTimer) hideTimer = setTimeout(hide, 450); };
     function tablePosition(target: HTMLTableElement) {
-      const first = target.rows[0]?.cells[0]; if (!first) return null;
-      const resolved = view.state.doc.resolve(view.posAtDOM(first, 0));
-      let depth = resolved.depth;
-      while (depth && resolved.node(depth).type.spec.tableRole !== 'table') depth--;
-      return depth ? { pos: resolved.before(depth), node: resolved.node(depth) } : null;
+      try {
+        const resolved = view.state.doc.resolve(view.posAtDOM(target, 0));
+        let depth = resolved.depth;
+        while (depth && resolved.node(depth).type.spec.tableRole !== 'table') depth--;
+        if (depth) return { pos: resolved.before(depth), node: resolved.node(depth) };
+        return resolved.nodeAfter?.type.spec.tableRole === 'table' ? { pos: resolved.pos, node: resolved.nodeAfter } : null;
+      } catch { return null; }
     }
     function finishGesture(commit: boolean) {
       const active = gesture; gesture = null;
@@ -82,12 +84,8 @@ export const TableSelectionHandles = Extension.create({
     }
     const select = (axis: Axis, index: number) => {
       if (!table || !view.dom.contains(table)) return;
-      const first = table.rows[0]?.cells[0]; if (!first) return;
-      const resolved = view.state.doc.resolve(view.posAtDOM(first, 0));
-      let depth = resolved.depth;
-      while (depth && resolved.node(depth).type.spec.tableRole !== 'table') depth--;
-      if (!depth) return;
-      const node = resolved.node(depth), map = TableMap.get(node), start = resolved.start(depth);
+      const target = tablePosition(table); if (!target) return;
+      const node = target.node, map = TableMap.get(node), start = target.pos + 1;
       const at = (row: number, column: number) => view.state.doc.resolve(start + map.map[row * map.width + column]);
       if (axis === 'row' && index >= map.height || axis === 'column' && index >= map.width) return;
       const selection = axis === 'row' ? CellSelection.rowSelection(at(index, 0), at(index, map.width - 1))

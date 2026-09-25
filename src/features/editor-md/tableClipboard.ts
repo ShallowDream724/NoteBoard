@@ -25,9 +25,12 @@ import type { EditorView } from '@tiptap/pm/view';
 import { parseClipboardMatrix } from '../../core/clipboardMatrix';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { insertTablePart } from './tableStructure';
+import { attachedClipboardContent, mergeImportedAnnotationBodies } from './clipboard/structured';
+import { remapAnnotationIds } from './annotations/model';
+import { CLIPBOARD_LIMITS } from './clipboard/normalize';
+import { TABLE_SELECTION_MIME } from './clipboard/constants';
 
 export const tableClipboardPluginKey = new PluginKey('tableClipboard');
-const TABLE_SELECTION_MIME = 'application/x-noteboard-table-selection';
 type ClipboardScope = 'row' | 'column' | 'table' | 'cells';
 
 function cellsTable(schema: Schema, cells: NonNullable<ReturnType<typeof __pastedCells>>, slice?: Slice) {
@@ -47,7 +50,7 @@ export function writeTableClipboard(view: EditorView, event: ClipboardEvent, cut
   const slice = selection.content(), serialized = view.serializeForClipboard(slice);
   data.setData('text/plain', customClipboardTextSerializer(slice, view));
   data.setData('text/html', serialized.dom.innerHTML);
-  data.setData(TABLE_SELECTION_MIME, JSON.stringify({ version: 1, scope, slice: slice.toJSON() }));
+  data.setData(TABLE_SELECTION_MIME, JSON.stringify({ version: 1, scope, slice: { ...slice.toJSON(), content: attachedClipboardContent(view.state.doc, slice) } }));
   event.preventDefault();
   if (cut) {
     const dispatch = (tr: import('@tiptap/pm/state').Transaction) => dispatchDiscreteEdit(view, tr);
@@ -59,12 +62,19 @@ export function writeTableClipboard(view: EditorView, event: ClipboardEvent, cut
   return true;
 }
 
-function internalSelection(view: EditorView, event: ClipboardEvent): { scope: ClipboardScope; slice: Slice } | null {
+function internalSelection(view: EditorView, event: ClipboardEvent): { scope: ClipboardScope; slice: Slice; bodies: ProseMirrorNode[] } | null {
   const raw = event.clipboardData?.getData(TABLE_SELECTION_MIME); if (!raw) return null;
   try {
+    if (raw.length > CLIPBOARD_LIMITS.characters) return null;
     const value = JSON.parse(raw);
     if (value.version !== 1 || !['row','column','table','cells'].includes(value.scope)) return null;
-    return { scope: value.scope, slice: Slice.fromJSON(view.state.schema, value.slice) };
+    const remapped = remapAnnotationIds({ type: 'doc', content: value.slice.content });
+    const content = [], bodies: ProseMirrorNode[] = [];
+    for (const node of remapped.content ?? []) {
+      if (node.type === 'annotationStore') for (const body of node.content ?? []) { const parsed = view.state.schema.nodeFromJSON(body); parsed.check(); bodies.push(parsed); }
+      else content.push(node);
+    }
+    return { scope: value.scope, slice: Slice.fromJSON(view.state.schema, { ...value.slice, content }), bodies };
   } catch { return null; }
 }
 
@@ -296,9 +306,11 @@ export function matrixToPastedCells(
 export function executeTableMatrixPaste(
   view: EditorView,
   matrix: string[][],
-  pmCells?: { width: number; height: number; rows: Fragment[] } | null
+  pmCells?: { width: number; height: number; rows: Fragment[] } | null,
+  bodies: ProseMirrorNode[] = [],
 ): boolean {
   const sel = view.state.selection;
+  const dispatch = (tr: import('@tiptap/pm/state').Transaction) => dispatchDiscreteEdit(view, mergeImportedAnnotationBodies(tr, bodies));
 
   // 1. 如果已有 ProseMirror 原生解析好的表格切片（例如包含完整 PM 元数据的内部复制）
   if (pmCells) {
@@ -307,14 +319,14 @@ export function executeTableMatrixPaste(
       const start = sel.$anchorCell.start(-1);
       const map = TableMap.get(table);
       const rect = map.rectBetween(sel.$anchorCell.pos - start, sel.$headCell.pos - start);
-      __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, rect, pmCells);
+      __insertCells(view.state, dispatch, start, rect, pmCells);
       return true;
     }
 
     const $cell = selectionCell(view.state);
     const start = $cell.start(-1);
     const map = TableMap.get($cell.node(-1));
-    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, map.findCell($cell.pos - start), pmCells);
+    __insertCells(view.state, dispatch, start, map.findCell($cell.pos - start), pmCells);
     return true;
   }
 
@@ -333,7 +345,7 @@ export function executeTableMatrixPaste(
     // Preserve source dimensions; never silently repeat or truncate a matrix.
     const cells = matrixToPastedCells(view.state.schema, matrix);
 
-    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, rect, cells);
+    __insertCells(view.state, dispatch, start, rect, cells);
     return true;
   }
 
@@ -345,7 +357,7 @@ export function executeTableMatrixPaste(
     const cellRect = map.findCell($cell.pos - start);
     const cells = matrixToPastedCells(view.state.schema, matrix);
 
-    __insertCells(view.state, tr => dispatchDiscreteEdit(view, tr), start, cellRect, cells);
+    __insertCells(view.state, dispatch, start, cellRect, cells);
     return true;
   }
 
@@ -359,32 +371,32 @@ export function executeTableMatrixPaste(
 export function handleTablePaste(view: EditorView, event: ClipboardEvent, slice: Slice): boolean {
   const internal = internalSelection(view, event);
   if (internal) slice = internal.slice;
+  if (insertTableSlice(view, slice, internal?.scope, internal?.bodies)) return true;
+  if (!isInTable(view.state)) return false;
+  const text = event.clipboardData?.getData('text/plain') ?? '';
+  if (!text) return false;
+  const matrix = parseClipboardMatrix(text);
+  if (!matrix || matrix.length === 0) return false;
+  return executeTableMatrixPaste(view, matrix, null);
+}
+
+/** Already-normalized slices (including embedded editors) need no second JSON/HTML parse. */
+export function insertTableSlice(view: EditorView, slice: Slice, scope?: ClipboardScope, bodies: ProseMirrorNode[] = []): boolean {
   const pmCells = __pastedCells(slice);
+  if (!pmCells) return false;
   if (pmCells && !isInTable(view.state)) {
-    dispatchDiscreteEdit(view, view.state.tr.replaceSelectionWith(cellsTable(view.state.schema, pmCells, slice)));
+    dispatchDiscreteEdit(view, mergeImportedAnnotationBodies(view.state.tr.replaceSelectionWith(cellsTable(view.state.schema, pmCells, slice)), bodies));
     return true;
   }
   if (!isInTable(view.state)) return false;
-  if (pmCells && (internal?.scope === 'row' || internal?.scope === 'column')) {
+  if (scope === 'row' || scope === 'column') {
     const rect = selectedRect(view.state), pos = rect.tableStart - 1;
-    const next = insertTablePart(rect.table, cellsTable(view.state.schema, pmCells, slice), internal.scope, internal.scope === 'row' ? rect.top : rect.left);
-    dispatchDiscreteEdit(view, view.state.tr.replaceWith(pos, pos + rect.table.nodeSize, next));
+    const next = insertTablePart(rect.table, cellsTable(view.state.schema, pmCells, slice), scope, scope === 'row' ? rect.top : rect.left);
+    dispatchDiscreteEdit(view, mergeImportedAnnotationBodies(view.state.tr.replaceWith(pos, pos + rect.table.nodeSize, next), bodies));
     return true;
   }
 
-  // 优先检查是否带有 ProseMirror 原生结构
-  const text = event.clipboardData?.getData('text/plain') ?? '';
-
-  if (pmCells) {
-    return executeTableMatrixPaste(view, [], pmCells);
-  }
-
-  if (!text) return false;
-
-  const matrix = parseClipboardMatrix(text);
-  if (!matrix || matrix.length === 0) return false;
-
-  return executeTableMatrixPaste(view, matrix, null);
+  return executeTableMatrixPaste(view, [], pmCells, bodies);
 }
 
 /**

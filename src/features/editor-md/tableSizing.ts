@@ -7,23 +7,12 @@ import { SizedTableRow } from './markdownTable';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { columnWidthsStep, resizedColumnPair } from './tableColumnWidths';
 import { tableGesturePreview } from './tableGesturePreview';
+import { createTableRowView } from './tableRowView';
 
 export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
-    return ({ node }) => {
-      const row = document.createElement('tr');
-      let shown: unknown;
-      const showHeight = (height: unknown) => {
-        if (height === shown) return; shown = height;
-        row.style.height = row.style.minHeight = typeof height === 'number' ? `${height}px` : '';
-      };
-      showHeight(node.attrs.height);
-      return {
-        dom: row, contentDOM: row,
-        update(next) { if (next.type !== node.type) return false; node = next; showHeight(node.attrs.height); return true; },
-        ignoreMutation: mutation => mutation.type === 'attributes' && mutation.target === row,
-      };
-    };
+    const viewportEnabled = this.editor.extensionManager.extensions.some(extension => extension.name === 'tableViewport');
+    return ({ node, decorations, view, getPos }) => createTableRowView(node, view, getPos, decorations, viewportEnabled);
   },
 });
 

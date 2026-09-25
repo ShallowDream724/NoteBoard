@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core';
-import { Type, Table2, Image, Braces, Quote, List, ListOrdered, ListTodo, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { Type, Table2, Image, Braces, Quote, List, ListOrdered, ListTodo, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
 import { blockRange, copyBlock, deleteBlock, formatBlock, insertAfterBlock } from './blockActions';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
@@ -16,10 +16,14 @@ import { runDiscreteEdit } from './discreteEdit';
 import { showToast } from '../../stores/toastStore';
 import { useFormattingUpdates } from './useFormattingUpdates';
 import './blockContextMenu.css';
+import { editorDocumentFormat } from './editorDocumentCodec';
+import { NodeSelection } from '@tiptap/pm/state';
+import { beginAnnotation, openAnnotation } from './annotations/commands';
+import { toggleConceal } from './rich-content/commands';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
-  const Icon = type === 'table' ? Table2 : type === 'image' ? Image : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
+  const Icon = type === 'table' ? Table2 : type === 'image' ? Image : type === 'imageCollection' ? Grid2X2 : type === 'disclosure' ? PanelTopClose : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
   return <Icon size={15}/>;
 }
 export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: number; close: () => void }) {
@@ -28,6 +32,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const range = blockRange(editor, pos); if (!range) return null;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
   const styled = text || type === 'mathBlock';
+  const native = editorDocumentFormat(editor) === 'noteboard';
+  const selectNode = () => editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
   const grid = type === 'table' ? tableGrid(range.node) : null;
   const headerRow = grid?.cells.filter(cell => cell.row === 0), headerColumn = grid?.cells.filter(cell => cell.column === 0);
   const action = (run: () => unknown) => { run(); close(); };
@@ -62,6 +68,14 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         onReturnToEditor={() => editor.view.focus()}/>}
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
+    {type === 'imageCollection' && <>
+      {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2 }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2 }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd }] as const).map(({ layout, columns, label, Icon }) =>
+        <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
+      <hr/>
+    </>}
+    {native && Object.hasOwn(range.node.attrs, 'annotationId') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginAnnotation(editor); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
+    {native && Object.hasOwn(range.node.attrs, 'concealed') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); toggleConceal(editor); })}><EyeOff size={16}/>{range.node.attrs.concealed ? '取消模糊' : '模糊内容'}</button>}
+    {native && (Object.hasOwn(range.node.attrs, 'annotationId') || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
     <button role="menuitem" type="button" onClick={() => action(() => copy(true))}><Scissors size={16}/>剪切</button>
     <button role="menuitem" type="button" onClick={() => action(() => copy(false))}><Copy size={16}/>复制</button>
     <button role="menuitem" type="button" onClick={() => action(() => deleteBlock(editor, pos))}><Trash2 size={16}/>删除</button>

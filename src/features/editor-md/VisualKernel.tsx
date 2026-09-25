@@ -22,7 +22,8 @@ import {
   flushPendingVisualSnapshot,
   hasPendingVisualSnapshot,
 } from './visualSnapshot';
-import { handlePastedImageFile } from './imagePaste';
+import { ClipboardImport } from './clipboard/clipboardImport';
+import { AnnotationLayer } from './annotations/AnnotationLayer';
 import { EditorBubbleMenu, TableToolbar } from './bubbleMenu';
 import { BlockDragHandle } from './blockDragHandle';
 import { BLOCK_MOVE_META } from './headingFolding';
@@ -92,9 +93,9 @@ export function VisualKernel({
   const blockHandleEnabled = useSettingsStore(state => state.settings.editor.enableBlockHandle);
   // 扩展只随文档身份构建一次；输入、焦点、菜单和标签激活都不重新分配整套扩展。
   // 链接回调继续由模块级工厂创建，不能重新引入持有 editor 的组件闭包。
-  const extensions = useMemo(() => buildExtensions(docKey, {
+  const extensions = useMemo(() => [...buildExtensions(docKey, {
     onOpenLinkModal: makeLinkModalOpener(docKey),
-  }), [docKey]);
+  }), ClipboardImport.configure({ docKey })], [docKey]);
   const initializeContent = useMemo(() => makeInitialContentLoader(docKey), [docKey]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   // 超链接插入与编辑弹窗状态
@@ -187,36 +188,6 @@ export function VisualKernel({
       attributes: {
         class: 'nb-prose',
         style: 'outline: none; max-width: var(--content-max-width); margin: 0 auto; padding: 16px 24px; min-height: 100%; font-size: var(--content-font-size); line-height: var(--content-line-height); font-family: var(--content-font-family); color: var(--editor-text);',
-      },
-      handlePaste: (_view, event) => {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        for (const item of Array.from(items)) {
-          if (item.type.startsWith('image/')) {
-            const file = item.getAsFile();
-            if (file && editor) {
-              event.preventDefault();
-              handlePastedImageFile(editor, file, docKey);
-              return true;
-            }
-          }
-        }
-        return false;
-      },
-      handleDrop: (_view, event) => {
-        const files = event.dataTransfer?.files;
-        if (!files || files.length === 0) return false;
-        const dropPosition = editor?.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
-        for (const file of Array.from(files)) {
-          if (file.type.startsWith('image/')) {
-            if (editor) {
-              event.preventDefault();
-              handlePastedImageFile(editor, file, docKey, dropPosition);
-              return true;
-            }
-          }
-        }
-        return false;
       },
     },
   }, [docKey]);
@@ -439,6 +410,7 @@ export function VisualKernel({
     >
       {editor && <EditorBubbleMenu editor={editor} enabled={active && visible} onOpenLinkModal={handleOpenLinkModal} />}
       {active && visible && editor && <TableToolbar editor={editor} />}
+      {active && visible && editor && <AnnotationLayer editor={editor} />}
       {active && visible && blockHandleEnabled && editor && <BlockDragHandle editor={editor} />}
       {active && visible && contextMenu && editor && (
         <EditorContextMenu

@@ -16,7 +16,7 @@ class FragmentDOMParser {
 }
 Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
 
-type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'pandoc' | 'md' | 'noteboard' }
+type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard' }
   | { type: 'asset-urls'; urls: string[] };
 let started = false;
 let receiveAssetUrls: ((urls: string[]) => void) | undefined;
@@ -46,9 +46,15 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
     const snapshot = typeof data.markdown === 'string' ? { markdown: data.markdown, doc: null }
       : (await import('../editor-md/documentExtensions')).materializeDocument(data.markdown);
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
+    if (data.format === 'standalone-html') {
+      const { standaloneHtml, localFileUrl } = await import('./standaloneHtml');
+      const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, paths => paths.map(localFileUrl), 'html');
+      self.postMessage({ type: 'result', result: standaloneHtml(result.html, data.title) });
+      return;
+    }
     const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup,
       paths => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); }));
-    const { html, items }: ExportDocument = result;
-    self.postMessage({ type: 'result', result: { html, items, markdown: snapshot.markdown } });
+    const { html, items, richSummary }: ExportDocument = result;
+    self.postMessage({ type: 'result', result: { html, items, richSummary, markdown: snapshot.markdown } });
   } catch (error) { self.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) }); }
 };

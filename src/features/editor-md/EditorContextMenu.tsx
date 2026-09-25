@@ -6,8 +6,7 @@ import { useMenuBounds } from '../../components/useMenuBounds';
 
 import React, { useState, useEffect, useRef } from 'react';
 import type { Editor } from '@tiptap/core';
-import { isInTable } from '@tiptap/pm/tables';
-import { applyTablePaste } from './tableClipboard';
+import { pasteFromSystemClipboard } from './clipboard/systemClipboard';
 import {
   Bold,
   Italic,
@@ -210,17 +209,7 @@ export function EditorContextMenu({
               style={btnStyle}
               onClick={async () => {
                 onClose();
-                try {
-                  const text = await navigator.clipboard.readText();
-                  if (text) {
-                    if (isInTable(editor.state) && applyTablePaste(editor, text)) {
-                      return;
-                    }
-                    editor.chain().focus().insertContent(text).run();
-                  }
-                } catch {
-                  document.execCommand('paste');
-                }
+                await pasteFromSystemClipboard(editor);
               }}
               onMouseEnter={(e) => {
                 setActiveSubmenu(null);
@@ -454,17 +443,7 @@ export function EditorContextMenu({
               style={btnStyle}
               onClick={async () => {
                 onClose();
-                try {
-                  const text = await navigator.clipboard.readText();
-                  if (text) {
-                    if (isInTable(editor.state) && applyTablePaste(editor, text)) {
-                      return;
-                    }
-                    editor.chain().focus().insertContent(text).run();
-                  }
-                } catch {
-                  document.execCommand('paste');
-                }
+                await pasteFromSystemClipboard(editor);
               }}
               onMouseEnter={(e) => {
                 setActiveSubmenu(null);
@@ -483,17 +462,7 @@ export function EditorContextMenu({
               style={btnStyle}
               onClick={async () => {
                 onClose();
-                try {
-                  const text = await navigator.clipboard.readText();
-                  if (text) {
-                    if (isInTable(editor.state) && applyTablePaste(editor, text)) {
-                      return;
-                    }
-                    editor.chain().focus().insertContent({ type: 'text', text }).run();
-                  }
-                } catch {
-                  document.execCommand('paste');
-                }
+                await pasteFromSystemClipboard(editor, true);
               }}
               onMouseEnter={(e) => {
                 setActiveSubmenu(null);

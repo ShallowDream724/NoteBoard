@@ -4,7 +4,9 @@
 
 `.nb` 与 `.nbdoc` 是同一格式的两个扩展名，默认新建使用 `.nb`，另存为与导出可选 `.nbdoc`。它们均为 UTF-8 JSON，顶层为 `{ "format": "noteboard", "version": 1, "document": … }`。document 使用现有 ProseMirror schema，不再另建一套富文本模型。文本、marks、段落属性、图片引用、公式源码、表格合并与尺寸均是树中的数据。两个后缀共用 codec，不存在旧格式转换分支；转换任务使用 `noteboard` 标识，不以扩展名区分实现。
 
-`core/nativeDocument` 负责 envelope；`editorDocumentCodec` 负责 schema 校验和编辑器读写；UI、文件会话、写队列和历史不解析格式细节。未知版本、节点、mark、属性或内容字段拒绝加载，不能先丢弃再自动保存。新增不兼容语义时必须提升格式版本并提供显式迁移。
+`core/nativeDocument` 负责 envelope；`core/nativeDocumentStructure` 校验说明实体唯一性、引用完整性及元数据归属；`editorDocumentCodec` 负责 schema 校验和编辑器读写。UI、文件会话、写队列和历史不解析格式细节。未知版本、节点、mark、属性或内容字段拒绝加载，不能先丢弃再自动保存。发布后的不兼容语义须提升格式版本并明确转换策略；内部测试格式不维护迁移分支。
+
+格式可以直接手写；默认属性可省略，不要求生成随机块 ID。只有补充说明使用作者自定、文档内唯一的 ID。图片组合、折叠块、模糊和说明采用明确语义节点/标记，见 [编写规范与示例](native-authoring.md)，该规范也作为未来 AI skill 的输入。
 
 原生文档只提供可视化编辑，不挂载 CodeMirror，不提供源码切换。普通 Markdown 继续保留源码和可视化模式，扩展样式仍采用其已有的注释协议和增量范围映射，详见 [document-styles.md](document-styles.md)。两种文件不通过改扩展名互相转换，转换入口统一在导出。
 

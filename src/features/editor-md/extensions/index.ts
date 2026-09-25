@@ -147,6 +147,10 @@ import { EnhancedImageBlock } from '../imageNodeView';
 import { ImageAssetLifecycle } from '../imageAssetExtension';
 import { TableSelectionHandles } from '../tableSelectionHandles';
 import { HeadingFolding } from '../headingFolding';
+import { InteractiveImageCollection, InteractiveImageSlot, InteractiveDisclosure } from '../rich-content/views';
+import { withRichPresentation } from '../rich-content/presentedView';
+import { AnnotationBehavior } from '../annotations/extension';
+import { TableViewport } from '../tableViewport';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -161,16 +165,17 @@ const InteractiveTable = MarkdownTable.extend({
 /** Document grammar stays independent from UI and session state. */
 export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): Extensions {
   return [
-    ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
-      mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
-      infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow,
+    ...buildDocumentExtensions({ image: withRichPresentation(EnhancedImageBlock.configure({ docKey })), codeBlock: withRichPresentation(CodeBlockView),
+      mathInline: MathInline, mathBlock: withRichPresentation(MathBlock), mermaidBlock: withRichPresentation(MermaidBlock), plantumlBlock: withRichPresentation(PlantUmlBlock),
+      infographicBlock: withRichPresentation(InfographicBlock), githubAlert: withRichPresentation(GitHubAlert), tableRow: ResizableTableRow,
       tableCell: EditableTableCell, tableHeader: EditableTableHeader,
+      imageCollection: withRichPresentation(InteractiveImageCollection), imageSlot: InteractiveImageSlot.configure({ docKey }), disclosure: withRichPresentation(InteractiveDisclosure),
       table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
     UnifiedDocumentHistoryKeys.configure({ docKey }), MarkdownTypingKeys, AlertCompletion,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
-    CharacterCount, TableClipboard, TableSizing, TableSelectionHandles, HeadingFolding, CodeHighlight, searchReplaceExtension(),
+    CharacterCount, TableClipboard, TableViewport, TableSizing, TableSelectionHandles, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
       addOptions() { return { suggestion: slashSuggestion }; },

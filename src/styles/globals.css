@@ -574,7 +574,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
  * Markdown 正文排版
  * ═════════════════════════════════════════════════════════ */
 
-.ProseMirror:not(.nb-bitable-rte-prose) {
+.ProseMirror:not(.nb-bitable-rte-prose):not(.nb-embedded-prose) {
   font-family: var(--content-font-family);
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);

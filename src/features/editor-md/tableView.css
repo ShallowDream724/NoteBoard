@@ -2,10 +2,11 @@
 .nb-table-selection-overlay { position:fixed; z-index:1; pointer-events:none; background:var(--editor-selection, #3b82f626); }
 .nb-large-table.nb-fixed-columns > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
 table.nb-isolated-rows { display:block; position:relative; }
-table.nb-isolated-rows>colgroup { display:flex; position:absolute; top:0; left:0; height:0; pointer-events:none; }
+table.nb-isolated-rows>colgroup { display:flex; position:absolute; top:0; left:0; width:100%; height:0; pointer-events:none; }
 table.nb-isolated-rows>colgroup>col { display:block; flex:none; }
 table.nb-isolated-rows>tbody { display:block; }
-table.nb-isolated-rows>tbody>tr { display:flex; height:auto !important; content-visibility:auto; contain-intrinsic-size:auto 40px; }
+table.nb-isolated-rows>tbody>tr { display:flex; height:auto !important; }
+table.nb-isolated-rows>tbody>tr.nb-row-placeholder { display:block; contain:strict; pointer-events:none; }
 table.nb-isolated-rows>tbody>tr+tr>:is(td,th) { border-top-width:0; }
 table.nb-isolated-rows>tbody>tr>:is(td,th) { display:block; flex:none; min-width:0; box-sizing:border-box; align-content:start; }
 table.nb-isolated-rows>tbody>tr>:is(td,th)[style*="vertical-align: middle"],

@@ -4,6 +4,7 @@ import { DOMSerializer } from '@tiptap/pm/model';
 import { buildDocumentExtensions, documentParser } from '../editor-md/documentExtensions';
 import { MarkdownTable } from '../editor-md/markdownTable';
 import { createMarkdownLexer } from '../editor-md/markdownLexer';
+import { projectRichContent } from './richProjection';
 
 /** Presentation is discarded from a copy, never from the authoritative tree.
  * Code, formulas, links and embedded diagram source remain content. */
@@ -49,5 +50,5 @@ const PortableTable = MarkdownTable.extend({
 let manager: MarkdownManager | undefined;
 export function portableMarkdown(document: JSONContent): string {
   manager ??= new MarkdownManager({ extensions: buildDocumentExtensions({ table: PortableTable }), marked: createMarkdownLexer() });
-  return manager.serialize(withoutPresentation(document));
+  return manager.serialize(withoutPresentation(projectRichContent(document, 'portable').document));
 }

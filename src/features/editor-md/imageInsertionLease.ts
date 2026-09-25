@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core';
-import { TextSelection, type Transaction } from '@tiptap/pm/state';
+import { TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
+import { Fragment, Slice } from '@tiptap/pm/model';
 import { MapMode, StateEffect } from '@codemirror/state';
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
@@ -7,24 +8,26 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getSessionGeneration, isClosing } from '../session/documentSession';
 import { getMdSourceView, getMdTipTapEditor } from './editorInstances';
+import { dispatchDiscreteEdit } from './discreteEdit';
 
 export interface InsertedImage { src: string; alt: string }
-interface Target {
+export interface InsertionTarget<T> {
   current(): boolean;
-  insert(image: InsertedImage): boolean;
+  insert(value: T): boolean;
   track(cancel: () => void): () => void;
 }
-export interface ImageInsertionLease {
+export interface InsertionLease<T> {
   docKey: string;
   directory: string | null;
   signal: AbortSignal;
   current(): boolean;
-  commit(image: InsertedImage): boolean;
+  commit(value: T): boolean;
   dispose(): void;
 }
+export type ImageInsertionLease = InsertionLease<InsertedImage | InsertedImage[]>;
 
 /** Loss of active ownership is permanent, even if the same path/tab is reopened later. */
-function captureLease(docKey: string, target: Target): ImageInsertionLease | null {
+export function captureDocumentInsertion<T>(docKey: string, target: InsertionTarget<T>): InsertionLease<T> | null {
   const document = useDocumentStore.getState().getDocument(docKey);
   if (!document) return null;
   const generation = getSessionGeneration(docKey);
@@ -52,7 +55,7 @@ function captureLease(docKey: string, target: Target): ImageInsertionLease | nul
   const stopTarget = target.track(cancel);
   const dispose = () => {
     if (disposed) return;
-    disposed = true; stopDocument(); stopWindow(); stopTarget();
+    disposed = true; stopDocument(); stopWindow(); stopTarget(); controller.abort();
   };
   const current = () => !disposed && !controller.signal.aborted && ownsIdentity();
   return { docKey, directory, signal: controller.signal, current, dispose,
@@ -66,22 +69,22 @@ function captureLease(docKey: string, target: Target): ImageInsertionLease | nul
   };
 }
 
-export function captureVisualImageInsertion(editor: Editor, docKey: string, position?: number): ImageInsertionLease | null {
+export function captureVisualInsertion<T>(editor: Editor, docKey: string, insert: (value: T, selection: Selection, position?: number) => boolean, position?: number): InsertionLease<T> | null {
   const selection = position === undefined ? editor.state.selection
     : TextSelection.near(editor.state.doc.resolve(Math.max(0, Math.min(position, editor.state.doc.content.size))));
   let bookmark = selection.getBookmark();
   let from = selection.from, to = selection.to;
-  return captureLease(docKey, {
+  let rawPosition = position;
+  return captureDocumentInsertion(docKey, {
     current: () => !editor.isDestroyed && editor.isEditable && getMdTipTapEditor(docKey) === editor && !editor.view.dom.closest('[inert]'),
-    insert: image => editor.chain().command(({ tr }) => {
-      tr.setSelection(bookmark.resolve(tr.doc)); return true;
-    }).setImage(image).focus().run(),
+    insert: value => insert(value, bookmark.resolve(editor.state.doc), rawPosition),
     track: cancel => {
       const update = ({ transaction, appendedTransactions }: { transaction: Transaction; appendedTransactions: Transaction[] }) => {
         for (const tr of [transaction, ...appendedTransactions]) {
           if (!tr.docChanged) continue;
           const start = tr.mapping.mapResult(from, 1), end = tr.mapping.mapResult(to, -1);
-          if (tr.getMeta('noteboard-document-replacement') || start.deletedAcross || end.deletedAcross || (from < to && start.deleted && end.deleted)) { cancel(); return; }
+          if (rawPosition !== undefined) { const mapped = tr.mapping.mapResult(rawPosition, 1); if (mapped.deletedAcross) { cancel(); return; } rawPosition = mapped.pos; }
+          if (tr.getMeta('noteboard-document-replacement') || (rawPosition === undefined && (start.deletedAcross || end.deletedAcross || (from < to && start.deleted && end.deleted)))) { cancel(); return; }
           bookmark = bookmark.map(tr.mapping);
           const mapped = bookmark.resolve(tr.doc); from = mapped.from; to = mapped.to;
         }
@@ -90,6 +93,42 @@ export function captureVisualImageInsertion(editor: Editor, docKey: string, posi
       return () => { editor.off('transaction', update); editor.off('destroy', cancel); };
     },
   });
+}
+
+/** Fill empty slots in order, append capacity, and preserve all existing captions. */
+export function insertVisualImages(editor: Editor, images: InsertedImage[], selection: Selection, position?: number): boolean {
+  return insertViewImages(editor.view, images, selection, position);
+}
+export function insertViewImages(view: import('@tiptap/pm/view').EditorView, images: InsertedImage[], selection: Selection, position?: number): boolean {
+  const schema = view.state.schema;
+  if (!images.length || !schema.nodes.image) return false;
+  const tr = view.state.tr, raw = Math.max(0, Math.min(position ?? selection.from, tr.doc.content.size));
+  const $pos = tr.doc.resolve(raw);
+  let slotDepth = -1;
+  for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === 'imageSlot') { slotDepth = depth; break; }
+  if (slotDepth >= 0 && $pos.node(slotDepth - 1).type.name === 'imageCollection') {
+    const collection = $pos.node(slotDepth - 1), collectionPos = $pos.before(slotDepth - 1), slotIndex = $pos.index(slotDepth - 1);
+    const appended = []; let next = 0, offset = 0;
+    for (let index = 0; index < collection.childCount; index++) {
+      const slot = collection.child(index);
+      if (index >= slotIndex && next < images.length && slot.firstChild?.type.name !== 'image') {
+        const position = collectionPos + 1 + offset;
+        tr.replaceWith(tr.mapping.map(position, 1), tr.mapping.map(position + slot.nodeSize, -1), slot.copy(Fragment.from(schema.nodes.image.create(images[next++])).append(slot.content)));
+      }
+      offset += slot.nodeSize;
+    }
+    while (next < images.length) appended.push(schema.nodes.imageSlot.create(null, schema.nodes.image.create(images[next++])));
+    if (appended.length) tr.insert(tr.mapping.map(collectionPos + collection.nodeSize - 1, -1), appended);
+  } else {
+    const content = Fragment.from(images.map(image => schema.nodes.image.create(image)));
+    if (position !== undefined && $pos.parent.canReplace($pos.index(), $pos.index(), content)) tr.insert(raw, content);
+    else tr.setSelection(selection).replaceSelection(new Slice(content, 0, 0));
+  }
+  dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
+}
+
+export function captureVisualImageInsertion(editor: Editor, docKey: string, position?: number): ImageInsertionLease | null {
+  return captureVisualInsertion<InsertedImage | InsertedImage[]>(editor, docKey, (value, selection, mappedPosition) => insertVisualImages(editor, Array.isArray(value) ? value : [value], selection, mappedPosition), position);
 }
 
 interface SourceTracker { update(value: ViewUpdate): void; cancel(): void }
@@ -101,12 +140,15 @@ const sourceTracking = ViewPlugin.define(view => ({
 
 export function captureSourceImageInsertion(view: EditorView, docKey: string): ImageInsertionLease | null {
   let range = view.state.selection.main;
-  return captureLease(docKey, {
+  return captureDocumentInsertion(docKey, {
     current: () => getMdSourceView(docKey) === view && !view.dom.closest('[inert]'),
-    insert: image => {
-      const alt = image.alt.replace(/[\[\]\\]/g, '\\$&');
+    insert: value => {
+      const images = Array.isArray(value) ? value : [value];
+      const snippet = images.map(image => {
+      const alt = image.alt.replace(/[[\]\\]/g, '\\$&');
       const src = image.src.replace(/\\/g, '/').replace(/>/g, '%3E').replace(/[\r\n]/g, '');
-      const snippet = `![${alt}](<${src}>)`;
+        return `![${alt}](<${src}>)`;
+      }).join('\n\n');
       view.dispatch({ changes: { from: range.from, to: range.to, insert: snippet }, selection: { anchor: range.from + snippet.length } });
       view.focus(); return true;
     },

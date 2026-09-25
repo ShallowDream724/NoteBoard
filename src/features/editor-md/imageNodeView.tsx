@@ -28,6 +28,7 @@ import { useExplorerStore } from '../explorer/explorerStore';
 import { resolveRelativeDocPath } from './linkHandler';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { Tooltip } from '../../components/Tooltip';
+import { useImageVisibility } from './rich-content/imageVisibility';
 
 /** 大图预览 Lightbox 模态框组件 */
 function ImageLightboxModal({
@@ -241,6 +242,7 @@ const modalBtnStyle: React.CSSProperties = {
 
 /** TipTap 图片 NodeView 组件 */
 export function ImageComponent({ node, extension, updateAttributes, deleteNode }: NodeViewProps) {
+  const visibility = useImageVisibility();
   const [hovered, setHovered] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -360,8 +362,9 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
   };
 
   return (
-    <NodeViewWrapper style={alignContainerStyle}>
+    <NodeViewWrapper className="nb-image" style={alignContainerStyle}>
       <div
+        ref={visibility.ref}
         style={{
           position: 'relative',
           display: 'inline-block',
@@ -369,6 +372,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
           maxWidth: '100%',
           borderRadius: 8,
           transition: 'width 150ms ease',
+          minHeight: visibility.visible ? undefined : visibility.placeholderHeight,
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -376,6 +380,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
         {/* 悬停浮层快捷操作工具栏 */}
         {hovered && (
           <div
+            data-image-toolbar=""
             style={{
               position: 'absolute',
               top: 8,
@@ -563,8 +568,10 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
         ) : (
           /* 禁用 Referer 携带，防止防盗链拦截并支持跨域图片原生渲染 */
           <img
-            src={resolvedDisplaySrc}
+            src={visibility.visible && resolvedDisplaySrc ? resolvedDisplaySrc : undefined}
             alt={alt}
+            loading="lazy"
+            decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setLoadError(true)}
             onDoubleClick={() => setLightboxOpen(true)}
@@ -589,6 +596,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
         {hovered && !loadError && (
           <Tooltip content="拖拽拉伸调节图片尺寸" side="left" sideOffset={6}>
             <div
+              data-image-resize=""
               onMouseDown={handleResizeStart}
               aria-label="拖拽拉伸调节图片尺寸"
               style={{

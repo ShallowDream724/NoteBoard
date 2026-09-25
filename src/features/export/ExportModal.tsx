@@ -11,6 +11,7 @@ import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { presentExportedFile } from './exportCompletion';
 import { DEFAULT_NATIVE_EXTENSION, NATIVE_DOCUMENT_EXTENSIONS } from '../../core/nativeDocument';
+import { richExportDiagnostics } from './richProjection';
 import './export.css';
 
 export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () => void }) {
@@ -61,8 +62,9 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const itemIndex = useMemo(() => new Map(document?.items.map(value => [value.id, value])), [document]);
   const currentItem = itemIndex.get(item);
   const issueIds = useMemo(() => new Set(pdf.receipt?.issues.filter(issue => issue.blocking).map(issue => issue.id) ?? []), [pdf.receipt]);
+  const richDiagnostics = useMemo(() => richExportDiagnostics(document?.richSummary, format), [document?.richSummary, format]);
   const diagnostics = useMemo(() => [error && error !== '已导出' ? error : '', pdf.error,
-    ...(pdf.receipt?.issues.map(issue => `${itemIndex.get(issue.id)?.label ?? issue.id}: ${issue.message}`) ?? [])].filter(Boolean).join('\n\n'), [error, pdf.error, pdf.receipt, itemIndex]);
+    ...richDiagnostics, ...(pdf.receipt?.issues.map(issue => `${itemIndex.get(issue.id)?.label ?? issue.id}: ${issue.message}`) ?? [])].filter(Boolean).join('\n\n'), [error, pdf.error, pdf.receipt, itemIndex, richDiagnostics]);
   const visibleItems = useMemo(() => {
     const result = []; const query = itemSearch.toLowerCase();
     for (const id of pdf.receipt?.adjustable ?? []) {
@@ -90,9 +92,11 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
       if (!destination) return;
       let warnings = '';
       if (format === 'pdf' && pdf.receipt) await invoke('save_pdf', { id: pdf.receipt.id, revision: pdf.receipt.revision, path: destination });
-      else if (format === 'md' || format === 'noteboard') {
-        const { prepareTextExport } = await import('./documentConversion');
-        const content = await prepareTextExport(document.source ?? document.markdown, format, document.baseDirectory, signal);
+      else if (format === 'md' || format === 'noteboard' || format === 'html5') {
+        const { prepareTextExport, prepareHtmlExport } = await import('./documentConversion');
+        const content = format === 'html5'
+          ? await prepareHtmlExport(document.source ?? document.markdown, document.title, document.baseDirectory, signal)
+          : await prepareTextExport(document.source ?? document.markdown, format, document.baseDirectory, signal);
         signal.throwIfAborted();
         const { writeDocument } = await import('../../core/ipc/commands');
         const result = await writeDocument(destination, content, 'utf8', 'lf');
@@ -106,7 +110,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
       }
       onClose();
-      await presentExportedFile(destination, warnings || undefined);
+      await presentExportedFile(destination, [...richDiagnostics, warnings].filter(Boolean).join('\n') || undefined);
     } catch (error) { if (!signal.aborted) setError(String(error)); } finally {
       if (current.pandoc) { void invoke('cancel_pandoc', { id: current.pandoc }).catch(() => {}); current.pandoc = undefined; }
       savingRef.current = false;
@@ -145,7 +149,8 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         </section>}
         {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => navigateToItem(issue.id)}><AlertCircle size={15}/><span>{itemIndex.get(issue.id)?.label && <strong>{itemIndex.get(issue.id)!.label}<br/></strong>}{issue.message}</span></button>)}
         {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedReceipt(e.target.checked ? receiptKey : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
-      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
+      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。图片保留原文件引用。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
+      {!!richDiagnostics.length && <div className="export-note" role="status">{richDiagnostics.map(message => <p key={message}>{message}</p>)}</div>}
     </aside><main>{format === 'pdf' ? <>
       {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
         : pdf.error || (!document && error) ? <div className="export-empty">暂时无法生成预览</div>

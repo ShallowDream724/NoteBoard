@@ -4,7 +4,7 @@ import { PresentedTableCell, PresentedTableHeader } from './tableCellPresentatio
 
 /** Attribute edits retain the cell and its editable subtree. The default
  * view replaces a td/th wrapper whenever colwidth or presentation changes. */
-class TableCellView {
+export class TableCellView {
   dom: HTMLElement;
   contentDOM: HTMLElement;
   private attributes: Record<string, string>;

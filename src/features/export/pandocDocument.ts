@@ -7,6 +7,7 @@ import { isSafeHighlightColor } from '../editor-md/markdownHighlight';
 import { tableFill } from '../editor-md/tableCellPresentation';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { documentColor } from '../document-style/colors';
+import { projectRichContent } from './richProjection';
 
 type Ast = { t: string; c?: unknown };
 const node = (t: string, c?: unknown): Ast => c === undefined ? { t } : { t, c };
@@ -19,8 +20,8 @@ function inline(value: DocumentNode): Ast[] {
   if (value.isText) result = (value.text ?? '').split(/(\s+)/).filter(Boolean).map(word => /^\s+$/.test(word) ? node('Space') : node('Str', word));
   else if (value.type.name === 'hardBreak') result = [node('LineBreak')];
   else if (value.type.name === 'mathInline') result = [node('Math', [node(isDisplayMath(value.attrs.delimiter as MathDelimiter) ? 'DisplayMath' : 'InlineMath'), value.attrs.latex])];
-  else if (value.type.name.toLowerCase().includes('image')) result = [node('Image', [attr(), [node('Str', value.attrs.alt ?? '')], [value.attrs.src, value.attrs.title ?? '']])];
-  else result = children(value, inline);
+  else if (value.type.name === 'image') result = [node('Image', [attr(), [node('Str', value.attrs.alt ?? '')], [value.attrs.src, value.attrs.title ?? '']])];
+  else throw new Error(`无法导出行内节点 ${value.type.name}`);
   for (const mark of [...value.marks].reverse()) {
     const types: Record<string, string> = { bold: 'Strong', italic: 'Emph', strike: 'Strikeout', underline: 'Underline' };
     if (types[mark.type.name]) result = [node(types[mark.type.name], result)];
@@ -39,6 +40,7 @@ function block(value: DocumentNode, cellFills = true): Ast[] {
   const paragraphStyle = [ ['left','center','right'].includes(value.attrs.textAlign) ? `text-align:${value.attrs.textAlign}` : '',
     Number.isInteger(value.attrs.indent) && value.attrs.indent > 0 && value.attrs.indent <= 8 ? `margin-left:${value.attrs.indent * 2}em` : '' ].filter(Boolean).join(';');
   switch (value.type.name) {
+    case 'documentPresentation': return [];
     case 'paragraph': { const content = node('Para', children(value, inline)); return [paragraphStyle ? node('Div', [attr(['noteboard-presentation'], [['style', paragraphStyle]]), [content]]) : content]; }
     case 'heading': return [node('Header', [value.attrs.level, paragraphStyle ? attr(['noteboard-presentation'], [['style', paragraphStyle]]) : attr(), children(value, inline)])];
     case 'codeBlock': return [node('CodeBlock', [attr(value.attrs.language ? [value.attrs.language] : []), value.textContent])];
@@ -83,14 +85,15 @@ function block(value: DocumentNode, cellFills = true): Ast[] {
         [attr(), header ? [rows.shift()] : []], [[attr(), 0, [], rows]], [attr(), []]])];
     }
     default:
-      if (value.type.name.toLowerCase().includes('image')) return [node('Para', inline(value))];
-      if (value.attrs.code != null) return [node('CodeBlock', [attr([value.type.name.replace(/Block$/, '')]), String(value.attrs.code)])];
-      return children(value, recurse);
+      if (value.type.name === 'image') return [node('Para', inline(value))];
+      if (['mermaidBlock', 'plantumlBlock', 'infographicBlock'].includes(value.type.name)) return [node('CodeBlock', [attr([value.type.name.replace(/Block$/, '')]), String(value.attrs.code ?? '')])];
+      throw new Error(`无法导出节点 ${value.type.name}`);
   }
 }
 /** Pass math as semantic AST nodes; Pandoc never re-interprets currency/delimiters. */
 export function pandocSource(source: string | DocumentNode): string {
-  const doc = typeof source === 'string' ? parseMarkdownDocument(source) : source;
+  const original = typeof source === 'string' ? parseMarkdownDocument(source) : source;
+  const doc = original.type.schema.nodeFromJSON(projectRichContent(original.toJSON(), 'portable').document);
   const fills = documentTableStyle(doc) !== 'three-line';
   return JSON.stringify({ blocks: children(doc, value => block(value, fills)), meta: {} });
 }

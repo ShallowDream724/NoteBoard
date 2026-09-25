@@ -1,0 +1,30 @@
+{
+  "format": "noteboard",
+  "version": 1,
+  "document": {
+    "type": "doc",
+    "content": [
+      { "type": "annotationStore", "content": [
+        { "type": "annotationBody", "attrs": { "id": "observation" }, "content": [
+          { "type": "paragraph", "content": [{ "type": "text", "text": "连续记录同一对象，可以更容易比较变化。说明也支持列表和图片。" }] }
+        ] }
+      ] },
+      { "type": "heading", "attrs": { "level": 1 }, "content": [{ "type": "text", "text": "观察手记" }] },
+      { "type": "paragraph", "content": [
+        { "type": "text", "text": "将照片、发现与疑问放在一起，留下" },
+        { "type": "text", "text": "可追溯的观察", "marks": [{ "type": "annotationReference", "attrs": { "id": "observation" } }] },
+        { "type": "text", "text": "。" }
+      ] },
+      { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "照片对照" }] },
+      { "type": "imageCollection", "attrs": { "layout": "grid", "columns": 2 }, "content": [
+        { "type": "imageSlot" }, { "type": "imageSlot" }, { "type": "imageSlot" }, { "type": "imageSlot" }
+      ] },
+      { "type": "paragraph", "content": [{ "type": "text", "text": "点击空槽添加照片，也可以把图片拖入其中。" }] },
+      { "type": "disclosure", "attrs": { "title": "记录条件", "open": false }, "content": [
+        { "type": "paragraph", "content": [{ "type": "text", "text": "时间、光照与拍摄位置保持一致。" }] },
+        { "type": "paragraph", "content": [{ "type": "text", "text": "需要验证的推测", "marks": [{ "type": "conceal" }] }] }
+      ] },
+      { "type": "paragraph" }
+    ]
+  }
+}

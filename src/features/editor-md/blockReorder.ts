@@ -68,7 +68,7 @@ export function getTopLevelBlockInfo(
     const $topLevelPos = view.state.doc.resolve(pos);
     const node = view.state.doc.nodeAt(pos);
 
-    if (($topLevelPos.depth !== 0 && !isListItem(node)) || !node?.isBlock || node.type.name === 'documentPresentation') return null;
+    if (($topLevelPos.depth !== 0 && !isListItem(node)) || !node?.isBlock || ['documentPresentation', 'annotationStore'].includes(node.type.name)) return null;
     return { element, pos, node };
   } catch {
     // NodeView 正在重绘或 DOM 已失效时不生成落点，等待下一次指针事件重新解析。
@@ -89,7 +89,7 @@ function dropEntries(view: EditorView, items: boolean | undefined): TopLevelBloc
   if (elements.length === view.state.doc.childCount) {
     view.state.doc.forEach((node, pos, index) => {
       const element = elements[index];
-      if (node.type.name === 'documentPresentation' || element.classList.contains('nb-heading-fold-hidden')) return;
+      if (['documentPresentation', 'annotationStore'].includes(node.type.name) || element.classList.contains('nb-heading-fold-hidden')) return;
       if (!items || !element.matches('ul,ol')) { entries.push({ element, node, pos }); return; }
       const candidates = [...element.querySelectorAll('li')].filter(item => !item.closest('td,th'));
       const models: Array<{ node: ProseMirrorNode; pos: number }> = [];

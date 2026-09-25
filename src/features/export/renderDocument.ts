@@ -8,14 +8,30 @@ import type { ExportDocument, ExportItem } from './model';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { matrixSource, matrixPart, type MatrixSource } from '../../core/math/structure';
 import { MATH_LIMITS } from '../editor-md/mathLimits';
+import { projectRichContent } from './richProjection';
+import { markTableEdges } from './tableLayout';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
-  math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths): Promise<ExportDocument> {
+  math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths,
+  mode: 'print' | 'html' = 'print'): Promise<ExportDocument> {
   signal?.throwIfAborted();
-  const doc = snapshot ?? parseMarkdownDocument(markdown);
+  const original = snapshot ?? parseMarkdownDocument(markdown);
+  const projection = projectRichContent(original.toJSON(), mode);
+  const doc = original.type.schema.nodeFromJSON(projection.document);
   const container = document.createElement('article');
   container.dataset.tableStyle = documentTableStyle(doc);
-  container.append(DOMSerializer.fromSchema(doc.type.schema).serializeFragment(doc.content));
+  container.dataset.exportMode = mode;
+  const base = DOMSerializer.fromSchema(doc.type.schema);
+  const concealed = (node: Node) => node.attrs.concealed ? { 'data-nb-conceal': '', tabindex: '0', 'aria-label': '聚焦以显示内容' } : {};
+  const emptySlot = (node: Node) => { let empty = true; node.forEach(child => { if (child.type.name === 'image' || child.content.size) empty = false; }); return empty; };
+  const serializer = new DOMSerializer({ ...base.nodes,
+    imageCollection: node => ['section', { ...concealed(node), class: `export-image-collection${node.attrs.layout === 'carousel' ? ' export-image-carousel' : ''}`, 'data-columns': node.attrs.columns, 'aria-label': node.attrs.layout === 'carousel' ? '图片轮播' : '图片拼图' }, 0],
+    imageSlot: node => ['figure', { class: 'export-image-slot', ...(emptySlot(node) ? { 'data-empty': 'true', 'aria-hidden': 'true' } : {}) }, 0],
+    disclosure: node => ['details', { ...concealed(node), class: 'export-disclosure', ...(node.attrs.open ? { open: '' } : {}) }, ['summary', node.attrs.title], ['div', 0]],
+    annotationStore: () => ['section', { class: 'export-annotations', 'aria-label': '补充说明' }, ['h2', '补充说明'], ['div', 0]],
+    annotationBody: node => ['section', { class: 'export-annotation', id: `export-note-${projection.annotationNumbers.get(node.attrs.id)}` }, ['h3', `[${projection.annotationNumbers.get(node.attrs.id)}]`], ['div', 0]],
+  }, base.marks);
+  container.append(serializer.serializeFragment(doc.content));
   container.querySelectorAll('[data-document-presentation]').forEach(element => element.remove());
   const items: ExportItem[] = [];
   let mathIndex = 0;
@@ -76,6 +92,7 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     const body = document.createElement('tbody');
     Array.from(table.children).filter(child => child.tagName === 'TR').forEach(row => body.append(row));
     if (body.children.length) table.append(body);
+    if (mode === 'html') markTableEdges(table);
     items.push({ id, kind: 'table', label: `表格 ${tableIndex} · ${first?.textContent?.slice(0, 40) ?? ''}` });
   }
   let codeEngine: typeof import('../editor-md/codeHighlightEngine') | undefined;
@@ -118,5 +135,5 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   }
   // Export never contains editing controls or active document scripts.
   container.querySelectorAll('script,iframe,button,input,textarea,select').forEach(node => node.remove());
-  return { title, markdown, baseDirectory, html: container.outerHTML, items };
+  return { title, markdown, baseDirectory, html: container.outerHTML, items, richSummary: projection.summary };
 }

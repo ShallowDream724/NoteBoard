@@ -70,29 +70,39 @@ async function writeImage(lease: ImageInsertionLease, target: ImageDestination, 
 }
 
 /** Capture the original PM target before reading bytes; optionally use the drop hit position. */
-export async function handlePastedImageFile(editor: Editor, file: File, docKey: string, position?: number): Promise<void> {
-  const lease = captureVisualImageInsertion(editor, docKey, position);
+export async function handlePastedImageFiles(editor: Editor, files: File[], docKey: string, position?: number): Promise<void> {
+  return handleImageFilesUsingLease(captureVisualImageInsertion(editor, docKey, position), files);
+}
+export async function handleImageFilesUsingLease(lease: ImageInsertionLease | null, files: File[]): Promise<void> {
   if (!lease) return;
   try {
+    const images: InsertedImage[] = []; let fallback = false;
+    // Sequential IO bounds decoded/binary memory and preserves clipboard order.
+    for (const file of files) {
+    assertCurrent(lease);
     const target = destination(lease, file.name);
     if (target) {
       try {
         const bytes = new Uint8Array(await file.arrayBuffer()); assertCurrent(lease);
         await writeImage(lease, target, bytes);
-        if (lease.commit(target)) showToast(`图片已保存至 /${target.folder} 并插入`, 'success');
-        return;
+        images.push(target); continue;
       } catch (error) {
         if (error instanceof CancelledInsertion || !lease.current()) return;
         const src = await asDataURL(file, lease.signal); assertCurrent(lease);
-        if (lease.commit({ src, alt: target.alt })) showToast('图片落盘失败，已临时以 Base64 嵌入', 'warning');
-        return;
+        images.push({ src, alt: target.alt }); fallback = true; continue;
       }
     }
     const src = await asDataURL(file, lease.signal); assertCurrent(lease);
-    if (lease.commit({ src, alt: safeName(file.name.replace(/\.[^.]+$/, '')) })) showToast('图片已插入，保存文档后可管理图片文件', 'info');
+    images.push({ src, alt: safeName(file.name.replace(/\.[^.]+$/, '')) });
+    }
+    if (lease.commit(images)) showToast(fallback ? '图片已插入；部分图片落盘失败，暂存于文档中' : `已插入 ${images.length} 张图片`, fallback ? 'warning' : 'success');
   } catch (error) {
     if (!(error instanceof CancelledInsertion) && !lease.signal.aborted) showToast(`图片插入失败：${String(error)}`, 'error');
   } finally { lease.dispose(); }
+}
+
+export function handlePastedImageFile(editor: Editor, file: File, docKey: string, position?: number): Promise<void> {
+  return handlePastedImageFiles(editor, [file], docKey, position);
 }
 
 async function pickAndSaveLocalImage(lease: ImageInsertionLease): Promise<InsertedImage | null> {
@@ -124,8 +134,8 @@ async function insertPickedImage(lease: ImageInsertionLease | null): Promise<voi
   } finally { lease.dispose(); }
 }
 
-export function insertLocalImageWithDialog(editor: Editor, docKey: string): Promise<void> {
-  return insertPickedImage(captureVisualImageInsertion(editor, docKey));
+export function insertLocalImageWithDialog(editor: Editor, docKey: string, position?: number): Promise<void> {
+  return insertPickedImage(captureVisualImageInsertion(editor, docKey, position));
 }
 export function insertSourceImageWithDialog(view: EditorView, docKey: string): Promise<void> {
   return insertPickedImage(captureSourceImageInsertion(view, docKey));

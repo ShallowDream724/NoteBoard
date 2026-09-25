@@ -26,7 +26,7 @@ export function tableGesturePreview(table: HTMLTableElement, row?: HTMLTableRowE
   style.textContent = `
     table.${id} { table-layout:fixed !important; width:${sum}px !important; min-width:0 !important; }
     ${widths.map((width, i) => `table.${id}>colgroup>col:nth-child(${i + 1})${isolateRows ? `,table.${id} tr>:nth-child(${i + 1})` : ''} { width:${width}px !important; min-width:0 !important; }`).join('\n')}
-    ${isolateRows ? `table.${id} { display:block !important; }
+    ${isolateRows && !table.classList.contains('nb-isolated-rows') ? `table.${id} { display:block !important; }
       table.${id}>colgroup { display:none; }
       table.${id}>tbody,table.${id}>thead,table.${id}>tfoot { display:block; }
       table.${id} tr { display:flex; content-visibility:auto; contain-intrinsic-size:auto 44px; }

@@ -3,7 +3,7 @@ import type { ExportDocument } from './model';
 import type { JSONContent } from '@tiptap/core';
 
 /** One conversion per disposable worker; closing the dialog immediately releases its heap. */
-function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'pandoc' | 'md' | 'noteboard', signal?: AbortSignal): Promise<T> {
+function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard', signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./documentWorker.ts', import.meta.url), { type: 'module' });
@@ -32,7 +32,7 @@ function convert<T>(markdown: string | JSONContent, title: string, directory: st
 }
 
 export async function prepareDocument(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal): Promise<ExportDocument> {
-  const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown'>>(content, title, directory, 'html', signal);
+  const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown' | 'richSummary'>>(content, title, directory, 'html', signal);
   return { ...result, title, baseDirectory: directory };
 }
 export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal) {
@@ -40,4 +40,7 @@ export function preparePandoc(markdown: string | JSONContent, signal?: AbortSign
 }
 export function prepareTextExport(content: string | JSONContent, format: 'md' | 'noteboard', directory: string, signal?: AbortSignal) {
   return convert<string>(content, '', directory, format, signal);
+}
+export function prepareHtmlExport(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal) {
+  return convert<string>(content, title, directory, 'standalone-html', signal);
 }

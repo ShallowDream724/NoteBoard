@@ -81,7 +81,8 @@ export function resetAutomaticTableWidths(table: HTMLElement) {
  * Only the first logical column needs occupancy tracking; a spanning left cell
  * already owns that edge on the following rows. Rowspans stop at their section. */
 export function markTableEdges(table: HTMLTableElement) {
-  const rows = Array.from(table.rows);
+  // Worker DOMs expose the serialized tree but may omit browser-only table APIs.
+  const rows = table.rows ? Array.from(table.rows) : Array.from(table.querySelectorAll<HTMLTableRowElement>(':scope > thead > tr, :scope > tbody > tr, :scope > tfoot > tr, :scope > tr'));
   let start = 0;
   while (start < rows.length) {
     let end = start + 1;
@@ -89,8 +90,10 @@ export function markTableEdges(table: HTMLTableElement) {
     let leftSpan = 0;
     for (let index = start; index < end; index++) {
       const row = rows[index];
-      for (const [column, cell] of Array.from(row.cells).entries()) {
-        const span = cell.rowSpan === 0 ? end - index : Math.min(cell.rowSpan, end - index);
+      const cells = row.cells ? Array.from(row.cells) : Array.from(row.children).filter(child => ['TD', 'TH'].includes(child.tagName)) as HTMLTableCellElement[];
+      for (const [column, cell] of cells.entries()) {
+        const rowspan = cell.rowSpan ?? Number(cell.getAttribute('rowspan') ?? 1);
+        const span = rowspan === 0 ? end - index : Math.min(rowspan, end - index);
         const edges: string[] = [];
         if (column === 0 && leftSpan === 0) { edges.push('left'); leftSpan = span; }
         if (index === 0) edges.push('top');

@@ -1,6 +1,7 @@
 @import 'katex/dist/katex.min.css';
 @import '../editor-md/tablePresentation.css';
 @import '../../core/math/wrapping.css';
+@import './richDocument.css';
 :root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: white; color: #18202b; }

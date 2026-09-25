@@ -3,6 +3,7 @@ import type { Node, Schema } from '@tiptap/pm/model';
 import { decodeNativeDocument, encodeNativeDocument, visitNativeDocument } from '../../core/nativeDocument';
 import { hasMarkdownContentChanged, initializeMarkdownContent, parseMarkdown, serializeMarkdown, withEditableTail } from './serialize';
 import { rebaseDocumentReferences } from '../../core/documentReferences';
+import { normalizeNativeStructure } from '../../core/nativeDocumentStructure';
 
 export type RichDocumentFormat = 'markdown' | 'noteboard';
 const formats = new WeakMap<Editor, RichDocumentFormat>();
@@ -21,7 +22,7 @@ export function serializeNativeNode(doc: Node, directory = ''): string {
   return content;
 }
 export function parseNativeNode(content: string, schema: Schema): Node {
-  const json = decodeNativeDocument(content);
+  const json = normalizeNativeStructure(decodeNativeDocument(content));
   const validate = (value: JSONContent, mark = false) => {
     const spec = mark ? schema.marks[value.type ?? ''] : schema.nodes[value.type ?? ''];
     if (!spec) throw new Error(`文档包含不支持的${mark ? '样式' : '内容'}：${value.type}。原文件未修改。`);
