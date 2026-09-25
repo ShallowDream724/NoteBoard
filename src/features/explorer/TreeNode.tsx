@@ -4,7 +4,7 @@ import { useMenuBounds } from '../../components/useMenuBounds';
 // 24px 行高、depth*12+8 缩进、缩进导线、图标、悬停、当前 tab 高亮、行内重命名与右键菜单
 // 详见 docs/07-UI布局与交互规范.md §5.1
 
-import React, { memo, useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronRight,
   FileText,
@@ -25,11 +25,15 @@ import { getFileIcon } from '../../components/FileIcon';
 import { renameOpenPath } from './renameOpenPath';
 import { showToast } from '../../stores/toastStore';
 import * as ipc from '../../core/ipc/commands';
+import { groupMarkdownAssociations } from '../document-format/markdownAssociationIndex';
+import { normalizePath, sameKey } from './pathUtils';
 
 interface TreeNodeProps {
   node: FileTreeNode;
   depth: number;
   isLast: boolean;
+  associatedMarkdown?: FileTreeNode;
+  associationRevision?: number;
 }
 
 // ── 单节点渲染 ──
@@ -37,19 +41,25 @@ interface TreeNodeProps {
 export const TreeNode = memo(function TreeNode({
   node,
   depth,
+  associatedMarkdown,
+  associationRevision = 0,
 }: TreeNodeProps) {
   const { toggle, loadChildren } = useTreeData();
   const expand = useExplorerStore((s) => s.expand);
-  const nodeKey = node.path.toLowerCase();
+  const nodeKey = normalizePath(node.path).toLowerCase();
 
   // 精确响应式订阅：当前节点的展开状态、子节点缓存、高亮状态以及定位滚动触发计数
   const isNodeExpanded = useExplorerStore((s) => s.expanded.has(nodeKey));
+  const isAssociationExpanded = useExplorerStore((s) => s.associationExpanded.has(nodeKey));
+  const toggleAssociation = useExplorerStore((s) => s.toggleAssociation);
+  const expandAssociation = useExplorerStore((s) => s.expandAssociation);
   const children = useExplorerStore((s) => s.children.get(nodeKey));
-  const isRevealed = useExplorerStore((s) => (s.revealed ? s.revealed.toLowerCase() === nodeKey : false));
+  const isRevealed = useExplorerStore((s) => sameKey(s.revealed, node.path));
   const revealCount = useExplorerStore((s) => s.revealCount);
   const setRevealed = useExplorerStore((s) => s.setRevealed);
   const root = useExplorerStore((s) => s.root);
   const setRoot = useExplorerStore((s) => s.setRoot);
+  const revealed = useExplorerStore(s => s.revealed);
 
   // 重命名状态
   const [isRenaming, setIsRenaming] = useState(false);
@@ -109,7 +119,14 @@ export const TreeNode = memo(function TreeNode({
     }
   }, [node.name, isRenaming]);
 
-  const expanded = node.isDir ? isNodeExpanded : false;
+  const expandable = node.isDir || !!associatedMarkdown;
+  const expanded = node.isDir ? isNodeExpanded : !!associatedMarkdown && isAssociationExpanded;
+  const visibleChildren = useMemo(() => !expanded ? [] : node.isDir ? groupMarkdownAssociations(children ?? [])
+    : associatedMarkdown ? [{ node: associatedMarkdown }] : [], [expanded, node.isDir, children, associatedMarkdown, associationRevision]);
+  useEffect(() => {
+    if (associatedMarkdown && sameKey(revealed, associatedMarkdown.path)) expandAssociation(node.path);
+  }, [associatedMarkdown?.path, revealed, revealCount, node.path, expandAssociation]);
+  const toggleCurrent = () => { if (node.isDir) void toggle(node.path); else if (associatedMarkdown) toggleAssociation(node.path); };
 
   const paddingLeft = depth * 12 + 8;
 
@@ -174,7 +191,7 @@ export const TreeNode = memo(function TreeNode({
   const handleArrowClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setRevealed(node.path, false);
-    toggle(node.path);
+    toggleCurrent();
   };
 
   // 右键条目：先将条目设为选中，计算防溢出坐标后再弹出菜单
@@ -188,6 +205,18 @@ export const TreeNode = memo(function TreeNode({
   // 按键响应：支持 F2 快捷键直接进入重命名
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.target !== e.currentTarget || isRenaming) return;
+    if (e.key === 'ArrowRight' && expandable) {
+      e.preventDefault(); e.stopPropagation();
+      if (!expanded) toggleCurrent();
+      else rowRef.current?.closest('[role="treeitem"]')?.querySelector<HTMLElement>('[role="group"] [data-explorer-row]')?.focus();
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault(); e.stopPropagation();
+      if (expanded) toggleCurrent();
+      else rowRef.current?.closest('[role="treeitem"]')?.parentElement?.closest('[role="treeitem"]')?.querySelector<HTMLElement>('[data-explorer-row]')?.focus();
+      return;
+    }
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
@@ -295,12 +324,13 @@ export const TreeNode = memo(function TreeNode({
   };
 
   return (
-    <div role="treeitem" aria-expanded={node.isDir ? expanded : undefined} aria-level={depth + 1}>
+    <div role="treeitem" aria-expanded={expandable ? expanded : undefined} aria-level={depth + 1}>
       <Tooltip content={node.path} disabled={Boolean(menuPos) || isRenaming} side="right" sideOffset={6}>
         <div
           ref={rowRef}
           style={rowStyle}
           tabIndex={0}
+          data-explorer-row={node.path}
           onMouseEnter={handleHover}
           onMouseLeave={handleLeave}
           onClick={handleClick}
@@ -308,7 +338,7 @@ export const TreeNode = memo(function TreeNode({
           onKeyDown={handleKeyDown}
         >
           {/* 展开箭头 */}
-          {node.isDir ? (
+          {expandable ? (
             <span
               onClick={handleArrowClick}
               style={{
@@ -544,14 +574,16 @@ export const TreeNode = memo(function TreeNode({
       )}
 
       {/* 子节点递归渲染 */}
-      {expanded && children && children.length > 0 && (
+      {expanded && visibleChildren.length > 0 && (
         <div role="group">
-          {children.map((child, i) => (
+          {visibleChildren.map(({ node: child, markdown }, i) => (
             <TreeNode
               key={child.path}
               node={child}
               depth={depth + 1}
-              isLast={i === children.length - 1}
+              isLast={i === visibleChildren.length - 1}
+              associatedMarkdown={markdown}
+              associationRevision={associationRevision}
             />
           ))}
         </div>

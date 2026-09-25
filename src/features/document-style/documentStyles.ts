@@ -2,6 +2,7 @@ import { Extension, Mark, type Editor } from '@tiptap/core';
 import { documentColor } from './colors';
 import type { TextStylePair } from './stylePreference';
 import type { Transaction } from '@tiptap/pm/state';
+import { editorSupportsCapability, runWithDocumentCapability } from '../document-format/featureGate';
 
 export const TextColor = Mark.create({
   name: 'textColor',
@@ -35,7 +36,8 @@ export const BlockPresentation = Extension.create({
     } },
   ]; },
 });
-export function setTextColor(editor: Editor, color: string | null) {
+export function setTextColor(editor: Editor, color: string | null): boolean {
+  if (color && !editorSupportsCapability(editor, 'textColor')) return runWithDocumentCapability(editor, 'textColor', next => setTextColor(next, color));
   const chain = editor.chain().focus(undefined, { scrollIntoView: false });
   const styled = color && documentColor(color) ? chain.setMark('textColor', { color }) : chain.unsetMark('textColor');
   return styled.command(({ tr }) => { styleMathBlocks(tr, { color }); return true; }).run();
@@ -49,19 +51,22 @@ export function styleMathBlocks(tr: Transaction, change: Partial<TextStylePair>,
     tr.setNodeMarkup(pos, undefined, attrs);
   });
 }
-export function setHighlightColor(editor: Editor, color: string | null) {
+export function setHighlightColor(editor: Editor, color: string | null): boolean {
+  if (color && !editorSupportsCapability(editor, 'highlight')) return runWithDocumentCapability(editor, 'highlight', next => setHighlightColor(next, color));
   const chain = editor.chain().focus(undefined, { scrollIntoView: false });
   const styled = color ? chain.setHighlight({ color }) : chain.unsetHighlight();
   return styled.command(({ tr }) => { styleMathBlocks(tr, { background: color }); return true; }).run();
 }
-export function applyTextStyle(editor: Editor, pair: TextStylePair) {
+export function applyTextStyle(editor: Editor, pair: TextStylePair): boolean {
+  if ((pair.color || pair.background) && !editorSupportsCapability(editor, 'textColor')) return runWithDocumentCapability(editor, 'textColor', next => applyTextStyle(next, pair));
   const color = documentColor(pair.color), background = documentColor(pair.background);
   let chain = editor.chain().focus(undefined, { scrollIntoView: false });
   chain = color ? chain.setMark('textColor', { color }) : chain.unsetMark('textColor');
   chain = background ? chain.setHighlight({ color: background }) : chain.unsetHighlight();
   return chain.command(({ tr }) => { styleMathBlocks(tr, pair); return true; }).run();
 }
-export function setParagraphPresentation(editor: Editor, change: { textAlign?: 'left'|'center'|'right'; indentBy?: number }) {
+export function setParagraphPresentation(editor: Editor, change: { textAlign?: 'left'|'center'|'right'; indentBy?: number }): boolean {
+  if (!editorSupportsCapability(editor, 'alignment')) return runWithDocumentCapability(editor, 'alignment', next => setParagraphPresentation(next, change));
   const { state } = editor, tr = state.tr;
   state.doc.nodesBetween(state.selection.from, state.selection.to, (node, pos) => {
     if (!['paragraph','heading'].includes(node.type.name)) return;

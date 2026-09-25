@@ -291,6 +291,7 @@ export interface TypographySettings {
 }
 
 export interface EditorSettings {
+  pureMarkdown?: boolean;
   selectionToolbarPosition?: 'below' | 'above';
   defaultViewMode: ViewMode;
   softWrap: boolean;

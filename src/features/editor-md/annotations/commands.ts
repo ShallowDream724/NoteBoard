@@ -4,6 +4,7 @@ import { NodeSelection, type Selection } from '@tiptap/pm/state';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import { annotationAnchors, annotationBodyContent, annotationId, collectAnnotations, newAnnotationId } from './model';
 import { captureAnnotationTarget, type AnnotationDraftTarget } from './draftTarget';
+import { editorSupportsCapability, runWithDocumentCapability } from '../../document-format/featureGate';
 
 export const ANNOTATION_OPEN_EVENT = 'nb-open-annotation';
 export const ANNOTATION_BEGIN_EVENT = 'nb-begin-annotation';
@@ -11,11 +12,13 @@ export interface AnnotationBeginRequest { id: string; target: AnnotationDraftTar
 /** UI creation starts with a local draft. Only its explicit Save changes the document. */
 export function beginAnnotation(editor: Editor): string | null {
   if (!canAddAnnotation(editor)) return null;
+  if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { beginAnnotation(next); }); return null; }
   const id = newAnnotationId();
   editor.view.dom.dispatchEvent(new CustomEvent<AnnotationBeginRequest>(ANNOTATION_BEGIN_EVENT, { detail: { id, target: captureAnnotationTarget(editor.state.selection) } }));
   return id;
 }
 export function openAnnotation(editor: Editor, id: string, options: { edit?: boolean } = {}) {
+  if (options.edit && !editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => openAnnotation(next, id, options)); return; }
   editor.view.dom.dispatchEvent(new CustomEvent(ANNOTATION_OPEN_EVENT, { detail: { id, edit: options.edit ?? false } }));
 }
 
@@ -48,6 +51,7 @@ export function canAddAnnotation(editor: Editor, selection = editor.state.select
 }
 
 export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 'paragraph' }], options: { id?: string; selection?: Selection; open?: boolean } = {}): string | null {
+  if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { addAnnotation(next, content, { ...options, selection: undefined }); }); return null; }
   const { state } = editor, { schema } = state, selection = options.selection ?? state.selection;
   if (!canAddAnnotation(editor, selection)) return null;
   const id = options.id === undefined ? newAnnotationId() : annotationId(options.id);
@@ -75,6 +79,7 @@ export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 
 }
 
 export function updateAnnotation(editor: Editor, id: string, content: JSONContent[]): boolean {
+  if (!editorSupportsCapability(editor, 'annotation')) return runWithDocumentCapability(editor, 'annotation', next => updateAnnotation(next, id, content));
   const record = collectAnnotations(editor.state.doc).get(id); if (!record) return false;
   let replacement;
   try { replacement = record.node.type.createChecked({ id }, Fragment.fromArray(annotationBodyContent(content).map(node => editor.schema.nodeFromJSON(node)))); }

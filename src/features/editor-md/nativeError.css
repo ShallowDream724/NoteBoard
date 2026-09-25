@@ -1,0 +1,4 @@
+.nb-native-error { margin: 12px 0; padding: 14px 16px; border: 1px solid var(--warning-500, #c88825); border-radius: 8px; background: var(--warning-50, #fff8e9); color: var(--text-primary); overflow: hidden; }
+.nb-native-error p { margin: 6px 0; font-size: 13px; }
+.nb-native-error pre { max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.nb-native-error button { border: 0; background: transparent; color: var(--editor-accent); padding: 4px 0; cursor: pointer; }

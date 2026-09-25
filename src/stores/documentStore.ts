@@ -12,6 +12,7 @@ import {
 } from '../features/history/documentHistory';
 import { normalizePath } from '../features/explorer/pathUtils';
 import { kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
+import { emit } from '../core/emitter';
 
 export interface Document {
   /** 规范化路径 key */
@@ -138,6 +139,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       return { documents: newMap };
     });
 
+    emit('document-loaded', { key: payload.key });
     return doc;
   },
 

@@ -11,6 +11,7 @@ import { beginAnnotation } from '@/features/editor-md/annotations/commands';
 import { annotationAnchors, collectAnnotations } from '@/features/editor-md/annotations/model';
 import { undoDepth } from '@tiptap/pm/history';
 import { EditorView } from '@tiptap/pm/view';
+import { nativeTestEditor } from './nativeTestEditor';
 
 let editor: Editor, root: Root;
 beforeEach(async () => {
@@ -26,6 +27,7 @@ beforeEach(async () => {
     { type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'example' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A useful explanation' }] }] }] },
     { type: 'paragraph', content: [{ type: 'text', text: 'New anchor words' }] },
   ] } });
+  nativeTestEditor(editor);
   const host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
 });

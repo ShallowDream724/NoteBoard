@@ -27,6 +27,54 @@
   border-radius: 0;
 }
 
+/* Content reserves navigation space; the actual editor scrollers span the pane. */
+.nb-editor-area {
+  container: document-pane / inline-size;
+}
+.nb-document-stage {
+  --document-outline-width: clamp(180px, 21cqi, 232px);
+  --document-outline-inset: 28px;
+  --document-outline-space: 0px;
+  min-height: 0;
+}
+.nb-document-stage[data-outline] {
+  --document-outline-space: calc(var(--document-outline-width) + var(--document-outline-inset) + 24px);
+}
+.nb-document-content {
+  width: calc(100% - var(--document-outline-space, 0px));
+}
+.nb-markdown-source .cm-scroller {
+  box-sizing: border-box;
+  padding-right: var(--document-outline-space, 0px);
+}
+.nb-markdown-source .cm-content {
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+@container document-pane (max-width: 720px) {
+  .nb-document-stage {
+    --document-outline-width: 164px;
+    --document-outline-inset: 20px;
+  }
+}
+
+/* At narrow pane sizes a bounded floating navigator leaves editing width intact. */
+@container document-pane (max-width: 560px) {
+  .nb-document-stage[data-outline] {
+    --document-outline-width: min(220px, calc(100cqi - 48px));
+    --document-outline-space: 0px;
+  }
+  .nb-document-stage .nb-document-outline {
+    max-height: min(440px, calc(100% - 96px));
+    padding: 10px;
+    border: 1px solid var(--editor-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-md, 0 6px 20px #00000014);
+  }
+}
+
 /* The panel library maintains a 10px mouse / 20px touch resize target,
  * independently of this 3px visual boundary. Adjacent panes add no second border. */
 .nb-panel-separator {

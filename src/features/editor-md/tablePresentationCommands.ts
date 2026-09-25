@@ -7,6 +7,7 @@ import { documentTableStyle } from './documentPresentation';
 import { tableFill } from './tableCellPresentation';
 import { columnWidthsStep } from './tableColumnWidths';
 import { tableGrid } from './tableStructure';
+import { editorSupportsCapability, runWithDocumentCapability } from '../document-format/featureGate';
 
 export type TableFillScope = 'cells' | 'row' | 'column';
 interface CellPatch { pos: number; background?: string | null; header?: boolean; textAlign?: string | null; verticalAlign?: string | null }
@@ -87,7 +88,8 @@ export function selectTableScope(editor: Editor, scope: TableFillScope) {
   editor.view.dispatch(editor.state.tr.setSelection(expanded));
   editor.view.focus(); return true;
 }
-export function fillTableSelection(editor: Editor, scope: TableFillScope, value: string | null) {
+export function fillTableSelection(editor: Editor, scope: TableFillScope, value: string | null): boolean {
+  if (value && !editorSupportsCapability(editor, 'tableFill')) return runWithDocumentCapability(editor, 'tableFill', next => fillTableSelection(next, scope, value));
   const rect = tableSelection(editor), color = tableFill(value);
   if (!rect || (value !== null && !color) || documentTableStyle(editor.state.doc) === 'three-line') return false;
   const area = scope === 'row' ? { ...rect, left: 0, right: rect.map.width }
@@ -102,13 +104,15 @@ export function fillTableSelection(editor: Editor, scope: TableFillScope, value:
   return true;
 }
 
-export function alignTableSelection(editor: Editor, change: Pick<CellPatch, 'textAlign' | 'verticalAlign'>) {
+export function alignTableSelection(editor: Editor, change: Pick<CellPatch, 'textAlign' | 'verticalAlign'>): boolean {
+  if (!editorSupportsCapability(editor, 'alignment')) return runWithDocumentCapability(editor, 'alignment', next => alignTableSelection(next, change));
   const rect = tableSelection(editor); if (!rect || !validAlignment({ pos: 0, ...change })) return false;
   const patches = rect.map.cellsInRect(rect).map(pos => ({ pos, ...change }));
   dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TablePresentationStep(rect.tableStart - 1, patches)));
   editor.view.focus(); return true;
 }
 export function distributeTableColumns(editor: Editor) {
+  if (!editorSupportsCapability(editor, 'tableDimensions')) return runWithDocumentCapability(editor, 'tableDimensions', distributeTableColumns);
   const rect = tableSelection(editor); if (!rect) return false;
   const saved: number[] = Array(rect.map.width).fill(0);
   let column = 0;
@@ -136,6 +140,7 @@ export function distributeTableColumns(editor: Editor) {
 }
 
 export function distributeTableRows(editor: Editor) {
+  if (!editorSupportsCapability(editor, 'tableDimensions')) return runWithDocumentCapability(editor, 'tableDimensions', distributeTableRows);
   const rect = tableSelection(editor); if (!rect) return false;
   const dom = editor.view.nodeDOM(rect.tableStart - 1);
   const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
@@ -216,7 +221,8 @@ export function tableHeaderState(editor: Editor) {
     canColumn: rect.left === 0 && rect.right === 1 && column.every(pos => index.get(pos)!.attrs.colspan === 1),
   };
 }
-export function setSelectedTableHeader(editor: Editor, axis: 'row' | 'column') {
+export function setSelectedTableHeader(editor: Editor, axis: 'row' | 'column'): boolean {
+  if (axis === 'column' && !editorSupportsCapability(editor, 'tableHeader')) return runWithDocumentCapability(editor, 'tableHeader', next => setSelectedTableHeader(next, axis));
   const info = tableHeaderState(editor); if (!info || !(axis === 'row' ? info.canRow : info.canColumn)) return false;
   const enabled = !(axis === 'row' ? info.rowHeader : info.columnHeader);
   const otherHeader = axis === 'row' ? info.columnHeader : info.rowHeader;

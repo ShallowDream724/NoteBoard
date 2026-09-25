@@ -36,11 +36,13 @@ import { materializeSourceStyles, type SourceStyles } from '../document-style/so
 import { getSessionGeneration } from '../session/documentSession';
 import { serializeNativeNode, type RichDocumentFormat } from './editorDocumentCodec';
 import { registerPendingSnapshotMaterializers } from '../../core/editor/pendingSnapshots';
+import type { NativeMetadata } from '../../core/nativeDocument';
 
 /** 暂存的 visual 快照（组内合并：同组多次输入只保留最新 doc 引用） */
 interface PendingVisualSnapshot {
   format?: RichDocumentFormat;
   directory?: string;
+  metadata?: NativeMetadata;
   /** 🔴 R3-01：稳定组身份（首个暂存生成；同组后续事务保留不变） */
   groupId: number;
   /** 不可变 ProseMirror 文档根引用（捕获时刻的定值） */
@@ -82,6 +84,7 @@ export function stagePendingVisualSnapshot(
   snapshot: {
     format?: RichDocumentFormat;
     directory?: string;
+    metadata?: NativeMetadata;
     doc: ProsemirrorNode;
     revision: number;
     manager: MarkdownManagerLike | null;
@@ -122,7 +125,7 @@ export function flushPendingVisualSnapshot(docKey: string): string | null {
   //    无纯适配器配置（测试替身/扩展未装配）时降级读当前编辑器实例（旧语义）
   let content: string;
   if (pending.format === 'noteboard') {
-    content = serializeNativeNode(pending.doc, pending.directory);
+    content = serializeNativeNode(pending.doc, pending.directory, pending.metadata);
   } else if (pending.manager && pending.schema) {
     // 🔴 R3-01：序列化异常向上抛出（调用方中止）——pending 尚未消费（保留待重试）
     content = serializeMarkdownFromDoc(pending.manager, pending.schema, pending.doc);

@@ -2,7 +2,7 @@
 // 适用于 Markdown 可视化与源码模式
 // 支持多级下拉菜单、实时 Active/Hover 状态同步、撤销/重做与丰富排版格式化工具
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
 import { formatSourceMark, setSourceHeading, sourceMarkRange } from '../editor-md/sourceFormatting';
@@ -44,6 +44,7 @@ import {
   PlusSquare,
   BarChart3,
   PanelTopClose,
+  RefreshCw,
 } from 'lucide-react';
 import {
   ToolbarButton,
@@ -61,16 +62,18 @@ import { insertLocalImageWithDialog, insertSourceImageWithDialog } from '../edit
 import { getMdTipTapEditor as getActiveTipTapEditor, getMdSourceView as getActiveSourceView } from '../editor-md/editorInstances';
 import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
-import { ResponsiveToolbar } from './ResponsiveToolbar';
+import { ResponsiveToolbar, ToolbarOverflowItem } from './ResponsiveToolbar';
 import { HighlightControl } from './HighlightControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
-import { ImageInsertItems, ImageInsertMenu, RichSelectionMenu } from '../editor-md/rich-content/menus';
+import { AnnotationButton, ImageInsertItems, ImageInsertMenu, RichSelectionMenu } from '../editor-md/rich-content/menus';
 import { insertDisclosure } from '../editor-md/rich-content/commands';
-import { editorDocumentFormat } from '../editor-md/editorDocumentCodec';
+import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import { requestImageLink } from '../editor-md/rich-content/imageLinkDialog';
 import { captureVisualImageInsertion, captureSourceImageInsertion } from '../editor-md/imageInsertionLease';
+import { useDocumentStore } from '../../stores/documentStore';
+import { nativeMarkdownLink } from '../document-format/nativeLink';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -82,6 +85,9 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   // 保证获取到最新的 TipTap editor 实例
   const editor = propEditor || getActiveTipTapEditor(docKey) || null;
   const isSourceMode = viewMode === 'source';
+  const nativeFeaturesVisible = useNativeFeatureVisibility() && !isSourceMode;
+  const document = useDocumentStore(state => state.documents.get(docKey));
+  const hasMarkdownLink = useMemo(() => document?.kind === 'noteboard' && !!nativeMarkdownLink(docKey, document.content), [docKey, document?.kind, document?.content]);
   const { canUndo, canRedo } = useDocumentHistory(docKey);
 
   useFormattingUpdates(editor, !isSourceMode);
@@ -463,6 +469,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     }
   };
 
+  if (isSourceMode && document?.kind === 'noteboard') return null;
   return (
     <ResponsiveToolbar onLayoutChange={() => {
       setHeadingDropdownOpen(false);
@@ -599,7 +606,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         onClick={() => toggleMark('code')}
       />
 
-      <HighlightControl
+      {nativeFeaturesVisible && <HighlightControl
         onApplyStyle={pair => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
         textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('mathBlock').textColor ?? editor?.getAttributes('textColor').color}
         onTextColor={color => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
@@ -610,7 +617,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         currentColor={isSourceMode ? sourceStyle?.background ?? sourceHighlight?.color : editor?.getAttributes('mathBlock').background ?? editor?.getAttributes('highlight').color}
         onApply={handleSelectHighlightColor} onRemove={handleRemoveHighlight}
         onReturnToEditor={() => { if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.commands.focus(); }}
-      />
+      />}
       {!isSourceMode && editor && <AlignmentMenu editor={editor}/>}
 
       <ToolbarDivider />
@@ -706,7 +713,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           label="引用块 (Quote)"
           onClick={handleInsertQuote}
         />
-        {!isSourceMode && editor && editorDocumentFormat(editor) === 'noteboard' && <ToolbarDropdownItem icon={<PanelTopClose size={14}/>} label="折叠块"
+        {nativeFeaturesVisible && editor && <ToolbarDropdownItem icon={<PanelTopClose size={14}/>} label="折叠块"
           onClick={() => { setInsertDropdownOpen(false); insertDisclosure(editor); }}/>}
 
         {/* 4. 表格二级菜单 */}
@@ -762,21 +769,21 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         />
 
         {/* 6. 图片二级菜单 */}
-        <ToolbarDropdownItem
+        <ToolbarOverflowItem id="image"><ToolbarDropdownItem
           icon={<ImageIcon size={14} />}
           label="图片"
           submenu={
             <ImageInsertItems editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} onDone={() => setInsertDropdownOpen(false)}/>
           }
-        />
+        /></ToolbarOverflowItem>
 
         {/* 7. 超链接菜单项 */}
-        <ToolbarDropdownItem
+        <ToolbarOverflowItem id="link"><ToolbarDropdownItem
           icon={<Link2 size={14} />}
           label="超链接"
           shortcut="Ctrl+K"
           onClick={handleOpenLink}
-        />
+        /></ToolbarOverflowItem>
 
         {/* 8. 日期时间二级菜单 */}
         <ToolbarDropdownItem
@@ -815,17 +822,21 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Link2 size={15} />}
         title="插入/编辑超链接"
+        overflowId="link"
         collapsePriority={30}
         shortcut="Ctrl+K"
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
       />
-      <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70}/>
+      <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70} overflowId="image"/>
+      {!isSourceMode && editor && <AnnotationButton editor={editor} collapsePriority={100}/>}
       {!isSourceMode && editor && <RichSelectionMenu editor={editor}/>}
 
       <ToolbarDivider />
 
       {/* ── 清除格式 ── */}
+      {hasMarkdownLink && <ToolbarButton icon={<RefreshCw size={15}/>} title="更新关联 Markdown" label="更新关联 Markdown" collapsePriority={25}
+        onClick={() => { void import('../editor-code/orchestration/saveDocument').then(({ saveDocument }) => saveDocument(docKey)); }}/>}
       <ToolbarButton
         icon={<RemoveFormatting size={15} color="#ef4444" />}
         title="清除选中文本格式"

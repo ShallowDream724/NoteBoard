@@ -5,6 +5,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useFontPackStore } from '../../stores/fontPackStore';
 import { prepareDocument } from './documentConversion';
 import { readMarkdownSnapshot } from '../editor-md/readDocumentSnapshot';
+import type { ExportInputFormat } from './model';
 
 export async function captureDocument(key: string, signal?: AbortSignal) {
   // Give the dialog a paint before materializing the immutable document snapshot.
@@ -19,9 +20,9 @@ export async function captureDocument(key: string, signal?: AbortSignal) {
   if (content == null && capability && snapshot?.content == null) throw new Error('当前文档暂时无法导出');
   const captured = content ?? snapshot?.content ?? document.content;
   if (captured == null) throw new Error('当前文档没有可导出的文本');
-  const source = tab.kind === 'noteboard' && typeof captured === 'string' ? decodeNativeDocument(captured) : captured;
-  const result = await prepareDocument(source, tab.displayName, document.dirPath ?? '', signal);
-  return { ...result, source };
+  const inputFormat: ExportInputFormat = tab.kind === 'noteboard' ? 'noteboard' : 'markdown';
+  const result = await prepareDocument(captured, tab.displayName, document.dirPath ?? '', signal, inputFormat);
+  return { ...result, source: captured, inputFormat };
 }
 export function exportFontCss() {
   const css = getComputedStyle(document.documentElement);
@@ -31,4 +32,3 @@ export function exportFontCss() {
     + faces.map(face => `@font-face{font-family:${quoted(face.family)};font-style:${face.style};font-weight:${face.weight};src:url(${quoted(convertFileSrc(face.path))})}`).join('\n');
 }
 import { isRichDocument } from '../../core/docKind';
-import { decodeNativeDocument } from '../../core/nativeDocument';

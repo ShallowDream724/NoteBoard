@@ -18,6 +18,7 @@ import { showToast } from '../../stores/toastStore';
 import { createDefaultBitableDocument, serializeBitableDocument } from '../bitable/bitableConverter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
 import { EMPTY_NATIVE_DOCUMENT } from '../../core/nativeDocument';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 let untitledCounter = 0;
 
@@ -216,11 +217,15 @@ export function newNativeDocument(): void {
   createUntitledDocument('noteboard');
 }
 
+export function newDefaultDocument(): void {
+  createUntitledDocument(useSettingsStore.getState().settings.editor.pureMarkdown ? 'markdown' : 'noteboard');
+}
+
 /** Bundled content is loaded only when requested, and edited as an unsaved copy. */
 export async function openShowcase(onlyIfEmpty = false): Promise<void> {
-  const { default: content } = await import('./showcase.md?raw');
+  const { default: content } = await import('./showcase.nb?raw');
   if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
-  createUntitledDocument('markdown', { title: '欢迎使用 NoteBoard.md', content });
+  createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content });
 }
 
 /** 新建思维导图文档 */

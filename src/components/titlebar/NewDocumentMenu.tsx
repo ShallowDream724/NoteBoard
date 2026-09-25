@@ -9,6 +9,7 @@ import { on, off } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useFavoritesStore } from '../../features/favorites/favoritesStore';
 import * as actions from '../../features/welcome/welcomeActions';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 type Action = { label: string; icon: ComponentType<{ size?: number }>; run: () => unknown };
 const primary: Action[] = [
@@ -45,6 +46,7 @@ function Items({ items }: { items: Action[] }) {
 
 /** The titlebar positions this menu; tab scrolling never owns its lifecycle. */
 export function NewDocumentMenu() {
+  const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -65,7 +67,7 @@ export function NewDocumentMenu() {
         </Menu.Trigger>
       </Tooltip>
       <Menu.Portal><Menu.Content className="titlebar-document-menu" align="start" sideOffset={5} collisionPadding={8}>
-        <Items items={primary} />
+        <Items items={pureMarkdown ? primary.filter(item => item.run !== actions.newNativeDocument) : primary} />
         <Menu.Separator className="titlebar-menu-separator" />
         <Menu.Sub>
           <Menu.SubTrigger className="titlebar-menu-item"><FileCode size={14} /><span>更多新建格式</span><ChevronRight size={13} /></Menu.SubTrigger>

@@ -16,6 +16,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 // 🔴 R3-10：异步核对结果按会话代际条件提交（旧读取不误标同路径新会话）
 import { getSessionGeneration } from '../session/documentSession';
+import { emit } from '../../core/emitter';
 
 /** 目录监听记录 */
 interface WatchRecord {
@@ -84,6 +85,7 @@ function findOpenDocKey(rawPath: string): string | null {
 
 /** 为事件路径上的已打开文档登记一次外部修改核对（去抖合并） */
 function scheduleDocumentRecheck(rawPath: string): void {
+  emit('document-file-changed', { path: rawPath });
   // 🔴 R3-10：按规范化身份匹配已打开文档（大小写/斜杠差异可命中）
   const docKey = findOpenDocKey(rawPath);
   if (!docKey) return;
@@ -186,7 +188,7 @@ function scheduleRecheck(dir: string): void {
     // 🔴 N09：静默窗口内命中的文档路径统一复核（自身写完成后外部修改仍能检出）
     const paths = [...deferredDocRechecks];
     deferredDocRechecks.clear();
-    for (const p of paths) void recheckDocument(p);
+    for (const p of paths) { emit('document-file-changed', { path: p }); void recheckDocument(p); }
   }, SELF_WRITE_SILENCE_MS + 100);
 }
 

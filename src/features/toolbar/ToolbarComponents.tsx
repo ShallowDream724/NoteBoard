@@ -24,6 +24,7 @@ export interface ToolbarButtonProps {
   style?: React.CSSProperties;
   /** Lower numbers hide first when hosted in ResponsiveToolbar. */
   collapsePriority?: number;
+  overflowId?: string;
   compactLabel?: boolean;
 }
 
@@ -156,6 +157,7 @@ export function ToolbarDivider() {
 
 export interface ToolbarDropdownProps {
   collapsePriority?: number;
+  overflowId?: string;
   trigger: ReactNode;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -338,9 +340,11 @@ export function ToolbarDropdownItem({
   return (
     <div
       ref={itemRef}
+      title={shortcut ? `${label} (${shortcut})` : label}
       role="menuitem" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
       aria-haspopup={hasSubmenu ? 'menu' : undefined} aria-expanded={hasSubmenu ? submenuOpen : undefined}
       onKeyDown={event => {
+        if (disabled) return;
         if (hasSubmenu && ['ArrowRight', 'Enter', ' '].includes(event.key)) {
           event.preventDefault(); hover.keyboard.current = true; updateSubmenuPosition(); hover.change(true);
         } else if (!hasSubmenu && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onClick?.(); }

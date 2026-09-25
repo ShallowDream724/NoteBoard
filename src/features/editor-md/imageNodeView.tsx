@@ -1,7 +1,7 @@
 // NoteBoard Markdown 现代图片扩展与交互组件
 // 支持本地相对路径动态解析、悬停工具栏、大图预览查看器、多级缩放与拖拽拉伸、居左/居中/居右对齐
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ImageNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
@@ -29,6 +29,7 @@ import { resolveRelativeDocPath } from './linkHandler';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { Tooltip } from '../../components/Tooltip';
 import { useImageVisibility } from './rich-content/imageVisibility';
+import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 
 /** 大图预览 Lightbox 模态框组件 */
 function ImageLightboxModal({
@@ -241,7 +242,18 @@ const modalBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 图片 NodeView 组件 */
-export function ImageComponent({ node, extension, updateAttributes, deleteNode }: NodeViewProps) {
+export function ImageComponent({ node, extension, editor, getPos, deleteNode }: NodeViewProps) {
+  const nativeFeaturesVisible = useNativeFeatureVisibility();
+  const [resizePreview, setResizePreview] = useState<string | null>(null);
+  const resizeCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => { resizeCleanup.current?.(); }, []);
+  const updatePresentation = (attrs: { align?: string; width?: string }) => {
+    const pos = getPos(); if (typeof pos !== 'number') return;
+    runWithDocumentCapability(editor, 'imageLayout', next => {
+      const image = next.state.doc.nodeAt(pos); if (image?.type.name !== 'image') return false;
+      next.view.dispatch(next.state.tr.setNodeMarkup(pos, undefined, { ...image.attrs, ...attrs })); return true;
+    });
+  };
   const visibility = useImageVisibility();
   const [hovered, setHovered] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -329,21 +341,27 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
 
     const startX = e.clientX;
     const initialWidth = parseInt(width, 10) || 100;
+    let finalWidth = initialWidth;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const diff = moveEvent.clientX - startX;
       const step = Math.round(diff / 5);
       const newWidth = Math.max(20, Math.min(100, initialWidth + step));
-      updateAttributes({ width: `${newWidth}%` });
+      finalWidth = newWidth;
+      setResizePreview(`${newWidth}%`);
     };
 
     const handleMouseUp = () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      resizeCleanup.current = null;
+      setResizePreview(null);
+      if (finalWidth !== initialWidth) updatePresentation({ width: `${finalWidth}%` });
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    resizeCleanup.current = () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   };
 
   // 在 NoteBoard 独立标签页中打开大图
@@ -368,7 +386,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
         style={{
           position: 'relative',
           display: 'inline-block',
-          width: width === '100%' ? '100%' : width,
+          width: resizePreview ?? width,
           maxWidth: '100%',
           borderRadius: 8,
           transition: 'width 150ms ease',
@@ -412,12 +430,13 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
 
             <div style={{ width: 1, height: 14, background: 'var(--editor-border)' }} />
 
+            {nativeFeaturesVisible && <>
             {/* 对齐方式 */}
             <Tooltip content="居左对齐" side="top" sideOffset={4}>
               <button
                 type="button"
                 aria-label="居左对齐"
-                onClick={() => updateAttributes({ align: 'left' })}
+                onClick={() => updatePresentation({ align: 'left' })}
                 style={{
                   ...actionBtnStyle,
                   background: align === 'left' ? 'var(--toolbar-active)' : 'transparent',
@@ -430,7 +449,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
               <button
                 type="button"
                 aria-label="居中对齐"
-                onClick={() => updateAttributes({ align: 'center' })}
+                onClick={() => updatePresentation({ align: 'center' })}
                 style={{
                   ...actionBtnStyle,
                   background: align === 'center' ? 'var(--toolbar-active)' : 'transparent',
@@ -443,7 +462,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
               <button
                 type="button"
                 aria-label="居右对齐"
-                onClick={() => updateAttributes({ align: 'right' })}
+                onClick={() => updatePresentation({ align: 'right' })}
                 style={{
                   ...actionBtnStyle,
                   background: align === 'right' ? 'var(--toolbar-active)' : 'transparent',
@@ -460,7 +479,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
               <button
                 type="button"
                 aria-label="缩放为 50%"
-                onClick={() => updateAttributes({ width: '50%' })}
+                onClick={() => updatePresentation({ width: '50%' })}
                 style={{
                   ...actionBtnStyle,
                   fontSize: 11,
@@ -476,7 +495,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
               <button
                 type="button"
                 aria-label="缩放为 75%"
-                onClick={() => updateAttributes({ width: '75%' })}
+                onClick={() => updatePresentation({ width: '75%' })}
                 style={{
                   ...actionBtnStyle,
                   fontSize: 11,
@@ -492,7 +511,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
               <button
                 type="button"
                 aria-label="缩放为 100%"
-                onClick={() => updateAttributes({ width: '100%' })}
+                onClick={() => updatePresentation({ width: '100%' })}
                 style={{
                   ...actionBtnStyle,
                   fontSize: 11,
@@ -507,6 +526,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
 
             <div style={{ width: 1, height: 14, background: 'var(--editor-border)' }} />
 
+            </>}
             {/* 删除图片 */}
             <Tooltip content="删除图片" side="top" sideOffset={4}>
               <button
@@ -593,7 +613,7 @@ export function ImageComponent({ node, extension, updateAttributes, deleteNode }
         )}
 
         {/* 拖拽缩放手柄（右下角） */}
-        {hovered && !loadError && (
+        {nativeFeaturesVisible && hovered && !loadError && (
           <Tooltip content="拖拽拉伸调节图片尺寸" side="left" sideOffset={6}>
             <div
               data-image-resize=""

@@ -1,9 +1,22 @@
-.nb-document-outline { display:flex; flex-direction:column; height:100%; min-height:0; padding:56px 18px 24px 12px; box-sizing:border-box; background:var(--editor-bg); }
+.nb-document-outline {
+  position: absolute;
+  z-index: 15;
+  top: 56px;
+  right: var(--document-outline-inset, 28px);
+  width: var(--document-outline-width, 200px);
+  max-height: calc(100% - 96px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
+  background: var(--editor-bg);
+}
 .nb-outline-toggle { align-self:flex-end; display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; margin-bottom:12px; }
 .nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }
-.nb-outline-list { flex:1; min-height:0; overflow:auto; padding:2px 0; scrollbar-width:thin; scrollbar-color:transparent transparent; }
-.nb-outline-list:hover { scrollbar-color:var(--scrollbar-thumb) transparent; }
-#nb-outline .nb-outline-list::-webkit-scrollbar-button { display:none!important; width:0!important; height:0!important; border:0!important; }
-#nb-outline .nb-outline-list::-webkit-scrollbar-thumb { background:transparent; }
-#nb-outline .nb-outline-list:hover::-webkit-scrollbar-thumb { background:var(--scrollbar-thumb,#aab1bb); }
-.nb-outline-open { position:absolute; right:18px; top:56px; z-index:15; }
+.nb-outline-toggle:active { background:var(--editor-selection-background); }
+.nb-outline-list { min-height:0; overflow:auto; padding:2px 0; scrollbar-width:thin; scrollbar-color:transparent transparent; }
+.nb-outline-list:is(:hover, :focus-within) { scrollbar-color:var(--scrollbar-thumb) transparent; }
+.nb-outline-list::-webkit-scrollbar-button { display:none!important; width:0!important; height:0!important; border:0!important; }
+.nb-outline-list::-webkit-scrollbar-thumb { background:transparent; }
+.nb-outline-list:is(:hover, :focus-within)::-webkit-scrollbar-thumb { background:var(--scrollbar-thumb,#aab1bb); }
+.nb-outline-open { position:absolute; right:var(--document-outline-inset,28px); top:56px; z-index:15; }

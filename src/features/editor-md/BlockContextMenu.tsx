@@ -16,7 +16,7 @@ import { runDiscreteEdit } from './discreteEdit';
 import { showToast } from '../../stores/toastStore';
 import { useFormattingUpdates } from './useFormattingUpdates';
 import './blockContextMenu.css';
-import { editorDocumentFormat } from './editorDocumentCodec';
+import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 import { NodeSelection } from '@tiptap/pm/state';
 import { beginAnnotation, openAnnotation } from './annotations/commands';
 import { toggleConceal } from './rich-content/commands';
@@ -28,11 +28,11 @@ export function BlockTypeIcon({ type, level }: { type: string | null; level?: nu
 }
 export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: number; close: () => void }) {
   const [colorsOpen, setColorsOpen] = useState(false);
+  const native = useNativeFeatureVisibility();
   useFormattingUpdates(editor);
   const range = blockRange(editor, pos); if (!range) return null;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
   const styled = text || type === 'mathBlock';
-  const native = editorDocumentFormat(editor) === 'noteboard';
   const selectNode = () => editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
   const grid = type === 'table' ? tableGrid(range.node) : null;
   const headerRow = grid?.cells.filter(cell => cell.row === 0), headerColumn = grid?.cells.filter(cell => cell.column === 0);
@@ -54,12 +54,12 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         { label:'引用', Icon:Quote, command:'toggleBlockquote' }] as const).map(({ label, Icon, command }) =>
         <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
     </div>}
-    {type === 'image' && <div className="nb-block-style-row">
+    {native && type === 'image' && <div className="nb-block-style-row">
       {([{ value: 'left', label: '图片左对齐', Icon: AlignLeft }, { value: 'center', label: '图片居中', Icon: AlignCenter },
         { value: 'right', label: '图片右对齐', Icon: AlignRight }] as const).map(({ value, label, Icon }) =>
-        <Tooltip key={value} content={label}><button type="button" aria-label={label} onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('image', { align: value })))}><Icon size={16}/></button></Tooltip>)}
+        <Tooltip key={value} content={label}><button type="button" aria-label={label} onClick={() => action(() => runWithDocumentCapability(editor, 'imageLayout', next => runDiscreteEdit(next, chain => chain.updateAttributes('image', { align: value }))))}><Icon size={16}/></button></Tooltip>)}
     </div>}
-    {(styled || type === 'table') && <div className="nb-block-style-row">
+    {native && (styled || type === 'table') && <div className="nb-block-style-row">
       {type !== 'mathBlock' && <AlignmentMenu editor={editor} cells={type === 'table'}/>}
       {styled && <HighlightControl open={colorsOpen} onOpenChange={setColorsOpen} active={editor.isActive('highlight') || !!editor.getAttributes('mathBlock').background}
         currentColor={editor.getAttributes('mathBlock').background ?? editor.getAttributes('highlight').color} textColor={editor.getAttributes('mathBlock').textColor ?? editor.getAttributes('textColor').color}
@@ -68,7 +68,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         onReturnToEditor={() => editor.view.focus()}/>}
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
-    {type === 'imageCollection' && <>
+    {native && type === 'imageCollection' && <>
       {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2 }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2 }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd }] as const).map(({ layout, columns, label, Icon }) =>
         <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
       <hr/>
@@ -81,9 +81,9 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     <button role="menuitem" type="button" onClick={() => action(() => deleteBlock(editor, pos))}><Trash2 size={16}/>删除</button>
     {type === 'table' && <><hr/>
       <button role="menuitem" type="button" disabled={headerRow?.some(cell => cell.node.attrs.rowspan > 1)} onClick={() => action(() => header('row'))}><Rows3 size={16}/>{headerRow?.every(cell => cell.node.type.name === 'tableHeader') ? '取消表头行' : '设置表头行'}</button>
-      <button role="menuitem" type="button" disabled={headerColumn?.some(cell => cell.node.attrs.colspan > 1)} onClick={() => action(() => header('column'))}><Columns3 size={16}/>{headerColumn?.every(cell => cell.node.type.name === 'tableHeader') ? '取消首列表头' : '设置首列表头'}</button>
+      {native && <><button role="menuitem" type="button" disabled={headerColumn?.some(cell => cell.node.attrs.colspan > 1)} onClick={() => action(() => header('column'))}><Columns3 size={16}/>{headerColumn?.every(cell => cell.node.type.name === 'tableHeader') ? '取消首列表头' : '设置首列表头'}</button>
       <button role="menuitem" type="button" onClick={() => action(() => distributeTableColumns(editor))}><Columns3 size={16}/>平均分布列宽</button>
-      <button role="menuitem" type="button" onClick={() => action(() => distributeTableRows(editor))}><Rows3 size={16}/>平均分布行高</button>
+      <button role="menuitem" type="button" onClick={() => action(() => distributeTableRows(editor))}><Rows3 size={16}/>平均分布行高</button></>}
     </>}
     <hr/><button role="menuitem" type="button" onClick={() => action(() => insertAfterBlock(editor, pos))}><Plus size={16}/>{['listItem','taskItem'].includes(type) ? '在下方插入列表项' : '在下方插入段落'}</button>
   </div>;

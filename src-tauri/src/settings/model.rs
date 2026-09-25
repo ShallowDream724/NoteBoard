@@ -180,6 +180,8 @@ impl Default for TypographySettings {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorSettings {
+    #[serde(default)]
+    pub pure_markdown: bool,
     #[serde(default = "default_selection_toolbar_position")]
     pub selection_toolbar_position: String,
     #[serde(default = "default_view_mode")]
@@ -213,6 +215,7 @@ pub struct EditorSettings {
 impl Default for EditorSettings {
     fn default() -> Self {
         Self {
+            pure_markdown: false,
             selection_toolbar_position: default_selection_toolbar_position(),
             default_view_mode: "visual".to_string(),
             soft_wrap: true,

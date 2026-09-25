@@ -1,10 +1,17 @@
+import { decodeNativeFile, visitNativeDocument } from '../../core/nativeDocument';
+
 /** Conservative evidence shared by cleanup and restoration. A null normalized
  * value means decoding was uncertain and must never authorize deletion. Matching
  * filenames intentionally over-retains (including prose/reference definitions).
  * Keep the native scanner's normalize_reference_text semantics in sync. */
 export function normalizeImageReferenceText(content: string, nativeDocument = false): string | null {
   if (nativeDocument) {
-    try { content = JSON.stringify(JSON.parse(content)); } catch { return null; }
+    const decoded = decodeNativeFile(content);
+    if (decoded.diagnostics.length) return null;
+    let invalid = false;
+    visitNativeDocument(decoded.document, node => { invalid ||= node.type === 'nativeError'; });
+    if (invalid) return null;
+    content = JSON.stringify(decoded.document);
   }
   let uncertain = false;
   const entities: Record<string, string> = {

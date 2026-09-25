@@ -35,7 +35,7 @@ vi.mock('@/components/WelcomeScreen', () => ({
 vi.mock('@/components/UnsupportedView', () => ({ UnsupportedView: () => null }));
 vi.mock('@/components/Toast', () => ({ ToastContainer: () => null }));
 vi.mock('@/components/FileDropOverlay', () => ({ FileDropOverlay: () => null }));
-vi.mock('@/features/outline/OutlinePanel', () => ({ OutlinePanel: () => null }));
+vi.mock('@/features/outline/OutlinePanel', () => ({ OutlinePanel: () => <nav aria-label="文档大纲" /> }));
 vi.mock('@/features/editor-code/UnsavedGuardDialog', () => ({ UnsavedGuardDialog: () => null }));
 vi.mock('@/features/explorer/Explorer', () => ({ Explorer: () => null }));
 vi.mock('@/features/search/SearchReplaceBar', () => ({ SearchReplaceBar: () => null }));
@@ -113,6 +113,16 @@ it('C15：已打开的四个标签切换及脏态更新均保持实例，关闭�
     for (const key of ['a', 'c', 'b', 'd', 'a']) {
       await act(async () => { useWindowStore.getState().activateTab(key); });
     }
+    expect(hostLog).toEqual(['mount:a', 'mount:b', 'mount:c', 'mount:d']);
+    // 大纲属于编辑区，展开/收起只改变内容留白，不替换宿主或内核。
+    const activeHost = host.querySelector('[data-host="a"]');
+    await act(async () => { useLayoutStore.getState().toggleOutline(); });
+    expect(host.querySelector('#nb-editor .nb-document-stage > nav')).not.toBeNull();
+    expect(host.querySelector('#nb-outline')).toBeNull();
+    expect(host.querySelector('.nb-document-stage')?.hasAttribute('data-outline')).toBe(true);
+    await act(async () => { useLayoutStore.getState().toggleOutline(); });
+    expect(host.querySelector('.nb-document-stage')?.hasAttribute('data-outline')).toBe(false);
+    expect(host.querySelector('[data-host="a"]')).toBe(activeHost);
     expect(hostLog).toEqual(['mount:a', 'mount:b', 'mount:c', 'mount:d']);
     // 此处验证渲染层移除；真实关闭写屏障与生命周期由 session 测试覆盖。
     await act(async () => { useWindowStore.setState(state => ({ tabs: state.tabs.filter(tab => tab.key !== 'b') })); });

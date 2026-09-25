@@ -1,6 +1,4 @@
 import type { EditorView } from '@codemirror/view';
-import { getLastHighlightColor } from '../toolbar/highlightPreference';
-import { applySourceTextStyle } from '../document-style/sourceDocumentStyle';
 
 function containsClosingTag(view: EditorView, from: number, to: number, tag: string) {
   let tail = '';
@@ -26,8 +24,7 @@ export function setSourceHeading(view: EditorView, level: number) {
 /** Source shortcuts and toolbar actions operate on the same selection grammar. */
 export function runSourceFormatCommand(view: EditorView, id: string): boolean | undefined {
   if (id === 'markdown.underline') return formatSourceMark(view, 'underline');
-  if (id === 'markdown.highlight') return sourceMarkRange(view, 'highlight') ? formatSourceMark(view, 'highlight', undefined, true)
-    : applySourceTextStyle(view, { background: getLastHighlightColor() }, true);
+  if (id === 'markdown.highlight') return sourceMarkRange(view, 'highlight') ? formatSourceMark(view, 'highlight', undefined, true) : true;
   const delimiters: Record<string, string> = { 'markdown.bold': '**', 'markdown.italic': '*', 'markdown.strike': '~~', 'markdown.code': '`' };
   const delimiter = delimiters[id];
   const { from, to } = view.state.selection.main;
@@ -81,7 +78,7 @@ export function sourceMarkRange(view: EditorView, mark: 'underline' | 'highlight
 
 export function formatSourceMark(view: EditorView, mark: 'underline' | 'highlight', color?: string, remove = false) {
   const current = sourceMarkRange(view, mark), selection = view.state.selection.main;
-  if (mark === 'highlight' && !current) return applySourceTextStyle(view, { background: remove ? null : color ?? getLastHighlightColor() });
+  if (mark === 'highlight' && (!current || !remove)) return false;
   const from = current?.from ?? selection.from, to = current?.to ?? selection.to;
   if (remove && !current) return false;
   const text = view.state.sliceDoc(current?.contentFrom ?? from, current?.contentTo ?? to);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { MarkdownTypingKeys } from '../../src/features/editor-md/typingAssist';
 import { completeAlert } from '../../src/features/editor-md/alertCommands';
 import { formatSourceMark, setSourceHeading } from '../../src/features/editor-md/sourceFormatting';
@@ -70,14 +70,13 @@ describe('Markdown interactive conveniences', () => {
       expect(editor.state.selection.$from.node(-1).type.name).toBe('githubAlert');
     } finally { editor.destroy(); }
   });
-  it('source underline toggles and colored marks replace their wrapper without nesting', () => {
+  it('source underline toggles but highlight never creates private source metadata', () => {
     const view = new EditorView({ state: EditorState.create({ doc: 'text', selection: { anchor: 0, head: 4 } }) });
     try {
       formatSourceMark(view, 'underline'); expect(view.state.doc.toString()).toBe('<u>text</u>');
       formatSourceMark(view, 'underline'); expect(view.state.doc.toString()).toBe('text');
-      formatSourceMark(view, 'highlight', '#fef08a'); formatSourceMark(view, 'highlight', '#bfdbfe');
-      expect(view.state.doc.toString()).toContain('text\n\n<!-- noteboard-styles ');
-      expect(parseMarkdownDocument(view.state.doc.toString()).firstChild?.firstChild?.marks[0]?.attrs.color).toBe('#bfdbfe');
+      expect(formatSourceMark(view, 'highlight', '#fef08a')).toBe(false);
+      expect(view.state.doc.toString()).toBe('text');
       formatSourceMark(view, 'highlight', undefined, true); expect(view.state.doc.toString()).toBe('text');
       setSourceHeading(view, 2); expect(view.state.doc.toString()).toBe('## text');
       setSourceHeading(view, 0); expect(view.state.doc.toString()).toBe('text');

@@ -322,7 +322,9 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         showToast('无法获取文档正文，另存为已取消', 'warning');
         return false;
       }
-      const saveContent = (doc?.kind === 'drawio' && !snapshot.trim()) ? DEFAULT_DRAWIO_XML : snapshot;
+      let saveContent = (doc?.kind === 'drawio' && !snapshot.trim()) ? DEFAULT_DRAWIO_XML : snapshot;
+      const capturedContent = saveContent;
+      let nativeWritten: Awaited<ReturnType<typeof import('../../document-format/nativeSaveAs').saveNativeAs>> | undefined;
 
       // 第 3 步：写盘（目标 key 的每文档写队列内；保存后 autosave 以新 key 排队，
       //    防止旧内容迟到覆盖）。失败时保留权威内容、dirty、历史和原身份——不迁移。
@@ -335,7 +337,16 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         if (getSessionGeneration(originalKey) !== originalGeneration) {
           throw new Error('文档会话已结束，另存为已取消');
         }
-        const writeResult = await ipc.writeDocument(selectedPath, saveContent, encoding, eol);
+        let writeResult;
+        if (docNow?.kind === 'noteboard') {
+          const { saveNativeAs } = await import('../../document-format/nativeSaveAs');
+          const written = await saveNativeAs(docNow, selectedPath, saveContent);
+          nativeWritten = written;
+          saveContent = written.content;
+          writeResult = { ok: written.result.ok, mtime: written.result.native?.mtime ?? 0, size: written.result.native?.size ?? 0,
+            ...(written.result.error ? { error: { kind: 'io' as const, message: written.result.error.message } } : {}) };
+          if (written.result.ok && written.request.markdown) noteSelfWrite(written.request.markdown.path);
+        } else writeResult = await ipc.writeDocument(selectedPath, saveContent, encoding, eol);
         noteSelfWrite(selectedPath);
         return writeResult;
       });
@@ -351,6 +362,10 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
 
       // The final barriers precede generation migration. Pending input arriving
       // during any await is materialized while its source generation is valid.
+      const nativeCodec = docNow?.kind === 'noteboard' ? await import('../../../core/nativeDocument') : null;
+      const nativeRelocation = nativeCodec ? await import('../../document-format/nativeRelocation') : null;
+      const linkedPath = nativeWritten?.request.markdown?.path;
+      if (linkedPath && useDocumentStore.getState().getDocument(linkedPath)) await flushDocument(linkedPath, 'save');
       await prepareDocumentIdentity(identityLease);
       await refreshDocumentIdentity(identityLease);
       try {
@@ -361,12 +376,19 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
       // Keep the original generation valid through the final await. Consuming
       // source/visual pending after migrateSession would discard this input.
       materializeIdentityPending(originalKey);
-      const finalContent = useDocumentStore.getState().getDocument(originalKey)?.content ?? saveContent;
+      let finalContent = saveContent;
 
       const displayName = selectedPath.split(/[\\/]/).pop() ?? selectedPath;
       const dirPath = selectedPath.substring(0, selectedPath.lastIndexOf('\\')) || selectedPath;
 
       commitDocumentIdentity(originalKey, selectedPath, () => {
+        // This is the last source-pending materialization boundary. No await may
+        // separate this read from publishing the new identity.
+        const latest = useDocumentStore.getState().getDocument(originalKey)?.content ?? capturedContent;
+        finalContent = latest === capturedContent ? saveContent : latest;
+        if (nativeCodec && nativeRelocation && latest !== capturedContent) {
+          finalContent = nativeRelocation.relocatePendingNativeSource(latest, originalKey, selectedPath, nativeCodec.readNativeMetadata(saveContent));
+        }
         useDocumentStore.getState().remove(originalKey);
         useDocumentStore.getState().upsertFromPayload({
           key: selectedPath,
@@ -393,6 +415,10 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
 
       // 事务成功：身份已提交给新 key——授权随迁移兑现（不再释放）
       newlyOwned = false;
+      if (nativeWritten) {
+        const { commitNativeSaveMetadata } = await import('../../document-format/nativeSaveCommit');
+        commitNativeSaveMetadata(selectedPath, nativeWritten);
+      }
       await onDocumentSaved(selectedPath, saveContent);
       return true;
     } finally {

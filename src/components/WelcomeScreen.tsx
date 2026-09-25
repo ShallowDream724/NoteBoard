@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
+import { useSettingsStore } from '../stores/settingsStore';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
 //    意图信号；空闲时机发起（不占首帧），点击新建/打开文件时资源已 ready，
 //    渲染同步命中 fulfilled lazy（零 fallback、远低于 1s 目标）。
@@ -76,6 +77,7 @@ export function WelcomeScreen({
   onNewXml,
 }: WelcomeScreenProps) {
   const [showMoreFormats, setShowMoreFormats] = useState(false);
+  const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
 
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
   const primaryCreateActions = [
@@ -323,7 +325,7 @@ export function WelcomeScreen({
           maxWidth: 840,
         }}
       >
-        {primaryCreateActions.map((action, i) => (
+        {primaryCreateActions.filter(action => !pureMarkdown || action.onClick !== onNewNativeDocument).map((action, i) => (
           <button
             key={i}
             type="button"

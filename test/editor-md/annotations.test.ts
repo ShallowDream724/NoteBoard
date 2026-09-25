@@ -8,12 +8,13 @@ import { AnnotationBehavior, annotationIndexKey } from '@/features/editor-md/ann
 import { addAnnotation, canAddAnnotation, removeAnnotation, selectedAnnotationId, updateAnnotation } from '@/features/editor-md/annotations/commands';
 import { annotationAnchors, annotationBodiesForFragment, collectAnnotations, remapAnnotationIds } from '@/features/editor-md/annotations/model';
 import { constrainAnnotationGeometry } from '@/features/editor-md/annotations/geometry';
+import { nativeTestEditor } from './nativeTestEditor';
 
 const editors: Editor[] = [];
 const paragraph = (text: string): JSONContent => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 function create(content: JSONContent[] = [paragraph('Anchor words here')]) {
   const editor = new Editor({ extensions: [StarterKit, ImageNode, ...annotationSchemaExtensions, AnnotationBehavior], content: { type: 'doc', content } });
-  editors.push(editor); return editor;
+  editors.push(editor); return nativeTestEditor(editor);
 }
 afterEach(() => { for (const editor of editors.splice(0)) editor.destroy(); vi.restoreAllMocks(); });
 

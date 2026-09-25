@@ -15,7 +15,7 @@ import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
 import { EditorView, keymap } from '@codemirror/view';
-import { Annotation, EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
+import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
@@ -85,7 +85,7 @@ import { restoreImageAssetsForContent } from './imageAssetLifecycle';
 
 // Mode/history synchronization is not an input event. It must never leave a
 // delayed source snapshot that can overwrite a subsequent undo/redo branch.
-const sourceReplacement = Annotation.define<boolean>();
+import { sourceReplacement } from './sourceDocumentSync';
 
 /** 回收恢复的 Markdown 视图状态形态（captureViewState 捕获） */
 type RestoredMarkdownViewState = {
@@ -110,7 +110,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const document = useDocumentStore.getState().getDocument(docKey);
     const verdict = judgeLargeDoc(document?.content ?? '', document?.size);
     const requested = useWindowStore.getState().getTab(docKey)?.viewMode ?? useSettingsStore.getState().settings.editor.defaultViewMode;
-    return { verdict, mode: document?.kind === 'noteboard' ? 'visual' as const : verdict.isLarge ? 'source' as const : requested };
+    return { verdict, mode: document?.kind !== 'noteboard' && verdict.isLarge ? 'source' as const : requested };
   }, [docKey]);
   const [viewMode, setViewMode] = useState<'visual' | 'source'>(initialView.mode);
   // 始终记录最新模式，供只在真正卸载时执行的清理逻辑读取
@@ -422,11 +422,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         ])),
         ...createBaseExtensions(useSettingsStore.getState().settings.editor),
         liveEditorSettings,
-        markdown(),
-        sourceTypingAssist,
-        sourceStylesField,
+        ...(nativeDocument ? [] : [markdown(), sourceTypingAssist, sourceStylesField]),
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
-        markdownPlainBracketExtension,
+        ...(nativeDocument ? [] : [markdownPlainBracketExtension]),
         nbSyntaxHighlighting,
         nbEditorTheme,
         updateListener,
@@ -465,7 +463,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     sourceViewRef.current = view;
     sourceContentRef.current = { text: view.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
     registerMdSourceView(docKey, view);
-  }, [docKey, readSourceContent]);
+  }, [docKey, nativeDocument, readSourceContent]);
 
   // 当前可见模式负责呈现统一历史节点，另一内核会在下次切换时无历史地同步到同一内容
   useEffect(() => {
@@ -555,12 +553,12 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     setLargeVerdict(verdict);
     // 先确定初始模式，文件历史的首节点必须采用当前权威内核实际展示的内容
     const tab = useWindowStore.getState().getTab(docKey);
-    const requestedMode = tab?.viewMode ?? (verdict.isLarge ? 'source' : settings.editor.defaultViewMode);
+    const requestedMode = tab?.viewMode ?? (!nativeDocument && verdict.isLarge ? 'source' : settings.editor.defaultViewMode);
     // 🔴 R4-03/D02：resolvedMode 单次决策——"用户意图（标签/设置）+ 大文档限制"
     //    合并后只应用一次，分支间不得互相覆盖。大文档强制 source（visual 内核
     //    不挂载）；resolvedMode 决定后续全部初始化（内核/历史/基线），不再被
     //    tab 恢复的 initialMode 二次改写。
-    const resolvedMode: 'visual' | 'source' = nativeDocument ? 'visual' : verdict.isLarge ? 'source' : requestedMode;
+    const resolvedMode: 'visual' | 'source' = !nativeDocument && verdict.isLarge ? 'source' : requestedMode;
     const historyInitialContent = content;
 
     if (verdict.isLarge && !nativeDocument) {
@@ -651,7 +649,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     // 🔴 S12：visual 内核重挂载（回收后）——恢复捕获的选区/滚动视图状态
     restoreMarkdownViewState();
     if (pendingSourceSelectionRef.current) {
-      const selection = mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
+      const selection = nativeDocument ? null : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
       pendingSourceSelectionRef.current = null;
       scheduleModeSelection('visual', selection);
     }
@@ -659,7 +657,6 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
   const toggleViewMode = useCallback((targetMode?: 'visual' | 'source') => {
-    if (nativeDocument) return;
     const nextMode = targetMode ?? (viewModeRef.current === 'visual' ? 'source' : 'visual');
     if (nextMode === viewModeRef.current) return;
 
@@ -673,7 +670,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       initSourceEditor(md);
       const embedded = editor ? embeddedEditingPosition(editor) : null;
       const sourceText = readSourceContent() ?? md;
-      const selection = editor ? mapModeSelection(editor, sourceText, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
+      const selection = editor && !nativeDocument ? mapModeSelection(editor, sourceText, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
       setViewMode('source');
@@ -688,7 +685,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       // large source files stay responsive even with an uncommitted edit group.
       const sourceDocument = sourceViewRef.current?.state.doc;
       const verdict = judgeLargeDoc(sourceDocument ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '');
-      if (verdict.isLarge) {
+      if (verdict.isLarge && !nativeDocument) {
         setLargeVerdict(verdict); setShowLargeBanner(true);
         return;
       }
@@ -748,16 +745,20 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       setViewMode('visual');
       useWindowStore.getState().setTabViewMode(docKey, 'visual');
       emit('view-mode-changed', { key: docKey, mode: 'visual' });
-      const visualSelection = mapModeSelection(editor, md, 'visual', sourceSelection);
+      const visualSelection = nativeDocument ? null : mapModeSelection(editor, md, 'visual', sourceSelection);
       scheduleModeSelection('visual', visualSelection);
     }
   }, [editor, docKey, nativeDocument, initSourceEditor, readSourceContent, scheduleModeSelection]);
 
   // 监听来自状态栏或外部的模式切换请求
   useEffect(() => {
-    const handleToggle = (payload: { key?: string; mode?: 'visual' | 'source' }) => {
+    const handleToggle = (payload: { key?: string; mode?: 'visual' | 'source'; line?: number }) => {
       if (payload.key === docKey || (!payload.key && useWindowStore.getState().activeKey === docKey)) {
         toggleViewMode(payload.mode);
+        if (payload.mode === 'source' && payload.line && sourceViewRef.current) {
+          const view = sourceViewRef.current, line = view.state.doc.line(Math.max(1, Math.min(payload.line, view.state.doc.lines)));
+          scheduleModeSelection('source', { anchor: line.from, head: line.to });
+        }
       }
     };
     on('toggle-md-view-mode', handleToggle);
@@ -770,7 +771,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   useEffect(() => {
     const unreg = registerShortcut({
       key: 'Ctrl+/',
-      when: () => !nativeDocument && useWindowStore.getState().activeKey === docKey,
+      when: () => useWindowStore.getState().activeKey === docKey,
       action: () => toggleViewMode(),
       stopPropagation: true,
       scope: 'global',
@@ -840,6 +841,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       {/* 源码模式容器（常驻 DOM，确保 sourceDivRef.current 始终有效挂载） */}
       <div
+        className="nb-markdown-source"
         inert={viewMode !== 'source'}
         aria-hidden={viewMode !== 'source'}
         style={{
@@ -862,14 +864,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           ref={sourceDivRef}
           style={{
             width: '100%',
-            maxWidth: 'var(--content-max-width)',
             height: '100%',
           }}
         />
       </div>
 
       {/* 底部左侧模式切换器：可视化 / 源码模式，具备热区靠近唤出与 Hover、Active 状态反馈，仅对当前文档生效 */}
-      {!nativeDocument && <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />}
+      <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />
       </div>
     </div>
   );

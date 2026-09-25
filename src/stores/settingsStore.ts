@@ -58,6 +58,7 @@ const DEFAULT_SETTINGS: Settings = {
     uiFontSize: 13,
   },
   editor: {
+    pureMarkdown: false,
     defaultViewMode: 'visual',
     softWrap: true,
     showLineNumbers: true,

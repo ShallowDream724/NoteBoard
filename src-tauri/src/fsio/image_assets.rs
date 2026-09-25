@@ -185,6 +185,34 @@ fn checked_paths(
     Ok((root, images))
 }
 
+// Each NB record is independently decoded so JSON Unicode/path escaping cannot
+// conceal a reference. An invalid record is unknown evidence: retain assets.
+fn native_reference_text(content: &str, extension: &str) -> Result<String, String> {
+    let mut lines = content.lines();
+    if lines.next().unwrap_or("").trim_start_matches('\u{feff}') != "#!noteboard 1" {
+        return if extension == "nb" { Ok(content.to_owned()) }
+        else { Err("无法读取 NoteBoard 文档引用，图片已保留".into()) };
+    }
+    let mut decoded = String::with_capacity(content.len());
+    for line in lines {
+        if line.trim().is_empty() { continue; }
+        let payload = line.strip_prefix("@block ").or_else(|| line.strip_prefix("@child ")).or_else(|| line.strip_prefix("@meta "))
+            .ok_or("NB 文档包含无法识别的记录，图片已保留")?;
+        let value: serde_json::Value = serde_json::from_str(payload).map_err(|_| "NB 文档含未修复的内容，图片已保留")?;
+        let mut pending = vec![&value];
+        while let Some(value) = pending.pop() {
+            if value.get("type").and_then(|value| value.as_str()) == Some("nativeError") { return Err("NB 文档含未修复的内容，图片已保留".into()); }
+            match value {
+                serde_json::Value::String(text) => { decoded.push_str(text); decoded.push('\n'); }
+                serde_json::Value::Array(values) => pending.extend(values),
+                serde_json::Value::Object(values) => pending.extend(values.values()),
+                _ => {}
+            }
+        }
+    }
+    Ok(decoded)
+}
+
 fn scan_references(
     root: PathBuf,
     images: &[CheckedImage],
@@ -246,14 +274,7 @@ fn scan_references(
             }
             let text = std::fs::read_to_string(&path)
                 .map_err(|e| format!("无法核对文档引用，图片已保留：{e}"))?;
-            let text = if ext == "nbdoc" {
-                serde_json::from_str::<serde_json::Value>(&text)
-                    .map_err(|_| "无法读取 NoteBoard 文档引用，图片已保留")?.to_string()
-            } else if ext == "nb" {
-                // .nb is also used by Wolfram. Scan foreign content as text;
-                // JSON decoding is needed only to expose escaped native paths.
-                serde_json::from_str::<serde_json::Value>(&text).map(|value| value.to_string()).unwrap_or(text)
-            } else { text };
+            let text = if ext == "nbdoc" || ext == "nb" { native_reference_text(&text, &ext)? } else { text };
             let text = normalize_reference_text(&text)?;
             for (image_key, filename) in &filenames {
                 if text.contains(filename) {
@@ -494,6 +515,13 @@ pub async fn restore_document_image(ticket: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_frames_decode_references_and_refuse_broken_records() {
+        let source = "#!noteboard 1\n@block {\"type\":\"table\"}\n@child {\"type\":\"image\",\"attrs\":{\"src\":\"img/\\u0070icture.png\"}}\n";
+        assert!(native_reference_text(source, "nb").unwrap().contains("picture.png"));
+        assert!(native_reference_text(&(source.to_owned() + "@child {broken\n"), "nb").is_err());
+        assert!(native_reference_text("#!noteboard 1\n@block {\"type\":\"nativeError\",\"attrs\":{\"raw\":\"unknown\"}}\n", "nb").is_err());
+    }
     #[test]
     fn encoded_and_html_references_are_retained_in_one_scan() {
         let dir = tempfile::tempdir().unwrap();

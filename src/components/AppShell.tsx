@@ -1,8 +1,8 @@
 // NoteBoard AppShell
-// 三栏布局：资源管理器 | 编辑区 | 大纲
+// 资源管理器 + 全宽编辑区；大纲是正文右侧留白中的导航层。
 // 详见 docs/07-UI布局与交互规范.md §1
 
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Group, Panel } from 'react-resizable-panels';
 import type { PanelSize } from 'react-resizable-panels';
 import type { Editor } from '@tiptap/core';
@@ -21,8 +21,6 @@ import {
   useLayoutStore,
   EXPLORER_MIN,
   EXPLORER_MAX,
-  OUTLINE_MIN,
-  OUTLINE_MAX,
 } from '../stores/layoutStore';
 // 🔴 S05：全部编辑器按类型懒加载（EditorHost + editorLoaders），壳不再静态导入任何编辑器
 import { EditorHost } from '../features/editor-host/EditorHost';
@@ -73,8 +71,17 @@ import { MissingFileDialog } from '../features/external/MissingFileDialog';
 import { checkActiveDocumentStillExists } from '../features/external/missingFileGuard';
 
 // ── AppShell ──
+const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
 
 export function AppShell(_props: { children?: React.ReactNode }) {
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void import('../features/document-format/nativeDocumentLifecycle').then(module => {
+      if (!disposed) stop = module.startNativeDocumentLifecycle();
+    });
+    return () => { disposed = true; stop?.(); };
+  }, []);
   const tabs = useWindowStore((s) => s.tabs);
   const activeKey = useWindowStore((s) => s.activeKey);
   // 🔴 迁移保护中的文档：阻断编辑输入（pointerEvents），避免迁移期间新修改无法同步到目标
@@ -83,7 +90,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     explorerVisible,
     explorerWidth,
     outlineVisible,
-    outlineWidth,
     statusBarVisible,
     boardPresentationMode,
   } = useLayoutStore();
@@ -114,7 +120,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   }, []);
 
   const explorerWidthRef = useRef<number>(explorerWidth);
-  const outlineWidthRef = useRef<number>(outlineWidth);
 
   // 标签激活变化只切换大纲的数据源，不修改或重建任何 Markdown 编辑器内核。
   useEffect(() => {
@@ -242,9 +247,9 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     clearPendingClose();
   };
 
-  // 右把手仅 Markdown 显示（不变式 I-17）
+  // 文档导航仅富文本文档显示。
   const activeTab = tabs.find((t) => t.key === activeKey);
-  const showOutline = isRichDocument(activeTab?.kind);
+  const showOutline = isRichDocument(activeTab?.kind) && activeTab?.viewMode !== 'source';
   // 仅活动画板可以接管应用外壳；切到其他格式时立即恢复常规布局
   const isBoardPresentationMode = boardPresentationMode && activeTab?.kind === 'board';
 
@@ -292,7 +297,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
         }
       },
       scope: 'global',
-      description: '展开/收起右侧栏',
+      description: '展开/收起大纲',
       stopPropagation: true,
     });
 
@@ -428,13 +433,9 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     return () => {
       // 卸载时同步最终宽度到 store
       const finalExplorerW = explorerWidthRef.current;
-      const finalOutlineW = outlineWidthRef.current;
       const store = useLayoutStore.getState();
       if (Math.abs(finalExplorerW - store.explorerWidth) > 1) {
         store.setExplorerWidth(finalExplorerW);
-      }
-      if (Math.abs(finalOutlineW - store.outlineWidth) > 1) {
-        store.setOutlineWidth(finalOutlineW);
       }
     };
   }, []);
@@ -455,19 +456,13 @@ export function AppShell(_props: { children?: React.ReactNode }) {
           style={{ width: '100%', height: '100%' }}
           onLayoutChanged={(layout) => {
             // layout 是 Map<panelId, percentage>
-            // ⚠️ 不能在此调用 setExplorerWidth/setOutlineWidth，
+            // ⚠️ 不能在此调用 setExplorerWidth，
             // 否则会触发 Group 重渲染 → 再次 onLayoutChanged → 无限循环 → 白屏。
             // 宽度持久化通过 onResize 回调 + 组件卸载时写入 store。
             if (explorerVisible) {
               const pct = layout['nb-explorer'];
               if (typeof pct === 'number') {
                 explorerWidthRef.current = (pct / 100) * window.innerWidth;
-              }
-            }
-            if (outlineVisible && showOutline) {
-              const pct = layout['nb-outline'];
-              if (typeof pct === 'number') {
-                outlineWidthRef.current = (pct / 100) * window.innerWidth;
               }
             }
           }}
@@ -501,6 +496,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
             minSize="30%"
           >
             <div
+              className="nb-editor-area"
               onFocusCapture={() => {
                 checkActiveDocumentStillExists().catch(() => {});
               }}
@@ -517,10 +513,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 background: 'var(--editor-bg)',
               }}
             >
-              {!isBoardPresentationMode && showOutline && !outlineVisible && <Tooltip content="展开大纲" side="left">
-                <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开大纲"
-                  onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
-              </Tooltip>}
               {/* 编辑器内容 */}
               <div
                 style={{
@@ -565,8 +557,11 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                     onNewXml={newXml}
                   />
                 ) : null}
+                {activeTab?.kind === 'noteboard' && <Suspense fallback={null}><LinkedMarkdownBanner docKey={activeTab.key} /></Suspense>}
                 {tabs.length > 0 ? (
                   <div
+                    className="nb-document-stage"
+                    data-outline={!isBoardPresentationMode && showOutline && outlineVisible || undefined}
                     style={{
                       flex: 1,
                       position: 'relative',
@@ -645,6 +640,14 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                         </div>
                       );
                     })}
+                    {!isBoardPresentationMode && showOutline && (outlineVisible ? (
+                      <OutlinePanel editor={activeEditor} />
+                    ) : (
+                      <Tooltip content="展开大纲" side="left">
+                        <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开大纲"
+                          onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
+                      </Tooltip>
+                    ))}
                   </div>
                 ) : null}
 
@@ -654,26 +657,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
             </div>
           </Panel>
 
-          {/* 大纲 */}
-          {!isBoardPresentationMode && outlineVisible && showOutline && (
-            <>
-              <Panel
-                id="nb-outline"
-                defaultSize={outlineWidth}
-                minSize={OUTLINE_MIN}
-                maxSize={OUTLINE_MAX}
-                onResize={(size: PanelSize) => {
-                  outlineWidthRef.current = size.inPixels;
-                }}
-                style={{
-                  background: 'var(--editor-bg)',
-                  overflow: 'hidden',
-                }}
-              >
-                <OutlinePanel editor={activeEditor} />
-              </Panel>
-            </>
-          )}
         </Group>
       </div>
 

@@ -4,12 +4,14 @@ import MarkdownIt from 'markdown-it';
 import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { setParagraphPresentation, setTextColor } from '../../src/features/document-style/documentStyles';
+import { nativeTestEditor } from './nativeTestEditor';
 
 describe('body-first document styles', () => {
   it('preserves overlapping inline colors, highlight, paragraph styles and normal Markdown', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>one <strong>two</strong> three</p>' });
     try {
-      editor.commands.setTextSelection({ from: 2, to: 10 }); setTextColor(editor, '#2563eb');
+      nativeTestEditor(editor);
+      editor.commands.setTextSelection({ from: 2, to: 10 }); expect(setTextColor(editor, '#2563eb')).toBe(true);
       editor.commands.setTextSelection({ from: 5, to: 13 }); editor.commands.setHighlight({ color: '#fef08a' });
       setParagraphPresentation(editor, { textAlign: 'center', indentBy: 1 });
       const markdown = serializeMarkdown(editor);
@@ -24,7 +26,8 @@ describe('body-first document styles', () => {
   it('keeps duplicate paragraphs distinct on roundtrip, but rejects changed/ambiguous anchors', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>same</p><p>same</p><p>unique</p>' });
     try {
-      editor.commands.setTextSelection({ from: 1, to: 5 }); setTextColor(editor, '#dc2626');
+      nativeTestEditor(editor);
+      editor.commands.setTextSelection({ from: 1, to: 5 }); expect(setTextColor(editor, '#dc2626')).toBe(true);
       editor.commands.setTextSelection({ from: 7, to: 11 }); setTextColor(editor, '#2563eb');
       editor.commands.setTextSelection({ from: 13, to: 19 }); editor.commands.setHighlight({ color: '#fef08a' });
       const markdown = serializeMarkdown(editor);

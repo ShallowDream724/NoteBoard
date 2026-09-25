@@ -1,9 +1,15 @@
-import { Children, isValidElement, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, createContext, isValidElement, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ToolbarDivider } from './ToolbarComponents';
 import { fitToolbar } from './toolbarLayout';
 import './ResponsiveToolbar.css';
 
-interface ItemProps { collapsePriority?: number }
+interface ItemProps { collapsePriority?: number; overflowId?: string }
+const ToolbarOverflowContext = createContext<ReadonlySet<string>>(new Set());
+
+/** A secondary menu owns a command only while its primary toolbar control is hidden. */
+export function ToolbarOverflowItem({ id, children }: { id: string; children: ReactNode }) {
+  return useContext(ToolbarOverflowContext).has(id) ? children : null;
+}
 
 /** Owns layout only; formatting commands and dropdown state stay with the toolbar. */
 export function ResponsiveToolbar({ children, onLayoutChange }: {
@@ -12,10 +18,13 @@ export function ResponsiveToolbar({ children, onLayoutChange }: {
 }) {
   const root = useRef<HTMLDivElement>(null);
   const items = Children.toArray(children).filter(isValidElement<ItemProps>);
-  const signature = items.map((item) => item.type === ToolbarDivider ? 'divider' : item.props.collapsePriority ?? 100).join(',');
+  const signature = items.map((item) => item.type === ToolbarDivider ? 'divider' : `${item.props.collapsePriority ?? 100}:${item.props.overflowId ?? ''}`).join(',');
   const onChangeRef = useRef(onLayoutChange);
   onChangeRef.current = onLayoutChange;
   const [layout, setLayout] = useState<{ compact: boolean; visible: number[] } | null>(null);
+  const visible = useMemo(() => layout ? new Set(layout.visible) : null, [layout]);
+  const overflowKey = items.flatMap((item, index) => item.props.overflowId && visible && !visible.has(index) ? [item.props.overflowId] : []).join(',');
+  const overflow = useMemo(() => new Set(overflowKey ? overflowKey.split(',') : []), [overflowKey]);
 
   useLayoutEffect(() => {
     const element = root.current;
@@ -62,12 +71,14 @@ export function ResponsiveToolbar({ children, onLayoutChange }: {
   }, [signature]);
 
   return (
+    <ToolbarOverflowContext.Provider value={overflow}>
     <div ref={root} className="responsive-toolbar" data-compact={layout?.compact ?? false}>
       {items.map((item, index) => {
-        const hidden = layout !== null && !layout.visible.includes(index);
+        const hidden = visible !== null && !visible.has(index);
         return (
           <div key={item.key ?? index} className="responsive-toolbar-item"
             data-priority={item.props.collapsePriority ?? 100}
+            data-toolbar-id={item.props.overflowId}
             data-separator={item.type === ToolbarDivider}
             data-hidden={hidden} aria-hidden={hidden || undefined} inert={hidden || undefined}>
             {item}
@@ -75,5 +86,6 @@ export function ResponsiveToolbar({ children, onLayoutChange }: {
         );
       })}
     </div>
+    </ToolbarOverflowContext.Provider>
   );
 }

@@ -1,5 +1,5 @@
 import { DOMParser, parseHTML } from 'linkedom/worker';
-import type { ExportDocument } from './model';
+import type { ExportDocument, ExportInputFormat } from './model';
 import type { JSONContent } from '@tiptap/core';
 
 // A DOM implementation only inside this disposable worker. It also preserves
@@ -16,7 +16,7 @@ class FragmentDOMParser {
 }
 Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
 
-type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard' }
+type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard'; inputFormat?: ExportInputFormat }
   | { type: 'asset-urls'; urls: string[] };
 let started = false;
 let receiveAssetUrls: ((urls: string[]) => void) | undefined;
@@ -25,9 +25,11 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
   if (started) return;
   started = true;
   try {
+    const content = typeof data.markdown === 'string' && data.inputFormat === 'noteboard'
+      ? (await import('../../core/nativeDocument')).decodeNativeDocument(data.markdown) : data.markdown;
     if (data.format === 'md' || data.format === 'noteboard') {
-      const { parseMarkdownDocument } = await import('../editor-md/documentExtensions');
-      const json = typeof data.markdown === 'string' ? parseMarkdownDocument(data.markdown).toJSON() : data.markdown;
+      const json = typeof content !== 'string' ? content
+        : (await import('../editor-md/documentExtensions')).parseMarkdownDocument(content).toJSON();
       const { rebaseDocumentReferences } = await import('../../core/documentReferences');
       rebaseDocumentReferences(json, data.directory);
       const result = data.format === 'md'
@@ -38,13 +40,13 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
     }
     if (data.format === 'pandoc') {
       const { pandocSource } = await import('./pandocDocument');
-      const source = typeof data.markdown === 'string' ? data.markdown
-        : (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(data.markdown);
+      const source = typeof content === 'string' ? content
+        : (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content);
       self.postMessage({ type: 'result', result: pandocSource(source) });
       return;
     }
-    const snapshot = typeof data.markdown === 'string' ? { markdown: data.markdown, doc: null }
-      : (await import('../editor-md/documentExtensions')).materializeDocument(data.markdown);
+    const snapshot = typeof content === 'string' ? { markdown: content, doc: null }
+      : { markdown: '', doc: (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content) };
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
     if (data.format === 'standalone-html') {
       const { standaloneHtml, localFileUrl } = await import('./standaloneHtml');

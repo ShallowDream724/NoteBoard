@@ -7,12 +7,13 @@ import { tableAxisRange, reorderedTable, moveTableAxis, insertTablePart } from '
 import { writeTableClipboard, handleTablePaste } from '@/features/editor-md/tableClipboard';
 import { runDiscreteEdit } from '@/features/editor-md/discreteEdit';
 import { distributeTableRows } from '@/features/editor-md/tablePresentationCommands';
+import { nativeTestEditor } from './nativeTestEditor';
 
 const editors: Editor[] = [];
 const cell = (text: string, attrs = {}): JSONContent => ({ type: 'tableCell', attrs, content: [{ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'textColor', attrs: { color: '#e53935' } }] }] }] });
 const row = (content: JSONContent[], height = 60): JSONContent => ({ type: 'tableRow', attrs: { height }, content });
 const table = (): JSONContent => ({ type: 'table', content: [row([cell('A', { background: '#fff2cc', colwidth: [100] }), cell('B', { colwidth: [200] })], 90), row([cell('C', { colwidth: [100] }), cell('D', { colwidth: [200] })]), row([cell('E', { colwidth: [100] }), cell('F', { colwidth: [200] })])] });
-function create(content: JSONContent = table()) { const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [content, { type: 'paragraph' }] } }); editors.push(editor); return editor; }
+function create(content: JSONContent = table()) { const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [content, { type: 'paragraph' }] } }); editors.push(editor); return nativeTestEditor(editor); }
 function selectRow(editor: Editor, index: number) {
   const map = TableMap.get(editor.state.doc.firstChild!);
   const at = (column: number) => editor.state.doc.resolve(1 + map.map[index * map.width + column]);

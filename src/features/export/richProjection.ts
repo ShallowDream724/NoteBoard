@@ -1,11 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 
 export type ExportProjection = 'portable' | 'html' | 'print';
-export interface RichExportSummary { grids: number; carousels: number; disclosures: number; concealed: number; annotations: number }
+export interface RichExportSummary { grids: number; carousels: number; disclosures: number; concealed: number; annotations: number; recovered?: number }
 const knownNodes = new Set(['doc', 'text', 'paragraph', 'heading', 'hardBreak', 'codeBlock', 'blockquote', 'horizontalRule',
   'bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem', 'table', 'tableRow', 'tableCell', 'tableHeader',
   'image', 'mathInline', 'mathBlock', 'mermaidBlock', 'plantumlBlock', 'infographicBlock', 'githubAlert', 'documentPresentation',
-  'imageCollection', 'imageSlot', 'disclosure', 'annotationStore', 'annotationBody']);
+  'imageCollection', 'imageSlot', 'disclosure', 'annotationStore', 'annotationBody', 'nativeError']);
 const knownMarks = new Set(['bold', 'italic', 'strike', 'underline', 'code', 'link', 'highlight', 'textColor', 'conceal', 'annotationReference']);
 const paragraph = (content: JSONContent[] = []): JSONContent => ({ type: 'paragraph', content });
 const text = (value: string, bold = false): JSONContent => ({ type: 'text', text: value, ...(bold ? { marks: [{ type: 'bold' }] } : {}) });
@@ -17,7 +17,9 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
   const references = new Set<string>();
   const summary: RichExportSummary = { grids: 0, carousels: 0, disclosures: 0, concealed: 0, annotations: 0 };
   const index = (value: JSONContent, path: string) => {
-    if (!knownNodes.has(value.type ?? '')) throw new Error(`无法导出节点 ${value.type ?? '(无类型)'}（${path}），内容未被丢弃。`);
+    // An unknown block has an explicit, lossless portable representation. The
+    // native error block already carries the exact original source fragment.
+    if (!knownNodes.has(value.type ?? '') || value.type === 'nativeError') { summary.recovered = (summary.recovered ?? 0) + 1; return; }
     for (const mark of value.marks ?? []) {
       if (!knownMarks.has(mark.type)) throw new Error(`无法导出标记 ${mark.type}（${path}），请保留原生文档。`);
       if (mark.type === 'conceal') summary.concealed++;
@@ -42,6 +44,10 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
   const reference = (id: string): JSONContent => ({ type: 'text', text: `[${numbers.get(id)}]`,
     ...(mode !== 'portable' ? { marks: [{ type: 'link', attrs: { href: `#export-note-${numbers.get(id)}` } }] } : {}) });
   const project = (value: JSONContent): JSONContent[] => {
+    if (!knownNodes.has(value.type ?? '') || value.type === 'nativeError') {
+      const raw = typeof value.attrs?.raw === 'string' ? value.attrs.raw : JSON.stringify(value);
+      return [{ type: 'codeBlock', content: raw ? [text(raw)] : [] }];
+    }
     if (value.type === 'annotationStore' || value.type === 'annotationBody') return [];
     const content: JSONContent[] = [];
     value.content?.forEach((child, index) => {
@@ -64,9 +70,16 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
     const anchor = value.attrs?.annotationId ? reference(String(value.attrs.annotationId)) : null;
     if (anchor && ['paragraph', 'heading'].includes(value.type!)) { content.push(anchor); clean.content = content; }
     let result: JSONContent[];
-    if (mode === 'portable' && (value.type === 'imageCollection' || value.type === 'imageSlot')) {
-      // Empty slots have no synthetic text; a caption-only slot still has content.
-      result = content.filter(child => child.type !== 'paragraph' || !!child.content?.length);
+    if (mode === 'portable' && value.type === 'imageSlot') {
+      result = [{ type: 'tableCell', content: content.length ? content : [paragraph()] }];
+    } else if (mode === 'portable' && value.type === 'imageCollection') {
+      const columns = value.attrs?.columns === 3 ? 3 : 2, rows: JSONContent[] = [];
+      for (let start = 0; start < content.length; start += columns) {
+        const cells = content.slice(start, start + columns);
+        while (cells.length < columns) cells.push({ type: 'tableCell', content: [paragraph()] });
+        rows.push({ type: 'tableRow', content: cells });
+      }
+      result = [{ type: 'table', content: rows }];
     } else if (mode === 'portable' && value.type === 'disclosure') {
       result = [paragraph([text(String(value.attrs?.title || '折叠内容'), true)]), ...content];
     } else {
@@ -96,10 +109,11 @@ export function richExportDiagnostics(summary: RichExportSummary | undefined, ta
   if (!summary || target === 'noteboard') return [];
   const result: string[] = [];
   const portable = ['md', 'docx', 'latex'].includes(target);
-  if (portable && summary.grids) result.push(`${summary.grids} 组图片拼图按顺序展开，全部图片和图注已保留。`);
-  if (target !== 'html5' && summary.carousels) result.push(`${summary.carousels} 组图片轮播已${portable ? '按顺序展开' : '展开为完整网格'}。`);
+  if (portable && summary.grids) result.push(`${summary.grids} 组图片拼图已保留为完整网格，包含全部图片、图注与空槽。`);
+  if (target !== 'html5' && summary.carousels) result.push(`${summary.carousels} 组图片轮播已展开为完整网格。`);
   if (target !== 'html5' && summary.disclosures) result.push(`${summary.disclosures} 个折叠块已展开，标题与正文完整保留。`);
   if (target !== 'html5' && summary.concealed) result.push(`${summary.concealed} 处模糊效果已移除，内容完整保留。`);
-  if (summary.annotations) result.push(`${summary.annotations} 处补充说明已编号并附于文末。`);
+  if (summary.annotations) result.push(`${summary.annotations} 处补充说明已${['docx', 'latex'].includes(target) ? '转换为脚注' : '编号并附于文末'}。`);
+  if (summary.recovered) result.push(`${summary.recovered} 处无法解析的内容已按原文保留为代码块。`);
   return result;
 }

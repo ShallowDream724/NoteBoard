@@ -86,6 +86,9 @@ pub fn run() {
             // 🔴 S07：统一文件准备（读盘前归属查询 + 在途去重 + blocking 读取）
             fsio::prepare::prepare_document,
             fsio::commands::write_document,
+            fsio::native_documents::save_native_bundle,
+            fsio::native_documents::read_native_headers,
+            fsio::native_documents::recover_native_commits,
             fsio::commands::save_binary_file,
             fsio::commands::read_dir,
             fsio::browse::browse_locations,

@@ -14,7 +14,12 @@ use super::write;
 
 /// 读取文档
 #[tauri::command]
-pub fn read_document(path: String) -> Result<DocumentPayload, String> {
+pub async fn read_document(path: String) -> Result<DocumentPayload, String> {
+    tauri::async_runtime::spawn_blocking(move || read_document_on_worker(path)).await.map_err(|error| error.to_string())?
+}
+
+fn read_document_on_worker(path: String) -> Result<DocumentPayload, String> {
+    super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(&path);
 
     if !p.exists() {

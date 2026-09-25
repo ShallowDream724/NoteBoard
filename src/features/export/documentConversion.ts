@@ -1,9 +1,9 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
-import type { ExportDocument } from './model';
+import type { ExportDocument, ExportInputFormat } from './model';
 import type { JSONContent } from '@tiptap/core';
 
 /** One conversion per disposable worker; closing the dialog immediately releases its heap. */
-function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard', signal?: AbortSignal): Promise<T> {
+function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard', signal?: AbortSignal, inputFormat?: ExportInputFormat): Promise<T> {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./documentWorker.ts', import.meta.url), { type: 'module' });
@@ -27,20 +27,20 @@ function convert<T>(markdown: string | JSONContent, title: string, directory: st
     };
     worker.onerror = event => fail(new Error(event.message || '文档转换失败'));
     worker.onmessageerror = () => fail(new Error('无法读取转换结果'));
-    try { worker.postMessage({ type: 'convert', markdown, title, directory, format }); } catch (error) { fail(error); }
+    try { worker.postMessage({ type: 'convert', markdown, title, directory, format, ...(inputFormat ? { inputFormat } : {}) }); } catch (error) { fail(error); }
   });
 }
 
-export async function prepareDocument(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal): Promise<ExportDocument> {
-  const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown' | 'richSummary'>>(content, title, directory, 'html', signal);
+export async function prepareDocument(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal, inputFormat?: ExportInputFormat): Promise<ExportDocument> {
+  const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown' | 'richSummary'>>(content, title, directory, 'html', signal, inputFormat);
   return { ...result, title, baseDirectory: directory };
 }
-export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal) {
-  return convert<string>(markdown, '', '', 'pandoc', signal);
+export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal, inputFormat?: ExportInputFormat) {
+  return convert<string>(markdown, '', '', 'pandoc', signal, inputFormat);
 }
-export function prepareTextExport(content: string | JSONContent, format: 'md' | 'noteboard', directory: string, signal?: AbortSignal) {
-  return convert<string>(content, '', directory, format, signal);
+export function prepareTextExport(content: string | JSONContent, format: 'md' | 'noteboard', directory: string, signal?: AbortSignal, inputFormat?: ExportInputFormat) {
+  return convert<string>(content, '', directory, format, signal, inputFormat);
 }
-export function prepareHtmlExport(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal) {
-  return convert<string>(content, title, directory, 'standalone-html', signal);
+export function prepareHtmlExport(content: string | JSONContent, title: string, directory: string, signal?: AbortSignal, inputFormat?: ExportInputFormat) {
+  return convert<string>(content, title, directory, 'standalone-html', signal, inputFormat);
 }

@@ -413,19 +413,23 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return;
     }
-    const result = await ipc.writeDocument(docKey, content, encoding, eol);
+    const written = await writeSnapshot(docKey, content, encoding, eol);
+    const result = written.result;
     // 写盘 I/O 返回后再次校验：等待磁盘期间会话换代则不推进基线/暂存清理
     if (!isSessionCurrent(docKey, generation)) return;
     noteSelfWrite(docKey);
     if (result.ok) {
+      await written.commit();
+      if (!isSessionCurrent(docKey, generation)) return;
+      const savedContent = written.content;
       // 🔴 基线只更新为实际写成功的文本
-      useDocumentStore.getState().updateBaseline(docKey, content, result.mtime, result.size);
-      baseline.updateBaseline(content);
+      useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
+      baseline.updateBaseline(savedContent);
       savedRevisions.set(docKey, revision);
       // 精确重算脏态（写盘期间的新输入仍为脏；改回基线则清脏）
       await refreshDirtyAfterWrite(docKey);
       // 携带内容证明的暂存清理：只删被覆盖的副本
-      await onDocumentSaved(docKey, content);
+      await onDocumentSaved(docKey, savedContent);
       if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     }
   }).catch((e) => {
@@ -442,6 +446,7 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
 export async function writeDocumentWithBarrier(
   docKey: string,
   content: string,
+  options?: { expectedNativeHash?: string },
 ): Promise<boolean> {
   // 🔴 R3-05/C09：closing 状态的旧会话拒绝写盘（返回 false——调用方得到明确失败，
   //    不以异常炸保存链；排空中的在途任务仍正常完成）
@@ -465,7 +470,8 @@ export async function writeDocumentWithBarrier(
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return false;
     }
-    const result = await ipc.writeDocument(docKey, content, encoding, eol);
+    const written = await writeSnapshot(docKey, content, encoding, eol, options?.expectedNativeHash);
+    const result = written.result;
     // 🔴 N04：写盘 I/O 返回后再校验（等待磁盘期间换代则不推进基线）
     if (!isSessionCurrent(docKey, generation)) return false;
     noteSelfWrite(docKey);
@@ -478,14 +484,37 @@ export async function writeDocumentWithBarrier(
       }
       return false;
     }
-    useDocumentStore.getState().updateBaseline(docKey, content, result.mtime, result.size);
-    getBaseline(docKey).updateBaseline(content);
+    await written.commit();
+    if (!isSessionCurrent(docKey, generation)) return false;
+    const savedContent = written.content;
+    useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
+    getBaseline(docKey).updateBaseline(savedContent);
     savedRevisions.set(docKey, revision);
     await refreshDirtyAfterWrite(docKey);
-    await onDocumentSaved(docKey, content);
+    await onDocumentSaved(docKey, savedContent);
     if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     return true;
   });
+}
+
+/** Storage routing is shared by every auto/manual save. A native save commits
+ * its linked Markdown before either baseline is advanced. */
+async function writeSnapshot(key: string, content: string, encoding: Parameters<typeof ipc.writeDocument>[2], eol: Parameters<typeof ipc.writeDocument>[3], expectedNativeHash?: string) {
+  const doc = useDocumentStore.getState().getDocument(key);
+  if (doc?.kind !== 'noteboard') return { content, result: await ipc.writeDocument(key, content, encoding, eol), commit: async () => {} };
+  const { persistNativeDocument } = await import('../document-format/nativePersistence');
+  const generation = getSessionGeneration(key);
+  const prepared = await persistNativeDocument(doc, content, expectedNativeHash);
+  const result = { ok: prepared.result.ok, mtime: prepared.result.native?.mtime ?? 0, size: prepared.result.native?.size ?? 0,
+    ...(prepared.result.error ? { error: { kind: 'io' as const, message: prepared.result.error.message } } : {}) };
+  return { content: prepared.content, result, commit: async () => {
+    await flushDocument(key, 'save');
+    const linked = prepared.request.markdown?.path;
+    if (linked && useDocumentStore.getState().getDocument(linked)) await flushDocument(linked, 'save');
+    if (!isSessionCurrent(key, generation)) return;
+    const { commitNativeSaveMetadata } = await import('../document-format/nativeSaveCommit');
+    commitNativeSaveMetadata(key, prepared);
+  } };
 }
 
 /** 仅供测试：读取会话/队列/关闭内部状态 */

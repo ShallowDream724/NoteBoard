@@ -143,6 +143,11 @@ export function EditorPanel() {
       </div>
 
       <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
+        <div><div>纯 Markdown 使用偏好</div><div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>默认新建 Markdown，并隐藏 NoteBoard 专属功能入口</div></div>
+        <input type="checkbox" checked={settings.editor.pureMarkdown ?? false} onChange={event => setEditor({ pureMarkdown: event.target.checked })}/>
+      </label>
+
+      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
         <span>选区工具栏位置</span>
         <select value={settings.editor.selectionToolbarPosition ?? 'below'}
           onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })}

@@ -5,7 +5,7 @@
 import React from 'react';
 import { ChevronUp } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
-import type { Tab } from '../../stores/windowStore';
+import { useWindowStore, type Tab } from '../../stores/windowStore';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { DeferredMarkdownToolbar } from './DeferredMarkdownToolbar';
 import { CodeToolbar } from './CodeToolbar';
@@ -19,12 +19,13 @@ interface EditorToolbarProps {
 
 export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
   const { editorToolbarVisible, setEditorToolbarVisible } = useLayoutStore();
+  const transferring = useWindowStore(state => !!activeTab && state.isTransferring(activeTab.key));
 
   // 若当前无激活标签页、非文本格式或为纯前端工具视图（如文本对比），不渲染操作栏
   if (
     !activeTab ||
     (!isRichDocument(activeTab.kind) && activeTab.kind !== 'code') ||
-    activeTab.toolKind === 'textdiff'
+    activeTab.toolKind === 'textdiff' || (activeTab.kind === 'noteboard' && activeTab.viewMode === 'source')
   ) {
     return null;
   }
@@ -41,6 +42,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
   // 2. 操作栏处于展开状态：渲染顶层工具栏容器
   return (
     <div
+      inert={transferring || undefined}
       style={{
         height: 36,
         minHeight: 36,

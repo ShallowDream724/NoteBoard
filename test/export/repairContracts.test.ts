@@ -21,9 +21,8 @@ it('Pandoc table colspec covers logical columns occupied by spans', () => {
 
 it('Pandoc highlight spans retain safe explicit and default background colors', () => {
   const source = pandocSource('<mark data-color="#ff66aa">colored</mark> and ==default==');
-  expect(source).toContain('background-color: #ff66aa');
-  expect(source).toContain('["data-color","#ff66aa"]');
-  expect(source).toContain('background-color: #ffff00');
+  expect(source).toContain('["nb-background","#ff66aa"]');
+  expect(source).toContain('["nb-background","#ffff00"]');
 });
 
 it('asset relocation changes only image source attributes and keeps marker-looking prose and code', async () => {

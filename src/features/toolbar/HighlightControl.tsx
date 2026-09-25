@@ -5,6 +5,7 @@ import { rememberTextStyle, useTextStylePreference, type TextStylePair } from '.
 import { ColorSwatches } from '../document-style/ColorSwatches';
 import './highlightControl.css';
 import { useHoverMenu } from '../../components/useHoverMenu';
+import { useNativeFeatureVisibility } from '../document-format/featureGate';
 
 interface Props {
   active: boolean; currentColor?: string; open: boolean; onOpenChange: (open: boolean) => void;
@@ -16,6 +17,7 @@ interface Props {
 
 /** Hover is only a preview: it must not move the editor's caret or keyboard focus. */
 export function HighlightControl({ active, currentColor, open, onOpenChange, onApply, onRemove, onReturnToEditor, textColor, onTextColor, onApplyStyle }: Props) {
+  const visible = useNativeFeatureVisibility();
   const lastStyle = useTextStylePreference();
   const menuId = useId();
   const menu = useRef<HTMLDivElement>(null);
@@ -27,10 +29,11 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
     else { if (pair.background) onApply(pair.background); else onRemove(); onTextColor?.(pair.color); }
     cancel();
   };
+  if (!visible) return null;
   return <div className="nb-highlight-control" data-open={hover.expanded || undefined} onPointerLeave={leave}>
     <Popover.Root open={open} onOpenChange={hover.change} modal={false}>
       <Popover.Anchor asChild><div className="nb-text-style-group">
-        <button type="button" className="nb-highlight-apply" aria-label="应用文字颜色与高亮" aria-pressed={active || !!textColor}
+        <button type="button" className="nb-highlight-apply" title="应用文字颜色与高亮" aria-label="应用文字颜色与高亮" aria-pressed={active || !!textColor}
           aria-description="应用上次的文字颜色和高亮"
           onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => applyPair(lastStyle)}
           onKeyDown={event => {
@@ -40,7 +43,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
           }}>
           <span aria-hidden="true" className="nb-text-style-preview" style={{ color: lastStyle.color ?? 'var(--editor-text)', backgroundColor: lastStyle.background ?? 'transparent' }}>A</span>
         </button>
-        <button {...hover.triggerProps} type="button" className="nb-text-style-expand" aria-label="选择文字颜色与高亮" aria-haspopup="dialog" aria-expanded={open}
+        <button {...hover.triggerProps} type="button" className="nb-text-style-expand" title="选择文字颜色与高亮" aria-label="选择文字颜色与高亮" aria-haspopup="dialog" aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           onPointerDown={event => event.preventDefault()}
           onClick={() => { hover.change(true); }}
@@ -66,7 +69,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
         <div className="nb-highlight-title">高亮</div>
         <ColorSwatches kind="background" label="高亮颜色" value={active ? currentColor : null}
           onChange={apply}/>
-        <button type="button" className="nb-color-reset" onClick={() => { const pair = { color: null, background: null }; rememberTextStyle(pair); applyPair(pair); }}>重置</button>
+        <button type="button" title="重置文字颜色与高亮" className="nb-color-reset" onClick={() => { const pair = { color: null, background: null }; rememberTextStyle(pair); applyPair(pair); }}>重置</button>
       </Popover.Content></Popover.Portal>
     </Popover.Root>
   </div>;

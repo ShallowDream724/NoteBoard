@@ -1,5 +1,6 @@
 .nb-image-collection { position:relative; margin:1.3em 0; min-width:0; }
 .nb-rich-menu-divider { height:1px; background:var(--editor-border); margin:4px 3px; }
+.nb-rich-menu-hint { padding:5px 8px 3px; color:var(--editor-text-muted); font:11px/1.5 var(--ui-font-family,inherit); }
 .nb-rich-url-input { box-sizing:border-box; width:100%; border:1px solid var(--editor-border); border-radius:6px; padding:9px 11px; background:var(--editor-bg); color:var(--editor-text); font:13px var(--ui-font-family); outline:none; }
 .nb-rich-url-input:focus { border-color:var(--editor-accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--editor-accent) 15%,transparent); }
 .nb-rich-url-error { color:var(--error-500,#dc2626); font:12px var(--ui-font-family); margin:8px 0; }

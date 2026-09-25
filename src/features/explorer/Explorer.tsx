@@ -3,7 +3,7 @@
 // 详见 docs/07-UI布局与交互规范.md §5
 // 详见 docs/09-开发路线图.md 阶段5
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { FilePlus, FolderPlus, LocateFixed, RotateCw, FolderOpen } from 'lucide-react';
 import { useExplorerStore, normalizePath } from './explorerStore';
 import { refreshExplorer, revealExplorerFile } from './explorerActions';
@@ -20,6 +20,7 @@ import { ExplorerBreadcrumb } from './ExplorerBreadcrumb';
 import { Tooltip } from '../../components/Tooltip';
 import { ExplorerHeader } from './ExplorerHeader';
 import { VerticalScrollArea } from '../../components/VerticalScrollArea';
+import { groupMarkdownAssociations, markdownAssociationRevision, subscribeMarkdownAssociations } from '../document-format/markdownAssociationIndex';
 
 // ── Explorer 组件 ──
 
@@ -35,6 +36,8 @@ export function Explorer() {
   useWatcher();
 
   const rootChildren = root ? children.get(normalizePath(root).toLowerCase()) : undefined;
+  const associationRevision = useSyncExternalStore(subscribeMarkdownAssociations, markdownAssociationRevision);
+  const visibleChildren = useMemo(() => groupMarkdownAssociations(rootChildren ?? []), [rootChildren, associationRevision]);
 
   // 刷新目录
   const handleRefresh = useCallback(async () => {
@@ -291,13 +294,15 @@ export function Explorer() {
             加载中
           </div>
         )}
-        {rootChildren && rootChildren.length > 0 ? (
-          rootChildren.map((node, i) => (
+        {visibleChildren.length > 0 ? (
+          visibleChildren.map(({ node, markdown }, i) => (
             <TreeNode
               key={node.path}
               node={node}
               depth={0}
-              isLast={i === rootChildren.length - 1}
+              isLast={i === visibleChildren.length - 1}
+              associatedMarkdown={markdown}
+              associationRevision={associationRevision}
             />
           ))
         ) : (

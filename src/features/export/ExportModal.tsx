@@ -95,8 +95,8 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
       else if (format === 'md' || format === 'noteboard' || format === 'html5') {
         const { prepareTextExport, prepareHtmlExport } = await import('./documentConversion');
         const content = format === 'html5'
-          ? await prepareHtmlExport(document.source ?? document.markdown, document.title, document.baseDirectory, signal)
-          : await prepareTextExport(document.source ?? document.markdown, format, document.baseDirectory, signal);
+          ? await prepareHtmlExport(document.source ?? document.markdown, document.title, document.baseDirectory, signal, document.inputFormat)
+          : await prepareTextExport(document.source ?? document.markdown, format, document.baseDirectory, signal, document.inputFormat);
         signal.throwIfAborted();
         const { writeDocument } = await import('../../core/ipc/commands');
         const result = await writeDocument(destination, content, 'utf8', 'lf');
@@ -106,7 +106,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         const id = crypto.randomUUID(); current.pandoc = id;
         await invoke('begin_pandoc', { id }); signal.throwIfAborted();
         const { preparePandoc } = await import('./documentConversion');
-        const source = await preparePandoc(document.source ?? document.markdown, signal); signal.throwIfAborted();
+        const source = await preparePandoc(document.source ?? document.markdown, signal, document.inputFormat); signal.throwIfAborted();
         warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
       }
       onClose();

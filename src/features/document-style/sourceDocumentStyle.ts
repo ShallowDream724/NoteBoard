@@ -1,13 +1,9 @@
 import type { EditorView } from '@codemirror/view';
-import { EditorState } from '@tiptap/pm/state';
 import { documentParser } from '../editor-md/documentExtensions';
 import { mapDocumentSelection } from '../editor-md/sourcePosition';
-import { presentationBody } from './presentationMetadata';
-import { documentColor } from './colors';
 import type { TextStylePair } from './stylePreference';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
-import { readStyledSource, resetSourceStyles } from './sourceStyleTracking';
-import { styleMathBlocks } from './documentStyles';
+import { readStyledSource } from './sourceStyleTracking';
 
 const snapshots = new WeakMap<EditorView, { source: EditorView['state']['doc']; doc: DocumentNode }>();
 function sourceDocument(view: EditorView, parse: boolean) {
@@ -39,30 +35,8 @@ export function sourceTextStyle(view: EditorView, parse = false): TextStylePair 
     background: styles.length && styles.every(style => style.background === styles[0].background) ? styles[0].background : null };
 }
 
-/** Explicit source-format actions parse once, update only the annotation footer,
- * and preserve the author's Markdown spelling/spacing and selection offsets. */
-export function applySourceTextStyle(view: EditorView, change: Partial<TextStylePair>, toggleHighlight = false) {
-  const selection = view.state.selection.main; if (selection.empty) return false;
-  const source = readStyledSource(view.state), { manager, schema } = documentParser();
-  const body = presentationBody(source, manager.instance);
-  if (selection.to > body.length) return false;
-  const doc = sourceDocument(view, true)!;
-  const mapped = mapDocumentSelection(doc, manager, source, 'visual', selection, view);
-  const from = Math.min(mapped.anchor, mapped.head), to = Math.max(mapped.anchor, mapped.head);
-  if (from === to) return false;
-  const tr = EditorState.create({ doc }).tr;
-  if (toggleHighlight && doc.rangeHasMark(from, to, schema.marks.highlight)) change = { ...change, background: null };
-  for (const [key, mark] of [['color','textColor'],['background','highlight']] as const) {
-    if (change[key] === undefined) continue;
-    tr.removeMark(from, to, schema.marks[mark]);
-    const color = documentColor(change[key]); if (color) tr.addMark(from, to, schema.marks[mark].create({ color }));
-  }
-  styleMathBlocks(tr, change, from, to);
-  if (!tr.docChanged) return false;
-  const serialized = manager.serialize(tr.doc.toJSON()), start = serialized.lastIndexOf('\n\n<!-- noteboard-styles ');
-  const next = body + (start >= 0 ? serialized.slice(start) : '');
-  // The body is byte-for-byte unchanged; replace only the old footer suffix.
-  view.dispatch({ changes: { from: body.length, to: view.state.doc.length, insert: next.slice(body.length) }, selection, effects: resetSourceStyles.of(null) });
-  snapshots.set(view, { source: view.state.doc, doc: tr.doc });
-  return true;
+/** Source editing preserves authored Markdown/HTML but never authors private
+ * presentation metadata. Rich styles are applied after conversion in visual NB. */
+export function applySourceTextStyle(_view: EditorView, _change: Partial<TextStylePair>, _toggleHighlight = false): boolean {
+  return false;
 }

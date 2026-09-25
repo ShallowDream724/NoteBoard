@@ -8,6 +8,8 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { columnWidthsStep, resizedColumnPair } from './tableColumnWidths';
 import { tableGesturePreview } from './tableGesturePreview';
 import { createTableRowView } from './tableRowView';
+import { runWithDocumentCapability } from '../document-format/featureGate';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
@@ -25,6 +27,7 @@ interface Drag extends Edge {
 }
 
 function edgeAt(view: EditorView, event: PointerEvent): Edge | null {
+  if (useSettingsStore.getState().settings.editor.pureMarkdown) return null;
   if (view.state.selection instanceof CellSelection) return null;
   if (!view.editable || !(event.target instanceof Element)) return null;
   const cell = event.target.closest<HTMLTableCellElement>('td,th');
@@ -62,6 +65,7 @@ function modelPosition(view: EditorView, edge: Edge) {
 export const TableSizing = Extension.create({
   name: 'tableSizing',
   addProseMirrorPlugins() {
+    const owner = this.editor;
     let pending: Pending | null = null, drag: Drag | null = null, frame = 0, hoverFrame = 0, view: EditorView | undefined;
     let guide: HTMLElement | undefined, latestPointer: PointerEvent | undefined, shown: Edge | null = null;
     const hideGuide = () => {
@@ -107,12 +111,18 @@ export const TableSizing = Extension.create({
       const node = editor.state.doc.nodeAt(current.pos);
       if (!commit || !node || Math.abs(current.next - current.start) < 1) return;
       if (current.axis === 'row' && node.type.spec.tableRole === 'row') {
-        dispatchDiscreteEdit(editor, editor.state.tr.setNodeMarkup(current.pos, undefined, { ...node.attrs, height: current.next }));
+        runWithDocumentCapability(owner, 'tableDimensions', next => {
+          const row = next.state.doc.nodeAt(current.pos); if (row?.type.spec.tableRole !== 'row') return false;
+          dispatchDiscreteEdit(next.view, next.state.tr.setNodeMarkup(current.pos, undefined, { ...row.attrs, height: current.next })); return true;
+        });
       } else if (current.axis === 'column' && node.type.spec.tableRole === 'table') {
         const widths = current.preview.widths.map(Math.round);
         widths[current.column] = current.next;
         if (current.adjacent !== undefined) widths[current.column + 1] = Math.round(current.adjacent);
-        dispatchDiscreteEdit(editor, editor.state.tr.step(columnWidthsStep(current.pos, node, widths)));
+        runWithDocumentCapability(owner, 'tableDimensions', next => {
+          const table = next.state.doc.nodeAt(current.pos); if (table?.type.spec.tableRole !== 'table') return false;
+          dispatchDiscreteEdit(next.view, next.state.tr.step(columnWidthsStep(current.pos, table, widths))); return true;
+        });
       }
     };
     return [new Plugin({
@@ -172,9 +182,11 @@ export const TableSizing = Extension.create({
         guide.setAttribute('aria-hidden', 'true'); editor.dom.ownerDocument.body.append(guide);
         const scroll = () => { if (drag) showGuide(drag); else hideGuide(); };
         editor.dom.ownerDocument.addEventListener('scroll', scroll, true);
+        const stopPreferences = useSettingsStore.subscribe(state => { if (state.settings.editor.pureMarkdown) finish(editor, false); });
         return {
           update() { if (editor.state.selection instanceof CellSelection || shown && !editor.dom.contains(shown.table)) hideGuide(); },
           destroy() { finish(editor, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
+            stopPreferences();
             editor.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; view = undefined; },
         };
       },

@@ -134,6 +134,7 @@ pub async fn prepare_document(
 
 /// 工作线程判别与读取（无锁；复用既有 read::read_file 的编码检测与解码）
 fn prepare_on_worker(path: &str, key: &str) -> Result<PreparedDocument, String> {
+    super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(path);
 
     let metadata = match std::fs::metadata(p) {

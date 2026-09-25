@@ -55,12 +55,16 @@ it.each(['markdown', 'noteboard'] as const)('physical Ctrl+Z uses the shared %s 
     expect(editor.state.doc.eq(initial)).toBe(true);
     await press('Z', true);
     expect(editor.state.doc.eq(changed)).toBe(true);
-    await act(async () => { editor.commands.setContent('<table><tr><td colwidth="80">A</td><td colwidth="160">B</td></tr><tr><td colwidth="80">C</td><td colwidth="160">D</td></tr></table><p>end</p>'); });
+    const table = '<table><tr><td colwidth="80">A</td><td colwidth="160">B</td></tr><tr><td colwidth="80">C</td><td colwidth="160">D</td></tr></table><p>end</p>';
+    await act(async () => { editor.commands.setContent(kind === 'noteboard' ? table : table.replace(/ colwidth="\d+"/g, '')); });
     const tableBefore = editor.state.doc;
-    await act(async () => { editor.commands.setTextSelection(4); expect(distributeTableColumns(editor)).toBe(true); });
-    const tableAfter = editor.state.doc;
-    await press('z'); expect(editor.state.doc.eq(tableBefore)).toBe(true);
-    await press('y'); expect(editor.state.doc.eq(tableAfter)).toBe(true);
+    let tableAfter = tableBefore;
+    if (kind === 'noteboard') {
+      await act(async () => { editor.commands.setTextSelection(4); expect(distributeTableColumns(editor)).toBe(true); });
+      tableAfter = editor.state.doc;
+      await press('z'); expect(editor.state.doc.eq(tableBefore)).toBe(true);
+      await press('y'); expect(editor.state.doc.eq(tableAfter)).toBe(true);
+    }
     await act(async () => { expect(moveTopLevelBlock(editor.view, 0, editor.state.doc.content.size)).not.toBeNull(); });
     await press('z'); expect(editor.state.doc.eq(tableAfter)).toBe(true);
   } finally { await act(async () => root.unmount()); host.remove(); }

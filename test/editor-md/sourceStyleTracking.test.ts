@@ -6,9 +6,11 @@ import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { applyTextStyle, setParagraphPresentation } from '../../src/features/document-style/documentStyles';
 import { sourceStylesField, readStyledSource, resetSourceStyles } from '../../src/features/document-style/sourceStyleTracking';
 import { buildStyleSpans, replaceStyleSpans, spanValueAt, styleSpans, type SpanTree } from '../../src/features/document-style/styleSpanTree';
+import { nativeTestEditor } from './nativeTestEditor';
 
 function seed() {
   const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>before</p><p>red words</p><p>after</p>' });
+  nativeTestEditor(editor);
   editor.commands.setTextSelection({ from: 9, to: 18 });
   applyTextStyle(editor, { color: '#dc2626', background: '#fef08a' });
   setParagraphPresentation(editor, { textAlign: 'center' });
@@ -39,6 +41,7 @@ it('retains inline and display formula colors through source edits inside TeX an
     { type: 'mathBlock', attrs: { latex: 'y+1', delimiter: '$$' } },
   ] } });
   try {
+    nativeTestEditor(editor);
     editor.commands.selectAll(); applyTextStyle(editor, { color: '#dc2626', background: '#fef08a' });
     const initial = serializeMarkdown(editor);
     let state = EditorState.create({ doc: initial, extensions: [sourceStylesField] });

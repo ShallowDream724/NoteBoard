@@ -37,7 +37,8 @@ import { TableInsertMenu } from './TableInsertMenu';
 import { TableFillMenu } from './TableFillMenu';
 import { documentTableStyle } from './documentPresentation';
 import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDistributionState, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
-import { RichSelectionMenu } from './rich-content/menus';
+import { AnnotationButton, RichSelectionMenu } from './rich-content/menus';
+import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -302,6 +303,7 @@ export function EditorBubbleMenu({
           onReturnToEditor={() => editor.commands.focus()}
           onRemove={() => { setHighlightColor(editor, null); }}/>
         <AlignmentMenu editor={editor}/>
+        <AnnotationButton editor={editor}/>
         <RichSelectionMenu editor={editor}/>
 
         <MenuDivider />
@@ -381,6 +383,7 @@ function HeaderRowIcon() {
 
 /** 表格浮动工具条（精美分类与方向直观区分，支持滚动实时跟随与智能避让） */
 export function TableToolbar({ editor }: { editor: Editor }) {
+  const nativeFeaturesVisible = useNativeFeatureVisibility();
   const toolbar = useRef<HTMLDivElement>(null);
   const refresh = useRef<() => void>(() => {});
   const [show, setShow] = useState(false);
@@ -559,11 +562,11 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       <AlignmentMenu editor={editor} cells/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
       <MenuDivider />
-      {tableDistributionState(editor).columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
-      {tableDistributionState(editor).rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
-      {isCellSelection(editor.state.selection) && editor.can().mergeCells() && <BubbleButton
+      {nativeFeaturesVisible && tableDistributionState(editor).columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
+      {nativeFeaturesVisible && tableDistributionState(editor).rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
+      {nativeFeaturesVisible && isCellSelection(editor.state.selection) && editor.can().mergeCells() && <BubbleButton
         title="合并选中单元格" icon={<Merge size={16}/>}
-        onClick={() => runDiscreteEdit(editor, chain => chain.mergeCells())}/>}
+        onClick={() => runWithDocumentCapability(editor, 'tableMerge', next => runDiscreteEdit(next, chain => chain.mergeCells()))}/>}
       {editor.can().splitCell() && <BubbleButton
         title="拆分合并单元格" icon={<Split size={16}/>}
         onClick={() => runDiscreteEdit(editor, chain => chain.splitCell())}/>}
@@ -574,7 +577,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         active={headers.rowHeader}
         onClick={() => setSelectedTableHeader(editor, 'row')}
       />}
-      {headers?.canColumn && <BubbleButton
+      {nativeFeaturesVisible && headers?.canColumn && <BubbleButton
         title={headers.columnHeader ? '取消表头列' : '首列设为表头'}
         icon={<HeaderColumnIcon />}
         active={headers.columnHeader}

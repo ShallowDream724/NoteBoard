@@ -97,15 +97,19 @@ export async function overwriteFromEditor(docKey: string): Promise<boolean> {
 
   try {
     // 受保护保存：写队列内落盘（基线更新为实际写入内容）
-    const result = await ipc.writeDocument(docKey, content, doc.encoding, doc.eol);
-    if (!result.ok) {
+    const { writeDocumentWithBarrier } = await import('../session/documentSession');
+    let expectedNativeHash: string | undefined;
+    if (doc.kind === 'noteboard') {
+      const disk = await ipc.readDocument(docKey);
+      if (disk.content == null) throw new Error('无法读取目标文档。');
+      const { documentTextHash } = await import('../../core/nativeDocumentIO');
+      expectedNativeHash = await documentTextHash(disk.content);
+    }
+    const ok = await writeDocumentWithBarrier(docKey, content, { expectedNativeHash });
+    if (!ok) {
       showToast('覆盖磁盘失败，冲突状态保留，可重试', 'error');
       return false;
     }
-    store.updateBaseline(docKey, content, result.mtime, result.size);
-    getBaseline(docKey).updateBaseline(content);
-    store.setDirty(docKey, false);
-    useWindowStore.getState().setTabDirty(docKey, false);
     // 解除冲突（文档与标签双侧）
     store.setExternalStatus(docKey, 'clean');
     useWindowStore.getState().setTabExternalStatus(docKey, 'clean');

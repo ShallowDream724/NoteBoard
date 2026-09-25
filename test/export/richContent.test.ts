@@ -45,10 +45,14 @@ describe('rich document export conservation', () => {
     expect(projection.content![0].content!.filter(node => node.text === '[1]')).toHaveLength(1);
   });
 
-  it('gives Word/LaTeX native image and math AST plus complete block endnotes', () => {
+  it('gives Word/LaTeX native image, grid, math and footnote AST without rebuilding the document', () => {
     const doc = documentParser().schema.nodeFromJSON(sample()); doc.check();
     const ast = pandocSource(doc);
     expect(ast.match(/"t":"Image"/g)).toHaveLength(3);
+    expect(ast.match(/"t":"Note"/g)).toHaveLength(2);
+    const table = JSON.parse(ast).blocks.find((value: { t: string }) => value.t === 'Table');
+    expect(table.c[2]).toHaveLength(3);
+    expect(table.c[4][0][3]).toHaveLength(2);
     expect(ast).not.toMatch(/RawBlock|RawInline/);
     expect(ast).toContain('DisplayMath');
     for (const text of ['折叠标题', '隐藏正文', '图注一', '图注二', '行内说明', '块级说明', '说明列表']) expect(ast).toContain(text);
@@ -96,8 +100,16 @@ describe('rich document export conservation', () => {
     expect(projection.content![1].content![0].content!.filter(node => node.type === 'paragraph')).toHaveLength(1);
   });
 
-  it('rejects unknown content and missing annotation bodies with concrete locations', () => {
-    expect(() => projectRichContent({ type: 'doc', content: [{ type: 'futureWidget', attrs: { caption: '不可丢失' } }] }, 'portable')).toThrow('futureWidget（正文/1）');
+  it('preserves unknown/error blocks as ordinary code and rejects missing annotation bodies', () => {
+    const markdown = portableMarkdown({ type: 'doc', content: [
+      { type: 'futureWidget', attrs: { caption: '不可丢失' } },
+      { type: 'nativeError', attrs: { raw: '@broken\n原始内容', message: '错误' } },
+    ] });
+    expect(markdown).toContain('```');
+    expect(markdown).toContain('futureWidget');
+    expect(markdown).toContain('不可丢失');
+    expect(markdown).toContain('@broken\n原始内容');
+    expect(markdown).not.toMatch(/noteboard-|nativeError|message/);
     expect(() => projectRichContent({ type: 'doc', content: [{ ...paragraph('anchor'), attrs: { annotationId: 'missing' } }] }, 'print')).toThrow('missing 缺少正文');
   });
 });

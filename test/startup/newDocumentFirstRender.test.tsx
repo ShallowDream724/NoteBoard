@@ -9,11 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TipTapEditor } from '@/features/editor-md/TipTapEditor';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
-import { getMdTipTapEditor } from '@/features/editor-md/editorInstances';
+import { getMdTipTapEditor, getMdSourceView } from '@/features/editor-md/editorInstances';
 import { resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
-import { clearAllDocumentHistories } from '@/features/history/documentHistory';
+import { clearAllDocumentHistories, undoDocumentHistory } from '@/features/history/documentHistory';
 import { encodeNativeDocument, decodeNativeDocument } from '@/core/nativeDocument';
 import { flushPendingVisualSnapshot } from '@/features/editor-md/visualSnapshot';
+import { emit } from '@/core/emitter';
+import { sourceStylesField } from '@/features/document-style/sourceStyleTracking';
 vi.mock('@/features/editor-md/extensions', async () => {
   const { default: StarterKit } = await import('@tiptap/starter-kit');
   const { Markdown } = await import('@tiptap/markdown');
@@ -59,7 +61,7 @@ function seedUntitled(n: number): string {
 }
 
 describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
-  it('原生文档忽略恢复的源码模式，直接编辑并捕获结构化样式', async () => {
+  it('原生源码直接编辑原生记录，切换与撤销保留文字样式', async () => {
     const key = 'untitled:native';
     useDocumentStore.getState().upsertFromPayload({
       key, displayName: '未命名.nbdoc', dirPath: '', kind: 'noteboard', language: 'plaintext',
@@ -72,10 +74,19 @@ describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
     try {
       await act(async () => { root.render(<TipTapEditor docKey={key} />); });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+      expect(getMdTipTapEditor(key)).toBeFalsy();
+      const source = getMdSourceView(key)!;
+      expect(source.state.doc.toString()).toContain('#!noteboard 1');
+      expect(source.state.field(sourceStylesField, false)).toBeUndefined();
+      const insertion = source.state.doc.toString().indexOf('红色文字') + 2;
+      await act(async () => { source.dispatch({ changes: { from: insertion, insert: '源' } }); emit('toggle-md-view-mode', { key, mode: 'visual' }); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
       const editor = getMdTipTapEditor(key)!;
       expect(editor.isEditable).toBe(true);
-      expect(host.querySelector('.cm-editor')).toBeNull();
       expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
+      expect(editor.getJSON().content![0].content![0]).toMatchObject({ text: '红色源文字', marks: [{ type: 'bold' }] });
+      await act(async () => { undoDocumentHistory(key); });
+      expect(editor.getJSON().content![0].content![0]).toMatchObject({ text: '红色文字', marks: [{ type: 'bold' }] });
       await act(async () => { editor.view.dispatch(editor.state.tr.insertText('新', 3)); });
       const snapshot = flushPendingVisualSnapshot(key)!;
       const native = decodeNativeDocument(snapshot);

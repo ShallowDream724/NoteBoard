@@ -7,10 +7,11 @@ import { parseNativeNode, serializeNativeNode } from '../../src/features/editor-
 import { encodeNativeDocument } from '../../src/core/nativeDocument';
 import { NodeSelection } from '@tiptap/pm/state';
 import { readFileSync } from 'node:fs';
+import { nativeTestEditor } from './nativeTestEditor';
 
 const editors: Editor[] = [];
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); });
-const editor = () => { const value = new Editor({ extensions: buildDocumentExtensions(), content: '<p>原文</p>' }); editors.push(value); return value; };
+const editor = () => { const value = new Editor({ extensions: buildDocumentExtensions(), content: '<p>原文</p>' }); editors.push(value); return nativeTestEditor(value); };
 describe('rich document content contract', () => {
   it('opens the public hand-authoring example with the shared strict schema', () => {
     const text = readFileSync('examples/rich-document.nb', 'utf8');
@@ -44,14 +45,16 @@ describe('rich document content contract', () => {
   it('canonicalizes hand-written note metadata and rejects dangling references without data loss', () => {
     const schema = documentParser().schema;
     const body = { type: 'paragraph', content: [{ type: 'text', text: '说明锚点', marks: [{ type: 'annotationReference', attrs: { id: 'note-1' } }] }] };
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body] }), schema)).toThrow('找不到');
+    expect(parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body] }), schema).firstChild?.attrs.message).toContain('找不到');
     const store = { type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'note-1' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: '说明正文' }] }] }] };
     const result = parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body, store] }), schema);
     expect(result.firstChild?.type.name).toBe('annotationStore');
     expect(result.textContent).toContain('说明正文');
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body, store, store] }), schema)).toThrow('一个');
+    const duplicate = parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body, store, store] }), schema);
+    expect(duplicate.firstChild?.attrs.message).toContain('一个');
+    expect(duplicate.lastChild?.attrs.raw).toContain('说明正文');
     const nested = structuredClone(store);
     nested.content[0].content = [body];
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body, nested] }), schema)).toThrow('嵌套');
+    expect(parseNativeNode(encodeNativeDocument({ type: 'doc', content: [body, nested] }), schema).firstChild?.attrs.message).toContain('嵌套');
   });
 });

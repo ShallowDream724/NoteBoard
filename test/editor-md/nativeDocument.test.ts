@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { buildDocumentExtensions, documentParser } from '@/features/editor-md/documentExtensions';
-import { initializeEditorDocument, serializeEditorDocument, parseEditorDocument, parseNativeNode } from '@/features/editor-md/editorDocumentCodec';
-import { encodeNativeDocument, decodeNativeDocument } from '@/core/nativeDocument';
+import { initializeEditorDocument, serializeEditorDocument, parseEditorDocument, parseNativeNode, serializeNativeNode, setEditorNativeMetadata, getEditorNativeMetadata } from '@/features/editor-md/editorDocumentCodec';
+import { encodeNativeDocument, decodeNativeDocument, decodeNativeFile, readNativeMetadata, replaceNativeMetadata } from '@/core/nativeDocument';
+import { normalizeImageReferenceText } from '@/features/editor-md/imageReferences';
 import { portableMarkdown } from '@/features/export/portableMarkdown';
 import { kindFromPath, savePolicyOf } from '@/core/docKind';
 import { pandocSource } from '@/features/export/pandocDocument';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { history, undoDepth } from '@codemirror/commands';
+import { setSourceNativeMetadata } from '@/features/editor-md/sourceDocumentSync';
 
 const editors: Editor[] = [];
 const p = (text: string): JSONContent => ({ type: 'paragraph', content: [{ type: 'text', text }] });
@@ -48,15 +53,68 @@ describe('Native document storage and portable export', () => {
     expect(parse).not.toHaveBeenCalled();
     expect(serialize).not.toHaveBeenCalled();
   });
-  it('rejects unknown versions, nodes and attributes instead of overwriting with a partial document', () => {
+  it('preserves unknown versions, nodes and attributes as local raw error blocks', () => {
     const { schema } = documentParser();
-    expect(() => decodeNativeDocument('{"format":"noteboard","version":2,"document":{"type":"doc"}}')).toThrow();
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [{ type: 'futureWidget' }] }), schema)).toThrow();
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [{ ...p('keep'), attrs: { futureStyle: 'red' } }] }), schema)).toThrow();
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [{ ...p('keep'), futureContent: 'must not vanish' }] }), schema)).toThrow();
-    expect(() => parseNativeNode(encodeNativeDocument({ type: 'doc', content: [{ type: 'paragraph', text: 'must not vanish' }] }), schema)).toThrow();
+    expect(decodeNativeDocument('{"format":"noteboard","version":2,"document":{"type":"doc"}}').content![0].type).toBe('nativeError');
+    for (const bad of [{ type: 'futureWidget' }, { ...p('keep'), attrs: { futureStyle: 'red' } }, { ...p('keep'), futureContent: 'must not vanish' }, { type: 'paragraph', text: 'must not vanish' }]) {
+      const source = encodeNativeDocument({ type: 'doc', content: [p('before'), bad, p('after')] });
+      const doc = parseNativeNode(source, schema);
+      expect(doc.child(1).type.name).toBe('nativeError');
+      expect(doc.lastChild!.textContent).toBe('after');
+      expect(serializeNativeNode(doc)).toBe(source);
+      expect(String(doc.child(1).attrs.raw)).toContain(JSON.stringify(bad));
+    }
     expect(kindFromPath('note.NBDOC')).toBe('noteboard');
     expect(savePolicyOf('noteboard')).toBe('auto');
+  });
+  it('recovers bad middle records and table rows without losing their raw text on visual edits', () => {
+    const source = '#!noteboard 1\n@block {"type":"paragraph","content":[{"type":"text","text":"before"}]}\n@block {broken\n@block {"type":"table"}\n@child {broken-row\n@child {"type":"tableRow","content":[{"type":"tableCell","content":[{"type":"paragraph","content":[{"type":"text","text":"good row"}]}]}]}\n@block {"type":"paragraph","content":[{"type":"text","text":"after"}]}\n';
+    const decoded = decodeNativeFile(source);
+    expect(decoded.diagnostics).toHaveLength(2);
+    const editor = create(); parseEditorDocument(editor, source);
+    expect(editor.getText()).toContain('good row'); expect(editor.getText()).toContain('after');
+    editor.view.dispatch(editor.state.tr.insertText('new ', 1));
+    const saved = serializeEditorDocument(editor);
+    expect(saved).toContain('@block {broken\n'); expect(saved).toContain('@child {broken-row\n');
+    expect(decodeNativeFile(saved).diagnostics).toHaveLength(2);
+  });
+  it('frames a large table by row and reuses unchanged immutable row serialization', () => {
+    const table = { type: 'table', content: Array.from({ length: 10000 }, (_, index) => ({ type: 'tableRow', content: [{ type: 'tableCell', content: [p(String(index))] }] })) };
+    const source = encodeNativeDocument({ type: 'doc', content: [table] });
+    expect(source.match(/^@child /gm)).toHaveLength(10000);
+    expect(source.split('\n')[1]).toBe('@block {"type":"table"}');
+    const { schema } = documentParser(), doc = schema.nodeFromJSON({ type: 'doc', content: [table] });
+    const toJSON = vi.spyOn(doc, 'toJSON');
+    expect(serializeNativeNode(doc)).toContain('9999'); expect(toJSON).not.toHaveBeenCalled();
+  });
+  it('reads and replaces metadata without parsing or changing body records and invalidates cached headers', () => {
+    const metadata = { markdown: { path: './note.md', baselineHash: 'abc', projectionVersion: 1 }, future: { flag: true } };
+    const source = encodeNativeDocument(sample, metadata), body = '@block {broken\n';
+    expect(readNativeMetadata(source)).toEqual(metadata);
+    expect(readNativeMetadata(replaceNativeMetadata('#!noteboard 1\n' + body, metadata))).toEqual(metadata);
+    expect(replaceNativeMetadata('#!noteboard 1\n' + body, metadata).endsWith(body)).toBe(true);
+    const editor = create(); parseEditorDocument(editor, source);
+    expect(getEditorNativeMetadata(editor)).toEqual(metadata);
+    const updated = { ...metadata, markdown: { ...metadata.markdown, baselineHash: 'def' } };
+    setEditorNativeMetadata(editor, updated);
+    expect(readNativeMetadata(serializeEditorDocument(editor))).toEqual(updated);
+    expect(decodeNativeFile(serializeEditorDocument(editor)).document).toEqual(decodeNativeFile(source).document);
+  });
+  it('decodes escaped native image references and retains images for broken records', () => {
+    const source = '#!noteboard 1\n@block {"type":"image","attrs":{"src":"img/\\u0070icture.png"}}\n';
+    expect(normalizeImageReferenceText(source, true)).toContain('picture.png');
+    expect(normalizeImageReferenceText(source + '@block {bad\n', true)).toBeNull();
+  });
+  it('updates live source metadata while preserving body, selection and undo state', () => {
+    const body = '@block {broken\n@block {"type":"paragraph","content":[{"type":"text","text":"selected"}]}\n';
+    const source = '#!noteboard 1\n' + body, anchor = source.indexOf('selected');
+    const view = new EditorView({ state: EditorState.create({ doc: source, selection: { anchor, head: anchor + 8 }, extensions: [history()] }) });
+    try {
+      setSourceNativeMetadata(view, { markdown: { path: './note.md', baselineHash: 'new', projectionVersion: 1 } });
+      expect(view.state.doc.toString().endsWith(body)).toBe(true);
+      expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe('selected');
+      expect(undoDepth(view.state)).toBe(0);
+    } finally { view.destroy(); }
   });
   it('exports all content once while removing private presentation metadata', () => {
     const output = portableMarkdown(sample);

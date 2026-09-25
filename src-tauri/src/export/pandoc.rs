@@ -104,26 +104,13 @@ fn resolve_program(configured: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-fn formatting_warning(document: &serde_json::Value, format: &str) -> Option<&'static str> {
-    if !["docx", "latex"].contains(&format) { return None; }
-    let mut pending = vec![document];
-    while let Some(value) = pending.pop() {
-        if value.get(1).and_then(|classes| classes.as_array())
-            .is_some_and(|classes| classes.iter().any(|class| matches!(class.as_str(), Some("noteboard-cell-fill" | "noteboard-presentation")))) {
-            return Some("部分颜色、对齐或缩进样式未映射到 Word/LaTeX；需要完整保留时请使用 HTML 或 PDF。");
-        }
-        if value.get("t").and_then(|kind| kind.as_str()) == Some("Span")
-            && value.pointer("/c/0/1").and_then(|classes| classes.as_array())
-                .is_some_and(|classes| classes.iter().any(|class| class.as_str() == Some("highlight"))) {
-            return Some("文本高亮底色未映射到 Word/LaTeX；需要保留时请使用 HTML 或 PDF。");
-        }
-        match value {
-            serde_json::Value::Array(values) => pending.extend(values),
-            serde_json::Value::Object(values) => pending.extend(values.values()),
-            _ => {},
-        }
-    }
-    None
+fn check_api_version(version: &serde_json::Value) -> Result<(), String> {
+    let parts = version.as_array().ok_or("无法读取 Pandoc 格式版本")?;
+    let major = parts.first().and_then(|value| value.as_u64()).unwrap_or(0);
+    let minor = parts.get(1).and_then(|value| value.as_u64()).unwrap_or(0);
+    // The source uses the modern Table/Cell representation, introduced in 1.22.
+    if major != 1 || minor < 22 { return Err("请使用 Pandoc 3.0 或更新版本导出文档。".into()); }
+    Ok(())
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,15 +137,24 @@ pub async fn pandoc_export(app: AppHandle, window: WebviewWindow, id: String, pa
         let template = run(&job, command(&path).args(["--from=markdown", "--to=json"]), Vec::new(), Duration::from_secs(10))?;
         if !template.status.success() { return Err("无法读取 Pandoc 格式版本".into()); }
         let template: serde_json::Value = serde_json::from_slice(&template.stdout).map_err(|e| e.to_string())?;
+        check_api_version(&template["pandoc-api-version"])?;
         let mut document: serde_json::Value = serde_json::from_str(&source).map_err(|e| e.to_string())?;
         document["pandoc-api-version"] = template["pandoc-api-version"].clone();
-        let warning = formatting_warning(&document, &format);
+        let adapter = if ["docx", "latex"].contains(&format.as_str()) {
+            document["meta"]["noteboard-target"] = serde_json::json!({"t":"MetaString", "c":format});
+            let mut file = tempfile::Builder::new().prefix("noteboard-pandoc-").suffix(".lua").tempfile().map_err(|e| e.to_string())?;
+            file.write_all(include_bytes!("pandoc-targets.lua")).map_err(|e| e.to_string())?;
+            file.flush().map_err(|e| e.to_string())?;
+            Some(file)
+        } else { None };
         let input = serde_json::to_vec(&document).map_err(|e| e.to_string())?;
         job.check()?;
         let destination = Path::new(&destination);
         let output = super::output::create(destination)?;
         let mut cmd = command(&path);
-        cmd.args(["--from=json", "--standalone", "--wrap=none", "--to", &format, "--output"]).arg(output.path());
+        cmd.args(["--from=json", "--standalone", "--wrap=none", "--to"]);
+        if let Some(adapter) = &adapter { cmd.arg(adapter.path()); } else { cmd.arg(&format); }
+        cmd.arg("--output").arg(output.path());
         if !directory.is_empty() { cmd.arg("--resource-path").arg(&directory).current_dir(directory); }
         if format == "html5" {
             let title = destination.file_stem().unwrap_or_default().to_string_lossy();
@@ -171,7 +167,7 @@ pub async fn pandoc_export(app: AppHandle, window: WebviewWindow, id: String, pa
         // or cancelled converter never truncates an existing destination.
         let _guard = job.child.lock().unwrap(); job.check()?;
         super::output::publish(output, destination)?;
-        Ok(match warning { Some(warning) if !messages.is_empty() => format!("{warning}\n\n{messages}"), Some(warning) => warning.into(), None => messages })
+        Ok(messages)
     }).await.map_err(|e| e.to_string());
     app.state::<PandocJobs>().0.lock().unwrap().remove(&id);
     result?
@@ -181,11 +177,10 @@ pub async fn pandoc_export(app: AppHandle, window: WebviewWindow, id: String, pa
 mod tests {
     use super::*;
     #[test]
-    fn highlight_warning_is_limited_to_unsupported_formats_and_documents() {
-        let document = serde_json::json!({"blocks":[{"t":"Para","c":[{"t":"Span","c":[["",["highlight"],[["data-color","#ff66aa"]]],[{"t":"Str","c":"text"}]]}]}]});
-        assert!(formatting_warning(&document, "docx").is_some());
-        assert!(formatting_warning(&document, "latex").is_some());
-        assert!(formatting_warning(&document, "html5").is_none());
-        assert!(formatting_warning(&serde_json::json!({"blocks":[]}), "docx").is_none());
+    fn requires_the_modern_table_api_instead_of_relabeling_legacy_ast() {
+        assert!(check_api_version(&serde_json::json!([1, 23, 1])).is_ok());
+        assert!(check_api_version(&serde_json::json!([1, 22, 2, 1])).is_ok());
+        assert!(check_api_version(&serde_json::json!([1, 21])).is_err());
+        assert!(check_api_version(&serde_json::json!([2, 0])).is_err());
     }
 }

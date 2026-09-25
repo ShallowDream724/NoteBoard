@@ -11,6 +11,12 @@ import type { EditorView } from '@codemirror/view';
 
 /** 活跃 TipTap（可视化模式）实例表：docKey → editor */
 const mdTipTapEditors = new Map<string, Editor>();
+const mdTipTapListeners = new Set<(docKey: string, editor: Editor) => void>();
+
+export function subscribeMdTipTapEditors(listener: (docKey: string, editor: Editor) => void): () => void {
+  mdTipTapListeners.add(listener);
+  return () => { mdTipTapListeners.delete(listener); };
+}
 
 /** 活跃 Markdown 源码模式 CM6 实例表：docKey → view */
 const mdSourceViews = new Map<string, EditorView>();
@@ -18,6 +24,7 @@ const mdSourceViews = new Map<string, EditorView>();
 /** 注册/更新可视化模式实例（返回注销函数；重复注销幂等） */
 export function registerMdTipTapEditor(docKey: string, editor: Editor): () => void {
   mdTipTapEditors.set(docKey, editor);
+  mdTipTapListeners.forEach(listener => listener(docKey, editor));
   return () => {
     mdTipTapEditors.delete(docKey);
   };

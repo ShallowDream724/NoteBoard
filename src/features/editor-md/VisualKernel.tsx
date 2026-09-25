@@ -15,7 +15,7 @@ import { on, off, emit } from '../../core/emitter';
 import { registerShortcut } from '../../core/shortcuts';
 import { buildExtensions } from './extensions';
 import { getMarkdownManager } from './serialize';
-import { initializeEditorDocument, editorDocumentFormat, editorDocumentDirectory } from './editorDocumentCodec';
+import { initializeEditorDocument, editorDocumentFormat, editorDocumentDirectory, getEditorNativeMetadata } from './editorDocumentCodec';
 // 🔴 J2：输入热路径只暂存不可变快照（O(1)）；序列化按历史组延迟执行
 import {
   stagePendingVisualSnapshot,
@@ -76,7 +76,7 @@ function makeLinkModalOpener(docKey: string): () => void {
 function makeInitialContentLoader(docKey: string) {
   return ({ editor }: { editor: Editor }) => {
     const document = useDocumentStore.getState().getDocument(docKey);
-    initializeEditorDocument(editor, document?.content ?? '', document?.kind === 'noteboard' ? 'noteboard' : 'markdown', document?.dirPath);
+    initializeEditorDocument(editor, document?.content ?? '', document?.kind === 'noteboard' ? 'noteboard' : 'markdown', document?.dirPath, docKey);
   };
 }
 
@@ -146,6 +146,7 @@ export function VisualKernel({
       stagePendingVisualSnapshot(docKey, {
         format: editorDocumentFormat(editor),
         directory: editorDocumentDirectory(editor),
+        metadata: getEditorNativeMetadata(editor),
         doc: transaction.doc,
         revision: getDocumentRevision(docKey),
         manager: getMarkdownManager(editor),
@@ -432,7 +433,7 @@ export function VisualKernel({
           onRemove={handleRemoveLink}
         />
       )}
-      <EditorContent editor={editor} style={{ height: '100%' }} />
+      <EditorContent editor={editor} className="nb-document-content" style={{ minHeight: '100%' }} />
     </div>
   );
 }

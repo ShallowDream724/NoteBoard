@@ -7,10 +7,11 @@ import { mapModeSelection } from '../../src/features/editor-md/sourcePosition';
 import { renderDocument } from '../../src/features/export/renderDocument';
 import { documentTableStyle, setDocumentTableStyle } from '../../src/features/editor-md/documentPresentation';
 import { isTopLevelBlockMoveAllowed } from '../../src/features/editor-md/blockReorder';
+import { nativeTestEditor } from './nativeTestEditor';
 
 const source = '| 编号 | 备注 |\n| --- | --- |\n| 1 | target |\n| 2 | last |';
 function editorFor(text = source) {
-  const editor = new Editor({ extensions: buildDocumentExtensions() }); parseMarkdown(editor, text); return editor;
+  const editor = new Editor({ extensions: buildDocumentExtensions() }); parseMarkdown(editor, text); return nativeTestEditor(editor);
 }
 describe('table presentation roundtrip', () => {
   it('keeps the default empty document editable', () => {

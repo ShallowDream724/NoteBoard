@@ -1,16 +1,16 @@
 # 原生文档与 Markdown 交换
 
-本文描述当前实现。后续产品与保存契约见 [NB、Markdown 与保存语义决策](native-format-and-save-decisions.md)；其中源码、关联保存、格式能力边界及磁盘语法的目标尚未全部落地。
+本文描述原生格式、编辑与资源实现。产品与保存契约见 [NB、Markdown 与保存语义决策](native-format-and-save-decisions.md)。
 
 ## 格式与编辑模型
 
-`.nb` 与 `.nbdoc` 是同一格式的两个扩展名，默认新建使用 `.nb`，另存为与导出可选 `.nbdoc`。它们均为 UTF-8 JSON，顶层为 `{ "format": "noteboard", "version": 1, "document": … }`。document 使用现有 ProseMirror schema，不再另建一套富文本模型。文本、marks、段落属性、图片引用、公式源码、表格合并与尺寸均是树中的数据。两个后缀共用 codec，不存在旧格式转换分支；转换任务使用 `noteboard` 标识，不以扩展名区分实现。
+`.nb` 与 `.nbdoc` 是同一格式的两个扩展名，默认新建使用 `.nb`。均为 UTF-8 独立帧文本：`#!noteboard 1` 文档头、可选 `@meta` 元数据、`@block` 顶层块与 `@child` 容器子记录。每条载荷是单行语义 JSON，代码/公式换行使用 JSON 转义。table、列表、imageCollection、annotationStore 按行或项分片。`NativeNode`/`NativeMark` 是不依赖 TipTap 的公共接口，形状与编辑器语义模型接近，避免普通输入反复转换两棵树。两个后缀共用 codec，无内部旧整篇 JSON 兼容分支。
 
-`core/nativeDocument` 负责 envelope；`core/nativeDocumentStructure` 校验说明实体唯一性、引用完整性及元数据归属；`editorDocumentCodec` 负责 schema 校验和编辑器读写。UI、文件会话、写队列和历史不解析格式细节。未知版本、节点、mark、属性或内容字段拒绝加载，不能先丢弃再自动保存。发布后的不兼容语义须提升格式版本并明确转换策略；内部测试格式不维护迁移分支。
+`core/nativeDocument` 负责帧解析、局部诊断和头部元数据；`core/nativeDocumentStructure` 校验说明引用；`editorDocumentCodec` 负责按帧 schema 校验和编辑器读写。坏记录、未知节点/mark/属性保留为 `nativeError {raw,message,line}`；坏表格行在原位置使用含错误块的单元格，后续有效行和块继续显示。坏容器骨架会保留整个容器记录。未知元数据命名空间须为 JSON 对象，原样保留。`readNativeMetadata` 只扫描头部，`replaceNativeMetadata` 只替换头记录，文件树与关联保存不解析整篇正文。
 
 格式可以直接手写；默认属性可省略，不要求生成随机块 ID。只有补充说明使用作者自定、文档内唯一的 ID。图片组合、折叠块、模糊和说明采用明确语义节点/标记，见 [编写规范与示例](native-authoring.md)，该规范也作为未来 AI skill 的输入。
 
-原生文档只提供可视化编辑，不挂载 CodeMirror，不提供源码切换。普通 Markdown 继续保留源码和可视化模式，扩展样式仍采用其已有的注释协议和增量范围映射，详见 [document-styles.md](document-styles.md)。两种文件不通过改扩展名互相转换，转换入口统一在导出。
+原生文档提供自身源码与可视化模式，复用 CodeMirror、ProseMirror 内核及同一文档历史。源码输入不解析全文，也不挂载 Markdown parser、typing assist 或私有样式区间 tracking；切回可视化时才容错解析。未改动的视觉根保留原始源码，附近的正常块改动仍原样写出错误记录。错误块可跳到对应源码行修复。源码首开与大文件沿用惰性创建 visual 内核策略。
 
 原生文档的状态栏不展示序列化 JSON 的源码行列和字符统计，避免把格式数据计为正文字数。
 
@@ -18,7 +18,7 @@
 
 输入事务使用 ProseMirror 不可变节点及原生位置映射。颜色和高亮是内联 mark，插入、删除、移动与撤销由同一编辑事务处理，无需全文搜索原文来重新定位样式。
 
-每键只暂存不可变文档引用；历史组边界、保存、切换和导出屏障才物化快照。原生快照直接序列化 JSON，绕过 Markdown 编解码。WeakMap 按不可变根节点及目录缓存序列化结果，不延长旧节点生命周期。
+每键只暂存不可变文档引用；历史组边界、保存、切换和导出屏障才物化快照。原生快照绕过 Markdown 编解码，也不先 `doc.toJSON()` 全树。WeakMap 按不可变块/行缓存记录字符串，根缓存同时包含目录和 metadata 身份，不延长旧节点生命周期。visual 暂存捕获 metadata 引用；保存服务必须先物化 pending 再更新关联基准。`setSourceNativeMetadata` 只对 CodeMirror 头记录做无历史替换，选区由 CM 映射。
 
 首次加载、完整保存和导出为 O(N) 的树遍历，持久化字符串与历史继续使用现有有界补丁机制。这里 N 为文档内容和属性总量；不宣称保存成本与文件长度无关。没有引入源文本与样式区间之间的全局模糊匹配。
 
@@ -26,9 +26,9 @@
 
 ## 资源引用
 
-第一版采用外部图片文件，不把图片字节嵌入 JSON。粘贴图片继续使用现有图片目录；序列化 detached JSON 时，将相对本地图片和链接解析为当前文档目录下的绝对引用，保证另存到其他目录后仍能访问原资源。URL、锚点和已绝对化路径保持有效。
+粘贴图片采用外部图片文件，正文引用现有图片目录。新物化记录将相对本地图片和链接解析为当前目录下的绝对引用；未变更源码保持原始相对引用。跨目录另存/导出须按目标路径执行资源重定位。URL、锚点和已绝对化路径保持有效。随应用内置的展示样例可含嵌入图片；用户图片导入不依赖该形式。
 
-因此原生文档不是可独立搬运所有附件的压缩包；迁移到其他电脑仍需同时迁移图片并保持引用可访问。资源回收扫描同时识别 Markdown 与两个后缀的原生 JSON，并保留跨窗口引用屏障，不能因正文为 JSON 而回收正在使用的图片。`.nb` 也被 Wolfram 使用，资源扫描遇到非 JSON 的 `.nb` 时按原文保守检查图片引用；编辑器仍要求正确的 NoteBoard envelope，不将 Wolfram 文档当作原生文档载入。
+原生文档不是附件压缩包，迁移到其他电脑仍需携带图片。前后端资源扫描识别两个后缀的帧记录，并解码 JSON 的 Unicode/路径转义；坏记录与显式错误块都属于不确定引用，回收保留图片。`.nb` 也被 Wolfram 使用，无 NB 头的 `.nb` 在资源扫描中按原文保守检查；编辑器将无法识别的内容保留为错误块。
 
 ## 桌面关联
 
@@ -42,8 +42,8 @@ Tauri 注册 `.nbdoc` 的 `NoteBoard.Document` ProgID；NSIS hook 将 `.nb` 添�
 
 “Markdown”导出使用独立的 portable serializer，不输出 NoteBoard 样式注释和私有属性。颜色、高亮、缩进、尺寸和对齐可降级；正文、链接、图片引用、公式和图表源码不得丢失。普通表格输出 GFM；合并格的内容只输出一次。包含多段落、列表或代码的复杂表格输出标准 HTML，保留单元格结构和所有块内容，公式/图表也保留源码。HTML 渲染能力仍取决于目标 Markdown 软件。
 
-“NoteBoard 文档”导出使用同一树生成原生 envelope，可将现有 Markdown 转为保留样式的原生文档。两个导出方向均在 worker 中转换，在实际写入前保留已有错误处理与结果提示。
+“NoteBoard 文档”导出使用同一树生成原生帧文本。两个导出方向均在 worker 中转换，源模式输入显式标记格式后解码，不能把 NB 帧文本当作 Markdown。错误原文不得被导出静默跳过。
 
 ## 验证边界
 
-`nativeDocument.test` 覆盖样式中间插字、结构和样式往返、独立撤销、未知 schema 拒绝、复杂表格代码/列表/公式/图表导出。`newDocumentFirstRender.test` 覆盖带源码恢复状态的原生文件仍只挂载可视化内核，并捕获原生快照。路径及图片回收沿用前后端资产测试。
+`nativeDocument.test` 覆盖样式中间插字、往返、局部错误/未知字段保留、坏表格行后继续读取、一万行表格分片、metadata 头读写及资源转义。`newDocumentFirstRender.test` 覆盖 NB 原始源码改字后切换、样式保留和撤销。完整加载和写出仍为 O(N)，当前用例不等于对所有规模、机器和巨大单元格的性能保证。

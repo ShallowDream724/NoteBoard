@@ -1,6 +1,7 @@
 import { Node, type Editor } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
+import { editorSupportsCapability, runWithDocumentCapability } from '../document-format/featureGate';
 
 export type TableStyle = 'standard' | 'three-line';
 export const tableStyle = (value: unknown): TableStyle => value === 'three-line' ? value : 'standard';
@@ -11,6 +12,7 @@ export function documentTableStyle(doc: DocumentNode): TableStyle {
   return doc.firstChild?.type.name === NAME ? tableStyle(doc.firstChild.attrs.tableStyle) : 'standard';
 }
 export function setDocumentTableStyle(editor: Editor, value: TableStyle) {
+  if (value !== 'standard' && !editorSupportsCapability(editor, 'tableStyle')) { runWithDocumentCapability(editor, 'tableStyle', next => setDocumentTableStyle(next, value)); return; }
   const { doc, tr } = editor.state;
   if (documentTableStyle(doc) === value) return;
   if (doc.firstChild?.type.name === NAME) {

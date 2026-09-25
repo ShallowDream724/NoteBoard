@@ -3,18 +3,21 @@ import type { FileTreeNode } from '../../core/ipc/types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useExplorerStore } from './explorerStore';
 import { getPathChain, isSubPath, normalizePath, sameKey } from './pathUtils';
+import { refreshMarkdownAssociations } from '../document-format/markdownAssociationIndex';
 
-// Only directory entries are read. Concurrent reveal/watch/refresh requests share IO.
-const reads = new Map<string, Promise<FileTreeNode[]>>();
-export function readExplorerDirectory(path: string): Promise<FileTreeNode[]> {
+// Directory entries and bounded NB headers share one navigation/refresh request.
+const reads = new Map<string, { force: boolean; work: Promise<FileTreeNode[]> }>();
+export function readExplorerDirectory(path: string, forceAssociations = false): Promise<FileTreeNode[]> {
   const hidden = useSettingsStore.getState().settings.file.showHiddenFiles;
   const key = `${hidden}:${normalizePath(path).toLowerCase()}`;
   let request = reads.get(key);
   if (!request) {
-    request = ipc.readDir(path, hidden).finally(() => reads.delete(key));
+    const state = { force: forceAssociations, work: Promise.resolve([] as FileTreeNode[]) };
+    state.work = ipc.readDir(path, hidden).then(async nodes => { await refreshMarkdownAssociations(path, nodes, state.force); return nodes; }).finally(() => reads.delete(key));
+    request = state;
     reads.set(key, request);
-  }
-  return request;
+  } else if (forceAssociations) request.force = true;
+  return request.work;
 }
 
 const refreshes = new Map<string, { dirty: boolean; work: Promise<void> }>();
@@ -29,7 +32,7 @@ export async function refreshExplorerDirectory(path: string): Promise<void> {
   state.work = (async () => {
     do {
       state.dirty = false;
-      const children = await readExplorerDirectory(path);
+      const children = await readExplorerDirectory(path, true);
       if (useExplorerStore.getState().rootRevision !== rootRevision) return;
       if (wasCached && !sameKey(path, root) && !useExplorerStore.getState().getChildren(path)) return;
       useExplorerStore.getState().updateChildren(path, children);

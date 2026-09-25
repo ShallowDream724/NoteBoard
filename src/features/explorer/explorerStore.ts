@@ -14,6 +14,8 @@ interface ExplorerStore {
   rootRevision: number;
   /** 展开的目录集合（路径 → 子节点） */
   expanded: Map<string, FileTreeNode[]>;
+  /** Presentation-only file groups; never directory watcher/read targets. */
+  associationExpanded: Set<string>;
   /** 当前定位的文件路径（高亮） */
   revealed: string | null;
   /** 定位触发版本计数器（用于通知节点执行滚动） */
@@ -34,6 +36,8 @@ interface ExplorerStore {
   expand: (path: string, children: FileTreeNode[]) => void;
   /** 收起目录 */
   collapse: (path: string) => void;
+  toggleAssociation: (path: string) => void;
+  expandAssociation: (path: string) => void;
   /** 设置根路径（跨目录时清空一切） */
   setRoot: (root: string, rootChildren: FileTreeNode[]) => void;
   /** 定位到文件（高亮并可选择触发滚动） */
@@ -52,6 +56,7 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
   root: null,
   rootRevision: 0,
   expanded: new Map(),
+  associationExpanded: new Set(),
   revealed: null,
   revealCount: 0,
   children: new Map(),
@@ -94,6 +99,17 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
     });
   },
 
+  toggleAssociation: path => set(state => {
+    const associationExpanded = new Set(state.associationExpanded), key = normalizePath(path).toLowerCase();
+    if (associationExpanded.has(key)) associationExpanded.delete(key); else associationExpanded.add(key);
+    return { associationExpanded };
+  }),
+  expandAssociation: path => set(state => {
+    const key = normalizePath(path).toLowerCase();
+    if (state.associationExpanded.has(key)) return state;
+    return { associationExpanded: new Set([...state.associationExpanded, key]) };
+  }),
+
   setRoot: (root, rootChildren) => {
     const key = normalizePath(root).toLowerCase();
     set((state) => {
@@ -104,6 +120,7 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
         root,
         rootRevision: state.rootRevision + 1,
         expanded: newExpanded,
+        associationExpanded: new Set(),
         children: newChildren,
         revealed: null,
       };
@@ -130,7 +147,10 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
       if (removed.length) for (const cached of newChildren.keys()) {
         if (removed.some(node => isSubPath(node.path, cached))) { newChildren.delete(cached); newExpanded.delete(cached); }
       }
-      return { children: newChildren, expanded: newExpanded };
+      const associationExpanded = new Set(state.associationExpanded);
+      const removedFiles = new Set((state.children.get(key) ?? []).filter(node => !node.isDir && !names.has(normalizePath(node.path).toLowerCase())).map(node => normalizePath(node.path).toLowerCase()));
+      for (const path of associationExpanded) if (removedFiles.has(path) || removed.some(node => isSubPath(node.path, path))) associationExpanded.delete(path);
+      return { children: newChildren, expanded: newExpanded, associationExpanded };
     });
   },
 
@@ -153,6 +173,7 @@ export const useExplorerStore = create<ExplorerStore>((set, get) => ({
       root: null,
       rootRevision: state.rootRevision + 1,
       expanded: new Map(),
+      associationExpanded: new Set(),
       revealed: null,
       revealCount: 0,
       children: new Map(),

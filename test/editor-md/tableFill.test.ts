@@ -7,9 +7,10 @@ import { serializeMarkdown, parseMarkdown } from '../../src/features/editor-md/s
 import { fillTableSelection, selectTableScope, tableHeaderState, setSelectedTableHeader } from '../../src/features/editor-md/tablePresentationCommands';
 import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentation';
 import { renderDocument } from '../../src/features/export/renderDocument';
+import { nativeTestEditor } from './nativeTestEditor';
 
 const markdown = '| 编号 | 值 | 备注 |\n| --- | --- | --- |\n| 1 | a | b |\n| 2 | c | d |';
-function make() { const editor = new Editor({ extensions: buildDocumentExtensions() }); parseMarkdown(editor, markdown); return editor; }
+function make() { const editor = new Editor({ extensions: buildDocumentExtensions() }); parseMarkdown(editor, markdown); return nativeTestEditor(editor); }
 function cell(editor: Editor, text: string) {
   let found = 0; editor.state.doc.descendants((node, pos) => { if (['tableCell', 'tableHeader'].includes(node.type.name) && node.textContent === text) { found = pos; return false; } });
   return found;
