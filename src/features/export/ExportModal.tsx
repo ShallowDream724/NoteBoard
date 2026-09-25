@@ -47,14 +47,15 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   }, [docKey]);
   useEffect(() => {
     const previous = window.document.activeElement as HTMLElement | null;
-    dialog.current?.querySelector<HTMLElement>('select')?.focus();
+    dialog.current?.focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); onClose(); }
       if (event.key === 'Tab') {
         const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select,[tabindex="0"]') ?? []);
         const first = controls[0], last = controls.at(-1);
-        if (event.shiftKey && window.document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && window.document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        const active = window.document.activeElement;
+        if (event.shiftKey && (active === first || active === dialog.current)) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && (active === last || active === dialog.current)) { event.preventDefault(); first?.focus(); }
       }
     };
     window.addEventListener('keydown', key); return () => { window.removeEventListener('keydown', key); if (previous?.isConnected) previous.focus(); };
@@ -119,7 +120,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   };
   const number = (key: 'marginMm' | 'fontPt' | 'lineHeight', label: string, min: number, max: number, step: number) => <label className="export-field">{label}
     <input type="number" min={min} max={max} step={step} value={options[key]} onChange={e => { const value = Number(e.target.value); if (Number.isFinite(value)) setOptions(o => ({ ...o, [key]: Math.min(max, Math.max(min, value)) })); }}/></label>;
-  return <div className="export-backdrop"><div ref={dialog} data-shortcuts-suspended role="dialog" aria-modal="true" aria-label="导出文档" className="export-dialog">
+  return <div className="export-backdrop"><div ref={dialog} tabIndex={-1} data-shortcuts-suspended role="dialog" aria-modal="true" aria-label="导出文档" className="export-dialog">
     <header><div><FileOutput size={18}/><strong>导出</strong><span className="export-title">{document?.title}</span></div>
       <button className="export-icon" aria-label="关闭导出" onClick={onClose}><X size={18}/></button></header>
     <div className="export-body"><aside>

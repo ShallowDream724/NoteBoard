@@ -7,7 +7,9 @@
 .export-field { display:flex;flex-direction:column;gap:6px;margin-bottom:14px;min-width:0; }.export-two { display:flex;gap:10px; }.export-two > * { flex:1; }
 .export-dialog select,.export-dialog input[type=number] { width:100%;border:1px solid var(--editor-border);border-radius:5px;background:var(--editor-bg);color:inherit;padding:7px 8px;font:inherit;min-width:0; }
 .export-check { display:flex;gap:8px;align-items:center; }.export-item-settings { margin-top:22px;border-top:1px solid var(--editor-border);padding-top:14px; }.export-item-settings h4 { margin:0 0 10px; }.export-item-settings select { margin-bottom:12px; }
-.export-preview { flex:1;overflow:auto;min-width:0; }.export-page-number { text-align:center;font-size:11px;padding:6px;color:var(--editor-text-muted); }
+.export-preview { flex:1;overflow:auto;min-width:0;min-height:0;overscroll-behavior:contain;cursor:default;user-select:none;caret-color:transparent;outline:none; }.export-page-number { text-align:center;font-size:11px;padding:6px;color:var(--editor-text-muted); }
+.export-preview:focus-visible { outline:1px solid var(--editor-accent);outline-offset:-2px; }
+.export-dialog:focus { outline:none; }
 .export-updating { position:absolute;right:16px;top:12px;display:flex;align-items:center;gap:6px;background:var(--editor-bg);border:1px solid var(--editor-border);border-radius:16px;padding:6px 10px;box-shadow:var(--shadow-sm); }
 .export-progress { margin:auto;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--editor-text); }
 .export-progress-ring { position:relative;width:112px;height:112px;flex-shrink:0;display:grid;place-items:center; }

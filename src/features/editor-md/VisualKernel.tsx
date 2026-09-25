@@ -98,6 +98,8 @@ export function VisualKernel({
   }), ClipboardImport.configure({ docKey })], [docKey]);
   const initializeContent = useMemo(() => makeInitialContentLoader(docKey), [docKey]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  useEffect(() => { if (!active || !visible) setContextMenu(null); }, [active, visible]);
   // 超链接插入与编辑弹窗状态
   const [linkModalState, setLinkModalState] = useState<{
     isOpen: boolean;
@@ -390,7 +392,9 @@ export function VisualKernel({
         visibility: visible ? 'visible' : 'hidden',
       }}
       onContextMenu={(e) => {
-        if (!editor) return;
+        if (!editor || !active || !visible) return;
+        // Embedded source fields keep their own native editing menu.
+        if (e.target instanceof Element && e.target.closest('input, textarea, button, [role="menu"], .cm-editor')) return;
         e.preventDefault();
         e.stopPropagation();
 
@@ -408,7 +412,7 @@ export function VisualKernel({
         });
       }}
     >
-      {editor && <EditorBubbleMenu editor={editor} enabled={active && visible} onOpenLinkModal={handleOpenLinkModal} />}
+      {editor && <EditorBubbleMenu editor={editor} enabled={active && visible && !contextMenu} onOpenLinkModal={handleOpenLinkModal} />}
       {active && visible && editor && <TableToolbar editor={editor} />}
       {active && visible && editor && <AnnotationLayer editor={editor} />}
       {active && visible && blockHandleEnabled && editor && <BlockDragHandle editor={editor} />}
@@ -417,8 +421,7 @@ export function VisualKernel({
           editor={editor}
           position={{ x: contextMenu.x, y: contextMenu.y }}
           hasSelection={contextMenu.hasSelection}
-          onClose={() => setContextMenu(null)}
-          onOpenLinkModal={handleOpenLinkModal}
+          onClose={closeContextMenu}
         />
       )}
       {active && visible && linkModalState && (

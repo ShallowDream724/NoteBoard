@@ -1,0 +1,33 @@
+.nb-editor-context-menu {
+  position: fixed;
+  z-index: 1400;
+  min-width: 228px;
+  max-width: calc(100vw - 16px);
+  padding: 7px;
+  border: 1px solid var(--editor-border);
+  border-radius: 10px;
+  background: var(--editor-surface);
+  color: var(--editor-text);
+  box-shadow: var(--shadow-lg);
+  font: var(--ui-font-size, 13px)/1.5 var(--ui-font-family);
+  outline: none;
+}
+.nb-editor-context-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nb-editor-context-menu > button:hover,
+.nb-editor-context-menu > button:focus-visible { background: var(--toolbar-hover); outline: none; }
+.nb-editor-context-menu > button > svg { flex: none; }
+.nb-editor-context-menu kbd { margin-left: auto; padding-left: 16px; color: var(--editor-text-muted); font: 11px var(--ui-font-family); }
+.nb-editor-context-menu > [role="separator"] { height: 1px; margin: 5px 0; background: var(--editor-border); }

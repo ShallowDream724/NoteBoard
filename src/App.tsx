@@ -399,7 +399,7 @@ export default function App() {
     <ErrorBoundary>
       <TooltipProvider delayDuration={100} skipDelayDuration={300}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
-          <AppShell />
+          <div inert={!!exportKey} style={{ display: 'contents' }}><AppShell /></div>
           {exportKey && <Suspense fallback={null}><ExportModal docKey={exportKey} onClose={closeExport}/></Suspense>}
           {/* 🔴 S05：全局弹窗按需装载；首开前不进入首屏闭包 */}
           {settingsEverOpened && (

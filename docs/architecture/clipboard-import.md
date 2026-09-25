@@ -2,6 +2,8 @@
 
 `VisualKernel` 注册 `ClipboardImport`，在 ProseMirror 默认 HTML 解析前处理 DOM paste。右键菜单通过 `systemClipboard.ts` 读取剪贴板快照，再调用同一导入入口。读取菜单剪贴板、图片文件或等待解析期间，插入位置随事务映射；切换文档、关闭编辑器、删除目标或按 Esc 取消后，不会写入新的目标。
 
+正文右键仅保留剪贴板与全选操作；有选区时同样提供“仅粘贴文本”。剪切/复制先同步恢复编辑器 DOM 选区，再进入既有原生剪贴板插件，不使用纯文本替代富文本片段，也不另写删除事务。
+
 `createClipboardImportPlugin({docKey, ownerCurrent, stripAnnotations})` 是共享的 ProseMirror view 入口。主编辑器通过 TipTap 适配器保留原有注册实例校验；说明草稿通过自己的 view 事务映射书签、父文档身份和正文存在性校验控制有效期。草稿销毁会取消 Worker/资产读取后的插入，图片仍沿用父文档目录的受管理资产流程。说明内的原生片段在 Worker 中去掉递归说明实体与引用，小片段走同步等价路径；PM 原生拖拽的后备清理只遍历不可变节点，不执行 JSON 往返。
 
 ## 格式选择与内容

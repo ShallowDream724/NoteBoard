@@ -105,7 +105,15 @@ export function PdfPreview({ bytes, receipt, onPages, onSettled, selected, navig
     const location = receipt?.locations.find(location => location.id === navigation.id);
     if (location) virtual.scrollToOffset(Math.max(0, (location.page - 1) * (pageHeight + 36) + (loaded.height - location.rect[3]) * width / loaded.width - 50));
   }, [navigation, receipt, loaded, documentKey, virtual, pageHeight, width]);
-  return <div ref={scroll} className="export-preview" aria-label="PDF 预览">
+  return <div ref={scroll} className="export-preview" role="region" tabIndex={0} aria-label="PDF 预览"
+    onPointerDown={event => {
+      if (!(event.target instanceof Element && event.target.closest('button'))) event.currentTarget.focus({ preventScroll: true });
+    }}
+    onWheelCapture={event => {
+      // A wheel over the page belongs to its native scroller, not a previously
+      // focused settings field. Preserve browser pixel/line deltas and momentum.
+      if (!event.ctrlKey && !event.metaKey && !event.currentTarget.contains(document.activeElement)) event.currentTarget.focus({ preventScroll: true });
+    }}>
     {error && <p role="alert">{error}</p>}
     <div style={{ height: virtual.getTotalSize(), position: 'relative', width, margin: '20px auto' }}>
       {loaded && virtual.getVirtualItems().map(item => <div key={item.key} style={{ position: 'absolute', top: item.start, left: 0 }}>
