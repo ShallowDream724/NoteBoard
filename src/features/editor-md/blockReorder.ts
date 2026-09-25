@@ -5,7 +5,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
-import { BLOCK_MOVE_META, foldedSectionEnd } from './headingFolding';
+import { BLOCK_MOVE_META, foldedSectionEnd, headingFoldingKey } from './headingFolding';
 import { isListItem, canMoveListItem, moveListItem } from './listItemActions';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
@@ -80,24 +80,47 @@ export function getTopLevelBlockInfo(
  * 按垂直坐标解析最近的顶层块边界。
  * 仅遍历 ProseMirror 直接子节点，因此即使指针位于 td、li、pre 内部，结果仍是其所属顶层块的前/后边界。
  */
+function dropEntries(view: EditorView, items: boolean | undefined): TopLevelBlockInfo[] {
+  const elements = Array.from(view.dom.children).filter((element): element is HTMLElement =>
+    element instanceof HTMLElement && !element.classList.contains('ProseMirror-widget'));
+  const entries: TopLevelBlockInfo[] = [];
+  // One parallel model/DOM walk avoids posAtDOM's repeated sibling-prefix
+  // walks for every drop target. Custom top-level widget layouts fall back.
+  if (elements.length === view.state.doc.childCount) {
+    view.state.doc.forEach((node, pos, index) => {
+      const element = elements[index];
+      if (node.type.name === 'documentPresentation' || element.classList.contains('nb-heading-fold-hidden')) return;
+      if (!items || !element.matches('ul,ol')) { entries.push({ element, node, pos }); return; }
+      const candidates = [...element.querySelectorAll('li')].filter(item => !item.closest('td,th'));
+      const models: Array<{ node: ProseMirrorNode; pos: number }> = [];
+      node.descendants((child, offset) => {
+        if (child.type.spec.tableRole === 'table') return false;
+        if (isListItem(child)) models.push({ node: child, pos: pos + 1 + offset });
+      });
+      if (candidates.length === models.length) models.forEach((model, i) => entries.push({ ...model, element: candidates[i] }));
+      else for (const candidate of candidates) { const info = getTopLevelBlockInfo(view, candidate); if (info) entries.push(info); }
+    });
+    return entries;
+  }
+  for (const element of elements) {
+    if (element.classList.contains('nb-heading-fold-hidden')) continue;
+    for (const candidate of items && element.matches('ul,ol') ? element.querySelectorAll('li') : [element]) {
+      const info = getTopLevelBlockInfo(view, candidate as HTMLElement); if (info) entries.push(info);
+    }
+  }
+  return entries;
+}
+
 export function resolveTopLevelDropTarget(
   view: EditorView,
   clientY: number,
   sourcePos?: number,
 ): TopLevelDropTarget | null {
   const items = sourcePos !== undefined && isListItem(view.state.doc.nodeAt(sourcePos));
+  const folding = headingFoldingKey.getState(view.state);
   let cached = dropIndexes.get(view);
-  if (!cached || cached.state !== view.state || cached.items !== items) {
-    const entries: TopLevelBlockInfo[] = [];
-    for (const child of Array.from(view.dom.children)) {
-      if (!(child instanceof HTMLElement) || child.classList.contains('nb-heading-fold-hidden')) continue;
-      const candidates = items && child.matches('ul,ol') ? child.querySelectorAll('li') : [child];
-      for (const element of candidates) {
-        const info = getTopLevelBlockInfo(view, element as HTMLElement);
-        if (info) entries.push(info);
-      }
-    }
-    cached = { state: view.state, items, entries }; dropIndexes.set(view, cached);
+  if (!cached || cached.doc !== view.state.doc || cached.folding !== folding || cached.items !== items) {
+    cached = { doc: view.state.doc, folding, items, entries: dropEntries(view, items) }; dropIndexes.set(view, cached);
   }
   const entries = cached.entries;
   if (entries.length === 0) return null;
@@ -127,7 +150,7 @@ export function resolveTopLevelDropTarget(
     element: last.element,
   };
 }
-const dropIndexes = new WeakMap<EditorView, { state: EditorView['state']; items: boolean; entries: TopLevelBlockInfo[] }>();
+const dropIndexes = new WeakMap<EditorView, { doc: ProseMirrorNode; folding: unknown; items: boolean; entries: TopLevelBlockInfo[] }>();
 
 /**
  * 校验块移动是否同时满足：源节点位于文档顶层、目标是顶层边界、目标不在源节点自身范围内。

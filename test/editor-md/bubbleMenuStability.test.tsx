@@ -32,6 +32,7 @@ it('父组件重复渲染时 BubbleMenu 的事务配置引用应保持稳定', a
   scrollContainer.appendChild(editorDom);
   document.body.appendChild(scrollContainer);
   const editor = {
+    state: { selection: { empty: true } },
     view: { dom: editorDom },
     isActive: () => false,
     getAttributes: () => ({}),

@@ -12,7 +12,11 @@ export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
     return ({ node }) => {
       const row = document.createElement('tr');
-      const showHeight = (height: unknown) => { row.style.height = typeof height === 'number' ? `${height}px` : ''; };
+      let shown: unknown;
+      const showHeight = (height: unknown) => {
+        if (height === shown) return; shown = height;
+        row.style.height = row.style.minHeight = typeof height === 'number' ? `${height}px` : '';
+      };
       showHeight(node.attrs.height);
       return {
         dom: row, contentDOM: row,

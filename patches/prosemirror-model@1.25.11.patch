@@ -1,0 +1,150 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 96ef508b05102c9b21f87fd930726cda4eb6e829..0f5379616e50897f4e9d6565b4ec2d07143f3644 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -111,7 +111,12 @@ var Fragment = function () {
+     value: function nodesBetween(from, to, f) {
+       var nodeStart = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 0;
+       var parent = arguments.length > 4 ? arguments[4] : undefined;
+-      for (var i = 0, pos = 0; pos < to; i++) {
++      var i = 0, pos = 0;
++      if (from > 0 && this.content.length >= 128) {
++        var first = this.findIndex(from);
++        i = first.index; pos = first.offset;
++      }
++      for (; pos < to; i++) {
+         var child = this.content[i],
+           end = pos + child.nodeSize;
+         if (end > from && f(child, nodeStart + pos, parent || null, i) !== false && child.content.size) {
+@@ -266,6 +271,7 @@ var Fragment = function () {
+       if (pos == 0) return retIndex(0, pos);
+       if (pos == this.size) return retIndex(this.content.length, pos);
+       if (pos > this.size || pos < 0) throw new RangeError("Position ".concat(pos, " outside of fragment (").concat(this, ")"));
++      if (this.content.length >= 128) return indexedFragmentPosition(this, pos);
+       for (var i = 0, curPos = 0;; i++) {
+         var cur = this.child(i),
+           end = curPos + cur.nodeSize;
+@@ -335,6 +341,23 @@ var found = {
+   index: 0,
+   offset: 0
+ };
++// Large immutable fragments share a lazy prefix index. Small fragments keep
++// the original linear path, avoiding allocation and binary-search overhead.
++const fragmentOffsets = new WeakMap();
++function indexedFragmentPosition(fragment, pos) {
++    let offsets = fragmentOffsets.get(fragment);
++    if (!offsets) {
++        offsets = new Float64Array(fragment.content.length + 1);
++        for (let i = 0; i < fragment.content.length; i++) offsets[i + 1] = offsets[i] + fragment.content[i].nodeSize;
++        fragmentOffsets.set(fragment, offsets);
++    }
++    let low = 0, high = offsets.length - 1;
++    while (low < high) {
++        const mid = (low + high + 1) >>> 1;
++        if (offsets[mid] <= pos) low = mid; else high = mid - 1;
++    }
++    return retIndex(low, offsets[low]);
++}
+ function retIndex(index, offset) {
+   found.index = index;
+   found.offset = offset;
+diff --git a/dist/index.js b/dist/index.js
+index 6b00598d43a5e95bdd030592626fe4d5b1656fc1..1450f32686ca682c528605eb6d0f46b4e1f50c9d 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -93,7 +93,12 @@ class Fragment {
+     into a node when the callback returns `false`.
+     */
+     nodesBetween(from, to, f, nodeStart = 0, parent) {
+-        for (let i = 0, pos = 0; pos < to; i++) {
++        let i = 0, pos = 0;
++        if (from > 0 && this.content.length >= 128) {
++            const start = this.findIndex(from);
++            i = start.index; pos = start.offset;
++        }
++        for (; pos < to; i++) {
+             let child = this.content[i], end = pos + child.nodeSize;
+             if (end > from && f(child, nodeStart + pos, parent || null, i) !== false && child.content.size) {
+                 let start = pos + 1;
+@@ -289,6 +294,7 @@ class Fragment {
+             return retIndex(this.content.length, pos);
+         if (pos > this.size || pos < 0)
+             throw new RangeError(`Position ${pos} outside of fragment (${this})`);
++        if (this.content.length >= 128) return indexedFragmentPosition(this, pos);
+         for (let i = 0, curPos = 0;; i++) {
+             let cur = this.child(i), end = curPos + cur.nodeSize;
+             if (end >= pos) {
+@@ -372,6 +378,23 @@ each leaf node).
+ */
+ Fragment.empty = new Fragment([], 0);
+ const found = { index: 0, offset: 0 };
++// Large immutable fragments share a lazy prefix index. Small fragments keep
++// the original linear path, avoiding allocation and binary-search overhead.
++const fragmentOffsets = new WeakMap();
++function indexedFragmentPosition(fragment, pos) {
++    let offsets = fragmentOffsets.get(fragment);
++    if (!offsets) {
++        offsets = new Float64Array(fragment.content.length + 1);
++        for (let i = 0; i < fragment.content.length; i++) offsets[i + 1] = offsets[i] + fragment.content[i].nodeSize;
++        fragmentOffsets.set(fragment, offsets);
++    }
++    let low = 0, high = offsets.length - 1;
++    while (low < high) {
++        const mid = (low + high + 1) >>> 1;
++        if (offsets[mid] <= pos) low = mid; else high = mid - 1;
++    }
++    return retIndex(low, offsets[low]);
++}
+ function retIndex(index, offset) {
+     found.index = index;
+     found.offset = offset;
+diff --git a/src/fragment.ts b/src/fragment.ts
+index 0bf655aab5ffb8162943572208d354ec4b18db2a..bfbb74eb86a4908a93b1fad5eae998644036836e 100644
+--- a/src/fragment.ts
++++ b/src/fragment.ts
+@@ -30,7 +30,12 @@ export class Fragment {
+                f: (node: Node, start: number, parent: Node | null, index: number) => boolean | void,
+                nodeStart = 0,
+                parent?: Node) {
+-    for (let i = 0, pos = 0; pos < to; i++) {
++    let i = 0, pos = 0
++    if (from > 0 && this.content.length >= 128) {
++      const start = this.findIndex(from)
++      i = start.index; pos = start.offset
++    }
++    for (; pos < to; i++) {
+       let child = this.content[i], end = pos + child.nodeSize
+       if (end > from && f(child, nodeStart + pos, parent || null, i) !== false && child.content.size) {
+         let start = pos + 1
+@@ -194,6 +199,7 @@ export class Fragment {
+     if (pos == 0) return retIndex(0, pos)
+     if (pos == this.size) return retIndex(this.content.length, pos)
+     if (pos > this.size || pos < 0) throw new RangeError(`Position ${pos} outside of fragment (${this})`)
++    if (this.content.length >= 128) return indexedFragmentPosition(this, pos)
+     for (let i = 0, curPos = 0;; i++) {
+       let cur = this.child(i), end = curPos + cur.nodeSize
+       if (end >= pos) {
+@@ -261,6 +267,23 @@ export class Fragment {
+ }
+ 
+ const found = {index: 0, offset: 0}
++// Large immutable fragments share a lazy prefix index. Small fragments keep
++// the original linear path, avoiding allocation and binary-search overhead.
++const fragmentOffsets = new WeakMap<Fragment, Float64Array>();
++function indexedFragmentPosition(fragment: Fragment, pos: number) {
++    let offsets = fragmentOffsets.get(fragment);
++    if (!offsets) {
++        offsets = new Float64Array(fragment.content.length + 1);
++        for (let i = 0; i < fragment.content.length; i++) offsets[i + 1] = offsets[i] + fragment.content[i].nodeSize;
++        fragmentOffsets.set(fragment, offsets);
++    }
++    let low = 0, high = offsets.length - 1;
++    while (low < high) {
++        const mid = (low + high + 1) >>> 1;
++        if (offsets[mid] <= pos) low = mid; else high = mid - 1;
++    }
++    return retIndex(low, offsets[low]);
++}
+ function retIndex(index: number, offset: number) {
+   found.index = index
+   found.offset = offset

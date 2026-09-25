@@ -1,0 +1,200 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index a615cb7cd5d320ac05db42ae3b0a516e08c72e91..91c47870e19be9bfe98d3234c3d613b33e8fba7f 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1408,18 +1408,18 @@ var NodeViewDesc = function (_ViewDesc4) {
+     }
+   }, {
+     key: "update",
+-    value: function update(node, outerDeco, innerDeco, view) {
++    value: function update(node, outerDeco, innerDeco, view, pos) {
+       if (this.dirty == NODE_DIRTY || !node.sameMarkup(this.node)) return false;
+-      this.updateInner(node, outerDeco, innerDeco, view);
++      this.updateInner(node, outerDeco, innerDeco, view, pos);
+       return true;
+     }
+   }, {
+     key: "updateInner",
+-    value: function updateInner(node, outerDeco, innerDeco, view) {
++    value: function updateInner(node, outerDeco, innerDeco, view, pos) {
+       this.updateOuterDeco(outerDeco);
+       this.node = node;
+       this.innerDeco = innerDeco;
+-      if (this.contentDOM) this.updateChildren(view, this.posAtStart);
++      if (this.contentDOM) this.updateChildren(view, pos === undefined ? this.posAtStart : pos + this.border);
+       this.dirty = NOT_DIRTY;
+     }
+   }, {
+@@ -1509,7 +1509,7 @@ var TextViewDesc = function (_NodeViewDesc) {
+     }
+   }, {
+     key: "update",
+-    value: function update(node, outerDeco, innerDeco, view) {
++    value: function update(node, outerDeco, innerDeco, view, pos) {
+       if (this.dirty == NODE_DIRTY || this.dirty != NOT_DIRTY && !this.inParent() || !node.sameMarkup(this.node)) return false;
+       this.updateOuterDeco(outerDeco);
+       if ((this.dirty != NOT_DIRTY || node.text != this.node.text) && node.text != this.nodeDOM.nodeValue) {
+@@ -1616,16 +1616,16 @@ var CustomNodeViewDesc = function (_NodeViewDesc2) {
+   }
+   _createClass(CustomNodeViewDesc, [{
+     key: "update",
+-    value: function update(node, outerDeco, innerDeco, view) {
++    value: function update(node, outerDeco, innerDeco, view, pos) {
+       if (this.dirty == NODE_DIRTY) return false;
+       if (this.spec.update && (this.node.type == node.type || this.spec.multiType)) {
+         var result = this.spec.update(node, outerDeco, innerDeco);
+-        if (result) this.updateInner(node, outerDeco, innerDeco, view);
++        if (result) this.updateInner(node, outerDeco, innerDeco, view, pos);
+         return result;
+       } else if (!this.contentDOM && !node.isLeaf) {
+         return false;
+       } else {
+-        return _get(_getPrototypeOf(CustomNodeViewDesc.prototype), "update", this).call(this, node, outerDeco, innerDeco, view);
++        return _get(_getPrototypeOf(CustomNodeViewDesc.prototype), "update", this).call(this, node, outerDeco, innerDeco, view, pos);
+       }
+     }
+   }, {
+@@ -1898,7 +1898,7 @@ var ViewTreeUpdater = function () {
+           var nextDOM = next.dom,
+             updated = void 0;
+           var locked = this.isLocked(nextDOM) && !(node.isText && next.node && next.node.isText && next.nodeDOM.nodeValue == node.text && next.dirty != NODE_DIRTY && sameOuterDeco(outerDeco, next.outerDeco));
+-          if (!locked && next.update(node, outerDeco, innerDeco, view)) {
++          if (!locked && next.update(node, outerDeco, innerDeco, view, pos)) {
+             this.destroyBetween(this.index, i);
+             if (next.dom != nextDOM) this.changed = true;
+             this.index++;
+diff --git a/dist/index.js b/dist/index.js
+index 61118eedda91103ffe9801239855f505c42b0751..21299899e42cf8c3e9bd1440418a9478d1b52d35 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1467,19 +1467,19 @@ class NodeViewDesc extends ViewDesc {
+     }
+     // If this desc must be updated to match the given node decoration,
+     // do so and return true.
+-    update(node, outerDeco, innerDeco, view) {
++    update(node, outerDeco, innerDeco, view, pos) {
+         if (this.dirty == NODE_DIRTY ||
+             !node.sameMarkup(this.node))
+             return false;
+-        this.updateInner(node, outerDeco, innerDeco, view);
++        this.updateInner(node, outerDeco, innerDeco, view, pos);
+         return true;
+     }
+-    updateInner(node, outerDeco, innerDeco, view) {
++    updateInner(node, outerDeco, innerDeco, view, pos) {
+         this.updateOuterDeco(outerDeco);
+         this.node = node;
+         this.innerDeco = innerDeco;
+         if (this.contentDOM)
+-            this.updateChildren(view, this.posAtStart);
++            this.updateChildren(view, pos === undefined ? this.posAtStart : pos + this.border);
+         this.dirty = NOT_DIRTY;
+     }
+     updateOuterDeco(outerDeco) {
+@@ -1531,7 +1531,7 @@ class TextViewDesc extends NodeViewDesc {
+             skip = skip.parentNode;
+         return { skip: (skip || true) };
+     }
+-    update(node, outerDeco, innerDeco, view) {
++    update(node, outerDeco, innerDeco, view, pos) {
+         if (this.dirty == NODE_DIRTY || (this.dirty != NOT_DIRTY && !this.inParent()) ||
+             !node.sameMarkup(this.node))
+             return false;
+@@ -1594,20 +1594,20 @@ class CustomNodeViewDesc extends NodeViewDesc {
+     // A custom `update` method gets to decide whether the update goes
+     // through. If it does, and there's a `contentDOM` node, our logic
+     // updates the children.
+-    update(node, outerDeco, innerDeco, view) {
++    update(node, outerDeco, innerDeco, view, pos) {
+         if (this.dirty == NODE_DIRTY)
+             return false;
+         if (this.spec.update && (this.node.type == node.type || this.spec.multiType)) {
+             let result = this.spec.update(node, outerDeco, innerDeco);
+             if (result)
+-                this.updateInner(node, outerDeco, innerDeco, view);
++                this.updateInner(node, outerDeco, innerDeco, view, pos);
+             return result;
+         }
+         else if (!this.contentDOM && !node.isLeaf) {
+             return false;
+         }
+         else {
+-            return super.update(node, outerDeco, innerDeco, view);
++            return super.update(node, outerDeco, innerDeco, view, pos);
+         }
+     }
+     selectNode() {
+@@ -1922,7 +1922,7 @@ class ViewTreeUpdater {
+                 let locked = this.isLocked(nextDOM) &&
+                     !(node.isText && next.node && next.node.isText && next.nodeDOM.nodeValue == node.text &&
+                         next.dirty != NODE_DIRTY && sameOuterDeco(outerDeco, next.outerDeco));
+-                if (!locked && next.update(node, outerDeco, innerDeco, view)) {
++                if (!locked && next.update(node, outerDeco, innerDeco, view, pos)) {
+                     this.destroyBetween(this.index, i);
+                     if (next.dom != nextDOM)
+                         this.changed = true;
+diff --git a/src/viewdesc.ts b/src/viewdesc.ts
+index 007ee1c97a51681ed7c76686bd0a8d7db8de05b8..5590990b4e022ad8c1b7ff3b1fa2142ac44db469 100644
+--- a/src/viewdesc.ts
++++ b/src/viewdesc.ts
+@@ -865,18 +865,18 @@ export class NodeViewDesc extends ViewDesc {
+ 
+   // If this desc must be updated to match the given node decoration,
+   // do so and return true.
+-  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView) {
++  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView, pos?: number) {
+     if (this.dirty == NODE_DIRTY ||
+         !node.sameMarkup(this.node)) return false
+-    this.updateInner(node, outerDeco, innerDeco, view)
++    this.updateInner(node, outerDeco, innerDeco, view, pos)
+     return true
+   }
+ 
+-  updateInner(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView) {
++  updateInner(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView, pos?: number) {
+     this.updateOuterDeco(outerDeco)
+     this.node = node
+     this.innerDeco = innerDeco
+-    if (this.contentDOM) this.updateChildren(view, this.posAtStart)
++    if (this.contentDOM) this.updateChildren(view, pos === undefined ? this.posAtStart : pos + this.border)
+     this.dirty = NOT_DIRTY
+   }
+ 
+@@ -935,7 +935,7 @@ class TextViewDesc extends NodeViewDesc {
+     return {skip: (skip || true) as any}
+   }
+ 
+-  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView) {
++  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView, pos?: number) {
+     if (this.dirty == NODE_DIRTY || (this.dirty != NOT_DIRTY && !this.inParent()) ||
+         !node.sameMarkup(this.node)) return false
+     this.updateOuterDeco(outerDeco)
+@@ -1004,16 +1004,16 @@ class CustomNodeViewDesc extends NodeViewDesc {
+   // A custom `update` method gets to decide whether the update goes
+   // through. If it does, and there's a `contentDOM` node, our logic
+   // updates the children.
+-  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView) {
++  update(node: Node, outerDeco: readonly Decoration[], innerDeco: DecorationSource, view: EditorView, pos?: number) {
+     if (this.dirty == NODE_DIRTY) return false
+     if (this.spec.update && (this.node.type == node.type || this.spec.multiType)) {
+       let result = this.spec.update(node, outerDeco, innerDeco)
+-      if (result) this.updateInner(node, outerDeco, innerDeco, view)
++      if (result) this.updateInner(node, outerDeco, innerDeco, view, pos)
+       return result
+     } else if (!this.contentDOM && !node.isLeaf) {
+       return false
+     } else {
+-      return super.update(node, outerDeco, innerDeco, view)
++      return super.update(node, outerDeco, innerDeco, view, pos)
+     }
+   }
+ 
+@@ -1325,7 +1325,7 @@ class ViewTreeUpdater {
+         let locked = this.isLocked(nextDOM) &&
+             !(node.isText && next.node && next.node.isText && next.nodeDOM.nodeValue == node.text &&
+               next.dirty != NODE_DIRTY && sameOuterDeco(outerDeco, next.outerDeco))
+-        if (!locked && next.update(node, outerDeco, innerDeco, view)) {
++        if (!locked && next.update(node, outerDeco, innerDeco, view, pos)) {
+           this.destroyBetween(this.index, i)
+           if (next.dom != nextDOM) this.changed = true
+           this.index++

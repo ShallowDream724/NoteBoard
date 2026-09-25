@@ -24,6 +24,7 @@ import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 import { BlockContextMenu, BlockTypeIcon } from './BlockContextMenu';
 import { selectBlock } from './blockActions';
 import { foldedSectionEnd } from './headingFolding';
+import { blockHandlePosition } from './blockHandleGeometry';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -131,6 +132,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const isHoveringHandleRef = useRef(false);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dropTargetRef = useRef<TopLevelDropTarget | null>(null);
+  const dragFrame = useRef(0);
+  const dragPoint = useRef({ x: 0, y: 0 });
   const suppressMenuClick = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuOpenRef = useRef(false); menuOpenRef.current = menuOpen;
@@ -162,6 +165,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   /** 清理指针捕获、全局光标和源块临时样式；取消与成功落下共用同一出口。 */
   const cleanupDrag = useCallback((updateReactState = true) => {
+    cancelAnimationFrame(dragFrame.current); dragFrame.current = 0;
     const session = dragSessionRef.current;
     dragSessionRef.current = null;
     dropTargetRef.current = null;
@@ -204,7 +208,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }, 300);
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
+    let hoverFrame = 0;
+    let pointer = { x: 0, y: 0 };
+    const updateHover = () => {
+      hoverFrame = 0;
       if (dragSessionRef.current || menuOpenRef.current) return;
       if (editorDom.classList.contains('nb-table-resizing')) {
         setState(current => current.visible ? { ...current, visible: false } : current);
@@ -212,12 +219,12 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }
 
       // 把手是编辑器的兄弟节点；进入把手后保持当前源块，不再按坐标重算。
-      if (handleRef.current?.contains(event.target as Node)) {
+      const targetElement = document.elementFromPoint(pointer.x, pointer.y);
+      if (targetElement && handleRef.current?.contains(targetElement)) {
         clearHideTimer();
         return;
       }
 
-      const targetElement = document.elementFromPoint(event.clientX, event.clientY);
       if (!targetElement || !editorDom.contains(targetElement)) {
         scheduleHide();
         return;
@@ -230,10 +237,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
       if (!blockInfo) return;
 
-      const blockRect = blockElement.getBoundingClientRect();
-      const scrollRect = scrollParent.getBoundingClientRect();
-      const top = blockRect.top - scrollRect.top + scrollParent.scrollTop;
-      const left = blockRect.left - scrollRect.left + scrollParent.scrollLeft - (blockInfo.node.type.name === 'table' ? 78 : blockInfo.node.type.name === 'heading' ? 76 : 56);
+      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50);
 
       setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) ? current : ({
         visible: true,
@@ -242,6 +246,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         nodePos: blockInfo.pos,
         nodeType: blockInfo.node.type.name,
       }));
+    };
+    const handleMouseMove = (event: MouseEvent) => {
+      pointer = { x: event.clientX, y: event.clientY };
+      if (!hoverFrame) hoverFrame = requestAnimationFrame(updateHover);
     };
 
     const handleMouseLeave = () => {
@@ -263,6 +271,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       editorDom.removeEventListener('mousemove', handleMouseMove);
       scrollParent.removeEventListener('mouseleave', handleMouseLeave);
       scrollParent.removeEventListener('scroll', handleScroll);
+      cancelAnimationFrame(hoverFrame);
       clearHideTimer();
     };
   }, [clearHideTimer, editor]);
@@ -292,7 +301,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     if (!editor || !session?.dragging) return;
 
     const { scrollParent } = session;
-    let scrollRect = scrollParent.getBoundingClientRect();
+    const scrollRect = scrollParent.getBoundingClientRect();
 
     // 长文档边缘自动滚动；滚动后重新读取布局，保证指示线紧贴真实文档边界。
     if (clientY < scrollRect.top + AUTO_SCROLL_EDGE) {
@@ -302,7 +311,6 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       const ratio = Math.min(1, (clientY - scrollRect.bottom + AUTO_SCROLL_EDGE) / AUTO_SCROLL_EDGE);
       scrollParent.scrollTop += Math.ceil(AUTO_SCROLL_MAX_STEP * ratio);
     }
-    scrollRect = scrollParent.getBoundingClientRect();
 
     const isInsideViewport = clientX >= scrollRect.left
       && clientX <= scrollRect.right
@@ -406,7 +414,11 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       setIsDragging(true);
     }
 
-    updateDragFeedback(event.clientX, event.clientY);
+    dragPoint.current = { x: event.clientX, y: event.clientY };
+    if (!dragFrame.current) dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = 0;
+      updateDragFeedback(dragPoint.current.x, dragPoint.current.y);
+    });
   }, [updateDragFeedback]);
 
   /** 指针释放时只使用最后一个通过校验的顶层边界，并由事务内核再次校验。 */
@@ -422,6 +434,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       menuHover.change(true);
       return;
     }
+    cancelAnimationFrame(dragFrame.current); dragFrame.current = 0;
+    updateDragFeedback(event.clientX, event.clientY);
     const target = dropTargetRef.current;
     suppressMenuClick.current = session.dragging;
     const result = session.dragging && target && editor
@@ -443,7 +457,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         }, DROP_SETTLE_DURATION);
       });
     }
-  }, [cleanupDrag, editor, menuHover]);
+  }, [cleanupDrag, editor, menuHover, updateDragFeedback]);
 
   const handlePointerCancel = useCallback(() => {
     cleanupDrag();

@@ -5,13 +5,29 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import './headingFolding.css';
 
 /** View state only: Markdown and exported/printed documents always contain the section. */
-export const headingFoldingKey = new PluginKey<DecorationSet>('noteboard-heading-folding');
+interface FoldingState { decorations: DecorationSet; folds: Set<number> }
+export const headingFoldingKey = new PluginKey<FoldingState>('noteboard-heading-folding');
 export const BLOCK_MOVE_META = 'noteboard-block-move';
 export interface BlockMove { from: number; to: number; inserted: number }
+const sectionIndexes = new WeakMap<PMNode, Map<number, number>>();
+function sectionIndex(doc: PMNode) {
+  let result = sectionIndexes.get(doc);
+  if (result) return result;
+  result = new Map();
+  const stack: Array<{ pos: number; level: number }> = [];
+  doc.forEach((node, pos) => {
+    if (node.type.name !== 'heading') return;
+    while (stack.length && stack[stack.length - 1].level >= node.attrs.level) result!.set(stack.pop()!.pos, pos);
+    stack.push({ pos, level: node.attrs.level });
+  });
+  for (const entry of stack) result.set(entry.pos, doc.content.size);
+  sectionIndexes.set(doc, result); return result;
+}
 
 export function headingSectionEnd(doc: PMNode, pos: number): number {
   const heading = doc.nodeAt(pos);
   if (heading?.type.name !== 'heading' || doc.resolve(pos).depth !== 0) return pos + (heading?.nodeSize ?? 0);
+  if (doc.childCount >= 128) return sectionIndex(doc).get(pos) ?? pos + heading.nodeSize;
   let end = pos + heading.nodeSize;
   for (let index = doc.resolve(pos).index() + 1; index < doc.childCount; index++) {
     const child = doc.child(index);
@@ -22,8 +38,7 @@ export function headingSectionEnd(doc: PMNode, pos: number): number {
 }
 
 export function foldedSectionEnd(state: EditorState, pos: number): number | undefined {
-  const folded = headingFoldingKey.getState(state)?.find(pos + 1, pos + 1, spec => spec.folded);
-  return folded?.length ? headingSectionEnd(state.doc, pos) : undefined;
+  return headingFoldingKey.getState(state)?.folds.has(pos) ? headingSectionEnd(state.doc, pos) : undefined;
 }
 
 function headingButton(pos: number, folded: boolean): Decoration {
@@ -42,10 +57,10 @@ function headingButton(pos: number, folded: boolean): Decoration {
       view.focus();
     };
     return button;
-  }, { side: -1, folded, headingToggle: true, stopEvent: () => true });
+  }, { key: `heading-fold-${pos}-${folded}`, side: -1, folded, headingToggle: true, stopEvent: () => true });
 }
 
-function rebuild(doc: PMNode, folds: Set<number>): DecorationSet {
+function rebuild(doc: PMNode, folds: Set<number>): FoldingState {
   const decorations: Decoration[] = [];
   // A stack of heading levels finds all hidden descendants in one pass.
   const levels: number[] = [];
@@ -57,11 +72,17 @@ function rebuild(doc: PMNode, folds: Set<number>): DecorationSet {
     if (levels.length) decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: 'nb-heading-fold-hidden' }));
     if (node.type.name === 'heading' && folds.has(pos)) levels.push(node.attrs.level);
   });
-  return DecorationSet.create(doc, decorations);
+  return { decorations: DecorationSet.create(doc, decorations), folds };
 }
 
-function foldPositions(decorations: DecorationSet): number[] {
-  return decorations.find(undefined, undefined, spec => spec.folded).map(decoration => decoration.from - 1);
+/** Table sizing/colour changes preserve top-level section boundaries. */
+function sameSections(before: PMNode, after: PMNode): boolean {
+  if (before.childCount !== after.childCount) return false;
+  for (let i = 0; i < before.childCount; i++) {
+    const a = before.child(i), b = after.child(i);
+    if (a !== b && (a.nodeSize !== b.nodeSize || a.type !== b.type || a.type.name === 'heading' && a.attrs.level !== b.attrs.level)) return false;
+  }
+  return true;
 }
 
 /** Inline typing only maps decorations; structure changes rebuild the affected view outline. */
@@ -97,7 +118,7 @@ export function toggleHeadingFold(state: EditorState, dispatch: (tr: Transaction
 export const HeadingFolding = Extension.create({
   name: 'headingFolding',
   addProseMirrorPlugins() {
-    return [new Plugin<DecorationSet>({
+    return [new Plugin<FoldingState>({
       key: headingFoldingKey,
       state: {
         init: (_, state) => rebuild(state.doc, new Set()),
@@ -105,22 +126,24 @@ export const HeadingFolding = Extension.create({
           const toggle = tr.getMeta(headingFoldingKey) as number | undefined;
           if (!tr.docChanged && toggle === undefined) {
             if (!tr.selectionSet) return previous;
-            const folds = foldPositions(previous);
-            const visible = folds.filter(pos => {
+            if (!previous.folds.size) return previous;
+            const visible = [...previous.folds].filter(pos => {
               const start = pos + (tr.doc.nodeAt(pos)?.nodeSize ?? 0);
               return tr.selection.from < start || tr.selection.from >= headingSectionEnd(tr.doc, pos);
             });
-            return visible.length === folds.length ? previous : rebuild(tr.doc, new Set(visible));
+            return visible.length === previous.folds.size ? previous : rebuild(tr.doc, new Set(visible));
           }
           if (toggle !== undefined) {
-            const folds = new Set(foldPositions(previous));
+            const folds = new Set(previous.folds);
             if (folds.has(toggle)) folds.delete(toggle); else folds.add(toggle);
             return rebuild(tr.doc, folds);
           }
-          if (onlyInlineChanges(tr)) return previous.map(tr.mapping, tr.doc);
+          if (onlyInlineChanges(tr)) return { decorations: previous.decorations.map(tr.mapping, tr.doc),
+            folds: new Set([...previous.folds].map(pos => tr.mapping.map(pos, 1))) };
+          if (!tr.getMeta(BLOCK_MOVE_META) && sameSections(tr.before, tr.doc)) return previous;
           const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
           const folds = new Set<number>();
-          for (const pos of foldPositions(previous)) {
+          for (const pos of previous.folds) {
             const mapped = move && pos >= move.from && pos < move.to
               ? move.inserted + pos - move.from
               : tr.mapping.mapResult(pos, 1);
@@ -130,7 +153,7 @@ export const HeadingFolding = Extension.create({
           return rebuild(tr.doc, folds);
         },
       },
-      props: { decorations: state => headingFoldingKey.getState(state) },
+      props: { decorations: state => headingFoldingKey.getState(state)?.decorations },
     })];
   },
 });

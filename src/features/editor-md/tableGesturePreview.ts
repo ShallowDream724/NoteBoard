@@ -9,12 +9,13 @@ export function tableGesturePreview(table: HTMLTableElement, row?: HTMLTableRowE
   if (!widths.length || widths.some(width => width <= 0)) return null;
   const id = `nb-table-preview-${++nextId}`, style = table.ownerDocument.createElement('style');
   if (row) {
+    const heightProperty = table.classList.contains('nb-isolated-rows') ? 'min-height' : 'height';
     // Row resizing must not change column layout or replace native row display.
-    style.textContent = `tr.${id}-row { height:${row.offsetHeight}px !important; }`;
+    style.textContent = `tr.${id}-row { ${heightProperty}:${row.offsetHeight}px !important; }`;
     table.ownerDocument.head.append(style); row.classList.add(`${id}-row`);
     const rule = style.sheet!.cssRules[0] as CSSStyleRule;
     return { widths, scale,
-      rowHeight(height: number) { rule.style.setProperty('height', `${height}px`, 'important'); },
+      rowHeight(height: number) { rule.style.setProperty(heightProperty, `${height}px`, 'important'); },
       columns(_index: number, _width: number, _adjacent?: number) {},
       dispose() { row.classList.remove(`${id}-row`); style.remove(); },
     };

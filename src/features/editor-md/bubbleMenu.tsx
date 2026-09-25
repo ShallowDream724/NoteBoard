@@ -241,7 +241,7 @@ export function EditorBubbleMenu({
       options={bubbleMenuOptions}
       style={{ zIndex: 1000 }}
     >
-      <div
+      {enabled && editor.state.selection instanceof TextSelection && !editor.state.selection.empty && <div
         ref={bubbleRoot} role="toolbar" aria-label="文字工具栏"
         style={{
           display: 'flex',
@@ -344,7 +344,7 @@ export function EditorBubbleMenu({
           icon={<RemoveFormatting size={16} />}
           onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
         />
-      </div>
+      </div>}
     </BubbleMenu>
   );
 }

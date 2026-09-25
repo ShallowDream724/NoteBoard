@@ -26,6 +26,8 @@ import { TableClipboard } from '../tableClipboard';
 import { ResizableTableRow, TableSizing } from '../tableSizing';
 import { MarkdownTable } from '../markdownTable';
 import { EfficientTableView } from '../tableView';
+import { withTableSelectionView } from '../tableSelectionView';
+import { EditableTableCell, EditableTableHeader } from '../tableCellView';
 import { useWindowStore } from '../../../stores/windowStore';
 
 import Suggestion from '@tiptap/suggestion';
@@ -150,13 +152,20 @@ export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
 }
 
+const InteractiveTable = MarkdownTable.extend({
+  addProseMirrorPlugins() {
+    return (this.parent?.() ?? []).map(plugin => plugin.spec.props?.decorations ? withTableSelectionView(plugin) : plugin);
+  },
+});
+
 /** Document grammar stays independent from UI and session state. */
 export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): Extensions {
   return [
     ...buildDocumentExtensions({ image: EnhancedImageBlock.configure({ docKey }), codeBlock: CodeBlockView,
       mathInline: MathInline, mathBlock: MathBlock, mermaidBlock: MermaidBlock, plantumlBlock: PlantUmlBlock,
       infographicBlock: InfographicBlock, githubAlert: GitHubAlert, tableRow: ResizableTableRow,
-      table: MarkdownTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
+      tableCell: EditableTableCell, tableHeader: EditableTableHeader,
+      table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
     UnifiedDocumentHistoryKeys.configure({ docKey }), MarkdownTypingKeys, AlertCompletion,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),

@@ -110,16 +110,22 @@ export function alignTableSelection(editor: Editor, change: Pick<CellPatch, 'tex
 }
 export function distributeTableColumns(editor: Editor) {
   const rect = tableSelection(editor); if (!rect) return false;
-  const dom = editor.view.nodeDOM(rect.tableStart - 1);
-  const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
-  if (!table) return false;
-  const columns = table.querySelector(':scope > colgroup')?.children;
-  const scale = table.getBoundingClientRect().width / table.offsetWidth || 1;
   const saved: number[] = Array(rect.map.width).fill(0);
-  for (const cell of tableGrid(rect.table).cells) {
-    (cell.node.attrs.colwidth as number[] | null)?.forEach((width, offset) => { if (width > 0) saved[cell.column + offset] ||= width; });
+  let column = 0;
+  rect.table.firstChild?.forEach(cell => {
+    for (let i = 0; i < cell.attrs.colspan; i++) saved[column++] = cell.attrs.colwidth?.[i] ?? 0;
+  });
+  const widths = saved.slice();
+  if (saved.some(width => !width)) {
+    const dom = editor.view.nodeDOM(rect.tableStart - 1);
+    const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
+    if (!table) return false;
+    const columns = table.querySelector(':scope > colgroup')?.children;
+    const scale = table.getBoundingClientRect().width / table.offsetWidth || 1;
+    for (const cell of tableGrid(rect.table).cells)
+      (cell.node.attrs.colwidth as number[] | null)?.forEach((width, offset) => { if (width > 0) saved[cell.column + offset] ||= width; });
+    for (let i = 0; i < widths.length; i++) widths[i] = saved[i] || Math.max(40, Math.round(columns?.length === rect.map.width ? columns[i].getBoundingClientRect().width / scale : table.offsetWidth / rect.map.width));
   }
-  const widths = saved.map((width, index) => width || Math.max(40, Math.round(columns?.length === rect.map.width ? columns[index].getBoundingClientRect().width / scale : table.offsetWidth / rect.map.width)));
   const from = editor.state.selection instanceof CellSelection ? rect.left : 0;
   const to = editor.state.selection instanceof CellSelection ? rect.right : rect.map.width;
   const width = Math.max(40, Math.round(widths.slice(from, to).reduce((a, b) => a + b, 0) / (to - from)));
@@ -162,7 +168,7 @@ class TableRowHeightsStep extends Step {
     if (this.heights.some(row => !Number.isInteger(row.index) || row.index < 0 || row.index >= table.childCount
       || row.height !== null && (!Number.isFinite(row.height) || row.height < 0 || row.height > 10000))) return StepResult.fail('Invalid row height');
     const rows: Node[] = [];
-    table.forEach((row, _pos, index) => rows.push(changes.has(index) ? row.type.create({ ...row.attrs, height: changes.get(index) }, row.content, row.marks) : row));
+    table.forEach((row, _pos, index) => rows.push(changes.has(index) && changes.get(index) !== row.attrs.height ? row.type.create({ ...row.attrs, height: changes.get(index) }, row.content, row.marks) : row));
     return StepResult.fromReplace(doc, this.pos, this.pos + table.nodeSize, new Slice(Fragment.from(table.copy(Fragment.fromArray(rows))), 0, 0));
   }
   invert(doc: Node) { const table = doc.nodeAt(this.pos)!; return new TableRowHeightsStep(this.pos, this.heights.map(row => ({ index: row.index, height: table.child(row.index).attrs.height }))); }

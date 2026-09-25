@@ -1,6 +1,6 @@
 import { Fragment, Slice, type Node, type Schema } from '@tiptap/pm/model';
 import { Step, StepResult, type Mappable } from '@tiptap/pm/transform';
-import { buildLogicalTableGrid } from './tableGrid';
+import { tableGrid } from './tableStructure';
 
 type CellWidths = Array<Array<number[] | null>>;
 
@@ -16,14 +16,16 @@ export class TableColumnWidthsStep extends Step {
       const original = table.child(row), widths = this.cells[row];
       if (original.childCount !== widths.length) return StepResult.fail('Table columns changed');
       const cells: Node[] = [];
+      let changed = false;
       for (let col = 0; col < original.childCount; col++) {
         const cell = original.child(col), width = widths[col];
         if (width && (width.length !== cell.attrs.colspan || width.some(value => !Number.isFinite(value) || value < 0 || value > 10000))) return StepResult.fail('Invalid column widths');
         const before = cell.attrs.colwidth as number[] | null;
         const same = before === width || (!!before && !!width && before.length === width.length && before.every((value, i) => value === width[i]));
+        if (!same) changed = true;
         cells.push(same ? cell : cell.type.create({ ...cell.attrs, colwidth: width }, cell.content, cell.marks));
       }
-      rows.push(original.copy(Fragment.fromArray(cells)));
+      rows.push(changed ? original.copy(Fragment.fromArray(cells)) : original);
     }
     return StepResult.fromReplace(doc, this.pos, this.pos + table.nodeSize, new Slice(Fragment.from(table.copy(Fragment.fromArray(rows))), 0, 0));
   }
@@ -46,10 +48,19 @@ export class TableColumnWidthsStep extends Step {
 Step.jsonID('noteboardTableColumnWidths', TableColumnWidthsStep);
 
 export function columnWidthsStep(pos: number, table: Node, widths: number[]): TableColumnWidthsStep {
-  const rows: Node[][] = [];
-  table.forEach(row => { const cells: Node[] = []; row.forEach(cell => cells.push(cell)); rows.push(cells); });
-  const grid = buildLogicalTableGrid(rows, cell => cell.attrs);
-  return new TableColumnWidthsStep(pos, grid.rows.map(row => row.map(cell => widths.slice(cell.column, cell.column + cell.colspan))));
+  const grid = tableGrid(table), rows: CellWidths = grid.rows.map(() => []);
+  const single = widths.map(width => [width]), spans = new Map<string, number[]>();
+  for (const cell of grid.cells) {
+    const count = cell.node.attrs.colspan;
+    let values = single[cell.column] ?? [];
+    if (count > 1) {
+      const key = cell.column + ':' + count;
+      values = spans.get(key)!;
+      if (!values) { values = widths.slice(cell.column, cell.column + count); spans.set(key, values); }
+    }
+    rows[cell.row].push(values);
+  }
+  return new TableColumnWidthsStep(pos, rows);
 }
 
 /** Interior boundaries redistribute space; the outer boundary changes table

@@ -1,0 +1,44 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 6c65eb7d57e207a8cd1f2a2ae3bb99507c405cef..2e4b8623d72c31081e4b38e6cdbd6fdcc2d4b145 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -761,7 +761,7 @@ function changedDescendants(old, cur, offset, f) {
+ 	const oldSize = old.childCount, curSize = cur.childCount;
+ 	outer: for (let i = 0, j = 0; i < curSize; i++) {
+ 		const child = cur.child(i);
+-		for (let scan = j, e = Math.min(oldSize, i + 3); scan < e; scan++) if (old.child(scan) == child) {
++		for (let scan = j, e = Math.min(oldSize, j + 3); scan < e; scan++) if (old.child(scan) == child) {
+ 			j = scan + 1;
+ 			offset += child.nodeSize;
+ 			continue outer;
+@@ -769,6 +769,8 @@ function changedDescendants(old, cur, offset, f) {
+ 		f(child, offset);
+ 		if (j < oldSize && old.child(j).sameMarkup(child)) changedDescendants(old.child(j), child, offset + 1, f);
+ 		else child.nodesBetween(0, child.content.size, f, offset + 1);
++		// Keep the old cursor moving when a whole run has changed attributes.
++		if (j < oldSize) j++;
+ 		offset += child.nodeSize;
+ 	}
+ }
+diff --git a/dist/index.js b/dist/index.js
+index 5b4ac25594ba5722409332b1e5c812f108c9bf11..e9930bde18b88ea55ff2cfeca4af1de25bbe514e 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -761,7 +761,7 @@ function changedDescendants(old, cur, offset, f) {
+ 	const oldSize = old.childCount, curSize = cur.childCount;
+ 	outer: for (let i = 0, j = 0; i < curSize; i++) {
+ 		const child = cur.child(i);
+-		for (let scan = j, e = Math.min(oldSize, i + 3); scan < e; scan++) if (old.child(scan) == child) {
++		for (let scan = j, e = Math.min(oldSize, j + 3); scan < e; scan++) if (old.child(scan) == child) {
+ 			j = scan + 1;
+ 			offset += child.nodeSize;
+ 			continue outer;
+@@ -769,6 +769,8 @@ function changedDescendants(old, cur, offset, f) {
+ 		f(child, offset);
+ 		if (j < oldSize && old.child(j).sameMarkup(child)) changedDescendants(old.child(j), child, offset + 1, f);
+ 		else child.nodesBetween(0, child.content.size, f, offset + 1);
++		// Keep the old cursor moving when a whole run has changed attributes.
++		if (j < oldSize) j++;
+ 		offset += child.nodeSize;
+ 	}
+ }
