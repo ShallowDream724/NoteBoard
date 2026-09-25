@@ -56,7 +56,7 @@ export function ensureDocumentCapability(editor: Editor, capability: DocumentCap
   const selection = editor.state.selection.toJSON(), before = editor.state.doc;
   const request = (async () => {
     const { requestNativeConversion } = await import('./NativeConversionDialog');
-    const options = await requestNativeConversion();
+    const options = await requestNativeConversion(!key.startsWith('untitled:'));
     if (!options || editor.isDestroyed) return null;
     if (!editor.state.doc.eq(before)) { showToast('内容已变化，请重新应用此操作', 'warning'); return null; }
     const { convertMarkdownToNative } = await import('./convertDocument');
