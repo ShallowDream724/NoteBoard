@@ -96,13 +96,13 @@ it('超出小文档预热预算的屏外公式延迟到进入预加载范围后�
     const [firstTarget, secondTarget] = [...observer!.targets];
     await act(async () => observer!.activate(firstTarget));
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await vi.waitFor(() => expect(host.querySelectorAll('.katex')).toHaveLength(1), { timeout: 5000 });
     });
     expect(host.querySelectorAll('.katex')).toHaveLength(1);
 
     await act(async () => observer!.activate(secondTarget));
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await vi.waitFor(() => expect(host.querySelectorAll('.katex')).toHaveLength(2), { timeout: 5000 });
     });
     expect(host.querySelectorAll('.katex')).toHaveLength(2);
     height.mockReturnValue(0);

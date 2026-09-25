@@ -3,10 +3,11 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { foldedSectionEnd } from './headingFolding';
 import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
+import { isListItem, listItemRemovalRange } from './listItemActions';
 
 export function blockRange(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || editor.state.doc.resolve(pos).depth !== 0) return null;
+  if (!node || editor.state.doc.resolve(pos).depth !== 0 && !isListItem(node)) return null;
   return { node, from: pos, to: foldedSectionEnd(editor.state, pos) ?? pos + node.nodeSize };
 }
 export function selectBlock(editor: Editor, pos: number, titleOnly = false): boolean {
@@ -24,16 +25,25 @@ export function selectBlock(editor: Editor, pos: number, titleOnly = false): boo
 export function formatBlock(editor: Editor, pos: number, command: (chain: ChainedCommands) => ChainedCommands, titleOnly = false) {
   const range = blockRange(editor, pos); if (!range) return false;
   const end = titleOnly ? pos + range.node.nodeSize : range.to;
-  return runDiscreteEdit(editor, chain => command(chain.setTextSelection({ from: pos + 1, to: end - 1 })));
+  return runDiscreteEdit(editor, chain => {
+    if (isListItem(range.node)) {
+      chain = chain.setTextSelection({ from: pos + 2, to: titleOnly ? pos + range.node.firstChild!.nodeSize : end - 2 });
+      if (titleOnly) chain = chain.liftListItem(range.node.type.name);
+    } else chain = chain.setTextSelection({ from: pos + 1, to: end - 1 });
+    return command(chain);
+  });
 }
 export function deleteBlock(editor: Editor, pos: number) {
   const range = blockRange(editor, pos); if (!range) return false;
-  dispatchDiscreteEdit(editor.view, editor.state.tr.delete(range.from, range.to)); editor.view.focus(); return true;
+  const removed = isListItem(range.node) ? listItemRemovalRange(editor.state.doc, pos) : range;
+  dispatchDiscreteEdit(editor.view, editor.state.tr.delete(removed.from, removed.to)); editor.view.focus(); return true;
 }
 export function insertAfterBlock(editor: Editor, pos: number) {
   const range = blockRange(editor, pos); if (!range) return;
-  const tr = editor.state.tr.insert(range.to, editor.schema.nodes.paragraph.create());
-  tr.setSelection(TextSelection.create(tr.doc, range.to + 1)); dispatchDiscreteEdit(editor.view, tr); editor.view.focus();
+  const item = isListItem(range.node);
+  const node = item ? range.node.type.createAndFill()! : editor.schema.nodes.paragraph.create();
+  const tr = editor.state.tr.insert(range.to, node);
+  tr.setSelection(TextSelection.near(tr.doc.resolve(range.to + 1))); dispatchDiscreteEdit(editor.view, tr); editor.view.focus();
 }
 /** Native copy keeps HTML/schema styles alongside plain text. Delete only after successful copy. */
 export function copyBlock(editor: Editor, pos: number, cut = false): boolean {

@@ -10,7 +10,7 @@ import { createMarkdownLexer } from '../editor-md/markdownLexer';
 export function withoutPresentation(node: JSONContent): JSONContent {
   const { attrs, marks, content, ...rest } = node;
   const cleanAttrs = attrs && Object.fromEntries(Object.entries(attrs)
-    .filter(([key]) => !['background', 'textAlign', 'verticalAlign', 'indent', 'height', 'colwidth', 'width', 'align'].includes(key)));
+    .filter(([key]) => !['textColor', 'background', 'textAlign', 'verticalAlign', 'indent', 'height', 'colwidth', 'width', 'align'].includes(key)));
   return {
     ...rest,
     ...(cleanAttrs && Object.keys(cleanAttrs).length ? { attrs: cleanAttrs } : {}),

@@ -1,7 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
-import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { TextSelection } from '@tiptap/pm/state';
+import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { isDisplayMath, writeMath, type MathDelimiter } from './mathSyntax';
 import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
@@ -19,12 +20,6 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const viewportRef = useRef<HTMLSpanElement>(null);
   const previewRef = useRef<MathPreviewController | null>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    const selection = editor.state.selection;
-    // TipTap also marks atoms selected when a text/all-document selection covers
-    // them. Only an explicit node selection may move focus into formula source.
-    if (selected && selection instanceof NodeSelection && selection.from === getPos()) setEditing(true);
-  }, [selected, editor, getPos]);
   useLayoutEffect(() => {
     if (!editing) { setInputHost(null); return; }
     const pos = getPos();
@@ -76,7 +71,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     const control = event.ctrlKey || event.metaKey;
     if (control && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault(); event.stopPropagation();
-      editor.commands.keyboardShortcut(event.shiftKey || event.key.toLowerCase() === 'y' ? 'Mod-Shift-z' : 'Mod-z');
+      dispatchEditorShortcut(editor.view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
       return;
     }
     if (event.key === 'Escape' || (event.key === 'Enter' && (control || (!display && !event.shiftKey)))) {
@@ -93,7 +88,9 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       style={{
         display: display ? 'block' : 'inline-block', maxWidth: '100%', verticalAlign: 'baseline',
         padding: display ? '8px 0' : '0 2px', borderRadius: 'var(--radius-sm)',
-        background: selected && !editing ? 'var(--editor-selection-background)' : undefined,
+        color: node.attrs.textColor || undefined,
+        background: node.attrs.background || undefined,
+        boxShadow: selected && !editing ? '0 0 0 2px var(--editor-selection-background)' : undefined,
       }}
       onClick={() => setEditing(true)}
     >

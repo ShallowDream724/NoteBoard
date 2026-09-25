@@ -7,6 +7,7 @@ import {
   useEffect,
   useRef,
   useCallback,
+  useId,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { type Editor } from '@tiptap/core';
@@ -45,6 +46,8 @@ const BLOCK_TYPE_LABELS: Record<string, string> = {
   bulletList: '无序列表',
   orderedList: '有序列表',
   taskList: '任务列表',
+  listItem: '列表项',
+  taskItem: '任务项',
   blockquote: '引用块',
   table: '表格',
   codeBlock: '代码块',
@@ -112,6 +115,7 @@ function clampPreviewCoordinate(value: number, viewportSize: number, reservedSiz
 }
 
 export function BlockDragHandle({ editor }: { editor: Editor | null }) {
+  const ownerId = useId();
   const [state, setState] = useState<DragHandleState>({
     visible: false,
     top: 0,
@@ -133,13 +137,22 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const menuHover = useHoverMenu(menuOpen, open => {
     if (open && (!editor || state.nodePos === null || dragSessionRef.current?.dragging)) return;
     editor?.view.dom.classList.toggle('nb-block-menu-open', open);
+    menuOpenRef.current = open;
     if (open) {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
       selectBlock(editor!, state.nodePos!);
       editor!.view.dispatch(editor!.state.tr.setMeta('bubbleMenu', 'hide'));
     }
     setMenuOpen(open);
   });
   useEffect(() => () => { editor?.view.dom.classList.remove('nb-block-menu-open'); }, [editor]);
+  useEffect(() => {
+    if (!editor) return;
+    const root = editor.view.dom;
+    root.dataset.nbBlockHandleOwner = ownerId;
+    return () => { delete root.dataset.nbBlockHandleOwner; };
+  }, [editor, ownerId]);
 
   const clearHideTimer = useCallback(() => {
     if (!hideTimerRef.current) return;
@@ -185,7 +198,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       if (hideTimerRef.current || dragSessionRef.current || menuOpenRef.current) return;
       hideTimerRef.current = setTimeout(() => {
         hideTimerRef.current = null;
-        if (!isHoveringHandleRef.current && !dragSessionRef.current) {
+        if (!isHoveringHandleRef.current && !dragSessionRef.current && !menuOpenRef.current) {
           setState((current) => ({ ...current, visible: false }));
         }
       }, 300);
@@ -220,15 +233,15 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       const blockRect = blockElement.getBoundingClientRect();
       const scrollRect = scrollParent.getBoundingClientRect();
       const top = blockRect.top - scrollRect.top + scrollParent.scrollTop;
-      const left = blockRect.left - scrollRect.left + scrollParent.scrollLeft - (blockInfo.node.type.name === 'heading' ? 70 : 48);
+      const left = blockRect.left - scrollRect.left + scrollParent.scrollLeft - (blockInfo.node.type.name === 'table' ? 78 : blockInfo.node.type.name === 'heading' ? 76 : 56);
 
-      setState({
+      setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) ? current : ({
         visible: true,
         top,
         left: Math.max(left, 4),
         nodePos: blockInfo.pos,
         nodeType: blockInfo.node.type.name,
-      });
+      }));
     };
 
     const handleMouseLeave = () => {
@@ -311,7 +324,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       return;
     }
 
-    const target = resolveTopLevelDropTarget(editor.view, clientY);
+    const target = resolveTopLevelDropTarget(editor.view, clientY, session.sourcePos);
     const valid = Boolean(
       target
       && isTopLevelBlockMoveAllowed(editor.state.doc, session.sourcePos, target.insertPos, foldedSectionEnd(editor.state, session.sourcePos)),
@@ -404,6 +417,11 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     event.preventDefault();
     event.stopPropagation();
 
+    if (!session.dragging) {
+      cleanupDrag();
+      menuHover.change(true);
+      return;
+    }
     const target = dropTargetRef.current;
     suppressMenuClick.current = session.dragging;
     const result = session.dragging && target && editor
@@ -425,7 +443,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         }, DROP_SETTLE_DURATION);
       });
     }
-  }, [cleanupDrag, editor]);
+  }, [cleanupDrag, editor, menuHover]);
 
   const handlePointerCancel = useCallback(() => {
     cleanupDrag();
@@ -452,6 +470,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   return (
     <>
+      {editor && state.nodeType === 'heading' && state.nodePos !== null && state.nodePos <= editor.state.doc.content.size &&
+        <style>{`[data-nb-block-handle-owner="${ownerId}"]>:nth-child(${editor.state.doc.resolve(state.nodePos).index(0) + 1})::before{visibility:hidden}`}</style>}
       <Popover.Root open={menuOpen && !isDragging} onOpenChange={menuHover.change}>
       <Popover.Anchor asChild>
         <button
@@ -490,7 +510,11 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       </Popover.Anchor>
       <Popover.Portal><Popover.Content {...menuHover.contentProps} className="nb-block-menu-popover" side="left" align="start" sideOffset={5} collisionPadding={10}
         onOpenAutoFocus={menuHover.onOpenAutoFocus} onCloseAutoFocus={menuHover.onCloseAutoFocus}
-        onInteractOutside={event => { if (event.target instanceof Element && event.target.closest('[data-nb-editor-menu]')) event.preventDefault(); }}>
+        onInteractOutside={event => {
+          menuHover.contentProps.onInteractOutside(event);
+          const target = event.detail.originalEvent.target;
+          if (target instanceof Element && target.closest('[data-nb-editor-menu]')) event.preventDefault();
+        }}>
         <HoverMenuContext.Provider value={menuHover}>{editor && state.nodePos !== null && <BlockContextMenu editor={editor} pos={state.nodePos} close={() => menuHover.change(false)}/>}</HoverMenuContext.Provider>
       </Popover.Content></Popover.Portal></Popover.Root>
 

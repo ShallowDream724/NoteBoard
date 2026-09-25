@@ -62,7 +62,7 @@ import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
 import { HighlightControl } from './HighlightControl';
-import { setTextColor, applyTextStyle } from '../document-style/documentStyles';
+import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
 
@@ -199,13 +199,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().setHighlight({ color }).run();
+    setHighlightColor(editor, color);
   };
 
   const handleRemoveHighlight = () => {
     if (isSourceMode) { executeSourceAction(view => formatSourceMark(view, 'highlight', undefined, true)); return; }
     if (!editor) return;
-    editor.chain().focus().unsetHighlight().run();
+    setHighlightColor(editor, null);
   };
 
   // ── 插入元素处理 ──
@@ -605,13 +605,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
       <HighlightControl
         onApplyStyle={pair => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
-        textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('textColor').color}
+        textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('mathBlock').textColor ?? editor?.getAttributes('textColor').color}
         onTextColor={color => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
         collapsePriority={40}
         open={highlightDropdownOpen}
         onOpenChange={open => { if (open && sourceView) sourceTextStyle(sourceView, true); setHighlightDropdownOpen(open); }}
-        active={isSourceMode ? !!sourceStyle?.background || sourceHighlight !== null : Boolean(editor?.isActive('highlight'))}
-        currentColor={isSourceMode ? sourceStyle?.background ?? sourceHighlight?.color : editor?.getAttributes('highlight').color}
+        active={isSourceMode ? !!sourceStyle?.background || sourceHighlight !== null : Boolean(editor?.isActive('highlight') || editor?.getAttributes('mathBlock').background)}
+        currentColor={isSourceMode ? sourceStyle?.background ?? sourceHighlight?.color : editor?.getAttributes('mathBlock').background ?? editor?.getAttributes('highlight').color}
         onApply={handleSelectHighlightColor} onRemove={handleRemoveHighlight}
         onReturnToEditor={() => { if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.commands.focus(); }}
       />

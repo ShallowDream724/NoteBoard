@@ -12,6 +12,7 @@
 // 7. 主题切换时重渲染
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { MermaidNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { observe } from './viewportActivation';
@@ -242,7 +243,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
         onKeyDown={event => {
           if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
             event.preventDefault(); event.stopPropagation();
-            editor.commands.keyboardShortcut(event.shiftKey || event.key.toLowerCase() === 'y' ? 'Mod-Shift-z' : 'Mod-z');
+            dispatchEditorShortcut(editor.view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
           }
         }}
         style={{ display: 'block', width: '100%', boxSizing: 'border-box', minHeight: 140, padding: '10px 14px', border: 0, resize: 'vertical', background: 'var(--editor-surface)', color: 'var(--editor-text)', fontFamily: 'var(--mono-font-family)', fontSize: 'var(--mono-font-size)', lineHeight: 1.5 }} />

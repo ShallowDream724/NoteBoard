@@ -2,13 +2,14 @@ import { Extension } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
 import { Plugin } from '@tiptap/pm/state';
 import { resolveShortcut, isRetiredShortcut } from '../../core/shortcutBindings';
+import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 
 /** Interactive conveniences only; never reinterpret imported Markdown. */
 export const MarkdownTypingKeys = Extension.create({
   name: 'markdownTypingKeys',
   priority: 1100,
   addProseMirrorPlugins() {
-    return [new Plugin({ props: { handleDOMEvents: { keydown: (_view, event) => {
+    return [new Plugin({ props: { handleDOMEvents: { keydown: (view, event) => {
       if (event.defaultPrevented || event.isComposing) return false;
       const command = resolveShortcut(event, 'markdown');
       if (!command) {
@@ -16,8 +17,9 @@ export const MarkdownTypingKeys = Extension.create({
         return false;
       }
       const level = /^markdown\.heading([0-6])$/.exec(command.id)?.[1];
-      level !== undefined ? Number(level) === 0 ? this.editor.commands.setParagraph() : this.editor.commands.setHeading({ level: Number(level) as 1|2|3|4|5|6 })
-        : this.editor.commands.keyboardShortcut(command.defaults[0].replaceAll('+', '-').replace('Ctrl-', 'Mod-'));
+      if (level === undefined) dispatchEditorShortcut(view, command.defaults[0]);
+      else if (Number(level) === 0) this.editor.commands.setParagraph();
+      else this.editor.commands.setHeading({ level: Number(level) as 1|2|3|4|5|6 });
       event.preventDefault();
       return true;
     } } } })];

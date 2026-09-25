@@ -28,7 +28,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { Tooltip } from '../../components/Tooltip';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
-import { setTextColor, applyTextStyle } from '../document-style/documentStyles';
+import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { useFormattingUpdates } from './useFormattingUpdates';
 import { useEditorOverlayDismiss } from './useEditorOverlayDismiss';
@@ -36,7 +36,7 @@ import { runDiscreteEdit } from './discreteEdit';
 import { TableInsertMenu } from './TableInsertMenu';
 import { TableFillMenu } from './TableFillMenu';
 import { documentTableStyle } from './documentPresentation';
-import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
+import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDistributionState, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -197,6 +197,7 @@ export function EditorBubbleMenu({
     state: { selection: { empty: boolean } };
   }) => {
     const { selection } = state;
+    if (currentEditor.isDestroyed) return false;
     if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
@@ -296,9 +297,9 @@ export function EditorBubbleMenu({
           onApplyStyle={pair => applyTextStyle(editor, pair)}
           textColor={editor.getAttributes('textColor').color} onTextColor={color => setTextColor(editor, color)}
           active={editor.isActive('highlight')} currentColor={editor.getAttributes('highlight').color}
-          onApply={color => editor.chain().focus().setHighlight({ color }).run()}
+          onApply={color => setHighlightColor(editor, color)}
           onReturnToEditor={() => editor.commands.focus()}
-          onRemove={() => { editor.chain().focus().unsetHighlight().run(); }}/>
+          onRemove={() => { setHighlightColor(editor, null); }}/>
         <AlignmentMenu editor={editor}/>
 
         <MenuDivider />
@@ -556,8 +557,8 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       <AlignmentMenu editor={editor} cells/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
       <MenuDivider />
-      <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>
-      <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>
+      {tableDistributionState(editor).columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
+      {tableDistributionState(editor).rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
       {isCellSelection(editor.state.selection) && editor.can().mergeCells() && <BubbleButton
         title="合并选中单元格" icon={<Merge size={16}/>}
         onClick={() => runDiscreteEdit(editor, chain => chain.mergeCells())}/>}

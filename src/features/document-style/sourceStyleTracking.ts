@@ -4,7 +4,7 @@ import { presentationBody } from './presentationMetadata';
 import { applyStyleRanges, documentStyleRanges, mapStyleRanges, type SpanStyle, type StyleLayer } from './sourceStyleRanges';
 import { buildStyleSpans, replaceStyleSpans, styleSpans, type SpanTree } from './styleSpanTree';
 
-const layers: StyleLayer[] = ['text', 'block', 'cell'];
+const layers: StyleLayer[] = ['text', 'block', 'cell', 'math'];
 export interface SourceStyles {
   bodyEnd: number;
   trees: Partial<Record<StyleLayer, SpanTree<SpanStyle> | null>>;

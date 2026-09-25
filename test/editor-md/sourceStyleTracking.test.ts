@@ -33,6 +33,27 @@ it('tracks source insert/delete and block splits while retaining paired styles a
   state = state.update({ changes: { from: 0, to: state.doc.length, insert: initial }, effects: resetSourceStyles.of(null) }).state;
   expect(readStyledSource(state)).toBe(initial);
 });
+it('retains inline and display formula colors through source edits inside TeX and surrounding text', () => {
+  const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'red ' }, { type: 'mathInline', attrs: { latex: 'x+1', delimiter: '$' } }, { type: 'text', text: ' words' }] },
+    { type: 'mathBlock', attrs: { latex: 'y+1', delimiter: '$$' } },
+  ] } });
+  try {
+    editor.commands.selectAll(); applyTextStyle(editor, { color: '#dc2626', background: '#fef08a' });
+    const initial = serializeMarkdown(editor);
+    let state = EditorState.create({ doc: initial, extensions: [sourceStylesField] });
+    for (const [needle, insert] of [['red', ' new'], ['x+', '2'], ['y+', '3']]) {
+      const at = state.doc.toString().indexOf(needle) + needle.length;
+      state = state.update({ changes: { from: at, insert } }).state;
+    }
+    const doc = parseMarkdownDocument(readStyledSource(state));
+    const inline = doc.child(0).child(1), block = doc.child(1);
+    expect(inline.attrs.latex).toBe('x+21');
+    expect(inline.marks.map(mark => mark.attrs.color).sort()).toEqual(['#dc2626','#fef08a']);
+    expect(block.attrs).toMatchObject({ latex: 'y+31', textColor: '#dc2626', background: '#fef08a' });
+    doc.check();
+  } finally { editor.destroy(); }
+});
 it('does not parse or serialize on source keystrokes and materializes each immutable snapshot once', () => {
   const initial = seed(); let state = EditorState.create({ doc: initial, extensions: [sourceStylesField] });
   const manager = documentParser().manager, parse = vi.spyOn(manager, 'parse'), serialize = vi.spyOn(manager, 'serialize');

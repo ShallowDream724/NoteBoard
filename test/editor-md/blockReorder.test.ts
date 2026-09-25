@@ -60,6 +60,23 @@ afterEach(() => {
 });
 
 describe('Markdown 顶层块安全重排序', () => {
+  it('moves individual list items within and across lists, retaining marks and undo', () => {
+    const item = (text: string) => ({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'bold' }] }] }] });
+    const editor = createEditor({ type: 'doc', content: [{ type: 'orderedList', attrs: { start: 3 }, content: [item('one'),item('two'),item('three')] }, { type: 'paragraph', content: [{ type: 'text', text: 'end' }] }] });
+    const initial = editor.state.doc;
+    const first = 1, end = initial.firstChild!.nodeSize - 1;
+    expect(moveTopLevelBlock(editor.view, first, end)).not.toBeNull();
+    expect(editor.state.doc.firstChild!.textContent).toBe('twothreeone');
+    editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
+    const moved = moveTopLevelBlock(editor.view, first, initial.content.size)!;
+    expect(moved).not.toBeNull();
+    const list = editor.state.doc.resolve(moved.insertedPos).parent;
+    expect(list.type.name).toBe('orderedList');
+    expect(list.textContent).toBe('one');
+    expect(list.firstChild!.firstChild!.firstChild!.marks[0].type.name).toBe('bold');
+    editor.state.doc.check();
+    editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
+  });
   it('拖拽独立于前后输入撤销，重做保留移动后的内容', () => {
     const editor = createEditor({ type: 'doc', content: [
       { type: 'paragraph', content: [{ type: 'text', text: 'one' }] },

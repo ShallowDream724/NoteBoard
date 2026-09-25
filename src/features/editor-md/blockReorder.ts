@@ -6,6 +6,7 @@ import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
 import { BLOCK_MOVE_META, foldedSectionEnd } from './headingFolding';
+import { isListItem, canMoveListItem, moveListItem } from './listItemActions';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
 export interface TopLevelBlockInfo {
@@ -37,6 +38,8 @@ export function findTopLevelBlockElement(
   target: EventTarget | null,
 ): HTMLElement | null {
   let element = target instanceof HTMLElement ? target : null;
+  const item = element?.closest('li');
+  if (item && editorDom.contains(item) && !item.closest('td,th')) return item;
 
   while (element && element.parentElement && element.parentElement !== editorDom) {
     element = element.parentElement;
@@ -53,16 +56,19 @@ export function getTopLevelBlockInfo(
   view: EditorView,
   element: HTMLElement,
 ): TopLevelBlockInfo | null {
-  if (element.parentElement !== view.dom) return null;
+  const item = element.tagName === 'LI' && view.dom.contains(element) && !element.closest('td,th');
+  if (element.parentElement !== view.dom && !item) return null;
 
   try {
     const domPos = view.posAtDOM(element, 0);
     const $domPos = view.state.doc.resolve(domPos);
-    const pos = $domPos.depth === 0 ? domPos : $domPos.before(1);
+    let depth = $domPos.depth;
+    if (item) while (depth > 0 && !isListItem($domPos.node(depth))) depth--;
+    const pos = item && depth ? $domPos.before(depth) : $domPos.depth === 0 ? domPos : $domPos.before(1);
     const $topLevelPos = view.state.doc.resolve(pos);
     const node = view.state.doc.nodeAt(pos);
 
-    if ($topLevelPos.depth !== 0 || !node?.isBlock || node.type.name === 'documentPresentation') return null;
+    if (($topLevelPos.depth !== 0 && !isListItem(node)) || !node?.isBlock || node.type.name === 'documentPresentation') return null;
     return { element, pos, node };
   } catch {
     // NodeView 正在重绘或 DOM 已失效时不生成落点，等待下一次指针事件重新解析。
@@ -77,43 +83,51 @@ export function getTopLevelBlockInfo(
 export function resolveTopLevelDropTarget(
   view: EditorView,
   clientY: number,
+  sourcePos?: number,
 ): TopLevelDropTarget | null {
-  const entries: Array<TopLevelBlockInfo & { rect: DOMRect }> = [];
-  const seenPositions = new Set<number>();
-
-  for (const child of Array.from(view.dom.children)) {
-    if (!(child instanceof HTMLElement)) continue;
-    const info = getTopLevelBlockInfo(view, child);
-    if (!info || seenPositions.has(info.pos)) continue;
-    seenPositions.add(info.pos);
-    const rect = child.getBoundingClientRect();
-    if (rect.height > 0) entries.push({ ...info, rect });
+  const items = sourcePos !== undefined && isListItem(view.state.doc.nodeAt(sourcePos));
+  let cached = dropIndexes.get(view);
+  if (!cached || cached.state !== view.state || cached.items !== items) {
+    const entries: TopLevelBlockInfo[] = [];
+    for (const child of Array.from(view.dom.children)) {
+      if (!(child instanceof HTMLElement) || child.classList.contains('nb-heading-fold-hidden')) continue;
+      const candidates = items && child.matches('ul,ol') ? child.querySelectorAll('li') : [child];
+      for (const element of candidates) {
+        const info = getTopLevelBlockInfo(view, element as HTMLElement);
+        if (info) entries.push(info);
+      }
+    }
+    cached = { state: view.state, items, entries }; dropIndexes.set(view, cached);
   }
-
+  const entries = cached.entries;
   if (entries.length === 0) return null;
-
-  for (const entry of entries) {
-    const midpoint = entry.rect.top + entry.rect.height / 2;
-    if (clientY < midpoint) {
+  const rectOf = (entry: TopLevelBlockInfo) => (isListItem(entry.node) ? entry.element.firstElementChild ?? entry.element : entry.element).getBoundingClientRect();
+  let low = 0, high = entries.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1, rect = rectOf(entries[middle]);
+    if (clientY < rect.top + rect.height / 2) high = middle; else low = middle + 1;
+  }
+  if (low < entries.length) {
+      const entry = entries[low];
       return {
         insertPos: entry.pos,
-        indicatorClientY: entry.rect.top,
+        indicatorClientY: rectOf(entry).top,
         targetPos: entry.pos,
         edge: 'before',
         element: entry.element,
       };
-    }
   }
 
   const last = entries[entries.length - 1];
   return {
     insertPos: foldedSectionEnd(view.state, last.pos) ?? last.pos + last.node.nodeSize,
-    indicatorClientY: last.rect.bottom,
+    indicatorClientY: rectOf(last).bottom,
     targetPos: last.pos,
     edge: 'after',
     element: last.element,
   };
 }
+const dropIndexes = new WeakMap<EditorView, { state: EditorView['state']; items: boolean; entries: TopLevelBlockInfo[] }>();
 
 /**
  * 校验块移动是否同时满足：源节点位于文档顶层、目标是顶层边界、目标不在源节点自身范围内。
@@ -132,6 +146,7 @@ export function isTopLevelBlockMoveAllowed(
     const $source = doc.resolve(sourcePos);
     const $insert = doc.resolve(insertPos);
     const sourceNode = doc.nodeAt(sourcePos);
+    if (isListItem(sourceNode)) return canMoveListItem(doc, sourcePos, insertPos);
 
     if ($source.depth !== 0 || $insert.depth !== 0 || !sourceNode?.isBlock || sourceNode.type.name === 'documentPresentation') return false;
     if (insertPos === 0 && doc.firstChild?.type.name === 'documentPresentation') return false;
@@ -163,6 +178,7 @@ export function moveTopLevelBlock(
 ): BlockMoveResult | null {
   const { state } = view;
   const sourceNode = state.doc.nodeAt(sourcePos);
+  if (isListItem(sourceNode)) return moveListItem(view, sourcePos, insertPos);
 
   const sourceEnd = foldedSectionEnd(state, sourcePos) ?? sourcePos + (sourceNode?.nodeSize ?? 0);
   if (!sourceNode || !isTopLevelBlockMoveAllowed(state.doc, sourcePos, insertPos, sourceEnd)) {

@@ -6,6 +6,7 @@ import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
 import { documentTableStyle } from './documentPresentation';
 import { tableFill } from './tableCellPresentation';
 import { columnWidthsStep } from './tableColumnWidths';
+import { tableGrid } from './tableStructure';
 
 export type TableFillScope = 'cells' | 'row' | 'column';
 interface CellPatch { pos: number; background?: string | null; header?: boolean; textAlign?: string | null; verticalAlign?: string | null }
@@ -112,13 +113,18 @@ export function distributeTableColumns(editor: Editor) {
   const dom = editor.view.nodeDOM(rect.tableStart - 1);
   const table = dom instanceof HTMLTableElement ? dom : dom instanceof Element ? dom.querySelector('table') : null;
   if (!table) return false;
-  const columns = table.querySelector('colgroup')?.children;
+  const columns = table.querySelector(':scope > colgroup')?.children;
   const scale = table.getBoundingClientRect().width / table.offsetWidth || 1;
-  const widths = Array.from({ length: rect.map.width }, (_, index) => Math.round(columns?.[index] ? columns[index].getBoundingClientRect().width / scale : table.offsetWidth / rect.map.width));
+  const saved: number[] = Array(rect.map.width).fill(0);
+  for (const cell of tableGrid(rect.table).cells) {
+    (cell.node.attrs.colwidth as number[] | null)?.forEach((width, offset) => { if (width > 0) saved[cell.column + offset] ||= width; });
+  }
+  const widths = saved.map((width, index) => width || Math.max(40, Math.round(columns?.length === rect.map.width ? columns[index].getBoundingClientRect().width / scale : table.offsetWidth / rect.map.width)));
   const from = editor.state.selection instanceof CellSelection ? rect.left : 0;
   const to = editor.state.selection instanceof CellSelection ? rect.right : rect.map.width;
   const width = Math.max(40, Math.round(widths.slice(from, to).reduce((a, b) => a + b, 0) / (to - from)));
   for (let index = from; index < to; index++) widths[index] = width;
+  if (widths.every((value, index) => value === saved[index])) return false;
   dispatchDiscreteEdit(editor.view, editor.state.tr.step(columnWidthsStep(rect.tableStart - 1, rect.table, widths)));
   return true;
 }
@@ -130,10 +136,19 @@ export function distributeTableRows(editor: Editor) {
   if (!table) return false;
   const from = editor.state.selection instanceof CellSelection ? rect.top : 0;
   const to = editor.state.selection instanceof CellSelection ? rect.bottom : rect.map.height;
-  const height = Math.max(24, Math.round(Array.from(table.rows).slice(from, to).reduce((sum, row) => sum + row.offsetHeight, 0) / (to - from)));
+  let sum = 0;
+  for (let index = from; index < to; index++) sum += rect.table.child(index).attrs.height || table.rows[index]?.offsetHeight || 24;
+  const height = Math.max(24, Math.round(sum / (to - from)));
   const heights = Array.from({ length: to - from }, (_, index) => ({ index: from + index, height: Math.min(10000, height) }));
+  if (heights.every(row => rect.table.child(row.index).attrs.height === row.height)) return false;
   dispatchDiscreteEdit(editor.view, editor.state.tr.step(new TableRowHeightsStep(rect.tableStart - 1, heights)));
   return true;
+}
+
+export function tableDistributionState(editor: Editor) {
+  const selection = editor.state.selection;
+  return { columns: selection instanceof CellSelection && selection.isRowSelection(),
+    rows: selection instanceof CellSelection && selection.isColSelection() };
 }
 
 /** Row attributes do not change positions. One table traversal avoids one

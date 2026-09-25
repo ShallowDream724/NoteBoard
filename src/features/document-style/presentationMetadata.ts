@@ -35,6 +35,9 @@ function presentationAttrs(node: JSONContent): Attributes {
   if (textBlocks.has(node.type!) && Number.isInteger(source.indent) && source.indent > 0 && source.indent <= 8) attrs.indent = source.indent;
   if (cells.has(node.type!) && ['top', 'middle', 'bottom'].includes(source.verticalAlign)) attrs.verticalAlign = source.verticalAlign;
   if (cells.has(node.type!) && ['left', 'center', 'right'].includes(source.textAlign ?? source.align)) attrs.align = source.textAlign ?? source.align;
+  if (node.type === 'mathBlock') for (const key of ['textColor', 'background']) {
+    const color = documentColor(source[key]); if (color) attrs[key] = color;
+  }
   return attrs;
 }
 function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSONContent {
@@ -52,6 +55,7 @@ function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSO
   const cleanAttrs = { ...node.attrs };
   if (textBlocks.has(node.type!)) { delete cleanAttrs.textAlign; delete cleanAttrs.indent; }
   if (cells.has(node.type!)) { delete cleanAttrs.align; delete cleanAttrs.textAlign; delete cleanAttrs.verticalAlign; }
+  if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; }
   return { ...node, ...(node.attrs ? { attrs: cleanAttrs } : {}),
     ...(node.marks ? { marks: node.marks.filter(mark => mark.type !== 'highlight' && mark.type !== 'textColor') } : {}),
     ...(node.content ? { content: node.content.map((child, index) => extract(child, [...path, index], records)) } : {}) };
@@ -73,7 +77,7 @@ function applyRanges(node: JSONContent, ranges: Range[]) {
   let offset = 0;
   node.content = (node.content ?? []).flatMap(child => {
     const length = child.text?.length ?? 1, start = offset; offset += length;
-    if (!child.text) return [child];
+    if (!child.text && child.type !== 'mathInline') return [child];
     const local: Range[] = [];
     groups.forEach((group, g) => {
       while (group[cursors[g]]?.to <= start) cursors[g]++;
@@ -91,7 +95,7 @@ function applyRanges(node: JSONContent, ranges: Range[]) {
         marks.push({ type: range.kind, attrs: { color: range.color } });
         }
       });
-      return { ...child, text: child.text!.slice(from, points[index+1]), marks };
+      return { ...child, ...(child.text ? { text: child.text.slice(from, points[index+1]) } : {}), marks };
     });
   });
 }

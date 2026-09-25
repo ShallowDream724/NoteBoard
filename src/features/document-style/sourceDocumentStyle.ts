@@ -7,6 +7,7 @@ import { documentColor } from './colors';
 import type { TextStylePair } from './stylePreference';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { readStyledSource, resetSourceStyles } from './sourceStyleTracking';
+import { styleMathBlocks } from './documentStyles';
 
 const snapshots = new WeakMap<EditorView, { source: EditorView['state']['doc']; doc: DocumentNode }>();
 function sourceDocument(view: EditorView, parse: boolean) {
@@ -30,7 +31,10 @@ export function sourceTextStyle(view: EditorView, parse = false): TextStylePair 
   const add = (marks: DocumentNode['marks']) => styles.push({ color: marks.find(mark => mark.type.name === 'textColor')?.attrs.color ?? null,
     background: marks.find(mark => mark.type.name === 'highlight')?.attrs.color ?? null });
   if (from === to) add(doc.resolve(from).marks());
-  else doc.nodesBetween(from, to, node => { if (node.isText) add(node.marks); });
+  else doc.nodesBetween(from, to, node => {
+    if (node.isText || node.type.name === 'mathInline') add(node.marks);
+    if (node.type.name === 'mathBlock') styles.push({ color: node.attrs.textColor, background: node.attrs.background });
+  });
   return { color: styles.length && styles.every(style => style.color === styles[0].color) ? styles[0].color : null,
     background: styles.length && styles.every(style => style.background === styles[0].background) ? styles[0].background : null };
 }
@@ -53,6 +57,7 @@ export function applySourceTextStyle(view: EditorView, change: Partial<TextStyle
     tr.removeMark(from, to, schema.marks[mark]);
     const color = documentColor(change[key]); if (color) tr.addMark(from, to, schema.marks[mark].create({ color }));
   }
+  styleMathBlocks(tr, change, from, to);
   if (!tr.docChanged) return false;
   const serialized = manager.serialize(tr.doc.toJSON()), start = serialized.lastIndexOf('\n\n<!-- noteboard-styles ');
   const next = body + (start >= 0 ? serialized.slice(start) : '');
