@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { allocateTableWidths, markTableEdges, resetAutomaticTableWidths, setAutomaticTableWidths } from '../../src/features/export/tableLayout';
+import { allocateTableWidths, captureTablePresentation, markTableEdges, restoreTablePresentation, setAutomaticTableWidths } from '../../src/features/export/tableLayout';
 import { continueTableRows } from '../../src/features/export/tableContinuation';
 
 const originalRangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
@@ -16,13 +16,19 @@ it('reserves complete compact columns before fitting a long formula column', () 
   expect(allocateTableWidths({ natural: Array(20).fill(80), minimum: Array(20).fill(20) }, 700)).toBeNull();
 });
 
-it('automatic widths replace empty colgroups and reset without keeping stale widths', () => {
-  const table = document.createElement('table'); table.innerHTML = '<colgroup><col><col></colgroup><tbody><tr><td>A</td><td>B</td></tr></tbody>';
+it('temporary wrapping restores original manual widths after repeated mode changes', () => {
+  const table = document.createElement('table'); table.style.width = '1200px'; table.innerHTML = '<colgroup><col style="width:400px"><col style="width:800px"></colgroup><tbody><tr><td>A</td><td>B</td></tr></tbody>';
+  const baseline = captureTablePresentation(table), original = table.querySelector('colgroup')!.outerHTML;
   setAutomaticTableWidths(table, [50, 130]);
   expect(table.querySelectorAll('col')).toHaveLength(2);
   expect(table.style.getPropertyValue('--export-table-width')).toBe('180px');
-  resetAutomaticTableWidths(table);
-  expect(table.querySelector('colgroup')).toBeNull();
+  expect(table.style.width).toBe('180px');
+  restoreTablePresentation(table, baseline);
+  expect(table.querySelector('colgroup')!.outerHTML).toBe(original);
+  setAutomaticTableWidths(table, [200, 400]); restoreTablePresentation(table, baseline);
+  expect(table.querySelectorAll('colgroup')).toHaveLength(1);
+  expect(table.querySelector('colgroup')!.outerHTML).toBe(original);
+  expect(table.style.width).toBe('1200px');
   expect(table.style.getPropertyValue('--export-table-width')).toBe('');
 });
 

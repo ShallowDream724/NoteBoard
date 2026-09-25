@@ -5,6 +5,7 @@ import { TextSelection } from '@tiptap/pm/state';
 import { ImageCollection, ImageSlot, Disclosure } from './schema';
 import { insertLocalImageWithDialog } from '../imagePaste';
 import { dispatchDiscreteEdit } from '../discreteEdit';
+import { collectionPresentation } from './collectionPresentation';
 import './richContent.css';
 import './carousel.css';
 
@@ -54,6 +55,7 @@ class CollectionView implements NodeView {
   }
   private refresh() {
     this.dom.dataset.layout = this.node.attrs.layout;
+    this.dom.style.cssText = collectionPresentation(this.node.attrs).style;
     this.contentDOM.style.gridTemplateColumns = `repeat(${this.node.attrs.columns},minmax(0,1fr))`;
     this.active = Math.min(this.active, this.node.childCount - 1);
     cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => { this.frame = 0; this.show(this.active, false); });
@@ -108,7 +110,7 @@ class CollectionView implements NodeView {
     for (const slot of next) if (!this.nearby.has(slot)) { slot.setAttribute('data-carousel-nearby', ''); slot.dispatchEvent(new Event('nb-carousel-proximity')); }
     this.nearby = next;
   }
-  update(node: Node) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.childCount !== node.childCount; this.node = node; if (changed) this.refresh(); return true; }
+  update(node: Node) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.attrs.width !== node.attrs.width || this.node.attrs.align !== node.attrs.align || this.node.childCount !== node.childCount; this.node = node; if (changed) this.refresh(); return true; }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM || mutation.target === this.viewport) || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return this.footer.contains(event.target as globalThis.Node); }
   destroy() { cancelAnimationFrame(this.frame); cancelAnimationFrame(this.scrollFrame); clearTimeout(this.settleTimer); this.resize?.disconnect(); this.viewport.removeEventListener('scroll', this.onScroll); this.viewport.removeEventListener('wheel', this.onWheel); this.viewport.removeEventListener('pointerdown', this.onPointerDown); }

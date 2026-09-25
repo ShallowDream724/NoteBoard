@@ -1,0 +1,2 @@
+.nb-table-alignment > span { margin-right:auto; padding-left:4px; }
+.nb-table-alignment button { display:grid; place-items:center; width:30px; height:30px; }

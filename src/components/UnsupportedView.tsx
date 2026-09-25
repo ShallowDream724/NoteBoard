@@ -6,13 +6,9 @@ import { extFromPath } from '../core/docKind';
 import { useDocumentStore } from '../stores/documentStore';
 import { showToast } from '../stores/toastStore';
 import './fileHandoff.css';
+import { formatFileSize } from '../core/formatFileSize';
 
 interface Props { filePath: string; fileName?: string; exportNotice?: { warnings?: string }; }
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
 
 /** A file handoff shares actions for ordinary attachments and completed exports. */
 export function UnsupportedView({ filePath, fileName, exportNotice }: Props) {

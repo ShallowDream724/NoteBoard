@@ -2,6 +2,7 @@ import { Table, TableRow } from '@tiptap/extension-table';
 import type { JSONContent, MarkdownToken } from '@tiptap/core';
 import { buildLogicalTableGrid, type TableCellPlacement } from './tableGrid';
 import { tableFill } from './tableCellPresentation';
+import { tableAlignment, tableAlignmentStyle } from './tableAlignment';
 
 const PREFIX = '<!-- noteboard-table ';
 const tokenizer = Table.config.markdownTokenizer!;
@@ -119,6 +120,27 @@ const commentJSON = (value: unknown) => JSON.stringify(value).replace(/[<>]/g, c
 
 /** Compact GFM output: source size follows content size, never rows × longest cell. */
 export const MarkdownTable = Table.extend({
+  addAttributes() {
+    return { ...this.parent?.(), tableAlign: {
+      default: null,
+      validate: value => { if (value !== null && !tableAlignment(value)) throw new RangeError('Invalid table alignment'); },
+      parseHTML: element => tableAlignment(element.getAttribute('data-table-align')),
+      renderHTML: attrs => tableAlignment(attrs.tableAlign) ? { 'data-table-align': attrs.tableAlign } : {},
+    } };
+  },
+  renderHTML(props) {
+    // Let the upstream renderer derive widths from the cells before adding the
+    // position. A style attribute on tableAlign would suppress those widths.
+    const output = this.parent!(props), alignment = tableAlignmentStyle(props.node.attrs.tableAlign);
+    if (alignment && Array.isArray(output)) {
+      const table = this.options.renderWrapper ? output[2] : output;
+      if (Array.isArray(table)) {
+        const attrs = table[1] as Record<string, unknown>;
+        attrs.style = [attrs.style, alignment].filter(Boolean).join('; ');
+      }
+    }
+    return output;
+  },
   markdownTokenizer: {
     ...tokenizer,
     start(src) {

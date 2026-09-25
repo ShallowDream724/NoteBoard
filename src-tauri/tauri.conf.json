@@ -24,6 +24,7 @@
         "shadow": true,
         "visible": false,
         "dragDropEnabled": true,
+        "zoomHotkeysEnabled": true,
         "devtools": true
       }
     ],

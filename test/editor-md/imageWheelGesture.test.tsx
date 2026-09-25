@@ -3,6 +3,7 @@ import { act, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { useImageWheelGesture, zoomImageAt } from '../../src/features/image-viewer/imageWheelGesture';
+import { installMediaGestureBoundary } from '../../src/core/mediaGestures';
 
 describe('image pinch gestures', () => {
   it('keeps the point under the cursor fixed, is reversible and clamps without drift', () => {
@@ -15,6 +16,7 @@ describe('image pinch gestures', () => {
     expect(zoomImageAt({ scale: 4, x: 20, y: 30 }, -100, point, .2, 4)).toEqual({ scale: 4, x: 20, y: 30 });
   });
   it('cancels native ctrl-wheel browser zoom and composes a rapid pinch stream', async () => {
+    const disposeBoundary = installMediaGestureBoundary(document);
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
     function Fixture() {
       const ref = useRef<HTMLDivElement>(null), [value, setValue] = useState({ scale: 1, x: 0, y: 0 });
@@ -29,6 +31,15 @@ describe('image pinch gestures', () => {
       await act(async () => { host.firstElementChild!.dispatchEvent(first); host.firstElementChild!.dispatchEvent(second); });
       expect(first.defaultPrevented).toBe(true); expect(second.defaultPrevented).toBe(true);
       expect(Number(host.firstElementChild!.getAttribute('data-scale'))).toBeCloseTo(Math.exp(.16));
-    } finally { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); }
+    } finally { disposeBoundary(); await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals(); }
+  });
+  it('leaves ordinary page scrolling native and prevents page zoom outside viewers', () => {
+    const dispose = installMediaGestureBoundary(document);
+    try {
+      const scroll = new WheelEvent('wheel', { deltaY: 120, cancelable: true });
+      const pinch = new WheelEvent('wheel', { ctrlKey: true, deltaY: -4, cancelable: true });
+      document.dispatchEvent(scroll); document.dispatchEvent(pinch);
+      expect(scroll.defaultPrevented).toBe(false); expect(pinch.defaultPrevented).toBe(true);
+    } finally { dispose(); }
   });
 });

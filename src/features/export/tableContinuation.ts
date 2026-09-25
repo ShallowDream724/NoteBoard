@@ -80,6 +80,8 @@ export function continueTableRows(table: HTMLTableElement, pageHeight: number): 
     return { changed: false, unsupported: true };
   }
   let original: string | undefined, unsupported = false;
+  const replacements: Array<{ row: HTMLTableRowElement; fragment: DocumentFragment }> = [];
+  const unresolved: HTMLTableRowElement[] = [];
   for (const row of tall) {
     const top = row.getBoundingClientRect().top;
     const cells = Array.from(row.cells);
@@ -87,11 +89,11 @@ export function continueTableRows(table: HTMLTableElement, pageHeight: number): 
     const padding = Math.max(...cells.map(cell => { const style = getComputedStyle(cell); return (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0); }), 0);
     const markerHeight = (parseFloat(getComputedStyle(cells[0]).fontSize) || 16) * .85 * 1.25;
     const height = capacity - padding - markerHeight - 6;
-    if (height < 24) { row.classList.add('export-tall-row'); unsupported = true; continue; }
+    if (height < 24) { unresolved.push(row); unsupported = true; continue; }
     const contexts = cells.map((): SliceContext => ({ top, height, part: 0, oversized: false }));
     const pieces = cells.map((cell, index) => sliceNode(cell, contexts[index]));
     const count = Math.max(...pieces.map(parts => Math.max(0, ...parts.keys()))) + 1;
-    if (count < 2 || contexts.some(context => context.oversized)) { row.classList.add('export-tall-row'); unsupported = true; continue; }
+    if (count < 2 || contexts.some(context => context.oversized)) { unresolved.push(row); unsupported = true; continue; }
     original ??= table.outerHTML;
     const repeatLabel = shortLabel(cells[0], height), replacement = document.createDocumentFragment();
     for (let part = 0; part < count; part++) {
@@ -112,7 +114,11 @@ export function continueTableRows(table: HTMLTableElement, pageHeight: number): 
       });
       replacement.append(fragment);
     }
-    row.replaceWith(replacement);
+    replacements.push({ row, fragment: replacement });
   }
+  // All geometry is read before changing the live table, avoiding one full
+  // table reflow per continued row. Each retained leaf is still cloned once.
+  unresolved.forEach(row => row.classList.add('export-tall-row'));
+  replacements.forEach(({ row, fragment }) => row.replaceWith(fragment));
   return { changed: original !== undefined, original, unsupported };
 }

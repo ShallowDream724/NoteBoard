@@ -18,6 +18,7 @@
 .nb-image-caption-add[hidden] { display:none; }
 .nb-image-counter { color:var(--editor-text-muted); font:11px var(--ui-font-family); font-variant-numeric:tabular-nums; }
 .nb-image-slot .nb-image { margin:0!important; }
+.nb-image-slot [data-image-frame] { width:100%!important; }
 .nb-image-slot .nb-image img { max-height:440px; object-fit:contain; }
 .nb-image-slot [data-image-toolbar] > :not(:first-child):not(:last-child) { display:none!important; }
 .nb-image-slot [data-image-resize] { display:none; }

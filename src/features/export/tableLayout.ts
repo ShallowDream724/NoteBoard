@@ -1,4 +1,19 @@
 export interface TableWidths { natural: number[]; minimum: number[] }
+export interface TablePresentation { style: string; columns: Element[] }
+/** Keep only column metadata, not another copy of every table cell. */
+export function captureTablePresentation(table: HTMLElement): TablePresentation {
+  return { style: table.style.cssText, columns: Array.from(table.querySelectorAll(':scope > colgroup'), group => group.cloneNode(true) as Element) };
+}
+export function restoreTablePresentation(table: HTMLElement, presentation: TablePresentation) {
+  table.style.cssText = presentation.style;
+  table.querySelectorAll(':scope > colgroup').forEach(group => group.remove());
+  table.prepend(...presentation.columns.map(group => group.cloneNode(true)));
+}
+export function tableColumnWidths(table: HTMLTableElement): number[] {
+  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>(':scope > colgroup > col'), column => column.getBoundingClientRect().width);
+  if (columns.length && columns.every(width => width > 0)) return columns;
+  return Array.from(table.rows[0]?.cells ?? []).flatMap(cell => Array(cell.colSpan).fill(cell.getBoundingClientRect().width / cell.colSpan));
+}
 
 /** Preserve compact columns before distributing the remaining space. Long
  * content has a bounded claim on the page; math resolves its own safe breaks. */
@@ -63,18 +78,15 @@ export function measureTableWidths(tables: readonly HTMLTableElement[], availabl
 }
 
 export function setAutomaticTableWidths(table: HTMLTableElement, widths: readonly number[]) {
-  // Any explicit width makes the caller retain the complete manual colgroup.
-  // Empty automatic colgroups must not add phantom columns beside ours.
+  // A temporary print plan replaces the column group as a unit. The session
+  // restores its small original presentation snapshot before the next plan.
   table.querySelectorAll(':scope > colgroup').forEach(group => group.remove());
   const columns = document.createElement('colgroup'); columns.dataset.exportColumns = 'true';
   for (const width of widths) { const column = document.createElement('col'); column.style.width = `${width}px`; columns.append(column); }
   table.prepend(columns); table.classList.add('table-wrap');
-  table.style.setProperty('--export-table-width', `${widths.reduce((sum, width) => sum + width, 0)}px`);
-}
-
-export function resetAutomaticTableWidths(table: HTMLElement) {
-  table.querySelectorAll('colgroup[data-export-columns]').forEach(group => group.remove());
-  table.style.removeProperty('--export-table-width');
+  const width = `${widths.reduce((sum, value) => sum + value, 0)}px`;
+  table.style.width = width; table.style.minWidth = '0';
+  table.style.setProperty('--export-table-width', width);
 }
 
 /** Cell-owned outer rules stop at real row boundaries when a table fragments.

@@ -2,6 +2,7 @@
 // 支持本地相对路径动态解析、悬停工具栏、大图预览查看器、多级缩放与拖拽拉伸、居左/居中/居右对齐
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ImageNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
@@ -55,6 +56,11 @@ export function ImageLightboxModal({
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const viewport = useRef<HTMLDivElement>(null);
   const gesturing = useImageWheelGesture(viewport, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: .2, max: 4, normalWheel: 'pan' });
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    viewport.current?.focus({ preventScroll: true });
+    return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, []);
 
   // 监听 Esc 键快速关闭
   useEffect(() => {
@@ -65,9 +71,11 @@ export function ImageLightboxModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
-      ref={viewport} role="dialog" aria-label="图片预览" aria-modal="true" data-image-lightbox=""
+      ref={viewport} role="dialog" aria-label="图片预览" aria-modal="true" tabIndex={-1} data-image-lightbox="" data-shortcuts-suspended
+      onPointerDown={event => event.stopPropagation()}
+      onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}
       style={{
         position: 'fixed',
         top: 0,
@@ -84,6 +92,7 @@ export function ImageLightboxModal({
         userSelect: 'none',
       }}
       onClick={(e) => {
+        e.stopPropagation();
         if (e.target === e.currentTarget) onClose();
       }}
     >
@@ -219,7 +228,7 @@ export function ImageLightboxModal({
         />
       </div>
 
-    </div>
+    </div>, document.body
   );
 }
 
@@ -402,6 +411,14 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
           borderRadius: 8,
           transition: 'width 150ms ease',
           minHeight: visibility.visible ? undefined : visibility.placeholderHeight,
+        }}
+        data-image-frame=""
+        onClick={event => {
+          // The small-image toolbar may cover the pointer between its buttons.
+          // Its empty surface has the same preview action as the image beneath it.
+          if (!loadError && event.currentTarget.closest('.nb-image-slot') && !(event.target as Element).closest('button, input, textarea, [data-image-resize]')) {
+            event.stopPropagation(); setLightboxOpen(true);
+          }
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

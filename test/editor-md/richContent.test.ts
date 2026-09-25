@@ -31,9 +31,11 @@ describe('rich document content contract', () => {
   });
   it('round trips hand-authored image slots, captions, styles and disclosure contents', () => {
     const json = { type: 'doc', content: [imageCollectionTemplate(4), { type: 'disclosure', attrs: { title: '完整记录', open: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: '隐藏也不能丢失', marks: [{ type: 'conceal' }] }] }] }] };
+    json.content[0].attrs = { ...json.content[0].attrs, width: '50%', align: 'right' };
     json.content[0].content![1] = { type: 'imageSlot', content: [{ type: 'image', attrs: { src: './img/a.png' } }, { type: 'paragraph', content: [{ type: 'text', text: '图注' }] }] };
     const schema = documentParser().schema, doc = parseNativeNode(encodeNativeDocument(json), schema);
     expect(parseNativeNode(serializeNativeNode(doc), schema).eq(doc)).toBe(true);
+    expect(doc.firstChild?.attrs).toMatchObject({ width: '50%', align: 'right' });
     expect(doc.textContent).toContain('隐藏也不能丢失'); expect(doc.firstChild?.child(0).childCount).toBe(0);
   });
   it('stores block conceal and disclosure creation in ordinary undo history', () => {

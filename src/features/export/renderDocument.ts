@@ -10,7 +10,9 @@ import { matrixSource, matrixPart, type MatrixSource } from '../../core/math/str
 import { MATH_LIMITS } from '../editor-md/mathLimits';
 import { projectRichContent } from './richProjection';
 import { markTableEdges } from './tableLayout';
+import { sizeDiagramSvg } from '../diagram-preview/svgSizing';
 import { DIAGRAM_LABELS, type DiagramRenderer, type DiagramRequest } from './diagramRendering';
+import { collectionPresentation } from '../editor-md/rich-content/collectionPresentation';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
   math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths,
@@ -26,7 +28,7 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   const concealed = (node: Node) => node.attrs.concealed ? { 'data-nb-conceal': '', tabindex: '0', 'aria-label': '聚焦以显示内容' } : {};
   const emptySlot = (node: Node) => { let empty = true; node.forEach(child => { if (child.type.name === 'image' || child.content.size) empty = false; }); return empty; };
   const serializer = new DOMSerializer({ ...base.nodes,
-    imageCollection: node => ['section', { ...concealed(node), class: `export-image-collection${node.attrs.layout === 'carousel' ? ' export-image-carousel' : ''}`, 'data-columns': node.attrs.columns, 'aria-label': node.attrs.layout === 'carousel' ? '图片轮播' : '图片拼图' }, 0],
+    imageCollection: node => ['section', { ...concealed(node), class: `export-image-collection${node.attrs.layout === 'carousel' ? ' export-image-carousel' : ''}`, 'data-columns': node.attrs.columns, style: collectionPresentation(node.attrs).style, 'aria-label': node.attrs.layout === 'carousel' ? '图片轮播' : '图片拼图' }, 0],
     imageSlot: node => ['figure', { class: 'export-image-slot', ...(emptySlot(node) ? { 'data-empty': 'true', 'aria-hidden': 'true' } : {}) }, 0],
     disclosure: node => ['details', { ...concealed(node), class: 'export-disclosure', ...(node.attrs.open ? { open: '' } : {}) }, ['summary', node.attrs.title], ['div', 0]],
     annotationStore: () => ['section', { class: 'export-annotations', 'aria-label': '补充说明' }, ['h2', '补充说明'], ['div', 0]],
@@ -122,7 +124,11 @@ export async function renderDocument(markdown: string, title: string, baseDirect
         const label = document.createElement('p'); label.className = 'export-diagram-error'; label.textContent = message;
         const source = document.createElement('pre'); source.textContent = request.code;
         element.replaceChildren(label, source);
-      } else element.innerHTML = result.html;
+      } else {
+        element.innerHTML = result.html;
+        const svg = element.querySelector('svg');
+        if (svg) sizeDiagramSvg(svg);
+      }
       items.push({ id, kind: 'diagram', label: `${DIAGRAM_LABELS[request.kind]} ${index + 1}` });
     });
   }

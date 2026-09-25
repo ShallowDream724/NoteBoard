@@ -1,6 +1,7 @@
 import * as ipc from '../../core/ipc/commands';
 import type { FileTreeNode } from '../../core/ipc/types';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useWindowStore } from '../../stores/windowStore';
 import { useExplorerStore } from './explorerStore';
 import { getPathChain, isSubPath, normalizePath, sameKey } from './pathUtils';
 import { refreshMarkdownAssociations } from '../document-format/markdownAssociationIndex';
@@ -81,6 +82,30 @@ export async function openExplorerDirectory(directory: string, request = beginEx
 }
 
 let parentNavigation: { filePath: string; request: ExplorerNavigation; work: Promise<void> | null } | null = null;
+let preservedActivation: { filePath: string; unsubscribe: () => void } | null = null;
+
+function clearPreservedActivation(): void {
+  preservedActivation?.unsubscribe();
+  preservedActivation = null;
+}
+
+/** The activation owns this policy until the user leaves the tab, including delayed React effects. */
+export function activateWithExplorerPolicy(filePath: string, policy: 'follow' | 'preserve', activate: () => void): void {
+  clearPreservedActivation();
+  if (policy === 'preserve') {
+    beginExplorerNavigation(); // Invalidate an older pending reveal before activating the new tab.
+    preservedActivation = {
+      filePath,
+      unsubscribe: useWindowStore.subscribe(state => {
+        if (!sameKey(state.activeKey, filePath)) clearPreservedActivation();
+      }),
+    };
+  }
+  try { activate(); }
+  finally {
+    if (!sameKey(useWindowStore.getState().activeKey, filePath)) clearPreservedActivation();
+  }
+}
 
 /** Failed/remote opens have no local follow-up; successful follow-ups own their cleanup. */
 export function releaseExplorerNavigation(request: ExplorerNavigation): void {
@@ -117,6 +142,7 @@ export function openExplorerFileParent(filePath: string, directory: string, requ
 
 /** Passive React effects must not supersede an explicit open still preparing or following. */
 export function followExplorerFile(filePath: string, directory: string, isCurrent: () => boolean): Promise<void> {
+  if (preservedActivation && sameKey(preservedActivation.filePath, filePath)) return Promise.resolve();
   if (parentNavigation && isCurrentNavigation(parentNavigation.request)) {
     if (!parentNavigation.work) return Promise.resolve();
     if (sameKey(parentNavigation.filePath, filePath)) return parentNavigation.work;
@@ -124,7 +150,7 @@ export function followExplorerFile(filePath: string, directory: string, isCurren
   return revealExplorerFile(filePath, directory, isCurrent);
 }
 
-/** Shared by tab following, the locate button and export completion. */
+/** Shared by ordinary tab following and the explicit locate button. */
 export async function revealExplorerFile(filePath: string, directory: string, isCurrent: () => boolean = () => true): Promise<void> {
   const revision = ++revealRevision;
   let root = useExplorerStore.getState().root;

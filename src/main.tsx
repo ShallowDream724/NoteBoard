@@ -8,6 +8,7 @@ import './styles/globals.css';
 import './styles/scrollbar.css';
 import { applyCachedTheme, applyCachedTypography } from './core/theme/applyTheme';
 import { perfMark } from './core/perf/perfMarks';
+import { installMediaGestureBoundary } from './core/mediaGestures';
 
 // 🔴 性能诊断：js_entry 是模块体首行执行的代理标记（静态依赖已求值完毕）；
 // head 中 __nbHtmlTs 记录了 HTML 解析的更早点，两者差值可估算入口依赖求值开销。
@@ -22,6 +23,8 @@ if (!applyCachedTheme()) {
 
 // 🔴 防首屏闪烁：同步注入排版变量
 applyCachedTypography();
+const disposeMediaGestures = installMediaGestureBoundary(document);
+if (import.meta.hot) import.meta.hot.dispose(disposeMediaGestures);
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

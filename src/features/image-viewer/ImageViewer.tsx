@@ -26,6 +26,7 @@ import { extFromPath } from '../../core/docKind';
 import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../../components/Tooltip';
 import { useImageWheelGesture } from './imageWheelGesture';
+import { formatFileSize } from '../../core/formatFileSize';
 
 interface ImageViewerProps {
   docKey: string;
@@ -35,14 +36,6 @@ interface ImageViewerProps {
 }
 
 type BgMode = 'grid' | 'dark' | 'light' | 'black';
-
-/** 格式化文件大小 */
-function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null || bytes <= 0) return '未知大小';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 /** 计算最大公约数以得出宽高比 */
 function getAspectRatio(w: number, h: number): string {

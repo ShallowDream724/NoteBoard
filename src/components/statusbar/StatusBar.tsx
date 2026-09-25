@@ -1,9 +1,11 @@
 // NoteBoard StatusBar
-// 底部状态栏：光标位置、字数/行数、编码、行尾符、类型、保存状态
+// 底部状态栏：文本统计、编码、行尾符、类型/模式、保存状态
 // 详见 docs/07-UI布局与交互规范.md §8
 
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
+import { useMemo } from 'react';
+import { isRichDocument } from '../../core/docKind';
 import { saveDocument } from '../../features/editor-code/orchestration/saveDocument';
 import { emit } from '../../core/emitter';
 import { Eye, Code } from 'lucide-react';
@@ -13,6 +15,15 @@ export function StatusBar() {
   const activeKey = useWindowStore((s) => s.activeKey);
   const activeTab = useWindowStore((s) => (activeKey ? s.getTab(activeKey) : undefined));
   const doc = useDocumentStore((s) => (activeKey ? s.documents.get(activeKey) : undefined));
+  const textStatistics = useMemo(() => {
+    const content = doc?.content;
+    if (content == null || (doc?.kind === 'noteboard' && activeTab?.viewMode !== 'source')) return null;
+    let lines = 1;
+    for (let index = 0; index < content.length; index += 1) {
+      if (content.charCodeAt(index) === 10) lines += 1;
+    }
+    return { characters: content.length, lines };
+  }, [doc?.content, doc?.kind, activeTab?.viewMode]);
 
   if (!doc) {
     return (
@@ -103,21 +114,17 @@ export function StatusBar() {
       }}
       role="status"
     >
-      {doc.kind !== 'noteboard' && <>
-      {/* 光标位置 */}
-      <div style={sectionStyle}>
-        <span>行 1, 列 1</span>
-      </div>
-      <div style={dividerStyle} />
+      {/* Native visual documents do not count their serialized frames as prose. */}
+      {textStatistics && <>
+        <div style={sectionStyle}>
+          <span>
+            {doc.kind === 'noteboard' ? '源码 ' : ''}{textStatistics.characters.toLocaleString()} {doc.kind === 'noteboard' ? '字符' : '字'} · {textStatistics.lines.toLocaleString()} 行
+          </span>
+        </div>
+        <div style={dividerStyle} />
+      </>}
 
-      {/* 字数/行数 */}
-      <div style={sectionStyle}>
-        <span>
-          {doc.content?.length.toLocaleString() ?? 0} 字 · {(doc.content?.split('\n').length ?? 0).toLocaleString()} 行
-        </span>
-      </div>
-      <div style={dividerStyle} />
-
+      {doc.content !== null && <>
       {/* 编码 */}
       <div style={sectionStyle}>
         <span>{doc.encoding === 'utf8' ? 'UTF-8' : doc.encoding === 'utf8-bom' ? 'UTF-8 BOM' : 'GBK'}</span>
@@ -131,17 +138,23 @@ export function StatusBar() {
       <div style={dividerStyle} />
 
       </>}
-      {/* 类型 / Markdown 模式切换 */}
-      {doc.kind === 'markdown' ? (
+      {/* 类型 / 富文档模式切换 */}
+      {isRichDocument(doc.kind) ? (
         <Tooltip
-          content={`当前：Markdown (${activeTab?.viewMode === 'source' ? '源码模式' : '可视化模式'}) · 点击切换`}
+          content={`当前：${typeLabel} (${activeTab?.viewMode === 'source' ? '源码模式' : '可视化模式'}) · 点击切换`}
           shortcut="Ctrl+/"
           side="top"
           sideOffset={6}
         >
-          <div
+          <button
+            type="button"
+            aria-label={`切换为${activeTab?.viewMode === 'source' ? '可视化' : '源码'}模式`}
             style={{
               ...sectionStyle,
+              border: 0,
+              background: 'transparent',
+              color: 'inherit',
+              font: 'inherit',
               borderRadius: 3,
               transition: 'all var(--transition-fast)',
             }}
@@ -171,15 +184,15 @@ export function StatusBar() {
             {activeTab?.viewMode === 'source' ? (
               <>
                 <Code size={13} style={{ flexShrink: 0 }} />
-                <span>Markdown (源码)</span>
+                <span>{typeLabel} (源码)</span>
               </>
             ) : (
               <>
                 <Eye size={13} style={{ flexShrink: 0 }} />
-                <span>Markdown (可视化)</span>
+                <span>{typeLabel} (可视化)</span>
               </>
             )}
-          </div>
+          </button>
         </Tooltip>
       ) : (
         <div style={sectionStyle}>

@@ -28,6 +28,7 @@ export const DOCUMENT_CAPABILITIES = {
   alignment: rich('对齐与缩进', 'paragraph alignment/indent', 'node', '保留内容，移除任意段落对齐与缩进'),
   tableMerge: rich('合并单元格', 'cell row/column spans', 'table', '展开合并单元格', 'table'),
   tableDimensions: rich('表格尺寸', 'column widths/row heights', 'table', '移除精确尺寸', 'table'),
+  tableAlignment: rich('整表位置', 'table horizontal alignment', 'node', '保留表格内容，移除整表位置', 'table'),
   tableFill: rich('表格底色', 'cell background', 'table', '移除底色', 'table'),
   tableStyle: rich('表格样式', 'table presentation', 'document', '标准 GFM 表格', 'table'),
   tableHeader: rich('首列表头', 'cell header role', 'table', '保留文字，移除首列表头语义', 'table'),

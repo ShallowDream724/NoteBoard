@@ -19,6 +19,7 @@ import { observe } from './viewportActivation';
 import { scheduleTask, cancelTask } from './viewportWorkScheduler';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { SvgDiagramViewport } from '../diagram-preview/SvgDiagramViewport';
 
 /** 🔴 S14：任务身份 = editor 实例（文档）+ 节点位置——不同节点互不覆盖 */
 const editorTaskIds = new WeakMap<object, number>();
@@ -61,6 +62,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
   const [inViewport, setInViewport] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [zoomReset, setZoomReset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderTokenRef = useRef<number>(0);
 
@@ -379,18 +381,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
             </div>
           )}
 
-          {svg && (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                maxWidth: '100%',
-                overflowX: 'auto',
-              }}
-              dangerouslySetInnerHTML={{ __html: svg }}
-            />
-          )}
+          {svg && <SvgDiagramViewport svg={svg}/>}
 
           {!code && (
             <span style={{ color: 'var(--editor-text-muted, #64748b)', fontStyle: 'italic', fontSize: 13 }}>
@@ -441,7 +432,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
                 <button
                   type="button"
                   className="nb-editor-icon-btn"
-                  onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
+                  onClick={() => setZoom((z) => Math.min(8, z + 0.2))}
                   style={{ minWidth: 28, height: 28 }}
                   aria-label="放大"
                 >
@@ -450,7 +441,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
                 <button
                   type="button"
                   className="nb-editor-toolbar-btn"
-                  onClick={() => setZoom(1)}
+                  onClick={() => { setZoom(1); setZoomReset(value => value + 1); }}
                   style={{ padding: '3px 8px', fontSize: 12 }}
                   aria-label="重置"
                 >
@@ -491,20 +482,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {svg && (
-              <div
-                style={{
-                  transform: `scale(${zoom})`,
-                  transformOrigin: 'center center',
-                  transition: 'transform 0.15s ease',
-                  background: 'var(--editor-surface, #ffffff)',
-                  padding: 24,
-                  borderRadius: 8,
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
-                }}
-                dangerouslySetInnerHTML={{ __html: svg }}
-              />
-            )}
+            {svg && <SvgDiagramViewport key={zoomReset} svg={svg} zoom={zoom} onZoom={setZoom} fullscreen/>}
           </div>
         </div>
       )}

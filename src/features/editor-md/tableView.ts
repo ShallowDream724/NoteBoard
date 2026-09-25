@@ -3,6 +3,7 @@ import type { Node } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import './tableView.css';
 import { TableRowLayout, isLargeTable, hasSimpleTableRows } from './tableRowLayout';
+import { tableAlignment, tableAlignmentMargins } from './tableAlignment';
 
 /** Independent row layout supports TableViewport's bounded content DOM while
  * ProseMirror retains the complete table and selection model. Small and merged
@@ -20,10 +21,20 @@ export class EfficientTableView extends TableView {
     this.table.style.tableLayout = fixed ? 'fixed' : '';
     this.dom.classList.toggle('nb-fixed-columns', fixed);
     this.rows.update(node, large);
+    this.applyAlignment(node);
+  }
+  private applyAlignment(node: Node) {
+    const alignment = tableAlignment(node.attrs.tableAlign);
+    if (alignment) this.table.dataset.tableAlign = alignment;
+    else delete this.table.dataset.tableAlign;
+    Object.assign(this.table.style, tableAlignmentMargins(alignment));
   }
   update(node: Node) {
     if (node === this.node) return true;
     if (node.type !== this.node.type) return false;
+    // Attribute-only edits reuse all rows, including the cached layout policy.
+    // Do not rescan a 10k-row table when changing its position.
+    if (node.content === this.node.content) { this.node = node; this.applyAlignment(node); return true; }
     // A row without a visibility decoration is a placeholder only inside a
     // qualifying table. Recreate descendants when that policy changes.
     if ((isLargeTable(node) && hasSimpleTableRows(node)) !== (isLargeTable(this.node) && hasSimpleTableRows(this.node))) return false;

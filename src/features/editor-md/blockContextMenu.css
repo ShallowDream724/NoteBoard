@@ -5,6 +5,8 @@
 .nb-block-context-menu button:hover,.nb-block-context-menu button:focus-visible { background:var(--toolbar-hover); outline:none; }
 .nb-block-format-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; padding:4px 0 7px; }
 .nb-block-format-grid button { display:grid; place-items:center; min-height:30px; font-size:12px; }
+.nb-collection-widths { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.nb-block-context-menu button[aria-pressed="true"] { background:var(--toolbar-active); color:var(--editor-accent); }
 .nb-block-style-row { display:flex; align-items:center; gap:6px; padding:5px 3px; border-block:1px solid var(--editor-border); margin-bottom:5px; }
 .nb-block-style-row:first-child { border-top:0; }
 .nb-block-context-menu hr { border:0; border-top:1px solid var(--editor-border); margin:5px 0; }

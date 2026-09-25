@@ -84,7 +84,10 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
       result = [paragraph([text(String(value.attrs?.title || '折叠内容'), true)]), ...content];
     } else {
       if (mode === 'print' && value.type === 'disclosure') attrs.open = true;
-      if (mode === 'print' && value.type === 'imageCollection') attrs.layout = 'grid';
+      if (mode === 'print' && value.type === 'imageCollection') {
+        if (attrs.layout === 'carousel') attrs.align = 'center';
+        attrs.layout = 'grid';
+      }
       result = [clean];
     }
     if (anchor && !['paragraph', 'heading'].includes(value.type!)) {

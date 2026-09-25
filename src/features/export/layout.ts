@@ -3,7 +3,7 @@ import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
 import { readableScale, renderedScale } from './layoutMetrics';
 import { continueFraction, continueMatrix } from './mathLayout';
 import { createProseOverflowCheck } from './proseOverflow';
-import { allocateTableWidths, markTableEdges, measureTableWidths, resetAutomaticTableWidths, setAutomaticTableWidths } from './tableLayout';
+import { allocateTableWidths, captureTablePresentation, markTableEdges, measureTableWidths, restoreTablePresentation, setAutomaticTableWidths, tableColumnWidths, type TablePresentation } from './tableLayout';
 import { continueTableRows } from './tableContinuation';
 import { addItemLocations, clearItemLocations } from './itemLocations';
 
@@ -59,10 +59,12 @@ export function createLayoutSession(root: HTMLElement) {
   const formulaOriginals = new Map<string, string>(); // only structurally continued formulas
   const itemIndex = new Map<string, HTMLElement[]>();
   const groups = new Map<string, HTMLElement>();
+  const tablePresentation = new Map<string, TablePresentation>();
   const checkProseOverflow = createProseOverflowCheck(root);
   const register = (scope: HTMLElement) => {
     for (const element of scope.querySelectorAll<HTMLElement>('[data-export-item]')) {
       const id = element.dataset.exportItem!;
+      if (element.tagName === 'TABLE' && !tablePresentation.has(id)) tablePresentation.set(id, captureTablePresentation(element));
       const list = itemIndex.get(id) ?? []; list.push(element); itemIndex.set(id, list);
     }
   };
@@ -87,7 +89,8 @@ export function createLayoutSession(root: HTMLElement) {
       if (element.classList.contains('export-math') && formulaOriginals.has(id)) { element.innerHTML = formulaOriginals.get(id)!; delete element.dataset.mathContinued; }
       element.style.removeProperty('zoom'); element.classList.remove('wrap', 'table-wrap');
       if (element.tagName === 'TABLE') {
-        resetAutomaticTableWidths(element);
+        const baseline = tablePresentation.get(id);
+        if (baseline) restoreTablePresentation(element, baseline);
         element.querySelectorAll('.export-tall-row').forEach(row => row.classList.remove('export-tall-row'));
       }
       element.querySelector<HTMLElement>('.katex-html')?.style.removeProperty('zoom');
@@ -118,7 +121,7 @@ export function createLayoutSession(root: HTMLElement) {
     const issue = (id: string, message: string, blocking = true) => { if (id) adjustable.add(id); issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };
     const tables = [...changed].flatMap(elements).filter((e): e is HTMLTableElement => e.tagName === 'TABLE');
     const manualTables = new Set(tables.filter(table => {
-      const manual = Array.from(table.querySelectorAll<HTMLTableColElement>('colgroup > col')).some(col => !!col.style.width);
+      const manual = Array.from(table.querySelectorAll<HTMLTableColElement>(':scope > colgroup > col')).some(col => !!col.style.width);
       // Fully specified schema tables already carry their exact total width.
       // Fixed layout makes that width authoritative before formula reflow.
       if (manual && table.style.width) table.classList.add('table-wrap');
@@ -126,7 +129,7 @@ export function createLayoutSession(root: HTMLElement) {
     }));
     const observed = tables.map(table => ({
       width: manualTables.has(table) ? table.getBoundingClientRect().width : extent(table),
-      columns: Array.from(table.rows[0]?.cells ?? [], cell => manualTables.has(table) ? cell.getBoundingClientRect().width : Math.ceil(cell.getBoundingClientRect().width) + 2),
+      columns: tableColumnWidths(table).map(width => manualTables.has(table) ? width : Math.ceil(width) + 2),
     }));
     // A naturally narrow table already fits. Repeating intrinsic-width passes
     // adds work without changing its layout decision.
@@ -143,6 +146,13 @@ export function createLayoutSession(root: HTMLElement) {
       if (tableWidths[index].width <= width + 1 && !adjustable.has(id)) return;
       adjustable.add(id);
       if (mode === 'fit') fit(table, width, tableWidths[index].width);
+      else if (mode === 'wrap') {
+        const columns = tableWidths[index].columns;
+        const total = columns.reduce((sum, value) => sum + value, 0);
+        // An explicit wrap choice overrides fixed editor widths in this preview
+        // only. Restore the original colgroup before every later mode change.
+        if (total > 0) setAutomaticTableWidths(table, columns.map(value => value / total * width));
+      }
       else {
         const manual = tableWidths[index].manual;
         const allocated = !manual && mode !== 'columns' && tableWidths[index].intrinsic

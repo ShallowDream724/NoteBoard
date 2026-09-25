@@ -8,7 +8,7 @@ import { notifyOpenRequestsAvailable } from '../../../core/ipc/events';
 import type { OpenRequestSource } from '../../../core/ipc/types';
 import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../../stores/windowStore';
-import { beginExplorerNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, revealExplorerFile, type ExplorerNavigation } from '../../explorer/explorerActions';
+import { activateWithExplorerPolicy, beginExplorerNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, revealExplorerFile, type ExplorerNavigation } from '../../explorer/explorerActions';
 import { useLayoutStore } from '../../../stores/layoutStore';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoaders';
@@ -61,10 +61,19 @@ function buildTab(key: string, displayName: string, kind: Tab['kind'], language:
 
 interface OpenDocumentOptions {
   exportNotice?: Tab['exportNotice'];
-  /** File association / CLI requests enter the direct parent, preserving sidebar visibility. */
-  explorer?: 'parent';
+  /** External requests enter the parent; export activation preserves the complete Explorer view. */
+  explorer?: 'parent' | 'preserve';
   /** Preserved when an external open is routed to the document's actual owner. */
   openRequestSource?: OpenRequestSource;
+}
+
+/** Keep explicit and passive Explorer follow-up behavior aligned for every local activation. */
+function activateDocumentTab(key: string, options: OpenDocumentOptions, tab?: Tab): void {
+  activateWithExplorerPolicy(key, options.explorer === 'preserve' ? 'preserve' : 'follow', () => {
+    const store = useWindowStore.getState();
+    if (tab) store.openTab(tab);
+    else store.activateTab(key);
+  });
 }
 
 /** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
@@ -108,7 +117,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
     case 'already-open': {
       // 已打开（本窗口/在途或其他窗口）：只激活或聚焦，不重复读盘、不覆盖脏内容
       if (prepared.ownerIsSelf) {
-        useWindowStore.getState().activateTab(prepared.key);
+        activateDocumentTab(prepared.key, options);
         // 🔴 R04：归属仍在但标签已不存在（刚关闭且注销 IPC 在途 / 首请求尚未建标签）——
         //    小重试等待归属注销或标签建立，最后重新走完整打开链
         if (!useWindowStore.getState().getTab(prepared.key)) {
@@ -116,7 +125,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
             await new Promise((resolve) => setTimeout(resolve, 60));
             const tabNow = useWindowStore.getState().getTab(prepared.key);
             if (tabNow) {
-              useWindowStore.getState().activateTab(prepared.key);
+              activateDocumentTab(prepared.key, options);
               scheduleExistingTabFollowUp(prepared.key, navigation);
               return 'focused';
             }
@@ -132,6 +141,8 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
     }
 
     case 'directory': {
+      // A directory has no document tab, so opening it cannot satisfy a preserve request.
+      if (options.explorer === 'preserve') return 'failed';
       // 拖入/打开的是文件夹：资源管理器定位到该目录（延后执行，不阻塞返回）
       useLayoutStore.getState().setExplorerVisible(true);
       try { await openExplorerDirectory(prepared.path, navigation); }
@@ -162,15 +173,15 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
           if (regResult.ownerLabel !== label) {
             return focusDocumentOwner(regResult.ownerLabel, prepared.key, options);
           }
-          useWindowStore.getState().activateTab(prepared.key);
+          activateDocumentTab(prepared.key, options);
           scheduleExistingTabFollowUp(prepared.key, navigation);
           return 'focused';
         }
       } catch (e) {
         console.error('注册图片文档失败:', e);
       }
-      useWindowStore.getState().openTab(buildTab(prepared.key, prepared.displayName, 'image', 'plaintext'));
-      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
+      activateDocumentTab(prepared.key, options, buildTab(prepared.key, prepared.displayName, 'image', 'plaintext'));
+      if (prepared.dirPath && options.explorer !== 'preserve') scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       scheduleRecentRecord(path, false);
       return 'opened';
     }
@@ -190,8 +201,8 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
         mtime: 0,
         readonly: true,
       });
-      useWindowStore.getState().openTab({ ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'), exportNotice: options.exportNotice });
-      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
+      activateDocumentTab(prepared.key, options, { ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'), exportNotice: options.exportNotice });
+      if (prepared.dirPath && options.explorer !== 'preserve') scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       return 'opened';
     }
 
@@ -210,7 +221,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
           if (regResult.ownerLabel !== label) {
             return focusDocumentOwner(regResult.ownerLabel, payload.key, options);
           } else {
-            useWindowStore.getState().activateTab(payload.key);
+            activateDocumentTab(payload.key, options);
             scheduleExistingTabFollowUp(payload.key, navigation);
           }
           return 'focused';
@@ -221,10 +232,10 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
 
       // 建 Document 与 Tab 并激活（关键路径：到此即可编辑）
       useDocumentStore.getState().upsertFromPayload(payload);
-      useWindowStore.getState().openTab(buildTab(payload.key, payload.displayName, payload.kind, payload.language));
+      activateDocumentTab(payload.key, options, buildTab(payload.key, payload.displayName, payload.kind, payload.language));
 
       // 目录展开与最近记录延后（不阻塞打开链路返回，不阻塞队列下一条）
-      if (payload.dirPath && payload.key) {
+      if (payload.dirPath && payload.key && options.explorer !== 'preserve') {
         scheduleExplorerFollowUp(payload.key, payload.dirPath, navigation);
       }
       scheduleRecentRecord(path, false);

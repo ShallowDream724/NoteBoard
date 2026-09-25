@@ -53,6 +53,7 @@ function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSO
   }
   if (Object.keys(attrs).length || ranges.length) records.push({ path, ...(Object.keys(attrs).length ? { attrs } : {}), ...(ranges.length ? { ranges } : {}) });
   const cleanAttrs = { ...node.attrs };
+  if (node.type === 'table') delete cleanAttrs.tableAlign;
   if (textBlocks.has(node.type!)) { delete cleanAttrs.textAlign; delete cleanAttrs.indent; }
   if (cells.has(node.type!)) { delete cleanAttrs.align; delete cleanAttrs.textAlign; delete cleanAttrs.verticalAlign; }
   if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; }

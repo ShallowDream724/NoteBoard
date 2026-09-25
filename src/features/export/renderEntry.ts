@@ -3,6 +3,7 @@ import { createLayoutSession } from './layout';
 import { listen } from '@tauri-apps/api/event';
 import { paperSize, type PdfPayload, type PdfOptions } from './model';
 import './document.css';
+import { waitForExportFonts } from './fontsReady';
 
 async function render() {
   const id = location.hash.slice(1);
@@ -29,7 +30,7 @@ async function render() {
       } catch (error) { await invoke('pdf_ready', { id, revision, issues: [], adjustable: [], error: String(error) }); }
     };
     await listen<{ options: PdfOptions; revision: number }>('export-options', ({ payload }) => void update(payload.options, payload.revision));
-    await document.fonts.ready;
+    await waitForExportFonts(root);
     await Promise.all(Array.from(root.querySelectorAll('img')).map(image => image.decode().catch(() => {})));
     await update(options, 0);
   } catch (error) { await invoke('pdf_ready', { id, issues: [], error: String(error) }); }

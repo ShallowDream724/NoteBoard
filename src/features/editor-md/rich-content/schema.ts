@@ -1,4 +1,5 @@
 import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core';
+import { collectionPresentation, isCollectionAlign, isCollectionWidth } from './collectionPresentation';
 
 /** Public, hand-authorable grammar. Views and export policy live outside it. */
 export const ImageCollection = Node.create({
@@ -6,9 +7,16 @@ export const ImageCollection = Node.create({
   addAttributes() { return {
     layout: { default: 'grid', validate: value => { if (!['grid', 'carousel'].includes(value)) throw new RangeError('Invalid image layout'); } },
     columns: { default: 2, validate: value => { if (value !== 2 && value !== 3) throw new RangeError('Invalid image columns'); } },
+    width: { default: '100%', validate: value => { if (!isCollectionWidth(value)) throw new RangeError('Invalid image collection width'); } },
+    align: { default: 'center', validate: value => { if (!isCollectionAlign(value)) throw new RangeError('Invalid image collection alignment'); } },
   }; },
-  parseHTML() { return [{ tag: 'section[data-nb-images]', getAttrs: element => ({ layout: element.getAttribute('data-nb-images') === 'carousel' ? 'carousel' : 'grid', columns: Number(element.getAttribute('data-columns')) === 3 ? 3 : 2 }) }]; },
-  renderHTML({ node, HTMLAttributes }) { return ['section', mergeAttributes(HTMLAttributes, { 'data-nb-images': node.attrs.layout, 'data-columns': node.attrs.columns }), 0]; },
+  parseHTML() { return [{ tag: 'section[data-nb-images]', getAttrs: element => {
+    const width = element.getAttribute('data-width'), align = element.getAttribute('data-align');
+    return { layout: element.getAttribute('data-nb-images') === 'carousel' ? 'carousel' : 'grid', columns: Number(element.getAttribute('data-columns')) === 3 ? 3 : 2,
+      width: isCollectionWidth(width) ? width : '100%', align: isCollectionAlign(align) ? align : 'center' };
+  } }]; },
+  renderHTML({ node, HTMLAttributes }) { return ['section', mergeAttributes(HTMLAttributes, { 'data-nb-images': node.attrs.layout, 'data-columns': node.attrs.columns,
+    'data-width': node.attrs.width, 'data-align': node.attrs.align, style: collectionPresentation(node.attrs).style }), 0]; },
   renderMarkdown(node, helpers) { return helpers.renderChildren(node.content ?? [], '\n\n'); },
 });
 export const ImageSlot = Node.create({

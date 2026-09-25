@@ -20,6 +20,8 @@ import { runWithDocumentCapability, useNativeFeatureVisibility } from '../docume
 import { NodeSelection } from '@tiptap/pm/state';
 import { beginAnnotation, openAnnotation } from './annotations/commands';
 import { toggleConceal } from './rich-content/commands';
+import { ImageCollectionMenu } from './rich-content/ImageCollectionMenu';
+import { TableAlignmentMenu } from './TableAlignmentMenu';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -59,6 +61,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         { value: 'right', label: '图片右对齐', Icon: AlignRight }] as const).map(({ value, label, Icon }) =>
         <Tooltip key={value} content={label}><button type="button" aria-label={label} onClick={() => action(() => runWithDocumentCapability(editor, 'imageLayout', next => runDiscreteEdit(next, chain => chain.updateAttributes('image', { align: value }))))}><Icon size={16}/></button></Tooltip>)}
     </div>}
+    {native && type === 'table' && <TableAlignmentMenu editor={editor} pos={pos} value={range.node.attrs.tableAlign} close={close}/>}
     {native && (styled || type === 'table') && <div className="nb-block-style-row">
       {type !== 'mathBlock' && <AlignmentMenu editor={editor} cells={type === 'table'}/>}
       {styled && <HighlightControl open={colorsOpen} onOpenChange={setColorsOpen} active={editor.isActive('highlight') || !!editor.getAttributes('mathBlock').background}
@@ -69,6 +72,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
     {native && type === 'imageCollection' && <>
+      <ImageCollectionMenu editor={editor} node={range.node} pos={pos}/>
       {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2 }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2 }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd }] as const).map(({ layout, columns, label, Icon }) =>
         <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
       <hr/>

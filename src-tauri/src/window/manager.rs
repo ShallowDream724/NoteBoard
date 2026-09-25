@@ -127,6 +127,9 @@ pub fn create_window(app: &tauri::AppHandle, label: String) -> Result<(), String
         .shadow(true)
         // 启用窗口拖拽文件接收能力
         .drag_and_drop(true)
+        // WebView2 otherwise suppresses Precision Touchpad pinch events.
+        // The frontend owns zoom inside media and prevents page-level zoom.
+        .zoom_hotkeys_enabled(true)
         .build();
         if let Err(error) = result {
             log::error!("Window {l} creation failed: {error}");

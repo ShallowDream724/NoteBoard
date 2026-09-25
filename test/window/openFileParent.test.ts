@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTabFromPath, openDocument } from '../../src/features/editor-code/orchestration/openDocument';
-import { followExplorerFile, openExplorerDirectory } from '../../src/features/explorer/explorerActions';
+import { followExplorerFile, openExplorerDirectory, revealExplorerFile } from '../../src/features/explorer/explorerActions';
 import { useExplorerStore } from '../../src/features/explorer/explorerStore';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useLayoutStore } from '../../src/stores/layoutStore';
@@ -23,6 +23,96 @@ const payload = (key: string): DocumentPayload => ({
   key, displayName: key.split('\\').pop()!, dirPath: key.slice(0, key.lastIndexOf('\\')),
   kind: 'markdown', language: 'markdown', content: '# Ready to edit', encoding: 'utf8',
   eol: 'lf', size: 15, mtime: 0, readonly: false,
+});
+
+describe('opening a document while preserving Explorer', () => {
+  function retainExplorerView(): void {
+    const store = useExplorerStore.getState();
+    store.setRoot('D:\\workspace', []);
+    store.expand('D:\\workspace\\drafts', []);
+    store.setRevealed('D:\\workspace\\drafts\\original.md', true);
+  }
+
+  function expectExplorerView(): void {
+    const state = useExplorerStore.getState();
+    expect(state.root).toBe('D:\\workspace');
+    expect([...state.expanded.keys()]).toEqual(['d:\\workspace\\drafts']);
+    expect(state.revealed).toBe('D:\\workspace\\drafts\\original.md');
+    expect(useLayoutStore.getState().explorerVisible).toBe(false);
+  }
+
+  it.each(['text', 'image', 'unsupported'] as const)('opens a new %s tab without explicit or delayed passive navigation', async kind => {
+    retainExplorerView();
+    const key = `C:\\exports\\result.${kind === 'text' ? 'md' : kind === 'image' ? 'png' : 'pdf'}`;
+    if (kind !== 'text') vi.mocked(ipc.prepareDocument).mockResolvedValueOnce({
+      type: kind, key, displayName: key.split('\\').pop()!, dirPath: 'C:\\exports', language: 'plaintext', size: 4096, mtime: 0,
+    });
+    expect(await openDocument(key, { explorer: 'preserve', exportNotice: {} })).toBe('opened');
+    await paint();
+    // This is the same delayed effect used by useReveal, including when the sidebar mounts later.
+    await followExplorerFile(key, 'C:\\exports', () => true);
+    await followExplorerFile(key, 'C:\\exports', () => true);
+    expect(useWindowStore.getState().activeKey).toBe(key);
+    expectExplorerView();
+    expect(ipc.readDir).not.toHaveBeenCalled();
+  });
+
+  it.each(['already-open', 'text-race', 'image-race'] as const)('preserves Explorer for %s activation without replacing dirty text', async branch => {
+    const key = branch === 'image-race' ? 'C:\\exports\\result.png' : 'C:\\exports\\result.md';
+    const tab = { ...buildTabFromPath(key), isDirty: true };
+    useWindowStore.setState({ tabs: [tab], activeKey: null });
+    useDocumentStore.getState().upsertFromPayload({ ...payload(key), content: 'unsaved text' });
+    retainExplorerView();
+    if (branch === 'already-open') {
+      vi.mocked(ipc.prepareDocument).mockResolvedValueOnce({ type: 'already-open', key, ownerLabel: 'nb-main', ownerIsSelf: true });
+    } else {
+      vi.mocked(ipc.registerDocument).mockResolvedValueOnce({ type: 'already-open', ownerLabel: 'nb-main' });
+      if (branch === 'image-race') vi.mocked(ipc.prepareDocument).mockResolvedValueOnce({ type: 'image', key, displayName: 'result.png', dirPath: 'C:\\exports', language: 'plaintext', size: 4096, mtime: 0 });
+    }
+    expect(await openDocument(key, { explorer: 'preserve' })).toBe('focused');
+    await followExplorerFile(key, 'C:\\exports', () => true);
+    await paint();
+    expectExplorerView();
+    expect(useWindowStore.getState().getTab(key)?.isDirty).toBe(true);
+    if (branch !== 'image-race') expect(useDocumentStore.getState().getDocument(key)?.content).toBe('unsaved text');
+    expect(ipc.readDir).not.toHaveBeenCalled();
+  });
+
+  it('allows explicit location and restores passive following after leaving the preserved activation', async () => {
+    const key = 'C:\\exports\\result.md';
+    retainExplorerView();
+    await openDocument(key, { explorer: 'preserve' });
+    await revealExplorerFile(key, 'C:\\exports');
+    expect(useExplorerStore.getState().root).toBe('C:\\exports');
+    retainExplorerView();
+    useWindowStore.getState().activateTab('D:\\workspace\\drafts\\original.md');
+    useWindowStore.getState().activateTab(key);
+    await followExplorerFile(key, 'C:\\exports', () => true);
+    expect(useExplorerStore.getState().root).toBe('C:\\exports');
+    expect(useExplorerStore.getState().revealed).toBe(key);
+  });
+
+  it('invalidates a directory result started before the preserve activation', async () => {
+    retainExplorerView();
+    const directory = deferred<FileTreeNode[]>();
+    vi.mocked(ipc.readDir).mockReturnValueOnce(directory.promise);
+    const oldReveal = revealExplorerFile('C:\\old\\old.md', 'C:\\old');
+    await openDocument('C:\\exports\\result.md', { explorer: 'preserve' });
+    directory.resolve([]);
+    await oldReveal;
+    expectExplorerView();
+  });
+
+  it('does not change Explorer when a preserve request resolves to a directory or remote owner', async () => {
+    retainExplorerView();
+    vi.mocked(ipc.prepareDocument).mockResolvedValueOnce({ type: 'directory', path: 'C:\\exports' });
+    expect(await openDocument('C:\\exports', { explorer: 'preserve' })).toBe('failed');
+    vi.mocked(ipc.prepareDocument).mockResolvedValueOnce({ type: 'already-open', key: 'C:\\exports\\result.md', ownerLabel: 'nb-owner', ownerIsSelf: false });
+    expect(await openDocument('C:\\exports\\result.md', { explorer: 'preserve' })).toBe('focused');
+    expectExplorerView();
+    expect(ipc.enqueueOpenRequests).not.toHaveBeenCalled();
+    expect(ipc.readDir).not.toHaveBeenCalled();
+  });
 });
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;

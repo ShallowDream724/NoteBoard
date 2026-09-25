@@ -74,6 +74,20 @@ describe('rich document export conservation', () => {
     expect(richExportDiagnostics(result.richSummary, 'noteboard')).toEqual([]);
   });
 
+  it('preserves group size and grid alignment while printing carousels as centered grids', async () => {
+    for (const layout of ['grid', 'carousel']) {
+      const source = sample(); source.content![1].attrs = { ...source.content![1].attrs, layout, width: '50%', align: 'right' };
+      const doc = documentParser().schema.nodeFromJSON(source);
+      const result = await renderDocument('', 'Test', '', undefined, doc);
+      const root = document.createElement('div'); root.innerHTML = result.html;
+      const collection = root.querySelector<HTMLElement>('.export-image-collection')!;
+      expect(collection.style.width).toBe('50%'); expect(collection.style.marginLeft).toBe('auto');
+      expect(collection.style.marginRight).toBe(layout === 'grid' ? '0px' : 'auto');
+      expect(collection.querySelectorAll('.export-image-slot')).toHaveLength(4);
+      expect(portableMarkdown(source)).toContain('two.png');
+    }
+  });
+
   it('keeps HTML interactive with a readable script-free fallback and a full print projection', async () => {
     const doc = documentParser().schema.nodeFromJSON(sample());
     const result = await renderDocument('', 'Test', '', undefined, doc, undefined, undefined, 'html');
