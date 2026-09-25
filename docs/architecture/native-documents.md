@@ -1,5 +1,7 @@
 # 原生文档与 Markdown 交换
 
+本文描述当前实现。后续产品与保存契约见 [NB、Markdown 与保存语义决策](native-format-and-save-decisions.md)；其中源码、关联保存、格式能力边界及磁盘语法的目标尚未全部落地。
+
 ## 格式与编辑模型
 
 `.nb` 与 `.nbdoc` 是同一格式的两个扩展名，默认新建使用 `.nb`，另存为与导出可选 `.nbdoc`。它们均为 UTF-8 JSON，顶层为 `{ "format": "noteboard", "version": 1, "document": … }`。document 使用现有 ProseMirror schema，不再另建一套富文本模型。文本、marks、段落属性、图片引用、公式源码、表格合并与尺寸均是树中的数据。两个后缀共用 codec，不存在旧格式转换分支；转换任务使用 `noteboard` 标识，不以扩展名区分实现。
