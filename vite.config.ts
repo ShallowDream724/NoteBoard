@@ -3,6 +3,12 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 
+// Server rendering is used only by on-demand infographic export. Keep both
+// entry wrappers and CJS implementations out of the client runtime chunk.
+function isReactServerModule(id: string): boolean {
+  return /[\\/]node_modules[\\/]react-dom[\\/](?:server(?:[.\\/]|$)|cjs[\\/]react-dom-server(?:[.-]|$))/.test(id);
+}
+
 // Excalidraw zh-CN 语言包增补插件（补齐官方 zh-CN 语言包中遗漏的 fontList、quickSearch、commandPalette 等词条）
 function excalidrawLocalesPlugin() {
   const extraZhCn = {
@@ -193,12 +199,16 @@ function moduleSourceManifestPlugin(): import('vite').Plugin {
         }
         return matches[matches.length - 1][1];
       };
-      const report: Record<string, { packages: string[] }> = {};
+      const report: Record<string, { packages: string[]; reactServerModules: string[] }> = {};
       for (const [fileName, chunkUnknown] of Object.entries(bundle)) {
         const chunk = chunkUnknown as { type?: string; moduleIds?: string[] };
         if (chunk.type !== 'chunk') continue;
         const packages = [...new Set((chunk.moduleIds ?? []).map(packageNameOf))].sort();
-        report[fileName] = { packages };
+        // react-dom itself is a valid client dependency; retain module-level
+        // evidence so the startup gate can detect its server renderer leaking.
+        const reactServerModules = [...new Set((chunk.moduleIds ?? []).filter(isReactServerModule)
+          .map(id => id.replace(/\\/g, '/').split('/node_modules/').pop()!))].sort();
+        report[fileName] = { packages, reactServerModules };
       }
       this.emitFile({
         type: 'asset',
@@ -252,7 +262,7 @@ export default defineConfig({
         //   之前的对象形式把 react/react-dom 卷进 excalidraw chunk（因为该包体积最大），
         //   导致入口静态闭包含整个 1.1 MiB 画板库。
         //   规则：
-        //   1. react 全家桶 → vendor-react（入口必需的公共依赖，单独小 chunk）
+        //   1. React client runtime → vendor-react；server renderer 保持按需加载
         //   2. mermaid/excalidraw/katex → 独立库 chunk（只含库自身代码，应用代码经动态 import 进入）
         //   3. 其余 node_modules 不归组（避免所有重库变成共有前置依赖）
         manualChunks(id) {
@@ -263,6 +273,7 @@ export default defineConfig({
             return 'vendor-react';
           }
           if (id.includes('node_modules')) {
+            if (isReactServerModule(id)) return 'vendor-react-server';
             if (id.includes('mermaid')) return 'mermaid';
             if (id.includes('@excalidraw') || id.includes('excalidraw')) return 'excalidraw';
             if (id.includes('katex')) return 'katex';

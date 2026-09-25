@@ -162,6 +162,9 @@ if (moduleSources) {
       resolveErrors.push(`模块来源清单缺少闭包 chunk 条目: ${file}（无法判定包来源——请用当前 vite 配置重新构建）`);
       continue;
     }
+    if (Array.isArray(entry.reactServerModules) && entry.reactServerModules.length) {
+      violations.push({ file, label: `react-dom/server（导出渲染器：${entry.reactServerModules.join(', ')}）`, bytes: visited.get(file).bytes, via: 'module-source:react-dom/server' });
+    }
     for (const { name, label } of FORBIDDEN_PACKAGES) {
       if (entry.packages.includes(name)) {
         violations.push({ file, label, bytes: visited.get(file).bytes, via: `module-source:${name}` });

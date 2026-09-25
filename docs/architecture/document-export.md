@@ -4,6 +4,8 @@
 
 标题栏、Ctrl+E 和 Ctrl+P 打开同一导出入口。Ctrl+P 不调用浏览器页面打印。转换器、排版窗口和 PDF.js 按需加载。
 
+信息图导出的 `react-dom/server` 也保持按需加载。Vite 将它的入口及 `react-dom-server*` 实现单独放入 `vendor-react-server`，首屏 `vendor-react` 只承载客户端运行时；不能因为同属 `react-dom` 就合并进首屏。构建来源清单记录具体服务端渲染模块，启动门禁按模块证据阻止其进入静态闭包，即使总字节仍低于预算也拒绝通过。
+
 - `editor-md/documentNodes.ts`、`documentExtensions.ts` 只定义文档结构、Markdown 语法及共享配置，不依赖 React、store、IPC 或 NodeView。编辑器的 `extensions/index.ts` 在同一语法上装配交互视图、历史与快捷键。
 - `readDocumentSnapshot.ts` 从当前编辑器捕获权威快照：可视化模式取不可变节点的 JSON，源码模式取当前 CodeMirror 文本。导出不为此物化历史、更新镜像或保存文件；其他编辑器走能力接口的 `flush('export')`。
 - `export/documentConversion.ts` 管理一次性 Worker。`documentWorker.ts` 在后台完成文本投影、解析、KaTeX 和只读 HTML；关闭对话框立即终止 Worker。图片资源采用一次批量握手：Worker 保留生成的图片元素引用，主线程只将路径交给 `convertFileSrc` 并返回 URL。图表也按批次握手，由真实浏览器调用共享图表渲染器；Worker 等待图形回填后再做唯一一次 HTML 序列化。主线程不重新解析整份导出 DOM，也不猜测 Tauri URL 前缀。LinkeDOM 只在 Worker 内提供 DOM，并补齐浏览器对 HTML 片段的文档包装，保留原始 HTML 的解析语义。

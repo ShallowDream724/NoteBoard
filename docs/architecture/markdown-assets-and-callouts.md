@@ -24,6 +24,8 @@ NB 的 `image.attrs.src` 与 Markdown 图片目的地只需保存文件路径或
 
 欢迎示例与 `examples/rich-document.nb` 共用三份 `examples/assets/*.png`。欢迎入口按需读取打包资源并存入恢复资源目录，因此未保存的示例、暂存、导出与首次保存都不依赖开发服务器 URL；仓库示例使用同目录 `./assets/` 相对引用，源码中不再重复图片二进制。
 
+安装包 CSP 的 `connect-src` 为 `'self' data:`：允许读取应用自身的打包图片，以及 Vite 可能内联的 data 图片和图片准备 Worker 的 data 解码；不开放额外网络来源。真实 Edge 在相同 CSP 响应头下验证了三张生产 PNG、主线程 data 读取与生产图片 Worker 的 data 解码，同时确认其他源连接被 `connect-src` 拦截。
+
 ## 删除图片
 
 - 编辑器适配层只收集语义图片节点的增删，程序化加载及模式同步不触发清理。
