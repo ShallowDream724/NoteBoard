@@ -240,6 +240,8 @@ export function createDir(dir: string, name: string): Promise<void> {
 export function renamePath(label: string, from: string, to: string, expectedKeys: string[]): Promise<void> {
   return invoke<void>('rename_path', { label, from, to, expectedKeys });
 }
+export interface BrowseLocation { name: string; path: string; kind: 'folder' | 'drive' }
+export function browseLocations(): Promise<BrowseLocation[]> { return invoke('browse_locations'); }
 
 export function moveToTrash(path: string): Promise<void> {
   return invoke<void>('move_to_trash', { path });

@@ -88,6 +88,7 @@ pub fn run() {
             fsio::commands::write_document,
             fsio::commands::save_binary_file,
             fsio::commands::read_dir,
+            fsio::browse::browse_locations,
             fsio::commands::create_file,
             fsio::commands::create_dir,
             fsio::commands::rename_path,

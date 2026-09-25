@@ -28,26 +28,11 @@ function nextUntitledKey(prefix: string): string {
 }
 
 /**
- * 打开系统文件选择对话框，支持多选
- * 选中后逐个打开为 tab
+ * 统一浏览文件与文件夹，支持多选；文件打开为标签，目录加入文件树。
  */
 export async function openFileDialog(): Promise<void> {
   const { requestFilePaths } = await import('./FileOpenDialog');
-  const paths = await requestFilePaths(async () => open({
-    multiple: true,
-    filters: [
-      { name: '全部文件', extensions: ['*'] },
-      { name: 'Markdown', extensions: ['md', 'markdown'] },
-      { name: 'NoteBoard 文档', extensions: ['nbdoc'] },
-      { name: '多维表格', extensions: ['bitable', 'table'] },
-      { name: '思维导图', extensions: ['mindmap', 'xmind', 'mm'] },
-      { name: '画板与绘图', extensions: ['excalidraw', 'drawio', 'dio', 'board'] },
-      { name: '图表与信息图脚本', extensions: ['mmd', 'mermaid', 'puml', 'plantuml', 'uml', 'infographic', 'ig'] },
-    ],
-  }), async () => {
-    const selected = await open({ directory: true, multiple: false });
-    return selected ? [selected] : null;
-  });
+  const paths = await requestFilePaths();
   if (!paths || paths.length === 0) return;
 
   for (const path of paths) {
@@ -121,7 +106,7 @@ function createUntitledDocument(
   if (type === 'noteboard') {
     kind = 'noteboard';
     language = 'json';
-    displayName = '未命名.nbdoc';
+    displayName = '未命名.nb';
     initialContent = EMPTY_NATIVE_DOCUMENT;
   } else if (type === 'markdown') {
     kind = 'markdown';

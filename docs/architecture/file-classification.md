@@ -1,6 +1,8 @@
 # 文件格式判定
 
-`.nbdoc` 归类 `noteboard`，使用原生 JSON codec 与可视化富文本内核。它不经过 Markdown 解析，也不提供源码模式。自动保存、导出和大纲等共同行为使用 `isRichDocument` 判断；格式契约见 [native-documents.md](native-documents.md)。
+`.nb` 与 `.nbdoc` 均归类 `noteboard`，使用同一个原生 JSON codec 与可视化富文本内核。它们不经过 Markdown 解析，也不提供源码模式。自动保存、导出和大纲等共同行为使用 `isRichDocument` 判断；格式契约见 [native-documents.md](native-documents.md)。
+
+统一“浏览”入口由 `welcome/PathBrowser` 管理文件与目录选择；`fsio/browse` 提供常用位置及磁盘列表，`read_dir` 在后台线程读取直接子项。前端以请求代次丢弃过期响应，按可见区域虚拟化列表；筛选只遍历当前目录，不递归读取子目录。目录结果仍需完整读取并排序后返回，虚拟化降低 DOM 成本，不等同于流式目录读取。确认后路径交给现有 `openDocument`，由同一入口决定打开文件还是加入文件夹。
 
 `core/docKind.json` 与 `core/languageByExt.json` 是前后端共用映射。TypeScript 导入，Rust `dto::kind_by_ext` 通过 include_str 和 OnceLock 读取，不再维护第二份 match。大小写统一，未知扩展名默认纯文本候选，磁盘读取仍通过内容嗅探识别二进制。
 

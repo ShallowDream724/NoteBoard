@@ -2,7 +2,7 @@
 
 ## 格式与编辑模型
 
-`.nbdoc` 是 UTF-8 JSON，顶层为 `{ "format": "noteboard", "version": 1, "document": … }`。document 使用现有 ProseMirror schema，不再另建一套富文本模型。文本、marks、段落属性、图片引用、公式源码、表格合并与尺寸均是树中的数据。
+`.nb` 与 `.nbdoc` 是同一格式的两个扩展名，默认新建使用 `.nb`，另存为与导出可选 `.nbdoc`。它们均为 UTF-8 JSON，顶层为 `{ "format": "noteboard", "version": 1, "document": … }`。document 使用现有 ProseMirror schema，不再另建一套富文本模型。文本、marks、段落属性、图片引用、公式源码、表格合并与尺寸均是树中的数据。两个后缀共用 codec，不存在旧格式转换分支；转换任务使用 `noteboard` 标识，不以扩展名区分实现。
 
 `core/nativeDocument` 负责 envelope；`editorDocumentCodec` 负责 schema 校验和编辑器读写；UI、文件会话、写队列和历史不解析格式细节。未知版本、节点、mark、属性或内容字段拒绝加载，不能先丢弃再自动保存。新增不兼容语义时必须提升格式版本并提供显式迁移。
 
@@ -24,7 +24,13 @@
 
 第一版采用外部图片文件，不把图片字节嵌入 JSON。粘贴图片继续使用现有图片目录；序列化 detached JSON 时，将相对本地图片和链接解析为当前文档目录下的绝对引用，保证另存到其他目录后仍能访问原资源。URL、锚点和已绝对化路径保持有效。
 
-因此 `.nbdoc` 不是可独立搬运所有附件的压缩包；迁移到其他电脑仍需同时迁移图片并保持引用可访问。资源回收扫描同时识别 Markdown 与原生 JSON，并保留跨窗口引用屏障，不能因正文为 JSON 而回收正在使用的图片。
+因此原生文档不是可独立搬运所有附件的压缩包；迁移到其他电脑仍需同时迁移图片并保持引用可访问。资源回收扫描同时识别 Markdown 与两个后缀的原生 JSON，并保留跨窗口引用屏障，不能因正文为 JSON 而回收正在使用的图片。`.nb` 也被 Wolfram 使用，资源扫描遇到非 JSON 的 `.nb` 时按原文保守检查图片引用；编辑器仍要求正确的 NoteBoard envelope，不将 Wolfram 文档当作原生文档载入。
+
+## 桌面关联
+
+Tauri 注册 `.nbdoc` 的 `NoteBoard.Document` ProgID；NSIS hook 将 `.nb` 添加到同一 ProgID 的打开方式列表，仅在系统及用户合并视图中没有既有默认程序时设置 `.nb` 默认值，不修改 Windows UserChoice。两个后缀均提供“用 NoteBoard 打开”系统右键入口。卸载只移除自身注册项，不删除其他软件的关联。
+
+应用内的文件树、标签页、浏览窗口和新建入口共用 `NoteBoardFileIcon`，与 Markdown 及其他文件类型区分。双击与右键的启动参数沿用统一的冷启动和单实例转交入口。
 
 ## 导出契约
 

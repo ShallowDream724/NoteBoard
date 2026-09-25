@@ -9,6 +9,7 @@ import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore } from '../../../stores/windowStore';
 import { getBaseline } from '../../editor-md/serialize';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
+import { DEFAULT_NATIVE_EXTENSION, NATIVE_DOCUMENT_EXTENSIONS } from '../../../core/nativeDocument';
 import type { WriteError } from '../../../core/ipc/types';
 import { DEFAULT_DRAWIO_XML } from './syncDocumentContent';
 import { onDocumentSaved } from '../../staging/stagingManager';
@@ -155,8 +156,8 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
   ];
 
   if (doc?.kind === 'noteboard') {
-    defaultExtension = 'nbdoc';
-    filters = [{ name: 'NoteBoard 文档 (*.nbdoc)', extensions: ['nbdoc'] }];
+    defaultExtension = DEFAULT_NATIVE_EXTENSION;
+    filters = NATIVE_DOCUMENT_EXTENSIONS.map(ext => ({ name: `NoteBoard 文档 (*.${ext})`, extensions: [ext] }));
   } else if (doc?.kind === 'markdown' || originalKey.includes('markdown')) {
     defaultExtension = 'md';
     filters = [

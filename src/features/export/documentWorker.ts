@@ -16,7 +16,7 @@ class FragmentDOMParser {
 }
 Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
 
-type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'pandoc' | 'md' | 'nbdoc' }
+type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'pandoc' | 'md' | 'noteboard' }
   | { type: 'asset-urls'; urls: string[] };
 let started = false;
 let receiveAssetUrls: ((urls: string[]) => void) | undefined;
@@ -25,7 +25,7 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
   if (started) return;
   started = true;
   try {
-    if (data.format === 'md' || data.format === 'nbdoc') {
+    if (data.format === 'md' || data.format === 'noteboard') {
       const { parseMarkdownDocument } = await import('../editor-md/documentExtensions');
       const json = typeof data.markdown === 'string' ? parseMarkdownDocument(data.markdown).toJSON() : data.markdown;
       const { rebaseDocumentReferences } = await import('../../core/documentReferences');

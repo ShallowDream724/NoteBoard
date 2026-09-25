@@ -55,6 +55,16 @@ function MarkdownFileIcon({ size, className, style }: FileIconOptions) {
   );
 }
 
+/** Bound notebook + N monogram, distinct from Markdown's folded sheet. */
+export function NoteBoardFileIcon({ size = 14, className, style }: FileIconOptions) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" className={className} style={style} aria-hidden="true" focusable="false">
+    <rect x="3" y="2" width="18" height="20" rx="4" fill="#6366d9"/>
+    <path d="M7 3v18" stroke="#b8bbff" strokeWidth="1.5"/>
+    <path d="M10 16V8l7 8V8" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M16 2h3v5l-1.5-1L16 7Z" fill="#72dfce"/>
+  </svg>;
+}
+
 export function getFileIcon(
   fileNameOrPath: string,
   options: FileIconOptions = {},
@@ -94,8 +104,8 @@ export function getFileIcon(
     case 'md':
     case 'markdown':
       return <MarkdownFileIcon {...iconProps} />;
-    case 'nbdoc':
-      return <FileText {...iconProps} color="#3b82f6" />;
+    case 'nb': case 'nbdoc':
+      return <NoteBoardFileIcon {...iconProps} />;
 
     // ── 思维导图与大纲（XMind / MindMap，活力珊瑚橙）──
     case 'mindmap':

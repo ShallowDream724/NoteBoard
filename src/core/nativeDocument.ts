@@ -4,6 +4,8 @@ import type { JSONContent } from '@tiptap/core';
  * newer format or silently discard an unknown field while saving it back. */
 export const NATIVE_DOCUMENT_FORMAT = 'noteboard';
 export const NATIVE_DOCUMENT_VERSION = 1;
+export const NATIVE_DOCUMENT_EXTENSIONS = ['nb', 'nbdoc'];
+export const DEFAULT_NATIVE_EXTENSION = NATIVE_DOCUMENT_EXTENSIONS[0];
 export interface NativeDocument {
   format: typeof NATIVE_DOCUMENT_FORMAT;
   version: typeof NATIVE_DOCUMENT_VERSION;

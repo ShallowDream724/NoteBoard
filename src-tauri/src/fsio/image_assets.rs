@@ -236,7 +236,7 @@ fn scan_references(
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_lowercase();
-            if !["md", "markdown", "mdown", "mdx", "html", "htm", "nbdoc"].contains(&ext.as_str()) {
+            if !["md", "markdown", "mdown", "mdx", "html", "htm", "nb", "nbdoc"].contains(&ext.as_str()) {
                 continue;
             }
             scanned += 1;
@@ -249,6 +249,10 @@ fn scan_references(
             let text = if ext == "nbdoc" {
                 serde_json::from_str::<serde_json::Value>(&text)
                     .map_err(|_| "无法读取 NoteBoard 文档引用，图片已保留")?.to_string()
+            } else if ext == "nb" {
+                // .nb is also used by Wolfram. Scan foreign content as text;
+                // JSON decoding is needed only to expose escaped native paths.
+                serde_json::from_str::<serde_json::Value>(&text).map(|value| value.to_string()).unwrap_or(text)
             } else { text };
             let text = normalize_reference_text(&text)?;
             for (image_key, filename) in &filenames {

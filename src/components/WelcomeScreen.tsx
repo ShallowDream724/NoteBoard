@@ -3,6 +3,7 @@
 // 详见 docs/07-UI布局与交互规范.md §11
 
 import React, { useState } from 'react';
+import { NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
 //    意图信号；空闲时机发起（不占首帧），点击新建/打开文件时资源已 ready，
@@ -79,8 +80,8 @@ export function WelcomeScreen({
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
   const primaryCreateActions = [
     {
-      icon: FilePlus,
-      label: '新建 NoteBoard 文档 (.nbdoc)',
+      icon: NoteBoardFileIcon,
+      label: '新建 NoteBoard 文档 (.nb)',
       desc: '完整保留文字与表格排版',
       shortcut: '',
       color: 'var(--editor-accent, #3b82f6)',

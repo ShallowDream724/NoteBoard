@@ -1,6 +1,7 @@
 pub mod read;
 pub mod write;
 pub mod dir;
+pub mod browse;
 pub mod trash;
 pub mod image_assets;
 pub mod commands;

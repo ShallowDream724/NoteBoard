@@ -3,15 +3,15 @@ import { createRoot } from 'react-dom/client';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 
-export function DialogShell({ title, description, children, onDismiss }: {
-  title: string; description: string; children: ReactNode; onDismiss: () => void;
+export function DialogShell({ title, description, children, onDismiss, width = 480 }: {
+  title: string; description: string; children: ReactNode; onDismiss: () => void; width?: number;
 }) {
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onDismiss(); }}>
     <Dialog.Portal>
       <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgb(0 0 0 / 30%)', zIndex: 10000 }} />
       <Dialog.Content data-shortcuts-suspended style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-        width: 'min(480px, calc(100vw - 40px))', boxSizing: 'border-box', padding: 24,
+        width: `min(${width}px, calc(100vw - 40px))`, boxSizing: 'border-box', padding: 24,
         background: 'var(--editor-surface)', color: 'var(--editor-text)',
         border: '1px solid var(--editor-border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', zIndex: 10001,
       }}>

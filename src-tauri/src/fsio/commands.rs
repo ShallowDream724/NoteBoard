@@ -138,9 +138,9 @@ pub fn save_binary_file(path: String, data: Vec<u8>) -> Result<WriteResult, Stri
 
 /// 读取目录
 #[tauri::command]
-pub fn read_dir(path: String, show_hidden: bool) -> Result<Vec<FileTreeNode>, String> {
-    let p = Path::new(&path);
-    dir::read_directory(p, show_hidden)
+pub async fn read_dir(path: String, show_hidden: bool) -> Result<Vec<FileTreeNode>, String> {
+    tauri::async_runtime::spawn_blocking(move || dir::read_directory(Path::new(&path), show_hidden))
+        .await.map_err(|error| error.to_string())?
 }
 
 /// 创建文件

@@ -10,6 +10,7 @@ import { ExportDiagnostics } from './ExportDiagnostics';
 import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { presentExportedFile } from './exportCompletion';
+import { DEFAULT_NATIVE_EXTENSION, NATIVE_DOCUMENT_EXTENSIONS } from '../../core/nativeDocument';
 import './export.css';
 
 export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () => void }) {
@@ -18,6 +19,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const [captureStartedAt, setCaptureStartedAt] = useState(() => performance.now());
   const [options, setOptions] = useState(DEFAULT_PDF);
   const [format, setFormat] = useState('pdf');
+  const [nativeExtension, setNativeExtension] = useState(DEFAULT_NATIVE_EXTENSION);
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
   const [pages, setPages] = useState(0);
   const [acceptedReceipt, setAcceptedReceipt] = useState<string>();
@@ -81,14 +83,14 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
     savingRef.current = true;
     setSaving(true); setError('');
     try {
-      const extension = format === 'html5' ? 'html' : format === 'latex' ? 'tex' : format;
+      const extension = format === 'noteboard' ? nativeExtension : format === 'html5' ? 'html' : format === 'latex' ? 'tex' : format;
       const destination = await save({ defaultPath: document.title.replace(/\.[^.]+$/, '') + '.' + extension,
         filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
       signal.throwIfAborted();
       if (!destination) return;
       let warnings = '';
       if (format === 'pdf' && pdf.receipt) await invoke('save_pdf', { id: pdf.receipt.id, revision: pdf.receipt.revision, path: destination });
-      else if (format === 'md' || format === 'nbdoc') {
+      else if (format === 'md' || format === 'noteboard') {
         const { prepareTextExport } = await import('./documentConversion');
         const content = await prepareTextExport(document.source ?? document.markdown, format, document.baseDirectory, signal);
         signal.throwIfAborted();
@@ -117,7 +119,8 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
     <header><div><FileOutput size={18}/><strong>导出</strong><span className="export-title">{document?.title}</span></div>
       <button className="export-icon" aria-label="关闭导出" onClick={onClose}><X size={18}/></button></header>
     <div className="export-body"><aside>
-      <label className="export-field">格式<select value={format} onChange={e => { if (e.target.value === 'pdf') setCaptureStartedAt(performance.now()); setFormat(e.target.value); }}><option value="pdf">PDF</option><option value="md">Markdown (.md)</option><option value="nbdoc">NoteBoard 文档 (.nbdoc)</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
+      <label className="export-field">格式<select value={format} onChange={e => { if (e.target.value === 'pdf') setCaptureStartedAt(performance.now()); setFormat(e.target.value); }}><option value="pdf">PDF</option><option value="md">Markdown (.md)</option><option value="noteboard">NoteBoard 文档</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
+      {format === 'noteboard' && <label className="export-field">文件后缀<select value={nativeExtension} onChange={e => setNativeExtension(e.target.value)}>{NATIVE_DOCUMENT_EXTENSIONS.map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select></label>}
       {format === 'pdf' ? <>
         <div className="export-two"><label className="export-field">纸张<select value={options.paper} onChange={e => setOptions(o => ({ ...o, paper: e.target.value as 'A4' | 'Letter' }))}><option>A4</option><option>Letter</option></select></label>
           <label className="export-field">方向<select value={String(options.landscape)} onChange={e => setOptions(o => ({ ...o, landscape: e.target.value === 'true' }))}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
@@ -142,13 +145,13 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         </section>}
         {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => navigateToItem(issue.id)}><AlertCircle size={15}/><span>{itemIndex.get(issue.id)?.label && <strong>{itemIndex.get(issue.id)!.label}<br/></strong>}{issue.message}</span></button>)}
         {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedReceipt(e.target.checked ? receiptKey : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
-      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'nbdoc' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
+      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
     </aside><main>{format === 'pdf' ? <>
       {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
         : pdf.error || (!document && error) ? <div className="export-empty">暂时无法生成预览</div>
         : <ExportProgress progress={pdf.progress ?? { phase: document ? 'starting' : 'preparing', startedAt: captureStartedAt }}/>}
       {pdf.receipt && pdf.busy && <div className="export-updating"><ExportProgress compact progress={pdf.progress ?? { phase: 'starting', startedAt: captureStartedAt }}/></div>}
-    </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'md' ? 'Markdown 文档' : format === 'nbdoc' ? 'NoteBoard 文档' : format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p></div>}</main></div>
+    </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'md' ? 'Markdown 文档' : format === 'noteboard' ? 'NoteBoard 文档' : format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p></div>}</main></div>
     <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : format === 'pdf' && pages ? `${pages} 页` : '')} details={diagnostics}/>
       <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || (blocked && !accepted)))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>
   </div></div>;

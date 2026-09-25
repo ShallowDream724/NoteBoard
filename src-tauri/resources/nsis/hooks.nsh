@@ -13,6 +13,19 @@
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\shell\open\command" "" '"$INSTDIR\NoteBoard.exe" "%1"'
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe" "FriendlyAppName" "NoteBoard"
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe" "SupportedTypes" ".md;.markdown;.txt;.json;.yaml;.yml;.sql;.js;.ts;.py;.rs;.go;.java;.c;.cpp;.cs;.sh;.css;.xml;.html;.excalidraw"
+  WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\SupportedTypes" ".nb" ""
+  WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\SupportedTypes" ".nbdoc" ""
+
+  ; .nb is shared with Wolfram. Preserve the merged system/user default;
+  ; Windows UserChoice is deliberately never modified.
+  ReadRegStr $R0 HKCR ".nb" ""
+  ${If} $R0 == ""
+    WriteRegStr HKCU "Software\Classes\.nb" "" "NoteBoard.Document"
+  ${EndIf}
+  WriteRegStr HKCU "Software\Classes\.nb\OpenWithProgids" "NoteBoard.Document" ""
+  WriteRegStr HKCU "Software\Classes\.nbdoc\OpenWithProgids" "NoteBoard.Document" ""
+  !insertmacro NB_DOCUMENT_CONTEXT "nb"
+  !insertmacro NB_DOCUMENT_CONTEXT "nbdoc"
 
   ; 为每个扩展名注册 OpenWithProgids
   !define EXTENSIONS ".md;.markdown;.txt;.json;.yaml;.yml;.sql;.js;.ts;.py;.rs;.go;.java;.c;.cpp;.cs;.sh;.css;.xml;.html;.excalidraw"
@@ -33,6 +46,14 @@
 !macro NSIS_HOOK_POSTUNINSTALL
   ; 清理应用程序注册
   DeleteRegKey HKCU "Software\Classes\Applications\NoteBoard.exe"
+  ReadRegStr $R0 HKCU "Software\Classes\.nb" ""
+  ${If} $R0 == "NoteBoard.Document"
+    DeleteRegValue HKCU "Software\Classes\.nb" ""
+  ${EndIf}
+  DeleteRegValue HKCU "Software\Classes\.nb\OpenWithProgids" "NoteBoard.Document"
+  DeleteRegValue HKCU "Software\Classes\.nbdoc\OpenWithProgids" "NoteBoard.Document"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.nb\shell\NoteBoard.Open"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.nbdoc\shell\NoteBoard.Open"
 
   ; 清理文件关联
   DeleteRegValue HKCU "Software\Classes\.md\OpenWithProgids" "NoteBoard"
@@ -45,4 +66,10 @@
 
   ; 刷新 Shell 缓存
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0x1000, i 0, i 0)'
+!macroend
+
+!macro NB_DOCUMENT_CONTEXT EXT
+  WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open" "" "用 NoteBoard 打开"
+  WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open" "Icon" "$INSTDIR\NoteBoard.exe,0"
+  WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open\command" "" '"$INSTDIR\NoteBoard.exe" "%1"'
 !macroend

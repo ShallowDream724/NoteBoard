@@ -1,0 +1,24 @@
+.nb-path-browser { font-size:13px; }
+.nb-browser-address { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.nb-browser-address input { min-width:0; flex:1; }
+.nb-path-browser input { background:var(--editor-bg); color:var(--editor-text); border:1px solid var(--editor-border); border-radius:6px; padding:8px 10px; }
+.nb-browser-address button,.nb-browser-body nav button { display:flex; align-items:center; gap:8px; border:0; border-radius:6px; padding:8px; background:transparent; color:inherit; cursor:pointer; }
+.nb-browser-address button:hover,.nb-browser-body nav button:hover { background:var(--editor-hover-background); }
+.nb-browser-body { display:flex; height:min(360px,45vh); border:1px solid var(--editor-border); border-radius:8px; overflow:hidden; }
+.nb-browser-body nav { width:128px; flex-shrink:0; overflow:auto; border-right:1px solid var(--editor-border); padding:6px; }
+.nb-browser-body nav button { width:100%; text-align:left; }
+.nb-browser-body nav span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nb-browser-body section { flex:1; min-width:0; display:flex; flex-direction:column; }
+.nb-browser-filter { display:flex; align-items:center; gap:8px; margin:8px; color:var(--editor-text-secondary); }
+.nb-browser-filter input { flex:1; min-width:0; padding:6px 8px; }
+.nb-browser-entries { flex:1; min-height:0; overflow:auto; position:relative; }
+.nb-browser-entry { display:flex; width:100%; align-items:center; gap:9px; padding:0 10px; text-align:left; border:0; background:transparent; color:inherit; cursor:pointer; }
+.nb-browser-entry span { flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nb-browser-entry small { color:var(--editor-text-muted); }
+.nb-browser-entry:hover { background:var(--editor-hover-background); }
+.nb-browser-entry[aria-selected="true"] { background:var(--editor-selection-background, #dfeaff); }
+.nb-browser-entry:focus-visible { outline:2px solid var(--editor-accent); outline-offset:-2px; }
+.nb-browser-empty { text-align:center; color:var(--editor-text-muted); margin:24px 12px; }
+.nb-browser-error { color:var(--error-500); }
+.nb-path-browser footer { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:16px; }
+.nb-path-browser footer>span { flex:1; color:var(--editor-text-secondary); font-size:12px; }

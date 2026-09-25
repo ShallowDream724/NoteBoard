@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { Plus, FileText, Table2, PencilRuler, Network, GitCompare, Layout,
   ChartColumn, Workflow, GitMerge, Braces, Database, FileCode, CodeXml,
-  FolderOpen, Star, Archive, ChevronRight, type LucideIcon } from 'lucide-react';
+  FolderOpen, Star, Archive, ChevronRight } from 'lucide-react';
+import { NoteBoardFileIcon } from '../FileIcon';
 import { Tooltip } from '../Tooltip';
 import { on, off } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useFavoritesStore } from '../../features/favorites/favoritesStore';
 import * as actions from '../../features/welcome/welcomeActions';
 
-type Action = { label: string; icon: LucideIcon; run: () => unknown };
+type Action = { label: string; icon: ComponentType<{ size?: number }>; run: () => unknown };
 const primary: Action[] = [
-  { label: '新建 NoteBoard 文档 (.nbdoc)', icon: FileText, run: actions.newNativeDocument },
+  { label: '新建 NoteBoard 文档 (.nb)', icon: NoteBoardFileIcon, run: actions.newNativeDocument },
   { label: '新建 Markdown 笔记 (.md)', icon: FileText, run: actions.newMarkdown },
   { label: '新建文本文档 (.txt)', icon: FileText, run: actions.newText },
   { label: '新建多维表格 (.bitable)', icon: Table2, run: actions.newBitable },

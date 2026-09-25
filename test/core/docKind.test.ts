@@ -15,6 +15,7 @@ import type { DocumentKind } from '@/core/ipc/types';
 describe('docKind 扩展名映射', () => {
   test('KIND_BY_EXT 覆盖全部点名格式与图片格式', () => {
     const requiredExts = [
+      'nb', 'nbdoc',
       'md',
       'markdown',
       'txt',
@@ -79,6 +80,8 @@ describe('docKind 扩展名映射', () => {
   });
 
   test('kindFromPath 路径推断', () => {
+    expect(kindFromPath('note.NB')).toBe<DocumentKind>('noteboard');
+    expect(kindFromPath('note.nbdoc')).toBe<DocumentKind>('noteboard');
     expect(kindFromPath('D:\\notes\\test.md')).toBe<DocumentKind>('markdown');
     expect(kindFromPath('schema.sql')).toBe<DocumentKind>('code');
     expect(kindFromPath('config.yaml')).toBe<DocumentKind>('code');
