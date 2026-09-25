@@ -1,8 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { prepareDocument } from '../../src/features/export/documentConversion';
+import { renderExportDiagrams } from '../../src/features/export/renderDiagrams';
 
 vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: vi.fn((path: string) => `host-specific:${path}`) }));
+vi.mock('../../src/features/export/renderDiagrams', () => ({ renderExportDiagrams: vi.fn() }));
 
 class ConversionWorker {
   static current: ConversionWorker;
@@ -53,4 +55,22 @@ it('host URL mapping failure rejects and releases the worker', async () => {
   worker.emit({ type: 'assets', paths: ['C:/a.png'] });
   await expect(result).rejects.toThrow('mapping failed');
   expect(worker.terminate).toHaveBeenCalledTimes(1);
+});
+
+it('renders a worker diagram batch in the browser and aborts unfinished rendering with the export', async () => {
+  vi.stubGlobal('Worker', ConversionWorker);
+  let complete!: (result: { html: string }[]) => void;
+  vi.mocked(renderExportDiagrams).mockImplementation(() => new Promise(resolve => { complete = resolve; }));
+  const controller = new AbortController();
+  const result = prepareDocument('source', 'title', '', controller.signal);
+  const worker = ConversionWorker.current;
+  worker.emit({ type: 'diagrams', requests: [{ kind: 'mermaid', code: 'graph LR\nA-->B' }] });
+  await vi.waitFor(() => expect(renderExportDiagrams).toHaveBeenCalledOnce());
+  const signal = vi.mocked(renderExportDiagrams).mock.calls[0][1]!;
+  controller.abort();
+  await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+  expect(signal.aborted).toBe(true);
+  complete([{ html: '<svg></svg>' }]); await Promise.resolve();
+  expect(worker.postMessage.mock.calls.some(call => call[0].type === 'diagram-results')).toBe(false);
+  expect(worker.terminate).toHaveBeenCalledOnce();
 });

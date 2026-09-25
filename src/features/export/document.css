@@ -20,6 +20,10 @@ li[data-type=taskItem] { display: flex; gap: .5em; align-items: flex-start; }
 .export-task-check { width: 1em; height: 1em; vertical-align: middle; }
 a { color: #245bc1; text-decoration: none; overflow-wrap: anywhere; }
 img,svg { max-width: 100%; } img { height: auto; }
+.export-diagram { margin: .8em 0; min-width: 0; break-inside: avoid; color: #18202b; --editor-text:#18202b; --editor-text-muted:#526174; --editor-surface:#fff; --editor-bg:#f8fafc; --editor-border:#d8dee7; }
+.export-diagram > svg { display: block; width: auto; height: auto; margin: 0 auto; max-width: 100%; }
+.export-diagram[data-diagram-kind="infographic"] { break-inside: auto; }
+.export-diagram-error { color: #a12c2c; font-size: .9em; white-space: pre-wrap; }
 blockquote { margin: .7em 0; padding: .2em 1em; border-left: 3px solid #c5cedb; color: #526174; }
 hr { border: 0; border-top: 1px solid #d8dee7; margin: 1em 0; }
 code,pre { font-family: var(--export-mono-font, Consolas, 'Microsoft YaHei', monospace); }

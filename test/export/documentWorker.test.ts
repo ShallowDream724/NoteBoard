@@ -49,3 +49,20 @@ it('keeps NB-looking Markdown prose as Markdown when its input format is explici
   await scope.onmessage!({ data: { type: 'convert', inputFormat: 'markdown', markdown: '#!noteboard 1\n\nOrdinary prose', title: 'Example', directory: '', format: 'md' } });
   expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({ type: 'result', result: expect.stringContaining('#!noteboard 1') });
 });
+
+it('waits for one real-browser diagram batch before serializing its final print HTML', async () => {
+  const postMessage = vi.fn();
+  const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
+  vi.stubGlobal('self', scope);
+  for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
+  await import('../../src/features/export/documentWorker');
+  const converting = scope.onmessage!({ data: { type: 'convert', markdown: '```mermaid\ngraph LR\nA-->B\n```', title: 'Diagram', directory: '', format: 'html' } });
+  await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'diagrams', requests: [{ kind: 'mermaid', code: 'graph LR\nA-->B' }] }));
+  expect(postMessage.mock.calls.some(call => call[0].type === 'result')).toBe(false);
+  await scope.onmessage!({ data: { type: 'diagram-results', results: [{ html: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40"><text>Final graphic</text></svg>' }] } });
+  await converting;
+  const output = postMessage.mock.calls.at(-1)?.[0];
+  expect(output.type).toBe('result'); expect(output.result.html).toContain('Final graphic');
+  expect(output.result.html).not.toContain('A--&gt;B');
+  expect(output.result.html).not.toContain('exportSourceOnly');
+});

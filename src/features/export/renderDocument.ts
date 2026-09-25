@@ -10,10 +10,11 @@ import { matrixSource, matrixPart, type MatrixSource } from '../../core/math/str
 import { MATH_LIMITS } from '../editor-md/mathLimits';
 import { projectRichContent } from './richProjection';
 import { markTableEdges } from './tableLayout';
+import { DIAGRAM_LABELS, type DiagramRenderer, type DiagramRequest } from './diagramRendering';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
   math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths,
-  mode: 'print' | 'html' = 'print'): Promise<ExportDocument> {
+  mode: 'print' | 'html' = 'print', diagrams?: DiagramRenderer): Promise<ExportDocument> {
   signal?.throwIfAborted();
   const original = snapshot ?? parseMarkdownDocument(markdown);
   const projection = projectRichContent(original.toJSON(), mode);
@@ -105,10 +106,25 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     codeEngine ??= await import('../editor-md/codeHighlightEngine');
     code.innerHTML = codeTokensToHTML(source, codeEngine.tokenizeCode(source, language));
   }
-  for (const diagram of container.querySelectorAll<HTMLElement>('[data-mermaid], [data-plantuml], [data-infographic]')) {
-    const source = document.createElement('pre'); source.dataset.exportSourceOnly = 'true';
-    source.textContent = diagram.getAttribute('code') ?? diagram.textContent;
-    diagram.replaceWith(source);
+  const diagramElements = Array.from(container.querySelectorAll<HTMLElement>('[data-mermaid], [data-plantuml], [data-infographic]'));
+  if (diagramElements.length) {
+    if (!diagrams) throw new Error('无法启动图表渲染，请重新打开导出。');
+    const requests: DiagramRequest[] = diagramElements.map(element => ({ kind: element.hasAttribute('data-mermaid') ? 'mermaid' : element.hasAttribute('data-plantuml') ? 'plantuml' : 'infographic', code: element.getAttribute('code') ?? element.textContent ?? '' }));
+    const rendered = await diagrams(requests); signal?.throwIfAborted();
+    if (rendered.length !== requests.length) throw new Error('图表渲染结果不完整，请重新导出。');
+    diagramElements.forEach((element, index) => {
+      const request = requests[index], result = rendered[index], id = `diagram-${index + 1}`;
+      element.removeAttribute('code'); element.classList.add('export-diagram');
+      element.dataset.diagramKind = request.kind; element.dataset.exportItem = id;
+      if (result.error || !result.html.trim()) {
+        const message = `${DIAGRAM_LABELS[request.kind]}渲染失败：${result.error || '未生成图形'}`;
+        element.dataset.diagramError = message;
+        const label = document.createElement('p'); label.className = 'export-diagram-error'; label.textContent = message;
+        const source = document.createElement('pre'); source.textContent = request.code;
+        element.replaceChildren(label, source);
+      } else element.innerHTML = result.html;
+      items.push({ id, kind: 'diagram', label: `${DIAGRAM_LABELS[request.kind]} ${index + 1}` });
+    });
   }
   const localImages: Array<{ image: HTMLImageElement; path: string }> = [];
   for (const image of container.querySelectorAll('img')) {

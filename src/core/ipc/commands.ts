@@ -210,6 +210,16 @@ export function writeDocument(
   return invoke<WriteResult>('write_document', { path, content, encoding, eol });
 }
 
+/** Publish only a content-addressed recovery image; native code verifies bytes and never replaces another file. */
+export function publishRecoveryImage(source: string, directory: string): Promise<string> {
+  return invoke<string>('publish_recovery_image', { source, directory });
+}
+export function storeImageAsset(directory: string, extension: string, data: Uint8Array): Promise<string> {
+  return invoke<string>('store_image_asset', data, { headers: {
+    'x-noteboard-image': `directory=${encodeURIComponent(directory)}&extension=${encodeURIComponent(extension)}`,
+  } });
+}
+
 // 保存二进制文件（如粘贴或插入的图片数据）
 export function saveBinaryFile(
   path: string,

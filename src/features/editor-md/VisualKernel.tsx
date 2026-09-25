@@ -188,7 +188,6 @@ export function VisualKernel({
     editorProps: {
       attributes: {
         class: 'nb-prose',
-        style: 'outline: none; max-width: var(--content-max-width); margin: 0 auto; padding: 16px 24px; min-height: 100%; font-size: var(--content-font-size); line-height: var(--content-line-height); font-family: var(--content-font-family); color: var(--editor-text);',
       },
     },
   }, [docKey]);

@@ -14,7 +14,7 @@ import { useWindowStore, type Tab } from '@/stores/windowStore';
 import { initShortcuts, registerShortcut } from '@/core/shortcuts';
 
 const io = vi.hoisted(() => ({ save: vi.fn() }));
-vi.mock('@/core/ipc/commands', async importOriginal => ({ ...await importOriginal<typeof import('@/core/ipc/commands')>(), saveBinaryFile: io.save }));
+vi.mock('@/core/ipc/commands', async importOriginal => ({ ...await importOriginal<typeof import('@/core/ipc/commands')>(), storeImageAsset: io.save }));
 vi.mock('@/features/explorer/refreshAfterWrite', () => ({ refreshExplorerAfterWrite: async () => {} }));
 
 class WorkerMock {
@@ -44,7 +44,7 @@ beforeEach(() => {
   previousDocuments = useDocumentStore.getState(); previousWindows = useWindowStore.getState();
   useDocumentStore.setState({ documents: new Map([[docKey, { key: docKey, dirPath: 'C:\\notes' } as Document]]) });
   useWindowStore.setState({ activeKey: docKey, tabs: [{ key: docKey, viewMode: 'visual' } as Tab] });
-  io.save.mockReset().mockResolvedValue({ ok: true });
+  io.save.mockReset().mockResolvedValue(`${'a'.repeat(64)}.png`);
   editor = new Editor({ extensions: buildDocumentExtensions({ image: ImageNode.configure({ docKey }) }), content: { type: 'doc', content: [paragraph('Parent document')] } });
 });
 afterEach(() => {
@@ -173,7 +173,7 @@ it('saves plain clipboard images with the parent document identity and inserts o
   const beforePaste = view.state.doc; bytes.resolve(new ArrayBuffer(4));
   await vi.waitFor(() => expect(imageSources(view)).toHaveLength(2));
   expect(io.save).toHaveBeenCalledTimes(2);
-  for (const [path, data] of io.save.mock.calls) { expect(path).toMatch(/^C:[\\/]notes[\\/]/); expect(data).toBeInstanceOf(Uint8Array); }
+  for (const [path, extension, data] of io.save.mock.calls) { expect(path).toMatch(/^C:[\\/]notes[\\/]/); expect(extension).toBe('png'); expect(data).toBeInstanceOf(Uint8Array); }
   expect(imageSources(view).every(src => src.startsWith('./'))).toBe(true);
   expect(view.state.doc.firstChild?.textContent).toBe('Xta');
   expect(editor.state.doc).toBe(parent);

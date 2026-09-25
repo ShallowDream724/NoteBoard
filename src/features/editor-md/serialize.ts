@@ -489,6 +489,12 @@ function deduplicateParsedMarkdownMarks(root: ParsedMarkdownNode): void {
   root.content?.forEach(deduplicateParsedMarkdownMarks);
 }
 
+/** Source and the current immutable tree already contain the same image mapping. */
+export function rememberMarkdownSource(editor: Editor, markdown: string): void {
+  const manager = getMarkdownManager(editor);
+  if (manager) lastSerialized.set(manager, { doc: editor.state.doc, markdown });
+}
+
 function parseMarkdownJSON(editor: Editor, markdown: string): JSONContent | null {
   if (!markdown.trim()) return { type: 'doc', content: [{ type: 'paragraph' }] };
   const parsed = getMarkdownManager(editor)?.parse?.(markdown);

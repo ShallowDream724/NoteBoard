@@ -10,7 +10,7 @@ export const DEFAULT_PDF: PdfOptions = {
   paper: 'A4', landscape: false, marginMm: 12, fontPt: 10.5, lineHeight: 1.4,
   pageNumbers: true, pageNumberPosition: 'bottom-center', pageNumberStyle: 'number', items: {},
 };
-export interface ExportItem { id: string; kind: 'formula' | 'table'; label: string }
+export interface ExportItem { id: string; kind: 'formula' | 'table' | 'diagram'; label: string }
 export interface LayoutIssue { id: string; message: string; blocking: boolean }
 export type ExportInputFormat = 'markdown' | 'noteboard';
 export interface ExportDocument { title: string; html: string; items: ExportItem[]; baseDirectory: string; markdown: string; source?: string | import('@tiptap/core').JSONContent; inputFormat?: ExportInputFormat; richSummary?: import('./richProjection').RichExportSummary }

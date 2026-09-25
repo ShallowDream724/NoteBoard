@@ -225,7 +225,10 @@ export function newDefaultDocument(): void {
 export async function openShowcase(onlyIfEmpty = false): Promise<void> {
   const { default: content } = await import('./showcase.nb?raw');
   if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
-  createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content });
+  const { prepareShowcaseAssets } = await import('./showcaseAssets');
+  const prepared = await prepareShowcaseAssets(content);
+  if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
+  createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content: prepared });
 }
 
 /** 新建思维导图文档 */

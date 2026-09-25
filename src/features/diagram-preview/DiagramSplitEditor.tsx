@@ -29,26 +29,13 @@ import { extFromPath } from '../../core/docKind';
 import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
+import { renderMermaidSvg } from './mermaidRenderer';
 
 interface DiagramSplitEditorProps {
   docKey: string;
 }
 
 type LayoutMode = 'split' | 'code' | 'preview';
-
-/** Mermaid 模块延迟加载 */
-let mermaidModule: typeof import('mermaid') | null = null;
-async function loadMermaid(): Promise<typeof import('mermaid')> {
-  if (mermaidModule) return mermaidModule;
-  const mod = await import('mermaid');
-  mermaidModule = mod;
-  mod.default.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
-  });
-  return mod;
-}
 
 export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   const doc = useDocumentStore((s) => s.documents.get(docKey));
@@ -72,6 +59,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const editorViewRef = useRef<EditorView | null>(null);
   const renderTokenRef = useRef(0);
+  const renderAbortRef = useRef<AbortController | null>(null);
 
   // 🔴 S12：布局/预览状态 ref 镜像（回收捕获读取最新值）+ 能力注册 + 重挂载恢复
   const extraStateRef = useRef({ layoutMode: 'split' as LayoutMode, zoom: 1, pan: { x: 0, y: 0 } });
@@ -140,34 +128,30 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   // 渲染图表
   const renderDiagram = useCallback(
     async (code: string) => {
+      renderAbortRef.current?.abort();
+      const controller = new AbortController(); renderAbortRef.current = controller;
+      const token = ++renderTokenRef.current;
       const trimmed = code.trim();
       if (!trimmed) {
         setSvgContent('');
         setRenderError(null);
+        setIsRendering(false);
         return;
       }
 
-      const token = ++renderTokenRef.current;
       setIsRendering(true);
       setRenderError(null);
 
       try {
         if (diagramType === 'mermaid') {
-          const mermaid = await loadMermaid();
           const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-          mermaid.default.initialize({
-            startOnLoad: false,
-            securityLevel: 'strict',
-            theme: isDark ? 'dark' : 'default',
-          });
-          const renderId = `diag-render-${Date.now()}`;
-          const { svg } = await mermaid.default.render(renderId, trimmed);
+          const svg = await renderMermaidSvg(trimmed, isDark ? 'dark' : 'default', controller.signal);
           if (token === renderTokenRef.current) {
             setSvgContent(svg);
           }
         } else {
           // PlantUML
-          const result = await renderPlantUmlToSvg(trimmed);
+          const result = await renderPlantUmlToSvg(trimmed, controller.signal);
           if (token === renderTokenRef.current) {
             if (result.error && !result.svg) {
               setRenderError(result.error);
@@ -250,6 +234,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
     renderDiagram(initialContent);
 
     return () => {
+      renderAbortRef.current?.abort(); renderTokenRef.current++;
       view.destroy();
       editorViewRef.current = null;
     };

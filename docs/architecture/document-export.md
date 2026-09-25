@@ -6,7 +6,7 @@
 
 - `editor-md/documentNodes.ts`、`documentExtensions.ts` 只定义文档结构、Markdown 语法及共享配置，不依赖 React、store、IPC 或 NodeView。编辑器的 `extensions/index.ts` 在同一语法上装配交互视图、历史与快捷键。
 - `readDocumentSnapshot.ts` 从当前编辑器捕获权威快照：可视化模式取不可变节点的 JSON，源码模式取当前 CodeMirror 文本。导出不为此物化历史、更新镜像或保存文件；其他编辑器走能力接口的 `flush('export')`。
-- `export/documentConversion.ts` 管理一次性 Worker。`documentWorker.ts` 在后台完成 JSON→Markdown、解析、KaTeX 和只读 HTML；关闭对话框立即终止 Worker。图片资源采用一次批量握手：Worker 保留生成的图片元素引用，主线程只将路径交给 `convertFileSrc` 并返回 URL，Worker 回填这些 `src` 后再做唯一一次 HTML 序列化；主线程不重新解析整份导出 DOM，也不猜测 Tauri URL 前缀。LinkeDOM 只在 Worker 内提供 DOM，并补齐浏览器对 HTML 片段的文档包装，保留原始 HTML 的解析语义。
+- `export/documentConversion.ts` 管理一次性 Worker。`documentWorker.ts` 在后台完成文本投影、解析、KaTeX 和只读 HTML；关闭对话框立即终止 Worker。图片资源采用一次批量握手：Worker 保留生成的图片元素引用，主线程只将路径交给 `convertFileSrc` 并返回 URL。图表也按批次握手，由真实浏览器调用共享图表渲染器；Worker 等待图形回填后再做唯一一次 HTML 序列化。主线程不重新解析整份导出 DOM，也不猜测 Tauri URL 前缀。LinkeDOM 只在 Worker 内提供 DOM，并补齐浏览器对 HTML 片段的文档包装，保留原始 HTML 的解析语义。
 - `renderDocument.ts` 输出包含公式、提示块 SVG、着色代码、图片和真实 thead 的独立 HTML，剔除交互控件。资源路径使用 `core/documentPath.ts`，生成后的资源重定位只更新图片 `src`，保留正文与代码中的 URI 文本。Pandoc 使用同一文档语法转成 JSON AST，公式是 Math 节点，不再次猜测货币定界符；表格列数采用共享稀疏逻辑网格，计入行列合并。
 
 转换是 O(输入与输出大小) 的整体任务，公式的实际成本还取决于 TeX 复杂度。后台并不意味着零内存：转换期间会有文档树和 HTML。Worker 完成或取消即释放；临时公式缓存上限 4 MiB。编辑器 JSON 捕获本身仍是 O(节点数)，不建立逐字符映射或常驻第二份编辑器。
@@ -16,6 +16,14 @@
 `richProjection.ts` 管理 Markdown、HTML 和打印的增强内容投影；Pandoc 由 `pandocDocument.ts` 直接遍历原始文档节点，不再先投影成便携内容或经 JSON 重建第二棵 ProseMirror 树。两条路径均只建立一次说明索引。未知节点与 `nativeError` 保留为普通代码块，后者使用 `attrs.raw` 原文；未知标记、缺失或循环说明引用明确报错。Markdown 使用标准表格保留图片组合中的图片、图注与空槽，说明编号附于文末。Pandoc 使用原生 Table 表示静态网格、Note 表示脚注、Math 表示公式，展开折叠标题与正文。PDF 同样保留完整网格，不依赖当前轮播页或已挂载表格行。
 
 HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片使用原文档目录解析后的文件 URL，PDF 则继续使用 Tauri 资源握手。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
+
+### 图表进入 HTML 与 PDF
+
+`renderDocument.ts` 将 Mermaid、PlantUML、Infographic 节点收集成一次请求，保留元素位置，等待 `renderDiagrams.ts` 返回静态图形；正常图表不再统一替换成源码。Mermaid 必须使用浏览器的 SVG 尺寸测量，不能在 LinkeDOM 中伪造结果。`diagram-preview/mermaidRenderer.ts` 是编辑节点、图表分栏预览和导出的共同惰性加载/串行渲染边界，临时可测量容器在成功、失败和取消后释放，排队中的废弃任务可取消。PlantUML 复用原有在线服务与 LRU 缓存，导出请求可取消并设 20 秒超时；信息图复用原有解析器和 React 组件生成静态 HTML，不截图或重写一套图形生成器。
+
+导出使用浅色图表；Mermaid/PlantUML 保留 SVG，信息图保留文字和 DOM 布局。打印排版在图表完成后开始，矢量图适应正文宽度与页高；文字缩小到难读时给出可定位提示，用户可明确选择适宽。只有渲染器实际失败才显示错误和保留的源码，错误不会伪装成已渲染图形。关闭导出会同时取消图表请求并释放 Worker。
+
+2026-09-25 定向验收：通过实际 `prepareDocument → documentWorker → 共享渲染器 → createLayoutSession → Edge printToPDF` 生成一页样本，含 Mermaid 流程图、PlantUML 时序图和 Infographic 流程卡片；3 张图表、2 个直接 SVG、0 源码回退、0 排版问题。PDF 文本层包含全部图表标签，整页视觉检查无裁切，普通 JavaScript 代码仍按代码显示。该验证覆盖浏览器排版链路，不替代 Tauri 原生保存对话框生命周期验收。
 
 此前 PDF 验收样本包含七张不同 PNG、空槽、仅图注槽、轮播、折叠、两种模糊、行内/块说明、说明内图片/列表/代码、数学和二十行表格。生产 Worker 经 Edge 153 打印的两份 PDF 各三页、七次图片绘制，全部十八个内容标记保留；六页渲染图无裁切和重叠。这项记录不替代后续 Pandoc 目标适配器验收，也不替代 Tauri 原生保存对话框生命周期测试。
 
@@ -61,7 +69,7 @@ WebView2 `PrintToPdf` 负责完整分页。仅修改页码样式/位置且正文
 
 统一解析显式路径、PATH，以及 Windows LocalAppData/Program Files 下的 Pandoc 安装目录。“设置 → 导出”可指定路径；缺失时引导官方下载，不自动安装。先由 `begin_pandoc` 建立归属当前窗口的会话，再启动可取消的转换 Worker 和 `pandoc_export`。每窗口最多一个会话、全局最多四个；关闭对话框或宿主窗口会终止并回收子进程。转换时并发写 stdin 并持续读取输出，每路最多留存 1 MiB，避免管道等待与警告无限累积。程序检测限时 10 秒，转换限时 30 分钟。结果先写同目录临时文件，成功且未取消才原子替换目的文件；失败或取消保留原文件并清理临时结果。
 
-DOCX 的最终分页由 Word/WPS 决定；PDF 逐项分页设置不强行映射为 DOCX 页面位置。HTML 使用 MathML；LaTeX 保留公式源码，后续编译需要本机 TeX 环境。外部格式不保证 PDF 的全部配色与排版。Mermaid/PlantUML/Infographic 在文档 PDF 中仍保留源码，图形导出尚未接入。
+DOCX 的最终分页由 Word/WPS 决定；PDF 逐项分页设置不强行映射为 DOCX 页面位置。HTML 使用 MathML；LaTeX 保留公式源码，后续编译需要本机 TeX 环境。外部格式不保证 PDF 的全部配色与排版。Mermaid/PlantUML/Infographic 在 HTML/PDF 中输出图形；当前 Pandoc 的 Word/LaTeX 目标继续以代码块保留图表源码。
 
 Word/LaTeX 要求 Pandoc 3.0 或更新版本。Rust 读取当前可执行程序的 API 版本，拒绝旧 Table AST，再为该次任务创建内嵌 `pandoc-targets.lua` 的临时副本；临时资源随任务释放。目标 writer 调用 Pandoc 自身 writer，不重新实现图片关系、公式、列表、表格或脚注序列化。
 

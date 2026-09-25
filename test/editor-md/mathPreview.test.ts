@@ -118,4 +118,42 @@ describe('formula preview reclamation geometry', () => {
     preview.setEditing(true); preview.setEditing(false);
     expect(host.firstElementChild).toBe(element); expect(state.renders).toHaveLength(1);
   });
+
+  it('keeps a tall matrix geometry through consecutive source edits until the latest worker result arrives', () => {
+    const host = document.createElement('span'); host.style.display = 'block'; document.body.append(host);
+    const first = mountMathPreview(host, '\\begin{matrix}a&b\\\\[3em]c&d\\end{matrix}', true, true); cleanups.push(first.dispose);
+    state.renders.at(-1)!.done({ html: '<span class="katex">matrix</span>' });
+    TestResizeObserver.current.notify(host.firstElementChild!, 480, 965);
+    TestResizeObserver.current.notify(host, 480, 965);
+    const measure = vi.spyOn(host, 'getBoundingClientRect');
+    first.dispose(true);
+    const placeholder = host.firstElementChild as HTMLElement;
+    expect(placeholder.style.height).toBe('965px');
+    const second = mountMathPreview(host, 'changed matrix', true, true); cleanups.push(second.dispose);
+    expect(host.firstElementChild).toBe(placeholder);
+    // Another keystroke can cancel that request before it has produced geometry.
+    const stale = state.renders.at(-1)!; second.dispose(true);
+    const third = mountMathPreview(host, 'latest matrix', true, true); cleanups.push(third.dispose);
+    expect(host.firstElementChild).toBe(placeholder);
+    stale.done({ html: '<span class="katex">stale result</span>' });
+    expect(host.firstElementChild).toBe(placeholder);
+    state.renders.at(-1)!.done({ html: '<span class="katex">latest result</span>' });
+    expect(host.querySelector('.katex')?.textContent).toBe('latest result');
+    expect(measure).not.toHaveBeenCalled();
+  });
+
+  it('keeps the editing height when a tall matrix becomes invalid, then releases it on close', () => {
+    const host = document.createElement('span'); host.style.display = 'block'; document.body.append(host);
+    const first = mountMathPreview(host, '\\begin{matrix}a&b\\\\[3em]c&d\\end{matrix}', true, true);
+    state.renders.at(-1)!.done({ html: '<span class="katex">matrix</span>' });
+    TestResizeObserver.current.notify(host, 480, 965);
+    expect(host.style.minHeight).toBe('965px');
+    first.dispose(true);
+    const invalid = mountMathPreview(host, '\\begin{matrix}a&b\\end{matrix', true, true); cleanups.push(invalid.dispose);
+    state.renders.at(-1)!.done({ html: '<span class="katex-error">source</span>', error: 'Missing closing brace' });
+    expect(host.querySelector('[role="status"]')?.textContent).toBe('Missing closing brace');
+    expect(host.style.minHeight).toBe('965px');
+    invalid.setEditing(false);
+    expect(host.style.minHeight).toBe('');
+  });
 });

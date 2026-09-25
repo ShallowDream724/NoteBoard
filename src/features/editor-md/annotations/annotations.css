@@ -1,7 +1,10 @@
 .nb-annotation-anchor { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; cursor: help; }
 .nb-annotation-anchor:focus-visible, .nb-annotation-block-anchor:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 3px; }
-.nb-annotation-block-anchor { border-inline-start: 2px dotted var(--editor-text-muted); }
-.nb-annotation-indicator { display: inline-flex; vertical-align: super; align-items: center; justify-content: center; width: 14px; height: 14px; margin-inline: 2px; padding: 0; border: 1px solid var(--editor-border); border-radius: 50%; color: var(--editor-text-muted); background: var(--editor-surface); font: 10px/1 var(--ui-font-family, sans-serif); cursor: help; user-select: none; }
+.nb-annotation-inline-marker { display:inline; position:relative; font-size:inherit; line-height:inherit; }
+.nb-annotation-block-marker { display:block; position:relative; height:0; margin:0!important; padding:0!important; overflow:visible; }
+.nb-annotation-indicator { position:absolute; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; padding:0; border:1px solid var(--editor-border); border-radius:50%; color:var(--editor-text-muted); background:var(--editor-surface); font:10px/1 var(--ui-font-family,sans-serif); cursor:help; user-select:none; }
+.nb-annotation-inline-marker > .nb-annotation-indicator { left:2px; bottom:.6em; }
+.nb-annotation-block-marker > .nb-annotation-indicator { right:4px; top:4px; }
 .nb-annotation-panel { position: fixed; z-index: 1300; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; max-width: calc(100vw - 16px); border: 1px solid var(--editor-border); border-radius: var(--radius-lg, 10px); background: var(--editor-surface); color: var(--editor-text); box-shadow: var(--shadow-lg, 0 8px 28px rgb(0 0 0 / 14%)); font: 13px/1.6 var(--ui-font-family, sans-serif); }
 .nb-annotation-header { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px 4px 12px; flex-shrink: 0; border-bottom: 1px solid var(--editor-border); user-select: none; touch-action: none; }
 .nb-annotation-panel[data-pinned] .nb-annotation-header { cursor: grab; }

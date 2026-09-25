@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/Tooltip';
 import { annotationSchemaExtensions } from '@/features/editor-md/annotations/schema';
 import { AnnotationBehavior } from '@/features/editor-md/annotations/extension';
 import { AnnotationLayer } from '@/features/editor-md/annotations/AnnotationLayer';
-import { beginAnnotation } from '@/features/editor-md/annotations/commands';
+import { beginAnnotation, addAnnotation } from '@/features/editor-md/annotations/commands';
 import { annotationAnchors, collectAnnotations } from '@/features/editor-md/annotations/model';
 import { undoDepth } from '@tiptap/pm/history';
 import { EditorView } from '@tiptap/pm/view';
@@ -112,6 +112,38 @@ it('saves a new rich draft and anchor as one undoable parent-document action', a
   expect(editor.state.doc.eq(original)).toBe(true);
   await act(async () => { editor.commands.redo(); });
   expect(collectAnnotations(editor.state.doc).get(id)?.node.textContent).toBe('Saved explanation');
+});
+
+it('saves with Enter before the embedded keymap and keeps Shift+Enter inside the draft', async () => {
+  let id = '';
+  await act(async () => { editor.commands.setTextSelection(targetRange()); id = beginAnnotation(editor)!; });
+  const field = await enterBody('First line');
+  await act(async () => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true }));
+  });
+  expect(panel()?.querySelector('[data-annotation-edit]')).toBeNull();
+  expect(field.querySelector('br')).not.toBeNull();
+  await act(async () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
+  expect(collectAnnotations(editor.state.doc).get(id)?.node.textContent).toBe('First line');
+  expect(panel()?.querySelector('[data-annotation-edit]')).not.toBeNull();
+  expect(undoDepth(editor.state)).toBe(1);
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('button[aria-label="移除说明"]')!.click());
+  expect(collectAnnotations(editor.state.doc).has(id)).toBe(false);
+});
+
+it('does not open a whole-block note when placing the caret in its paragraph', async () => {
+  let block!: HTMLElement;
+  await act(async () => {
+    const from = targetRange().from - 1;
+    editor.commands.setNodeSelection(from);
+    addAnnotation(editor, [{ type: 'paragraph', content: [{ type: 'text', text: 'Block note' }] }], { open: false });
+    const anchor = annotationAnchors(editor.state.doc).find(item => item.block)!;
+    block = editor.view.nodeDOM(anchor.from) as HTMLElement;
+    block.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  expect(panel()).toBeNull();
+  await act(async () => block.querySelector<HTMLButtonElement>('.nb-annotation-indicator')!.click());
+  expect(panel()?.textContent).toContain('Block note');
 });
 
 it('maps a new draft target through main-document edits before saving', async () => {

@@ -3,13 +3,13 @@ import { queueMath, refreshMathQueue, retireMath } from './mathRenderQueue';
 import { matrixSource } from '../../core/math/structure';
 import { mountMatrixPreview } from './matrixPreview';
 import { checkMathSource, mathMarkupNodeCount, MATH_LIMITS } from './mathLimits';
-import { registerMathPreview, type MathPreviewLease } from './mathPreviewSession';
+import { registerMathPreview } from './mathPreviewSession';
 import '../../core/math/wrapping.css';
 
 let nextId = 0;
 type Size = { width: number; height: number };
 type Geometry = Size & { baseline?: number };
-export interface MathPreviewController { dispose(): void; setEditing(editing: boolean): void }
+export interface MathPreviewController { dispose(preserveGeometry?: boolean): void; setEditing(editing: boolean): void }
 const sizes = new Map<Element, (size: Size) => void>();
 let resize: ResizeObserver | undefined;
 function observeSize(element: HTMLElement, callback: (size: Size) => void) {
@@ -23,6 +23,19 @@ function observeSize(element: HTMLElement, callback: (size: Size) => void) {
   return () => { if (!sizes.delete(element)) return; resize?.unobserve(element); if (!sizes.size) { resize?.disconnect(); resize = undefined; } };
 }
 
+/** Reuse observer-provided dimensions during both eviction and source changes.
+ * No layout read or scroll restoration is needed while the next worker runs. */
+function geometryPlaceholder(size: Geometry, display: boolean): HTMLElement {
+  const strut = document.createElement('span'); strut.className = 'math-preview-placeholder'; strut.setAttribute('aria-hidden', 'true');
+  strut.style.cssText = `display:block;width:${size.width}px;height:${size.height}px;font-size:0;line-height:0`;
+  if (!display) {
+    const baseline = document.createElement('span');
+    baseline.style.cssText = `display:inline-block;width:0;height:${size.baseline}px;vertical-align:baseline`;
+    strut.append(baseline);
+  }
+  return strut;
+}
+
 /** Owns only the empty preview host, outside React's node-view render cycle.
  * Viewport work never changes the document or editor selection. */
 export function mountMathPreview(host: HTMLElement, latex: string, display: boolean, editing: boolean, owner: HTMLElement = host.closest<HTMLElement>('.ProseMirror') ?? host.parentElement ?? host): MathPreviewController {
@@ -31,27 +44,35 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
   const refused = checkMathSource(latex, MATH_LIMITS.matrixSourceCharacters);
   if (refused) {
     const message = document.createElement('span'); message.setAttribute('role', 'status'); message.textContent = refused.error;
-    host.replaceChildren(message); return { dispose: () => host.replaceChildren(), setEditing() {} };
+    host.replaceChildren(message); return { dispose: preserveGeometry => { host.replaceChildren(); if (!preserveGeometry) host.style.minHeight = ''; }, setEditing: next => { if (!next) host.style.minHeight = ''; } };
   }
   // Allocate a stable geometric placeholder before first paint. A thousand-row
   // matrix must never first appear as two source lines, then shift the document.
   if (latex.length > 1200 && latex.includes('\\begin{')) {
     try {
       const matrix = matrixSource(latex, { retainBarred: true });
-      if (matrix && matrix.environment !== 'Bmatrix' && (matrix.rows.length > 64 || matrix.rows.length * matrix.columns > 512)) return { dispose: mountMatrixPreview(host, matrix), setEditing() {} };
-    } catch (error) { host.textContent = String(error); return { dispose: () => host.replaceChildren(), setEditing() {} }; }
+      if (matrix && matrix.environment !== 'Bmatrix' && (matrix.rows.length > 64 || matrix.rows.length * matrix.columns > 512)) {
+        const dispose = mountMatrixPreview(host, matrix);
+        return { dispose: preserveGeometry => { dispose(); if (!preserveGeometry) host.style.minHeight = ''; }, setEditing: next => { if (!next) host.style.minHeight = ''; } };
+      }
+    } catch (error) { host.textContent = String(error); return { dispose: preserveGeometry => { host.replaceChildren(); if (!preserveGeometry) host.style.minHeight = ''; }, setEditing: next => { if (!next) host.style.minHeight = ''; } }; }
   }
   const id = `math-preview:${++nextId}`;
   let cancel: (() => void) | undefined, cancelRetirement: (() => void) | undefined;
   let live = true, mounted = false, near = false, visible = false, size: Geometry | undefined;
-  let lease: MathPreviewLease;
   let stopSize = () => {};
+  const holdEditingHeight = () => {
+    if (editing && size) host.style.minHeight = `${Math.max(Number.parseFloat(host.style.minHeight) || 0, size.height)}px`;
+  };
   const placeholder = () => {
     const text = document.createElement('span'); text.style.color = 'var(--editor-text-muted)';
     text.textContent = latex ? (latex.length > 100 ? latex.slice(0, 100) + '…' : latex) : editing ? '输入 LaTeX 公式' : '点击输入公式';
     host.replaceChildren(text);
   };
-  placeholder();
+  // A connected React node view can replace its source controller while keeping
+  // the host. Preserve the previous formula's geometry until the new result is
+  // ready, otherwise a tall matrix briefly becomes one line on every keystroke.
+  if (!latex.trim() || !host.firstElementChild?.classList.contains('math-preview-placeholder')) placeholder();
   const show = () => {
     if (!live || !lease.isActive() || mounted || cancel || !latex.trim()) return;
     cancel = queueMath(id, { latex, display, priority: () => editing || visible ? 0 : near ? 1 : 2, isScrolling: () => !editing && viewportIsScrolling(host), done: result => {
@@ -86,12 +107,13 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
         hostWidth = value.width;
         const baseline = baselineProbe ? baselineProbe.getBoundingClientRect().top - host.getBoundingClientRect().top : undefined;
         size = { width: Math.max(value.width, display ? previewWidth : 0), height: value.height, baseline };
+        holdEditingHeight();
         lease.measured();
       });
       stopSize = () => { stopPreviewSize(); stopHostSize(); };
     } });
   };
-  lease = registerMathPreview(owner, {
+  const lease = registerMathPreview(owner, {
     sourceLength: latex.length,
     prepare: show,
     cancelPreparation: () => { cancel?.(); cancel = undefined; },
@@ -101,17 +123,10 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
       cancelRetirement = undefined;
       if (!live || !size) { lease.cancelRetirement(); return; }
       stopSize(); stopSize = () => {};
-      const strut = document.createElement('span'); strut.setAttribute('aria-hidden', 'true');
       // A block child adds no new host-font line box. Its zero-leading line
       // exports exactly the recorded baseline, including errors whose last line
       // uses a smaller font; explicit height preserves the remaining descent.
-      strut.style.cssText = `display:block;width:${size.width}px;height:${size.height}px;font-size:0;line-height:0`;
-      if (!display) {
-        const baseline = document.createElement('span');
-        baseline.style.cssText = `display:inline-block;width:0;height:${size.baseline}px;vertical-align:baseline`;
-        strut.append(baseline);
-      }
-      host.replaceChildren(strut);
+      host.replaceChildren(geometryPlaceholder(size, display));
       mounted = false;
       lease.released();
       });
@@ -132,13 +147,19 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
     setEditing: next => {
       if (!live || editing === next) return;
       editing = next;
+      // A temporarily invalid (or deliberately shorter) result must not shrink
+      // the page underneath the focused source field. Release only on close.
+      if (editing) holdEditingHeight(); else host.style.minHeight = '';
       if (near || editing) { cancelRetirement?.(); cancelRetirement = undefined; lease.cancelRetirement(); }
       lease.nearby(near || editing); refreshMathQueue();
       if (near || editing) show();
     },
-    dispose: () => {
+    dispose: (preserveGeometry = false) => {
       live = false; cancel?.(); cancelRetirement?.(); stopNear(); stopSize();
-      lease.dispose(); host.replaceChildren();
+      lease.dispose();
+      if (!preserveGeometry) host.style.minHeight = '';
+      if (preserveGeometry && size) host.replaceChildren(geometryPlaceholder(size, display));
+      else if (!preserveGeometry || !host.firstElementChild?.classList.contains('math-preview-placeholder')) host.replaceChildren();
     },
   };
 }

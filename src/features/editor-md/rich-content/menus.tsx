@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import { Image, Grid2X2, GalleryHorizontalEnd, MoreHorizontal, EyeOff, CircleHelp, MessageSquareText, X } from 'lucide-react';
+import { Image, Grid2X2, GalleryHorizontalEnd, MoreHorizontal, EyeOff, CircleHelp, X } from 'lucide-react';
 import { ToolbarButton, ToolbarDropdown, ToolbarDropdownItem } from '../../toolbar/ToolbarComponents';
 import { useNativeFeatureVisibility } from '../../document-format/featureGate';
 import { imageCollectionTemplate, insertImageCollection, selectionConcealed, toggleConceal, type ImageTemplate } from './commands';
@@ -28,8 +28,8 @@ export function AnnotationButton({ editor }: { editor: Editor; collapsePriority?
   const visible = useNativeFeatureVisibility();
   if (!visible || editor.state.selection.empty) return null;
   const id = selectedAnnotationId(editor);
-  return <ToolbarButton icon={id ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>}
-    label="说明" compactLabel title={id ? '编辑说明' : '添加说明'} active={!!id}
+  return <ToolbarButton icon={<CircleHelp size={16}/>}
+    title={id ? '编辑说明' : '添加说明'} active={!!id}
     onClick={() => { if (id) openAnnotation(editor, id, { edit: true }); else beginAnnotation(editor); }}/>
 }
 export function RichSelectionMenu({ editor }: { editor: Editor }) {
@@ -37,6 +37,7 @@ export function RichSelectionMenu({ editor }: { editor: Editor }) {
   const visible = useNativeFeatureVisibility();
   if (!visible || editor.state.selection.empty) return null;
   const id = selectedAnnotationId(editor), concealed = selectionConcealed(editor);
+  if (!id) return <ToolbarButton icon={<EyeOff size={16}/>} title={concealed ? '取消模糊' : '模糊内容'} active={concealed} onClick={() => toggleConceal(editor)}/>;
   const done = (run: () => void) => { setOpen(false); run(); };
   return <ToolbarDropdown isOpen={open} onOpenChange={setOpen} trigger={<ToolbarButton icon={<MoreHorizontal size={17}/>} title="更多文字操作" hasDropdown/>}>
     {id && <ToolbarDropdownItem icon={<X size={14}/>} label="移除说明" onClick={() => done(() => { removeAnnotation(editor, id); })}/>}

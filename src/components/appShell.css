@@ -41,6 +41,7 @@
   --document-outline-space: calc(var(--document-outline-width) + var(--document-outline-inset) + 24px);
 }
 .nb-document-content {
+  container: document-content / inline-size;
   width: calc(100% - var(--document-outline-space, 0px));
 }
 .nb-markdown-source .cm-scroller {

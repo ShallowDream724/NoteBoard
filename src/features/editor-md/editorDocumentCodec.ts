@@ -1,7 +1,7 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node, Schema } from '@tiptap/pm/model';
-import { decodeNativeFile, nativeNodeSource, nativeError, nativeErrorChild, NATIVE_CHILD_CONTAINERS, NATIVE_DOCUMENT_HEADER, replaceNativeMetadata, type NativeMetadata, type NativeNode, visitNativeDocument } from '../../core/nativeDocument';
-import { hasMarkdownContentChanged, initializeMarkdownContent, parseMarkdown, serializeMarkdown, withEditableTail } from './serialize';
+import { decodeNativeFile, nativeNodeSource, nativeError, nativeErrorChild, NATIVE_CHILD_CONTAINERS, NATIVE_DOCUMENT_HEADER, readNativeMetadata, replaceNativeMetadata, type NativeMetadata, type NativeNode, visitNativeDocument } from '../../core/nativeDocument';
+import { hasMarkdownContentChanged, initializeMarkdownContent, parseMarkdown, rememberMarkdownSource, serializeMarkdown, withEditableTail } from './serialize';
 import { resolveRelativeDocPath } from '../../core/documentPath';
 import { normalizeNativeStructure } from '../../core/nativeDocumentStructure';
 
@@ -23,6 +23,15 @@ export function editorDocumentKey(editor: Editor): string | undefined { return k
 export function getEditorNativeMetadata(editor: Editor): NativeMetadata { return metadataByEditor.get(editor) ?? emptyMetadata; }
 /** Metadata is an immutable snapshot; callers replace it after flushing pending edits. */
 export function setEditorNativeMetadata(editor: Editor, metadata: NativeMetadata): void { metadataByEditor.set(editor, metadata); }
+/** The caller has applied the same attribute-only image mapping to this exact
+ * immutable document and source. Do not use for arbitrary source replacement. */
+export function rememberEditorDocumentSource(editor: Editor, content: string): void {
+  if (editorDocumentFormat(editor) === 'markdown') { rememberMarkdownSource(editor, content); return; }
+  const metadata = readNativeMetadata(content);
+  metadataByEditor.set(editor, metadata);
+  originalSources.set(editor.state.doc, { content, metadata });
+  encoded.delete(editor.state.doc);
+}
 function compactAttrs(attrs: Record<string, unknown>, defaults: Record<string, { default?: unknown }> | undefined): Record<string, unknown> | undefined {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(attrs)) if (value !== undefined && value !== null && value !== defaults?.[key]?.default) result[key] = value;

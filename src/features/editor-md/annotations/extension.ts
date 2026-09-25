@@ -8,7 +8,9 @@ interface AnnotationIndex { records: Map<string, AnnotationRecord>; anchors: Ann
 export const annotationIndexKey = new PluginKey<AnnotationIndex>('annotations');
 
 interface Range { from: number; to: number }
-const intersects = (a: Range, b: Range) => a.from <= b.to && a.to >= b.from;
+// Positions are half-open. An insertion just after a block must not evict its
+// anchor: rescanning that insertion cannot visit the preceding block.
+const intersects = (a: Range, b: Range) => a.from < b.to && a.to > b.from;
 /** Step maps use the document after that step; map them through the remaining steps. */
 function touchedRanges(tr: Transaction): Range[] {
   const ranges: Range[] = [];
@@ -70,14 +72,23 @@ function decorationsFor(doc: ProseMirrorNode, records: Map<string, AnnotationRec
       const decorations: Decoration[] = [];
       for (const anchor of anchors) {
         if (!records.has(anchor.id)) continue;
-        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: 'nb-annotation-block-anchor', 'data-annotation-id': anchor.id, tabindex: '0' }));
-        decorations.push(Decoration.widget(anchor.to, () => {
+        const block = anchor.block ? doc.nodeAt(anchor.from) : null;
+        const inline = !anchor.block || (block?.isTextblock && block.type.name !== 'codeBlock');
+        const position = inline ? anchor.to - (anchor.block ? 1 : 0) : anchor.from;
+        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: 'nb-annotation-block-anchor', 'data-annotation-id': anchor.id }));
+        decorations.push(Decoration.widget(position, () => {
+          // Zero-flow markers never wrap a paragraph or add a row after an image.
+          // Text markers sit at the last character; other blocks use their top-right corner.
+          const marker = document.createElement('span');
+          marker.className = inline ? 'nb-annotation-inline-marker' : 'nb-annotation-block-marker';
+          marker.contentEditable = 'false';
           const button = document.createElement('button');
           button.type = 'button'; button.className = 'nb-annotation-indicator'; button.textContent = '?';
           button.setAttribute('aria-label', '打开补充说明'); button.dataset.annotationId = anchor.id;
           button.contentEditable = 'false';
-          return button;
-        }, { key: `annotation-${anchor.id}-${anchor.to}`, side: -1, stopEvent: () => true }));
+          marker.append(button);
+          return marker;
+        }, { key: `annotation-${anchor.id}-${position}-${inline}`, side: -1, stopEvent: () => true }));
       }
       return DecorationSet.create(doc, decorations);
 }

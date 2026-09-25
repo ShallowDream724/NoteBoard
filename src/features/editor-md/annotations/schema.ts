@@ -34,7 +34,7 @@ export const AnnotationStore = Node.create({
 export const AnnotationAnchors = Extension.create({
   name: 'annotationAnchors',
   addGlobalAttributes() { return [{ types: ANNOTATION_BLOCK_TYPES, attributes: {
-    annotationId: { default: null, parseHTML: element => element.getAttribute('data-annotation-id'),
+    annotationId: { default: null, keepOnSplit: false, parseHTML: element => element.getAttribute('data-annotation-id'),
       renderHTML: attrs => attrs.annotationId ? { 'data-annotation-id': attrs.annotationId, class: 'nb-annotation-block-anchor' } : {} },
   } }]; },
 });

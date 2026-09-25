@@ -90,6 +90,8 @@ pub fn run() {
             fsio::native_documents::read_native_headers,
             fsio::native_documents::recover_native_commits,
             fsio::commands::save_binary_file,
+            fsio::recovery_images::publish_recovery_image,
+            fsio::recovery_images::store_image_asset,
             fsio::commands::read_dir,
             fsio::browse::browse_locations,
             fsio::commands::create_file,

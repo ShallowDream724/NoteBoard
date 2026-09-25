@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash, webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JSONContent } from '@tiptap/core';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -13,6 +14,14 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@/features/explorer/explorerActions', () => ({ openExplorerDirectory: vi.fn() }));
 vi.mock('@/features/editor-code/orchestration/openDocument', () => ({ openDocument: vi.fn() }));
 vi.mock('@/features/editor-host/editorLoaders', () => ({ prefetchEditor: vi.fn(), resolveEditorKind: () => 'markdown' }));
+const resources = vi.hoisted(() => new Map<string, Uint8Array>());
+vi.mock('@/core/ipc/commands', async importOriginal => ({ ...await importOriginal<typeof import('@/core/ipc/commands')>(),
+  ensureStagingDirectory: async () => 'C:\\recovery',
+  storeImageAsset: async (directory: string, extension: string, bytes: Uint8Array) => {
+    const filename = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`;
+    resources.set(`${directory}\\${filename}`, bytes); return filename;
+  },
+}));
 
 const showcase = readFileSync('src/features/welcome/showcase.nb', 'utf8');
 const nodesOf = (root: JSONContent, type: string): JSONContent[] => {
@@ -22,10 +31,16 @@ const nodesOf = (root: JSONContent, type: string): JSONContent[] => {
 };
 
 beforeEach(() => {
+  resources.clear(); vi.stubGlobal('crypto', webcrypto);
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const name = String(url).match(/(morning|forest|evening)/)?.[1];
+    if (!name) throw new Error(`Unexpected asset URL ${url}`);
+    return { ok: true, arrayBuffer: async () => Uint8Array.from(readFileSync(`examples/assets/${name}.png`)).buffer };
+  }));
   useWindowStore.setState({ tabs: [], activeKey: null });
   useDocumentStore.setState({ documents: new Map() });
 });
-afterEach(() => { vi.clearAllMocks(); });
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe('bundled native feature showcase', () => {
   it('opens an editable native copy, preserving the empty-window guard', async () => {
@@ -33,7 +48,11 @@ describe('bundled native feature showcase', () => {
     const tab = useWindowStore.getState().activeTab()!;
     const document = useDocumentStore.getState().getDocument(tab.key)!;
     expect(tab).toMatchObject({ kind: 'noteboard', displayName: '欢迎使用 NoteBoard.nb', path: null, language: 'json' });
-    expect(document).toMatchObject({ kind: 'noteboard', readonly: false, content: showcase });
+    expect(document).toMatchObject({ kind: 'noteboard', readonly: false });
+    expect(document.content).not.toContain('data:image/');
+    expect(document.content).not.toContain('./assets/');
+    expect(document.content).toContain('C:/recovery/.noteboard-assets/');
+    expect(resources.size).toBe(3);
     expect(tab.key).toMatch(/^untitled:noteboard:/);
     await openShowcase(true);
     expect(useWindowStore.getState().tabs).toHaveLength(1);
@@ -71,8 +90,8 @@ describe('bundled native feature showcase', () => {
     const sources = new Set(nodesOf(json, 'image').map(image => String(image.attrs?.src)));
     expect(sources.size).toBeGreaterThanOrEqual(3);
     for (const source of sources) {
-      expect(source).toMatch(/^data:image\/png;base64,/);
-      const bytes = Buffer.from(source.split(',')[1], 'base64');
+      expect(source).toMatch(/^\.\/assets\/\w+\.png$/);
+      const bytes = readFileSync(`examples/${source.slice(2)}`);
       expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
       expect(bytes.readUInt32BE(16)).toBeGreaterThanOrEqual(400);
       expect(bytes.readUInt32BE(20)).toBeGreaterThanOrEqual(240);

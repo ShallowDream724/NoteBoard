@@ -25,6 +25,7 @@ import * as ipc from '../../core/ipc/commands';
 import { extFromPath } from '../../core/docKind';
 import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../../components/Tooltip';
+import { useImageWheelGesture } from './imageWheelGesture';
 
 interface ImageViewerProps {
   docKey: string;
@@ -140,6 +141,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const wheelGesture = useImageWheelGesture(containerRef, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: .05, max: 20 });
 
   // 自适应窗口缩放
   const fitToWindow = useCallback(() => {
@@ -206,16 +208,6 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
 
   // 水平翻转
   const toggleFlipH = () => setFlipH((prev) => !prev);
-
-  // 滚轮缩放与以鼠标指针为中心平移
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-    setScale((prevScale) => {
-      const newScale = Math.min(Math.max(prevScale * zoomFactor, 0.05), 20);
-      return Number(newScale.toFixed(3));
-    });
-  };
 
   // 拖拽平移事件处理
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -508,7 +500,6 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           cursor: isDragging ? 'grabbing' : 'grab',
           position: 'relative',
         }}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onDoubleClick={fitToWindow}
@@ -550,6 +541,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           /* 禁用 Referer 携带，防止外部或远程图片被防盗链拦截 */
           <img
             ref={imgRef}
+            data-image-preview-transform=""
             src={imgSrc}
             alt={name}
             referrerPolicy="no-referrer"
@@ -559,7 +551,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
             style={{
               transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
               transformOrigin: 'center center',
-              transition: isDragging ? 'none' : 'transform 0.08s ease-out',
+              transition: isDragging || wheelGesture ? 'none' : 'transform 0.08s ease-out',
               maxWidth: 'none',
               maxHeight: 'none',
               boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',

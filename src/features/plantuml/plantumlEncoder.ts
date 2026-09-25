@@ -93,7 +93,8 @@ export const encodePlantUml = compressAndEncodePlantUml;
 /**
  * 异步渲染 PlantUML 为 SVG 内容（带 LRU 缓存）
  */
-export async function renderPlantUmlToSvg(code: string): Promise<{ svg: string; error?: string }> {
+export async function renderPlantUmlToSvg(code: string, signal?: AbortSignal): Promise<{ svg: string; error?: string }> {
+  signal?.throwIfAborted();
   const trimmed = code.trim();
   if (!trimmed) {
     return { svg: '' };
@@ -106,7 +107,7 @@ export async function renderPlantUmlToSvg(code: string): Promise<{ svg: string; 
     const url = getPlantUmlSvgUrl(trimmed);
     if (!url) return { svg: '', error: '代码为空' };
 
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal });
     if (!resp.ok) {
       const errResult = { svg: '', error: `HTTP ${resp.status}: 渲染服务请求失败` };
       plantUmlSvgCache.set(trimmed, errResult);
@@ -125,6 +126,7 @@ export async function renderPlantUmlToSvg(code: string): Promise<{ svg: string; 
     plantUmlSvgCache.set(trimmed, okResult);
     return okResult;
   } catch (err) {
+    signal?.throwIfAborted();
     const errorMsg = err instanceof Error ? err.message : String(err);
     return { svg: '', error: `无法连接 PlantUML 渲染服务器 (${errorMsg})` };
   }

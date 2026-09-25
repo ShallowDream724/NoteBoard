@@ -392,3 +392,21 @@ mod rename_tests {
         assert_eq!(std::fs::read_to_string(target).unwrap(), "target");
     }
 }
+
+#[cfg(test)]
+mod image_asset_tests {
+    use super::save_binary_file;
+
+    #[test]
+    fn binary_image_save_creates_fresh_recovery_and_document_directories() {
+        let directory = tempfile::tempdir().unwrap();
+        let bytes = vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2];
+        for folder in ["recovery/.noteboard-assets", "documents/img"] {
+            let target = directory.path().join(folder).join("image.png");
+            assert!(!target.parent().unwrap().exists());
+            let result = save_binary_file(target.to_string_lossy().to_string(), bytes.clone()).unwrap();
+            assert!(result.ok);
+            assert_eq!(std::fs::read(&target).unwrap(), bytes);
+        }
+    }
+}

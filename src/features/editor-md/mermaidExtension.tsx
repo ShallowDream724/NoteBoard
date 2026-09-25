@@ -33,103 +33,7 @@ function editorTaskId(editor: object): number {
 }
 import { Tooltip } from '../../components/Tooltip';
 
-// ── 全局串行渲染队列 ──
-
-type RenderTask = {
-  id: number;
-  code: string;
-  theme: 'default' | 'dark' | 'forest';
-  signal: AbortSignal;
-  resolve: (svg: string) => void;
-  reject: (error: Error) => void;
-};
-
-const renderQueue: RenderTask[] = [];
-let isProcessing = false;
-let nextId = 0;
-
-/** Mermaid 模块延迟加载 */
-let mermaidModule: typeof import('mermaid') | null = null;
-let mermaidLoading: Promise<typeof import('mermaid')> | null = null;
-
-async function loadMermaid(): Promise<typeof import('mermaid')> {
-  if (mermaidModule) return mermaidModule;
-  if (mermaidLoading) return mermaidLoading;
-
-  mermaidLoading = import('mermaid').then((mod) => {
-    mermaidModule = mod;
-    // 初始化
-    mod.default.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'default',
-    });
-    return mod;
-  });
-  return mermaidLoading;
-}
-
-/** 处理队列中的下一个任务 */
-async function processQueue(): Promise<void> {
-  if (isProcessing) return;
-  const task = renderQueue.shift();
-  if (!task) return;
-
-  isProcessing = true;
-
-  try {
-    if (task.signal.aborted) { task.resolve(''); return; }
-    const mermaid = await loadMermaid();
-    if (task.signal.aborted) { task.resolve(''); return; }
-
-    // 设置主题
-    if (task.theme === 'dark') {
-      mermaid.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
-    } else if (task.theme === 'forest') {
-      mermaid.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'forest' });
-    } else {
-      mermaid.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
-    }
-
-    // 渲染
-    const renderId = `mermaid-${task.id}`;
-    const { svg } = await mermaid.default.render(renderId, task.code);
-    task.resolve(svg);
-  } catch (e) {
-    task.reject(e instanceof Error ? e : new Error(String(e)));
-  } finally {
-    isProcessing = false;
-    // 继续处理下一个
-    if (renderQueue.length > 0) {
-      processQueue();
-    }
-  }
-}
-
-/**
- * 提交 Mermaid 渲染任务到串行队列
- */
-function enqueueRender(code: string, theme: 'default' | 'dark' | 'forest', signal: AbortSignal): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      const index = renderQueue.indexOf(task);
-      if (index >= 0) renderQueue.splice(index, 1);
-      task.resolve('');
-    };
-    const task: RenderTask = {
-      id: nextId++,
-      code,
-      theme,
-      signal,
-      resolve: svg => { signal.removeEventListener('abort', abort); resolve(svg); },
-      reject: error => { signal.removeEventListener('abort', abort); reject(error); },
-    };
-    if (signal.aborted) { resolve(''); return; }
-    signal.addEventListener('abort', abort, { once: true });
-    renderQueue.push(task);
-    processQueue();
-  });
-}
+import { renderMermaidSvg, resetMermaidRenderer } from '../diagram-preview/mermaidRenderer';
 
 // ── 获取当前主题 ──
 
@@ -180,7 +84,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
     setError(null);
 
     try {
-      const result = await enqueueRender(currentCode, theme, signal);
+      const result = await renderMermaidSvg(currentCode, theme, signal);
       // 陈旧守卫：检查内容是否已变
       if (signal.aborted || token !== renderTokenRef.current) return;
       setSvg(result);
@@ -631,8 +535,5 @@ export const MermaidBlock = MermaidNode.extend({
 
 /** 清除 Mermaid 模块（主题切换时重置初始化） */
 export function resetMermaid(): void {
-  mermaidModule = null;
-  mermaidLoading = null;
-  for (const task of renderQueue.splice(0)) task.resolve('');
-  // An already running renderer retains the serial lock until its finally block.
+  resetMermaidRenderer();
 }

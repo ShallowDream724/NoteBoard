@@ -245,7 +245,24 @@ export function createLayoutSession(root: HTMLElement) {
     }
     if (global) {
       for (const image of root.querySelectorAll('img')) { image.style.maxHeight = `${pageHeight}px`; image.style.objectFit = 'contain'; if (!image.complete || !image.naturalWidth) issue('', '有图片未能加载，请检查图片路径'); }
-      if (root.querySelector('[data-export-source-only]')) issue('', '此图表暂按源码导出', false);
+    }
+    for (const id of changed) for (const diagram of elements(id).filter(element => element.classList.contains('export-diagram'))) {
+      if (diagram.dataset.diagramError) { issue(id, `${diagram.dataset.diagramError}。已保留源码供检查。`, false); continue; }
+      const svg = diagram.querySelector<SVGSVGElement>(':scope > svg');
+      if (svg) {
+        svg.style.maxHeight = `${pageHeight}px`;
+        const naturalWidth = parseFloat(svg.getAttribute('width') ?? ''), displayed = svg.getBoundingClientRect().width;
+        // A large vector can fit geometrically while its labels become illegible.
+        // The explicit fit mode remains the user's choice for that tradeoff.
+        if (naturalWidth > displayed && displayed > 0 && options.items[id] !== 'fit') {
+          const scale = displayed / naturalWidth;
+          const labels = Array.from(svg.querySelectorAll<SVGElement>('text,.nodeLabel')).filter(label => label.textContent?.trim());
+          if (labels.some(label => (parseFloat(getComputedStyle(label).fontSize) || 16) * scale < 8 * 96 / 72)) issue(id, '图表已适应页面，但文字较小；可选择适宽缩放或简化图表。');
+        }
+      }
+      const available = availableWidth(diagram, width), measured = extent(diagram);
+      if (options.items[id] === 'fit' && measured > available) fit(diagram, available, measured);
+      if (extent(diagram) > available + 1) issue(id, '图表超出正文宽度，请选择适宽缩放或调整页面设置。');
     }
     // Final geometry includes prose, headings, code, and imported block markup.
     // A clipping boundary is never itself evidence that a document fits.

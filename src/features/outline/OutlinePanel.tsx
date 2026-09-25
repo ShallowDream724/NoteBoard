@@ -1,7 +1,6 @@
 
 // NoteBoard 大纲面板
-// 24px 行、缩进 min(level-1,5)*12+8、字号阶梯、当前项高亮
-// 搜索过滤、h2/h3 折叠、双击就地重命名
+// 紧凑标题导航、层级折叠、双击就地重命名
 // 详见 docs/09-开发路线图.md 9.2-9.10
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
@@ -261,48 +260,32 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
               return (
                 <Tooltip key={h.id} content={h.text} disabled={isEditing} side="right" sideOffset={6}>
                   <div
+                    className="nb-outline-item"
                     data-heading-id={h.id}
+                    data-active={isActive || undefined}
+                    role="button"
+                    tabIndex={0}
+                    aria-current={isActive ? 'location' : undefined}
                     onClick={() => handleHeadingClick(h)}
                     onDoubleClick={() => handleDoubleClick(h)}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'var(--toolbar-hover)';
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        handleHeadingClick(h);
                       }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'transparent';
-                      }
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.transform = 'scale(0.985)';
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.transform = 'scale(1)';
                     }}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      height: 24,
                       paddingLeft: getIndent(h.level),
-                      paddingRight: 8,
-                      cursor: 'pointer',
                       fontSize: getFontSize(h.level),
-                      color: isActive ? 'var(--editor-accent)' : 'var(--editor-text)',
-                      fontWeight: isActive ? 600 : 400,
-                      background: isActive ? 'var(--editor-selection-background)' : 'transparent',
-                      borderLeft: isActive ? '2px solid var(--editor-accent)' : '2px solid transparent',
-                      userSelect: 'none',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      transition: 'all var(--transition-fast)',
                     }}
                   >
                     {/* 折叠/展开按钮 */}
                     {hasChildren ? (
-                      <span
+                      <button
+                        type="button"
+                        className="nb-outline-fold"
+                        aria-label={`${isCollapsedItem ? '展开' : '收起'}${h.text}`}
+                        aria-expanded={!isCollapsedItem}
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleCollapse(h.id);
@@ -315,19 +298,12 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
                           justifyContent: 'center',
                           flexShrink: 0,
                           cursor: 'pointer',
-                          color: 'var(--editor-text-muted)',
                           transform: isCollapsedItem ? 'none' : 'rotate(90deg)',
                           transition: 'transform var(--transition-fast), color var(--transition-fast)',
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = 'var(--editor-text)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = 'var(--editor-text-muted)';
-                        }}
                       >
                         <ChevronRight size={12} strokeWidth={2.2} />
-                      </span>
+                      </button>
                     ) : (
                       <span style={{ width: 16, flexShrink: 0 }} />
                     )}
@@ -365,7 +341,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
                         }}
                       />
                     ) : (
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span className="nb-outline-label">
                         {h.text}
                       </span>
                     )}

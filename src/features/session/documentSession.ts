@@ -501,18 +501,29 @@ export async function writeDocumentWithBarrier(
  * its linked Markdown before either baseline is advanced. */
 async function writeSnapshot(key: string, content: string, encoding: Parameters<typeof ipc.writeDocument>[2], eol: Parameters<typeof ipc.writeDocument>[3], expectedNativeHash?: string) {
   const doc = useDocumentStore.getState().getDocument(key);
-  if (doc?.kind !== 'noteboard') return { content, result: await ipc.writeDocument(key, content, encoding, eol), commit: async () => {} };
+  if (doc?.kind !== 'noteboard') {
+    if (doc?.kind !== 'markdown') return { content, result: await ipc.writeDocument(key, content, encoding, eol), commit: async () => {} };
+    const { prepareDocumentImageAssets } = await import('../editor-md/prepareImageAssets');
+    const prepared = await prepareDocumentImageAssets(content, 'markdown', key);
+    const generation = getSessionGeneration(key);
+    return { content: prepared.content, result: await ipc.writeDocument(key, prepared.content, encoding, eol), commit: async () => {
+      if (!prepared.references.length) return;
+      const { commitImageAssetSources } = await import('../editor-md/imageAssetCommit');
+      await flushDocument(key, 'save');
+      if (isSessionCurrent(key, generation)) commitImageAssetSources(key, content, prepared);
+    } };
+  }
   const { persistNativeDocument } = await import('../document-format/nativePersistence');
   const generation = getSessionGeneration(key);
   const prepared = await persistNativeDocument(doc, content, expectedNativeHash);
   const result = { ok: prepared.result.ok, mtime: prepared.result.native?.mtime ?? 0, size: prepared.result.native?.size ?? 0,
     ...(prepared.result.error ? { error: { kind: 'io' as const, message: prepared.result.error.message } } : {}) };
   return { content: prepared.content, result, commit: async () => {
-    await flushDocument(key, 'save');
+    const { commitNativeSaveMetadata } = await import('../document-format/nativeSaveCommit');
     const linked = prepared.request.markdown?.path;
     if (linked && useDocumentStore.getState().getDocument(linked)) await flushDocument(linked, 'save');
+    await flushDocument(key, 'save');
     if (!isSessionCurrent(key, generation)) return;
-    const { commitNativeSaveMetadata } = await import('../document-format/nativeSaveCommit');
     commitNativeSaveMetadata(key, prepared);
   } };
 }

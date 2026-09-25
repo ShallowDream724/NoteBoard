@@ -9,7 +9,7 @@ export function NativeConversionDialog({ finish, hasMarkdownFile = true }: { fin
   return <DialogShell title="转换为 NoteBoard 文档" description={description} onDismiss={() => finish(null)} width={440}>
     {hasMarkdownFile && <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
       <input type="checkbox" checked={removeMarkdown} onChange={event => setRemoveMarkdown(event.target.checked)}/>
-      删除原 Markdown，不再关联
+      <span><strong style={{ color: 'var(--error-500, #dc2626)' }}>删除</strong>原 Markdown，不再关联</span>
     </label>}
     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22 }}>
       <button type="button" title="取消转换" className="nb-btn-secondary" onClick={() => finish(null)}>取消</button>

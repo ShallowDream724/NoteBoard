@@ -13,10 +13,12 @@ export function useHoverMenu(open: boolean, onOpenChange: (open: boolean) => voi
   current.current = { open, onOpenChange, disabled };
   const [arming, setArming] = useState(false);
   const cancel = () => { clearTimeout(timer.current); timer.current = undefined; };
+  // A split trigger's main action and a portalled child panel are still inside
+  // the same hover branch. Retain ancestors without opening the child menu.
+  const keepAlive = () => { parent?.cancel(); cancel(); };
   const change = (next: boolean) => { cancel(); setArming(false); current.current.onOpenChange(next && !current.current.disabled); };
   const enter = (event?: PointerEvent) => {
-    parent?.cancel();
-    cancel();
+    keepAlive();
     if (event?.pointerType === 'touch' || current.current.disabled || current.current.open) return;
     keyboard.current = false;
     timer.current = setTimeout(() => {
@@ -52,7 +54,7 @@ export function useHoverMenu(open: boolean, onOpenChange: (open: boolean) => voi
     };
   }, [id, exclusive]);
   return {
-    expanded: open || arming, keyboard, cancel, change, enter, leave,
+    expanded: open || arming, keyboard, cancel: keepAlive, keepAlive, change, enter, leave,
     triggerProps: {
       'data-nb-menu-trigger': id,
       'data-menu-expanded': open || arming || undefined,
@@ -67,7 +69,7 @@ export function useHoverMenu(open: boolean, onOpenChange: (open: boolean) => voi
     },
     contentProps: {
       'data-nb-editor-menu': true,
-      onPointerEnter: () => { parent?.cancel(); cancel(); keyboard.current = false; },
+      onPointerEnter: () => { keepAlive(); keyboard.current = false; },
       onPointerLeave: leave,
       onInteractOutside: (event: { detail: { originalEvent: Event }; preventDefault(): void }) => {
         const target = event.detail.originalEvent.target;

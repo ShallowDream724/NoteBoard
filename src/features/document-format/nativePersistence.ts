@@ -5,15 +5,21 @@ import type { Document } from '../../stores/documentStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { prepareTextExport } from '../export/documentConversion';
 import { markdownLinkPath, parentDirectory, MARKDOWN_PROJECTION_VERSION } from './nativeLink';
+import { prepareDocumentImageAssets } from '../editor-md/prepareImageAssets';
+import type { PreparedImageSources } from '../editor-md/imageAssetSource';
 
 export interface PreparedNativeSave {
   request: NativeSaveRequest;
   content: string;
   metadata: NativeMetadata;
+  imageAssets?: { captured: string; prepared: PreparedImageSources };
 }
 
 /** A projection is produced only at an I/O boundary, never on an editor transaction. */
-export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineContent'>, source: string): Promise<PreparedNativeSave> {
+export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineContent'>, source: string, imageTarget = doc.key): Promise<PreparedNativeSave> {
+  const captured = source;
+  const assets = await prepareDocumentImageAssets(source, 'noteboard', imageTarget, imageTarget !== doc.key);
+  source = assets.content;
   let metadata = readNativeMetadata(source);
   const link = markdownLinkPath(doc.key, metadata);
   const request: NativeSaveRequest = {
@@ -44,7 +50,7 @@ export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineCon
     request.markdown = { path: link, content: markdown, expectedHash, encoding: disk.encoding, eol: disk.eol };
     request.content = replaceNativeMetadata(source, metadata);
   }
-  return { request, content: request.content, metadata };
+  return { request, content: request.content, metadata, ...(assets.references.length ? { imageAssets: { captured, prepared: assets } } : {}) };
 }
 
 export async function persistNativeDocument(doc: Pick<Document, 'key' | 'baselineContent'>, source: string, expectedNativeHash?: string): Promise<PreparedNativeSave & { result: NativeSaveResult }> {

@@ -7,10 +7,10 @@ import { EditorView } from '@codemirror/view';
 
 const mock = vi.hoisted(() => ({
   key: 'C:\\notes\\a.md', directory: 'C:\\notes', generation: 1,
-  editor: null as any, source: null as any, capabilities: {},
+  editor: null as unknown as Editor, source: null as EditorView | null, capabilities: {},
   activeKey: 'C:\\notes\\a.md', mode: 'visual', transferring: false,
   documents: new Set<() => void>(), windows: new Set<() => void>(),
-  save: vi.fn(), open: vi.fn(), read: vi.fn(), toast: vi.fn(), queue: vi.fn(),
+  save: vi.fn(), stage: vi.fn(), open: vi.fn(), read: vi.fn(), toast: vi.fn(), queue: vi.fn(),
 }));
 vi.mock('../../src/stores/documentStore', () => ({ useDocumentStore: {
   getState: () => ({ getDocument: (key: string) => key === mock.key ? { key, dirPath: mock.directory } : undefined }),
@@ -26,7 +26,7 @@ vi.mock('../../src/features/session/documentSession', () => ({ getSessionGenerat
   enqueueDocumentWrite: (key: string, writer: () => Promise<unknown>) => { mock.queue(key); return Promise.resolve().then(writer); },
 }));
 vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => mock.editor, getMdSourceView: () => mock.source }));
-vi.mock('../../src/core/ipc/commands', () => ({ saveBinaryFile: mock.save }));
+vi.mock('../../src/core/ipc/commands', () => ({ storeImageAsset: (directory: string, extension: string, bytes: Uint8Array) => directory.includes('.noteboard-assets') ? mock.stage(directory, extension, bytes) : mock.save(directory, extension, bytes), ensureStagingDirectory: async () => 'C:\\recovery' }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mock.open }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: mock.read }));
 vi.mock('../../src/stores/toastStore', () => ({ showToast: mock.toast }));
@@ -36,16 +36,32 @@ import { captureSourceImageInsertion } from '../../src/features/editor-md/imageI
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 const file = (bytes: Promise<ArrayBuffer>) => ({ name: 'photo.png', arrayBuffer: () => bytes } as File);
-const imageCount = () => { let count = 0; mock.editor.state.doc.descendants((node: any) => { if (node.type.name === 'image') count++; }); return count; };
+const imageCount = () => { let count = 0; mock.editor.state.doc.descendants(node => { if (node.type.name === 'image') count++; }); return count; };
 beforeEach(() => {
-  vi.clearAllMocks(); mock.generation = 1; mock.activeKey = mock.key; mock.mode = 'visual'; mock.transferring = false;
+  vi.clearAllMocks(); mock.key = 'C:\\notes\\a.md'; mock.directory = 'C:\\notes'; mock.generation = 1; mock.activeKey = mock.key; mock.mode = 'visual'; mock.transferring = false;
   mock.editor = new Editor({ extensions: [StarterKit, Image], content: '<p>abcd</p>' });
   mock.editor.commands.setTextSelection(3);
-  mock.save.mockResolvedValue({ ok: true }); mock.read.mockResolvedValue(new Uint8Array([1]));
+  mock.save.mockResolvedValue(`${'a'.repeat(64)}.png`); mock.read.mockResolvedValue(new Uint8Array([1]));
+  mock.stage.mockReset().mockResolvedValue(`${'a'.repeat(64)}.png`);
 });
 afterEach(() => { mock.editor.destroy(); mock.source?.destroy(); mock.source = null; expect(mock.documents.size).toBe(0); expect(mock.windows.size).toBe(0); });
 
 describe('async image insertion ownership', () => {
+  it('writes an untitled pasted image to durable recovery storage before inserting its path', async () => {
+    mock.key = 'untitled:note'; mock.activeKey = mock.key; mock.directory = '';
+    await handlePastedImageFile(mock.editor, file(Promise.resolve(new Uint8Array([1, 2]).buffer)), mock.key);
+    expect(mock.stage).toHaveBeenCalledWith('C:\\recovery\\.noteboard-assets', 'png', new Uint8Array([1, 2]));
+    expect(mock.save).not.toHaveBeenCalled(); expect(imageCount()).toBe(1);
+    expect(JSON.stringify(mock.editor.getJSON())).toContain('C:/recovery/.noteboard-assets/');
+    expect(JSON.stringify(mock.editor.getJSON())).not.toContain('data:image/');
+  });
+  it('reports untitled resource write failure without inserting a Base64 fallback', async () => {
+    mock.key = 'untitled:note'; mock.activeKey = mock.key; mock.directory = '';
+    mock.stage.mockRejectedValue(new Error('disk full'));
+    await handlePastedImageFile(mock.editor, file(Promise.resolve(new ArrayBuffer(1))), mock.key);
+    expect(imageCount()).toBe(0);
+    expect(mock.toast).toHaveBeenCalledWith(expect.stringContaining('disk full'), 'error');
+  });
   it('does not write or insert after a session changes while reading clipboard bytes', async () => {
     const bytes = deferred<ArrayBuffer>();
     const pending = handlePastedImageFile(mock.editor, file(bytes.promise), mock.key);
@@ -62,11 +78,11 @@ describe('async image insertion ownership', () => {
     expect(mock.editor.state.doc.child(0).textContent).toBe('Xab');
   });
   it('retains an already-written file but cannot insert after migration begins', async () => {
-    const write = deferred<{ ok: boolean }>(); mock.save.mockReturnValue(write.promise);
+    const write = deferred<string>(); mock.save.mockReturnValue(write.promise);
     const pending = handlePastedImageFile(mock.editor, file(Promise.resolve(new ArrayBuffer(1))), mock.key);
     await vi.waitFor(() => expect(mock.save).toHaveBeenCalledOnce());
     mock.transferring = true; mock.windows.forEach(listener => listener());
-    write.resolve({ ok: true }); await pending;
+    write.resolve(`${'a'.repeat(64)}.png`); await pending;
     expect(imageCount()).toBe(0); expect(mock.toast).toHaveBeenCalledWith(expect.stringContaining('保留'), 'info', 6000);
   });
   it('cancels when the original selected target is deleted while bytes are pending', async () => {

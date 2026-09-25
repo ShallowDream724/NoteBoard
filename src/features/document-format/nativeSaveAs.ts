@@ -8,10 +8,11 @@ import { markdownLinkPath, parentDirectory, relativeDocumentPath } from './nativ
 
 /** Save As moves the editing identity; links keep pointing to the same Markdown. */
 export async function saveNativeAs(doc: Document, target: string, source: string) {
-  const prepared = await prepareNativeSave(doc, source);
+  const prepared = await prepareNativeSave(doc, source, target);
   const markdown = markdownLinkPath(doc.key, prepared.metadata);
   if (markdown && prepared.metadata.markdown) prepared.metadata = { ...prepared.metadata, markdown: { ...prepared.metadata.markdown, path: relativeDocumentPath(target, markdown) } };
-  const rebased = await prepareTextExport(source, 'noteboard', doc.key.startsWith('untitled:') ? '' : parentDirectory(doc.key), undefined, 'noteboard');
+  const images = prepared.imageAssets?.prepared.references.map(([, path]): [string, string] => [path, `./${relativeDocumentPath(target, path)}`]);
+  const rebased = await prepareTextExport(prepared.content, 'noteboard', doc.key.startsWith('untitled:') ? '' : parentDirectory(doc.key), undefined, 'noteboard', images);
   prepared.content = replaceNativeMetadata(rebased, prepared.metadata);
   const exists = await ipc.pathExists(target);
   const baseline = exists.exists ? await ipc.readDocument(target) : null;

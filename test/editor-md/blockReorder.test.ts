@@ -10,6 +10,7 @@ import {
   isTopLevelBlockMoveAllowed,
   moveTopLevelBlock,
   resolveTopLevelDropTarget,
+  findTopLevelBlockElement,
 } from '@/features/editor-md/blockReorder';
 
 const editors: Editor[] = [];
@@ -60,6 +61,16 @@ afterEach(() => {
 });
 
 describe('Markdown 顶层块安全重排序', () => {
+  it('keeps the heading handle target while crossing its SVG folding icon', () => {
+    const editor = createEditor({ type: 'doc', content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Chapter' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Content' }] },
+    ] });
+    const heading = editor.view.dom.querySelector('h2')!;
+    const path = heading.querySelector('svg path') ?? heading.querySelector('svg')!;
+    expect(path).not.toBeNull();
+    expect(findTopLevelBlockElement(editor.view.dom, path)).toBe(heading);
+  });
   it('moves individual list items within and across lists, retaining marks and undo', () => {
     const item = (text: string) => ({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'bold' }] }] }] });
     const editor = createEditor({ type: 'doc', content: [{ type: 'orderedList', attrs: { start: 3 }, content: [item('one'),item('two'),item('three')] }, { type: 'paragraph', content: [{ type: 'text', text: 'end' }] }] });

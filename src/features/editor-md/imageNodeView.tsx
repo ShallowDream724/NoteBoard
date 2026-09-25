@@ -18,6 +18,7 @@ import {
   X,
   AlertCircle,
   RefreshCw,
+  Pencil,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
@@ -30,9 +31,13 @@ import { openDocument } from '../editor-code/orchestration/openDocument';
 import { Tooltip } from '../../components/Tooltip';
 import { useImageVisibility } from './rich-content/imageVisibility';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
+import { useImageWheelGesture } from '../image-viewer/imageWheelGesture';
+import { requestImageDescription } from './rich-content/imageDescriptionDialog';
+import { dispatchDiscreteEdit } from './discreteEdit';
+import type { Transaction } from '@tiptap/pm/state';
 
 /** 大图预览 Lightbox 模态框组件 */
-function ImageLightboxModal({
+export function ImageLightboxModal({
   src,
   alt,
   onClose,
@@ -47,6 +52,9 @@ function ImageLightboxModal({
 }) {
   const [scale, setScale] = useState(1);
   const [rotate, setRotate] = useState(0);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const viewport = useRef<HTMLDivElement>(null);
+  const gesturing = useImageWheelGesture(viewport, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: .2, max: 4, normalWheel: 'pan' });
 
   // 监听 Esc 键快速关闭
   useEffect(() => {
@@ -59,6 +67,7 @@ function ImageLightboxModal({
 
   return (
     <div
+      ref={viewport} role="dialog" aria-label="图片预览" aria-modal="true" data-image-lightbox=""
       style={{
         position: 'fixed',
         top: 0,
@@ -135,6 +144,7 @@ function ImageLightboxModal({
             onClick={() => {
             setScale(1);
             setRotate(0);
+            setTranslate({ x: 0, y: 0 });
           }}
             style={modalBtnStyle}
           >
@@ -182,6 +192,7 @@ function ImageLightboxModal({
 
       {/* 图片主视图 */}
       <div
+        data-image-preview-transform=""
         style={{
           maxWidth: '90vw',
           maxHeight: '85vh',
@@ -189,8 +200,8 @@ function ImageLightboxModal({
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
-          transition: 'transform 120ms ease',
-          transform: `scale(${scale}) rotate(${rotate}deg)`,
+          transition: gesturing ? 'none' : 'transform 120ms ease',
+          transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale}) rotate(${rotate}deg)`,
         }}
       >
         {/* 禁用 Referer 携带，防止防盗链拦截 */}
@@ -208,22 +219,6 @@ function ImageLightboxModal({
         />
       </div>
 
-      {/* 底部信息 */}
-      {alt && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 20,
-            color: 'rgba(255, 255, 255, 0.75)',
-            fontSize: 13,
-            background: 'rgba(0, 0, 0, 0.5)',
-            padding: '4px 12px',
-            borderRadius: 12,
-          }}
-        >
-          {alt}
-        </div>
-      )}
     </div>
   );
 }
@@ -247,6 +242,22 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
   const [resizePreview, setResizePreview] = useState<string | null>(null);
   const resizeCleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => { resizeCleanup.current?.(); }, []);
+  const editDescription = async () => {
+    let pos = getPos(); if (typeof pos !== 'number') return;
+    const originalSrc = node.attrs.src;
+    const map = ({ transaction }: { transaction: Transaction }) => {
+      if (pos === undefined) return;
+      const mapped = transaction.mapping.mapResult(pos, 1); pos = mapped.deletedAcross ? undefined : mapped.pos;
+    };
+    editor.on('transaction', map);
+    try {
+      const value = await requestImageDescription(node.attrs.alt ?? '');
+      if (value === null || editor.isDestroyed || pos === undefined) return;
+      const current = editor.state.doc.nodeAt(pos);
+      if (current?.type.name !== 'image' || current.attrs.src !== originalSrc || current.attrs.alt === value) return;
+      dispatchDiscreteEdit(editor.view, editor.state.tr.setNodeAttribute(pos, 'alt', value));
+    } finally { editor.off('transaction', map); }
+  };
   const updatePresentation = (attrs: { align?: string; width?: string }) => {
     const pos = getPos(); if (typeof pos !== 'number') return;
     runWithDocumentCapability(editor, 'imageLayout', next => {
@@ -527,6 +538,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
             <div style={{ width: 1, height: 14, background: 'var(--editor-border)' }} />
 
             </>}
+            <Tooltip content="编辑图片描述" side="top" sideOffset={4}><button type="button" data-image-description="" aria-label="编辑图片描述" onClick={() => { void editDescription(); }} style={actionBtnStyle}><Pencil size={14}/></button></Tooltip>
             {/* 删除图片 */}
             <Tooltip content="删除图片" side="top" sideOffset={4}>
               <button
@@ -590,7 +602,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
           <img
             src={visibility.visible && resolvedDisplaySrc ? resolvedDisplaySrc : undefined}
             alt={alt}
-            loading="lazy"
+            loading={visibility.visible ? 'eager' : 'lazy'}
             decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setLoadError(true)}
@@ -636,20 +648,6 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
           </Tooltip>
         )}
 
-        {/* 替代文本 Caption 说明 */}
-        {alt && (
-          <div
-            style={{
-              textAlign: align,
-              fontSize: 12,
-              color: 'var(--editor-text-muted)',
-              marginTop: 4,
-              fontStyle: 'italic',
-            }}
-          >
-            {alt}
-          </div>
-        )}
       </div>
 
       {/* 大图预览 Lightbox 模态框 */}

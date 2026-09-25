@@ -1,6 +1,7 @@
 import { DOMParser, parseHTML } from 'linkedom/worker';
 import type { ExportDocument, ExportInputFormat } from './model';
 import type { JSONContent } from '@tiptap/core';
+import type { DiagramRenderer, DiagramResult } from './diagramRendering';
 
 // A DOM implementation only inside this disposable worker. It also preserves
 // raw-HTML Markdown parsing, which TipTap otherwise treats literally in workers.
@@ -16,12 +17,14 @@ class FragmentDOMParser {
 }
 Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
 
-type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard'; inputFormat?: ExportInputFormat }
-  | { type: 'asset-urls'; urls: string[] };
+type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard'; inputFormat?: ExportInputFormat; imageSources?: Array<[string, string]> }
+  | { type: 'asset-urls'; urls: string[] } | { type: 'diagram-results'; results: DiagramResult[] };
 let started = false;
 let receiveAssetUrls: ((urls: string[]) => void) | undefined;
+let receiveDiagrams: ((results: DiagramResult[]) => void) | undefined;
 self.onmessage = async ({ data }: MessageEvent<Request>) => {
   if (data.type === 'asset-urls') { const receive = receiveAssetUrls; receiveAssetUrls = undefined; receive?.(data.urls); return; }
+  if (data.type === 'diagram-results') { const receive = receiveDiagrams; receiveDiagrams = undefined; receive?.(data.results); return; }
   if (started) return;
   started = true;
   try {
@@ -32,6 +35,10 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
         : (await import('../editor-md/documentExtensions')).parseMarkdownDocument(content).toJSON();
       const { rebaseDocumentReferences } = await import('../../core/documentReferences');
       rebaseDocumentReferences(json, data.directory);
+      if (data.imageSources?.length) {
+        const references = new Map(data.imageSources), { visitNativeDocument } = await import('../../core/nativeDocument');
+        visitNativeDocument(json, node => { if (node.type === 'image' && node.attrs && typeof node.attrs.src === 'string' && references.has(node.attrs.src)) node.attrs.src = references.get(node.attrs.src); });
+      }
       const result = data.format === 'md'
         ? (await import('./portableMarkdown')).portableMarkdown(json)
         : (await import('../../core/nativeDocument')).encodeNativeDocument(json);
@@ -48,14 +55,15 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
     const snapshot = typeof content === 'string' ? { markdown: content, doc: null }
       : { markdown: '', doc: (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content) };
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
+    const diagrams: DiagramRenderer = requests => new Promise(resolve => { receiveDiagrams = resolve; self.postMessage({ type: 'diagrams', requests }); });
     if (data.format === 'standalone-html') {
       const { standaloneHtml, localFileUrl } = await import('./standaloneHtml');
-      const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, paths => paths.map(localFileUrl), 'html');
+      const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, paths => paths.map(localFileUrl), 'html', diagrams);
       self.postMessage({ type: 'result', result: standaloneHtml(result.html, data.title) });
       return;
     }
     const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup,
-      paths => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); }));
+      paths => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); }), 'print', diagrams);
     const { html, items, richSummary }: ExportDocument = result;
     self.postMessage({ type: 'result', result: { html, items, richSummary, markdown: snapshot.markdown } });
   } catch (error) { self.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) }); }

@@ -9,10 +9,17 @@ import { synchronizeCurrentDocumentHistoryContent } from '../history/documentHis
 import { noteSelfWrite } from '../explorer/directoryWatcher';
 import type { PreparedNativeSave } from './nativePersistence';
 import type { NativeSaveResult } from '../../core/nativeDocumentIO';
+import { commitImageAssetSources } from '../editor-md/imageAssetCommit';
+import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../editor-md/visualSnapshot';
 
 /** Called after flushing in-flight input. Only the committed link receipt changes;
  * source/body edits made while the disk write ran remain intact and dirty. */
 export function commitNativeSaveMetadata(key: string, prepared: PreparedNativeSave & { result: NativeSaveResult }): void {
+  // Commit contains no await: a final pending snapshot can arrive after an
+  // asynchronous flush resolves, including saves with no image path changes.
+  if (useWindowStore.getState().getTab(key)?.viewMode === 'source') flushPendingSourceSnapshot(key);
+  else flushPendingVisualSnapshot(key);
+  if (prepared.imageAssets) commitImageAssetSources(key, prepared.imageAssets.captured, prepared.imageAssets.prepared);
   const doc = useDocumentStore.getState().getDocument(key);
   const header = doc?.content?.replace(/^\uFEFF/, '');
   if (prepared.request.markdown && doc?.content != null && (header?.startsWith(`${NATIVE_DOCUMENT_HEADER}\n`) || header?.startsWith(`${NATIVE_DOCUMENT_HEADER}\r\n`))) {

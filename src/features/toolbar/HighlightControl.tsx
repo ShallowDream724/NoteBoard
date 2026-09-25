@@ -30,11 +30,12 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
     cancel();
   };
   if (!visible) return null;
-  return <div className="nb-highlight-control" data-open={hover.expanded || undefined} onPointerLeave={leave}>
+  return <div className="nb-highlight-control" data-open={hover.expanded || undefined} onPointerEnter={hover.keepAlive} onPointerLeave={leave}>
     <Popover.Root open={open} onOpenChange={hover.change} modal={false}>
       <Popover.Anchor asChild><div className="nb-text-style-group">
         <button type="button" className="nb-highlight-apply" title="应用文字颜色与高亮" aria-label="应用文字颜色与高亮" aria-pressed={active || !!textColor}
           aria-description="应用上次的文字颜色和高亮"
+          onPointerEnter={hover.keepAlive}
           onPointerDown={event => event.preventDefault()} onMouseDown={event => event.preventDefault()} onClick={() => applyPair(lastStyle)}
           onKeyDown={event => {
             cancel();
@@ -50,7 +51,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
           onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); cancel(); keyboardOpen.current = true; onOpenChange(true); } }}><ChevronDown size={12}/></button>
       </div></Popover.Anchor>
       <Popover.Portal><Popover.Content {...hover.contentProps} ref={menu} id={menuId} role="dialog" aria-label="文字颜色与高亮" className="nb-highlight-menu" align="start" sideOffset={6} collisionPadding={8}
-        onPointerEnter={() => { cancel(); keyboardOpen.current = false; }} onPointerLeave={leave}
+        onPointerEnter={() => { hover.keepAlive(); keyboardOpen.current = false; }} onPointerLeave={leave}
         onOpenAutoFocus={event => { event.preventDefault(); if (keyboardOpen.current) menu.current?.querySelector<HTMLButtonElement>('[aria-pressed=true],button')?.focus(); }}
         onKeyDown={event => {
           cancel(); keyboardOpen.current = true;

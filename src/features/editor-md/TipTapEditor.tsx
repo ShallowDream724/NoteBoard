@@ -13,12 +13,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
+import { mapNativeDocumentSelection } from './nativeSourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
+import { TextSelection } from '@tiptap/pm/state';
 
 import { getBaseline } from './serialize';
 import {
@@ -199,11 +201,16 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       } else {
         const currentEditor = tipTapEditorRef.current;
         if (selection && currentEditor && !currentEditor.isDestroyed) {
-          currentEditor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run();
+          if (nativeDocument) {
+            const from = Math.min(selection.anchor, selection.head), node = currentEditor.state.doc.nodeAt(from);
+            if (node?.isAtom && node.isBlock && !node.isTextblock && (selection.anchor === selection.head || Math.abs(selection.head - selection.anchor) === node.nodeSize)) {
+              currentEditor.chain().setNodeSelection(from).focus().scrollIntoView().run();
+            } else currentEditor.chain().command(({ tr }) => { tr.setSelection(TextSelection.between(tr.doc.resolve(selection.anchor), tr.doc.resolve(selection.head))); return true; }).focus().scrollIntoView().run();
+          } else currentEditor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run();
         }
       }
     });
-  }, [docKey]);
+  }, [docKey, nativeDocument]);
 
   // 🔴 J2：注册 source 快照的历史导航/读取前物化钩子（visual 钩子由 VisualKernel 注册；
   //    undo/redo/getCurrent/模式同步/迁移导出先物化两种暂存——各自无暂存时 no-op）
@@ -649,7 +656,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     // 🔴 S12：visual 内核重挂载（回收后）——恢复捕获的选区/滚动视图状态
     restoreMarkdownViewState();
     if (pendingSourceSelectionRef.current) {
-      const selection = nativeDocument ? null : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
+      const selection = nativeDocument ? mapNativeDocumentSelection(editor.state.doc, content, 'visual', pendingSourceSelectionRef.current, editor) : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
       pendingSourceSelectionRef.current = null;
       scheduleModeSelection('visual', selection);
     }
@@ -670,7 +677,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       initSourceEditor(md);
       const embedded = editor ? embeddedEditingPosition(editor) : null;
       const sourceText = readSourceContent() ?? md;
-      const selection = editor && !nativeDocument ? mapModeSelection(editor, sourceText, 'source', embedded == null ? editor.state.selection : { anchor: embedded, head: embedded }) : null;
+      const visualSelection = editor && (embedded == null ? editor.state.selection : { anchor: embedded, head: embedded });
+      const selection = editor && visualSelection ? nativeDocument ? mapNativeDocumentSelection(editor.state.doc, sourceText, 'source', visualSelection, editor) : mapModeSelection(editor, sourceText, 'source', visualSelection) : null;
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
       setViewMode('source');
@@ -745,7 +753,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       setViewMode('visual');
       useWindowStore.getState().setTabViewMode(docKey, 'visual');
       emit('view-mode-changed', { key: docKey, mode: 'visual' });
-      const visualSelection = nativeDocument ? null : mapModeSelection(editor, md, 'visual', sourceSelection);
+      const visualSelection = nativeDocument ? mapNativeDocumentSelection(editor.state.doc, md, 'visual', sourceSelection, editor) : mapModeSelection(editor, md, 'visual', sourceSelection);
       scheduleModeSelection('visual', visualSelection);
     }
   }, [editor, docKey, nativeDocument, initSourceEditor, readSourceContent, scheduleModeSelection]);

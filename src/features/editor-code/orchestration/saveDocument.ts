@@ -346,7 +346,13 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
           writeResult = { ok: written.result.ok, mtime: written.result.native?.mtime ?? 0, size: written.result.native?.size ?? 0,
             ...(written.result.error ? { error: { kind: 'io' as const, message: written.result.error.message } } : {}) };
           if (written.result.ok && written.request.markdown) noteSelfWrite(written.request.markdown.path);
-        } else writeResult = await ipc.writeDocument(selectedPath, saveContent, encoding, eol);
+        } else {
+          if (docNow?.kind === 'markdown') {
+            const { prepareDocumentImageAssets } = await import('../../editor-md/prepareImageAssets');
+            saveContent = (await prepareDocumentImageAssets(saveContent, 'markdown', selectedPath)).content;
+          }
+          writeResult = await ipc.writeDocument(selectedPath, saveContent, encoding, eol);
+        }
         noteSelfWrite(selectedPath);
         return writeResult;
       });

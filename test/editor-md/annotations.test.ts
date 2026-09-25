@@ -9,11 +9,13 @@ import { addAnnotation, canAddAnnotation, removeAnnotation, selectedAnnotationId
 import { annotationAnchors, annotationBodiesForFragment, collectAnnotations, remapAnnotationIds } from '@/features/editor-md/annotations/model';
 import { constrainAnnotationGeometry } from '@/features/editor-md/annotations/geometry';
 import { nativeTestEditor } from './nativeTestEditor';
+import { moveTopLevelBlock } from '@/features/editor-md/blockReorder';
+import { ImageCollection, ImageSlot } from '@/features/editor-md/rich-content/schema';
 
 const editors: Editor[] = [];
 const paragraph = (text: string): JSONContent => ({ type: 'paragraph', content: [{ type: 'text', text }] });
 function create(content: JSONContent[] = [paragraph('Anchor words here')]) {
-  const editor = new Editor({ extensions: [StarterKit, ImageNode, ...annotationSchemaExtensions, AnnotationBehavior], content: { type: 'doc', content } });
+  const editor = new Editor({ extensions: [StarterKit, ImageNode, ImageCollection, ImageSlot, ...annotationSchemaExtensions, AnnotationBehavior], content: { type: 'doc', content } });
   editors.push(editor); return nativeTestEditor(editor);
 }
 afterEach(() => { for (const editor of editors.splice(0)) editor.destroy(); vi.restoreAllMocks(); });
@@ -49,6 +51,40 @@ describe('补充说明文档状态', () => {
     expect(editor.state.doc.firstChild?.attrs.annotationId).toBeNull();
     expect(collectAnnotations(editor.state.doc).size).toBe(0);
     editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+  });
+
+  it('places a block note inside the text end and does not clone it on paragraph split', () => {
+    const editor = create();
+    editor.commands.setNodeSelection(0);
+    const id = addAnnotation(editor, [paragraph('Whole paragraph')], { open: false })!;
+    const anchor = annotationAnchors(editor.state.doc)[0];
+    const element = editor.view.nodeDOM(anchor.from) as HTMLElement;
+    expect(element.querySelector('.nb-annotation-inline-marker > button')?.getAttribute('data-annotation-id')).toBe(id);
+    expect(editor.view.dom.querySelectorAll('.nb-annotation-indicator')).toHaveLength(1);
+    editor.commands.setTextSelection(anchor.to - 1);
+    expect(editor.commands.splitBlock()).toBe(true);
+    expect(annotationAnchors(editor.state.doc).filter(value => value.id === id)).toHaveLength(1);
+    expect(editor.state.doc.lastChild!.attrs.annotationId).toBeNull();
+    expect(editor.view.dom.querySelectorAll('.nb-annotation-indicator')).toHaveLength(1);
+    editor.commands.undo();
+    expect(collectAnnotations(editor.state.doc).has(id)).toBe(true);
+  });
+
+  it.each(['paragraph', 'imageCollection'])('moves a %s with its note, including undo and redo', type => {
+    const block: JSONContent = type === 'paragraph' ? paragraph('Move me') : { type, attrs: { layout: 'carousel' }, content: [{ type: 'imageSlot', content: [{ type: 'image', attrs: { src: 'one.png' } }] }] };
+    const editor = create([block, paragraph('Next'), paragraph('Last')]);
+    editor.commands.setNodeSelection(0);
+    const id = addAnnotation(editor, [paragraph('Travel with the block')], { open: false })!;
+    const before = editor.state.doc;
+    const anchor = annotationAnchors(before).find(value => value.id === id)!;
+    const result = moveTopLevelBlock(editor.view, anchor.from, before.content.size)!;
+    expect(result).not.toBeNull();
+    const moved = editor.state.doc;
+    expect(moved.nodeAt(result.insertedPos)!.attrs.annotationId).toBe(id);
+    expect(annotationAnchors(moved).filter(value => value.id === id)).toHaveLength(1);
+    expect(collectAnnotations(moved).get(id)?.node.textContent).toBe('Travel with the block');
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    editor.commands.redo(); expect(editor.state.doc.eq(moved)).toBe(true);
   });
 
   it('offers code explanations for the selected block, without creating an unanchored text note', () => {

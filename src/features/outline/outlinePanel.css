@@ -20,3 +20,13 @@
 .nb-outline-list::-webkit-scrollbar-thumb { background:transparent; }
 .nb-outline-list:is(:hover, :focus-within)::-webkit-scrollbar-thumb { background:var(--scrollbar-thumb,#aab1bb); }
 .nb-outline-open { position:absolute; right:var(--document-outline-inset,28px); top:56px; z-index:15; }
+.nb-outline-item { display:flex; align-items:center; min-height:26px; padding-right:6px; cursor:pointer; color:var(--editor-text); user-select:none; white-space:nowrap; }
+.nb-outline-label { min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; padding:2px 6px; border-radius:4px; transition:background-color 120ms ease,color 120ms ease; }
+.nb-outline-item:hover > .nb-outline-label { background:var(--toolbar-hover); }
+.nb-outline-item[data-active] > .nb-outline-label { color:var(--editor-accent); background:var(--editor-selection-background); font-weight:600; }
+.nb-outline-item:focus-visible { outline:none; }
+.nb-outline-item:focus-visible > .nb-outline-label { outline:1px solid var(--editor-accent); outline-offset:-1px; }
+.nb-outline-fold { padding:0; border:0; border-radius:3px; background:transparent; color:var(--editor-text-muted); }
+.nb-outline-fold:hover { color:var(--editor-text); }
+.nb-outline-fold:focus-visible { outline:1px solid var(--editor-accent); }
+@media(prefers-reduced-motion:reduce) { .nb-outline-label,.nb-outline-fold { transition:none!important; } }

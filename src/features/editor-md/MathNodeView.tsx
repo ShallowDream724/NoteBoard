@@ -37,7 +37,9 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     }
     const preview = mountMathPreview(host, latex, display, false, editor.view.dom);
     previewRef.current = preview;
-    return () => { previewRef.current = null; preview.dispose(); };
+    // Source changes replace the controller on the same connected host. Keep
+    // its last measured geometry while the new formula is being prepared.
+    return () => { previewRef.current = null; preview.dispose(host.isConnected); };
   }, [enabled, latex, delimiter, block, display, editor]);
   // Focus changes are priority changes, not a new formula or DOM lifetime.
   useEffect(() => { previewRef.current?.setEditing(editing); });

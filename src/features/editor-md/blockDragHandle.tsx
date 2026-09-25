@@ -5,12 +5,13 @@
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
-  useId,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { type Editor } from '@tiptap/core';
+import type { Transaction } from '@tiptap/pm/state';
 import {
   findTopLevelBlockElement,
   getTopLevelBlockInfo,
@@ -25,6 +26,7 @@ import { BlockContextMenu, BlockTypeIcon } from './BlockContextMenu';
 import { selectBlock } from './blockActions';
 import { foldedSectionEnd } from './headingFolding';
 import { blockHandlePosition } from './blockHandleGeometry';
+import { markHeadingHandleTarget } from './headingHandleMarker';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -118,7 +120,6 @@ function clampPreviewCoordinate(value: number, viewportSize: number, reservedSiz
 }
 
 export function BlockDragHandle({ editor }: { editor: Editor | null }) {
-  const ownerId = useId();
   const [state, setState] = useState<DragHandleState>({
     visible: false,
     top: 0,
@@ -139,6 +140,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const suppressMenuClick = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuOpenRef = useRef(false); menuOpenRef.current = menuOpen;
+  const refreshHoverRef = useRef<(() => void) | null>(null);
   const menuHover = useHoverMenu(menuOpen, open => {
     if (open && (!editor || state.nodePos === null || dragSessionRef.current?.dragging)) return;
     editor?.view.dom.classList.toggle('nb-block-menu-open', open);
@@ -150,14 +152,13 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       editor!.view.dispatch(editor!.state.tr.setMeta('bubbleMenu', 'hide'));
     }
     setMenuOpen(open);
+    if (!open) refreshHoverRef.current?.();
   });
   useEffect(() => () => { editor?.view.dom.classList.remove('nb-block-menu-open'); }, [editor]);
-  useEffect(() => {
-    if (!editor) return;
-    const root = editor.view.dom;
-    root.dataset.nbBlockHandleOwner = ownerId;
-    return () => { delete root.dataset.nbBlockHandleOwner; };
-  }, [editor, ownerId]);
+  useLayoutEffect(() => {
+    if (!editor || !state.visible || state.nodeType !== 'heading' || state.nodePos === null) return;
+    return markHeadingHandleTarget(editor, state.nodePos);
+  }, [editor, state.visible, state.nodeType, state.nodePos]);
 
   const clearHideTimer = useCallback(() => {
     if (!hideTimerRef.current) return;
@@ -221,12 +222,20 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }
 
       // 把手是编辑器的兄弟节点；进入把手后保持当前源块，不再按坐标重算。
-      const targetElement = document.elementFromPoint(pointer.x, pointer.y);
+      let targetElement = document.elementFromPoint(pointer.x, pointer.y);
       if (targetElement && handleRef.current?.contains(targetElement)) {
         clearHideTimer();
         return;
       }
 
+      if (targetElement === editorDom) {
+        // The control lane is padding, not a document node. Probe the content edge
+        // at the same y without walking every block (including large tables).
+        const bounds = editorDom.getBoundingClientRect();
+        const scale = bounds.width / editorDom.offsetWidth || 1;
+        const left = bounds.left + parseFloat(getComputedStyle(editorDom).paddingLeft) * scale;
+        if (pointer.x < left) targetElement = document.elementFromPoint(left + 2, pointer.y);
+      }
       if (!targetElement || !editorDom.contains(targetElement)) {
         scheduleHide();
         return;
@@ -234,10 +243,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
       clearHideTimer();
       const blockElement = findTopLevelBlockElement(editorDom, targetElement);
-      if (!blockElement) return;
+      if (!blockElement) { scheduleHide(); return; }
 
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
-      if (!blockInfo) return;
+      if (!blockInfo) { scheduleHide(); return; }
 
       const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50);
 
@@ -253,6 +262,20 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       pointer = { x: event.clientX, y: event.clientY };
       if (!hoverFrame) hoverFrame = requestAnimationFrame(updateHover);
     };
+    const refreshHover = () => { if (!hoverFrame) hoverFrame = requestAnimationFrame(updateHover); };
+    refreshHoverRef.current = refreshHover;
+    const handleDocumentChange = ({ transaction }: { transaction: Transaction }) => {
+      if (!transaction.docChanged) return;
+      setState(current => {
+        if (!current.visible || current.nodePos === null) return current;
+        const mapped = transaction.mapping.mapResult(current.nodePos, 1);
+        if (mapped.deletedAcross || mapped.pos >= transaction.doc.content.size) return { ...current, visible: false };
+        const node = transaction.doc.nodeAt(mapped.pos);
+        if (!node?.isBlock) return { ...current, visible: false };
+        return mapped.pos === current.nodePos && node.type.name === current.nodeType ? current : { ...current, nodePos: mapped.pos, nodeType: node.type.name };
+      });
+      refreshHover();
+    };
 
     const handleMouseLeave = () => {
       if (!isHoveringHandleRef.current) scheduleHide();
@@ -265,14 +288,17 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }
     };
 
-    editorDom.addEventListener('mousemove', handleMouseMove);
+    scrollParent.addEventListener('mousemove', handleMouseMove);
     scrollParent.addEventListener('mouseleave', handleMouseLeave);
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
+    editor.on('transaction', handleDocumentChange);
 
     return () => {
-      editorDom.removeEventListener('mousemove', handleMouseMove);
+      scrollParent.removeEventListener('mousemove', handleMouseMove);
+      if (refreshHoverRef.current === refreshHover) refreshHoverRef.current = null;
       scrollParent.removeEventListener('mouseleave', handleMouseLeave);
       scrollParent.removeEventListener('scroll', handleScroll);
+      editor.off('transaction', handleDocumentChange);
       cancelAnimationFrame(hoverFrame);
       clearHideTimer();
     };
@@ -486,8 +512,6 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   return (
     <>
-      {editor && state.nodeType === 'heading' && state.nodePos !== null && state.nodePos <= editor.state.doc.content.size &&
-        <style>{`[data-nb-block-handle-owner="${ownerId}"]>:nth-child(${editor.state.doc.resolve(state.nodePos).index(0) + 1})::before{visibility:hidden}`}</style>}
       <Popover.Root open={menuOpen && !isDragging} onOpenChange={menuHover.change}>
       <Popover.Anchor asChild>
         <button

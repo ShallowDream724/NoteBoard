@@ -22,8 +22,8 @@
   --nb-scrollbar-thumb: var(--scrollbar-thumb);
 }
 
-/* WebView2: leave scrollbar-width/color at auto so the native pseudo-element
- * styling and arrow buttons also work in newer Chromium versions. */
+/* WebView2: leave scrollbar-width/color at auto so native pseudo-element
+ * styling stays authoritative in newer Chromium versions. */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -56,22 +56,11 @@
   background: transparent;
 }
 
-::-webkit-scrollbar-button:vertical {
-  height: 10px;
-  background: transparent;
-  border: 5px solid transparent;
-}
-::-webkit-scrollbar-button:vertical:decrement:start {
-  border-top-width: 0;
-  border-bottom-color: var(--nb-scrollbar-thumb);
-}
-::-webkit-scrollbar-button:vertical:increment:end {
-  border-bottom-width: 0;
-  border-top-color: var(--nb-scrollbar-thumb);
-}
-::-webkit-scrollbar-button:vertical:increment:start,
-::-webkit-scrollbar-button:vertical:decrement:end {
+::-webkit-scrollbar-button {
   display: none;
+  width: 0;
+  height: 0;
+  border: 0;
 }
 
 /* 隐藏的水平滚动条，仅在 tab 栏需要时显示 */

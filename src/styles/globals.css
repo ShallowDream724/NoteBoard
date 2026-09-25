@@ -580,8 +580,18 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   line-height: var(--content-line-height);
   max-width: var(--content-max-width);
   margin: 0 auto;
-  padding: 0 24px 0 86px;
+  /* The control lane reserves space for handles, folding controls and list markers. */
+  padding: 0 24px 0 96px;
   color: var(--editor-text);
+}
+
+/* At narrow editing widths, keep the handle 8px from the pane edge instead of
+ * adding percentage-based document centering to the control lane. */
+@container document-content (max-width: 640px) {
+  .ProseMirror:not(.nb-bitable-rte-prose):not(.nb-embedded-prose) {
+    max-width: 100%;
+    padding-inline: 88px 16px;
+  }
 }
 
 .ProseMirror:focus {
@@ -1043,6 +1053,9 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   width: auto;
   margin: 16px 0;
 }
+
+.ProseMirror.nb-prose { padding-block:16px; min-height:100%; outline:none; }
+.ProseMirror :is(h1,h2,h3,h4,h5,h6):has(> .nb-heading-fold-toggle[data-nb-block-handle-active])::before { visibility:hidden; }
 .ProseMirror th, .ProseMirror td {
   min-width: 40px;
   overflow-wrap: normal;

@@ -10,6 +10,7 @@ const key = new PluginKey<DecorationSet>('code-token-colors');
 interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: () => number | undefined }
 interface Batch { updates: Map<Update['getPosition'], Update>; frame: number }
 const batches = new WeakMap<Editor, Batch>();
+const pluginViews = new WeakMap<Editor, object>();
 
 function flushHighlights(editor: Editor, batch: Batch) {
   if (editor.isDestroyed) { batches.delete(editor); return; }
@@ -44,10 +45,20 @@ export const CodeHighlight = Extension.create({
     const editor = this.editor;
     return [new Plugin({
     key,
-    view: () => ({ destroy() {
-      const batch = batches.get(editor);
-      if (batch) { cancelAnimationFrame(batch.frame); batches.delete(editor); }
-    } }),
+    view: () => {
+      const owner = {}; pluginViews.set(editor, owner);
+      return { destroy() {
+        // registerPlugin/unregisterPlugin recreates all plugin views. Its state
+        // and node views survive, so their already requested first tokens must
+        // survive too. Only a genuinely removed view owns final cancellation.
+        queueMicrotask(() => {
+          if (pluginViews.get(editor) !== owner) return;
+          pluginViews.delete(editor);
+          const batch = batches.get(editor);
+          if (batch) { cancelAnimationFrame(batch.frame); batches.delete(editor); }
+        });
+      } };
+    },
     state: {
       init: () => DecorationSet.empty,
       apply(tr, previous) {

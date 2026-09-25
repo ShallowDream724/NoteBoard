@@ -21,6 +21,11 @@ import { TableCellView } from '../tableCellView';
 export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body: ProseMirrorNode, editable: boolean): EditorView {
   const schema = editor.schema;
   const bindings = { ...baseKeymap,
+    ...(schema.nodes.hardBreak ? { 'Shift-Enter': (state: EditorState, dispatch?: (tr: import('@tiptap/pm/state').Transaction) => void) => {
+      if (dispatch) dispatch((state.selection.$from.parent.type.spec.code
+        ? state.tr.insertText('\n') : state.tr.replaceSelectionWith(schema.nodes.hardBreak.create())).scrollIntoView());
+      return true;
+    } } : {}),
     'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo,
     ...(schema.marks.bold ? { 'Mod-b': toggleMark(schema.marks.bold) } : {}),
     ...(schema.marks.italic ? { 'Mod-i': toggleMark(schema.marks.italic) } : {}),

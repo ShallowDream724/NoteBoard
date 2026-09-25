@@ -32,7 +32,7 @@ export function addItemLocations(elements: Iterable<HTMLElement>, adjustable: Re
       // Admission/syntax errors have text in place of KaTeX. Keep those issues
       // reachable from the preview too, without wrapping their diagnostic text.
       if (!targets.length) marker(element, id, false);
-    }
+    } else if (element.classList.contains('export-diagram')) marker(element, id, false);
   }
 }
 

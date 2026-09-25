@@ -6,6 +6,7 @@ import { ImageCollection, ImageSlot, Disclosure } from './schema';
 import { insertLocalImageWithDialog } from '../imagePaste';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import './richContent.css';
+import './carousel.css';
 
 const arrow = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>';
 function button(label: string, className: string, action: () => void, icon?: string) {
@@ -17,12 +18,16 @@ function button(label: string, className: string, action: () => void, icon?: str
 }
 class CollectionView implements NodeView {
   dom = document.createElement('section'); contentDOM = document.createElement('div');
+  private viewport = document.createElement('div'); private pagination = document.createElement('div');
   private footer = document.createElement('div'); private dots = document.createElement('div');
   private previous: HTMLButtonElement; private next: HTMLButtonElement;
   private active = 0; private frame = 0; private shown: HTMLElement | null = null;
   private dotStart = -1; private dotCount = -1; private counter = document.createElement('span');
+  private target: number | null = null; private scrollFrame = 0; private settleTimer: ReturnType<typeof setTimeout> | undefined;
+  private resize: ResizeObserver | undefined; private width = 0; private nearby = new Set<HTMLElement>();
   constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined) {
     this.dom.className = 'nb-image-collection'; this.contentDOM.className = 'nb-image-slots';
+    this.viewport.className = 'nb-image-viewport'; this.pagination.className = 'nb-image-pagination';
     this.dom.setAttribute('role', 'group'); this.dom.setAttribute('aria-label', '图片组合');
     this.footer.className = 'nb-image-collection-controls'; this.footer.contentEditable = 'false';
     this.dots.className = 'nb-image-dots'; this.dots.setAttribute('role', 'group'); this.dots.setAttribute('aria-label', '选择图片');
@@ -33,16 +38,50 @@ class CollectionView implements NodeView {
       dispatchDiscreteEdit(this.editor.view, this.editor.state.tr.insert(pos + this.node.nodeSize - 1, this.editor.schema.nodes.imageSlot.create()));
       this.show(this.node.childCount - 1);
     }, '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>');
-    this.counter.className = 'nb-image-counter'; this.counter.setAttribute('aria-live', 'polite');
-    this.footer.append(this.previous, this.dots, this.counter, this.next, add); this.dom.append(this.contentDOM, this.footer); this.refresh();
+    // Keep live regions out of the editable tree: modal aria isolation would
+    // otherwise mutate all sibling blocks and force ProseMirror to reparse them.
+    this.counter.className = 'nb-image-counter';
+    this.pagination.append(this.dots, this.counter);
+    this.footer.append(this.previous, this.pagination, this.next, add); this.viewport.append(this.contentDOM); this.dom.append(this.viewport, this.footer);
+    this.viewport.addEventListener('scroll', this.onScroll, { passive: true });
+    this.viewport.addEventListener('wheel', this.onWheel, { passive: true });
+    this.viewport.addEventListener('pointerdown', this.onPointerDown, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') { this.resize = new ResizeObserver(() => {
+      const width = this.viewport.clientWidth; if (!width || width === this.width) return;
+      this.width = width; if (this.node.attrs.layout === 'carousel') this.show(this.active, false);
+    }); this.resize.observe(this.viewport); }
+    this.refresh();
   }
   private refresh() {
     this.dom.dataset.layout = this.node.attrs.layout;
     this.contentDOM.style.gridTemplateColumns = `repeat(${this.node.attrs.columns},minmax(0,1fr))`;
     this.active = Math.min(this.active, this.node.childCount - 1);
-    cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => { this.frame = 0; this.show(this.active); });
+    cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => { this.frame = 0; this.show(this.active, false); });
   }
-  private show(index: number) {
+  private onPointerDown = () => { this.target = null; };
+  private onWheel = (event: WheelEvent) => { if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) this.target = null; };
+  private onScroll = () => {
+    if (this.node.attrs.layout !== 'carousel') return;
+    if (!this.scrollFrame) this.scrollFrame = requestAnimationFrame(() => {
+      this.scrollFrame = 0;
+      if (this.target === null && this.viewport.clientWidth) this.paint(Math.round(this.viewport.scrollLeft / this.viewport.clientWidth));
+    });
+    clearTimeout(this.settleTimer);
+    this.settleTimer = setTimeout(() => {
+      this.target = null;
+      if (this.viewport.clientWidth) this.paint(Math.round(this.viewport.scrollLeft / this.viewport.clientWidth));
+    }, 140);
+  };
+  private show(index: number, animate = true) {
+    this.paint(index);
+    if (this.node.attrs.layout !== 'carousel') { this.target = null; this.viewport.scrollLeft = 0; return; }
+    this.target = this.active;
+    const left = this.active * this.viewport.clientWidth;
+    const reduce = this.dom.ownerDocument.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (this.viewport.scrollTo) this.viewport.scrollTo({ left, behavior: animate && !reduce ? 'smooth' : 'auto' });
+    else this.viewport.scrollLeft = left;
+  }
+  private paint(index: number) {
     this.dots.children.item(this.active - this.dotStart)?.setAttribute('aria-pressed', 'false');
     this.shown?.removeAttribute('data-active');
     this.active = Math.max(0, Math.min(index, this.node.childCount - 1));
@@ -58,11 +97,21 @@ class CollectionView implements NodeView {
     this.shown?.setAttribute('data-active', ''); this.dots.children.item(this.active - start)?.setAttribute('aria-pressed', 'true');
     this.counter.hidden = this.node.childCount <= 9; this.counter.textContent = `${this.active + 1} / ${this.node.childCount}`;
     this.previous.disabled = this.active === 0; this.next.disabled = this.active === this.node.childCount - 1;
+    this.prepareAdjacentImages();
   }
-  update(node: Node) { if (node.type !== this.node.type) return false; const changed = this.node !== node; this.node = node; if (changed) this.refresh(); return true; }
-  ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM) || !this.contentDOM.contains(mutation.target)); }
+  private prepareAdjacentImages() {
+    const next = new Set<HTMLElement>();
+    if (this.node.attrs.layout === 'carousel') for (let at = Math.max(0, this.active - 1); at <= Math.min(this.node.childCount - 1, this.active + 1); at++) {
+      const slot = this.contentDOM.children.item(at); if (slot instanceof HTMLElement) next.add(slot);
+    }
+    for (const slot of this.nearby) if (!next.has(slot)) { slot.removeAttribute('data-carousel-nearby'); slot.dispatchEvent(new Event('nb-carousel-proximity')); }
+    for (const slot of next) if (!this.nearby.has(slot)) { slot.setAttribute('data-carousel-nearby', ''); slot.dispatchEvent(new Event('nb-carousel-proximity')); }
+    this.nearby = next;
+  }
+  update(node: Node) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.childCount !== node.childCount; this.node = node; if (changed) this.refresh(); return true; }
+  ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM || mutation.target === this.viewport) || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return this.footer.contains(event.target as globalThis.Node); }
-  destroy() { cancelAnimationFrame(this.frame); }
+  destroy() { cancelAnimationFrame(this.frame); cancelAnimationFrame(this.scrollFrame); clearTimeout(this.settleTimer); this.resize?.disconnect(); this.viewport.removeEventListener('scroll', this.onScroll); this.viewport.removeEventListener('wheel', this.onWheel); this.viewport.removeEventListener('pointerdown', this.onPointerDown); }
 }
 class SlotView implements NodeView {
   dom = document.createElement('figure'); contentDOM = document.createElement('div');

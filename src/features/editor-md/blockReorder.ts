@@ -37,15 +37,15 @@ export function findTopLevelBlockElement(
   editorDom: HTMLElement,
   target: EventTarget | null,
 ): HTMLElement | null {
-  let element = target instanceof HTMLElement ? target : null;
+  let element = target instanceof Element ? target : null;
   const item = element?.closest('li');
-  if (item && editorDom.contains(item) && !item.closest('td,th')) return item;
+  if (item instanceof HTMLElement && editorDom.contains(item) && !item.closest('td,th')) return item;
 
   while (element && element.parentElement && element.parentElement !== editorDom) {
     element = element.parentElement;
   }
 
-  return element?.parentElement === editorDom ? element : null;
+  return element instanceof HTMLElement && element.parentElement === editorDom ? element : null;
 }
 
 /**
@@ -56,6 +56,7 @@ export function getTopLevelBlockInfo(
   view: EditorView,
   element: HTMLElement,
 ): TopLevelBlockInfo | null {
+  if (element.classList.contains('ProseMirror-widget')) return null;
   const item = element.tagName === 'LI' && view.dom.contains(element) && !element.closest('td,th');
   if (element.parentElement !== view.dom && !item) return null;
 

@@ -11,6 +11,8 @@ import { prepareTextExport } from '../../src/features/export/documentConversion'
 import { persistNativeDocument, prepareNativeSave } from '../../src/features/document-format/nativePersistence';
 import { commitNativeSaveMetadata } from '../../src/features/document-format/nativeSaveCommit';
 import { writeDocumentWithBarrier } from '../../src/features/session/documentSession';
+import { Text } from '@codemirror/state';
+import { stagePendingSourceSnapshot } from '../../src/features/editor-md/visualSnapshot';
 
 vi.mock('../../src/core/nativeDocumentIO', async importOriginal => ({
   ...await importOriginal<typeof import('../../src/core/nativeDocumentIO')>(), saveNativeBundle: vi.fn(),
@@ -109,5 +111,20 @@ describe('native linked-save boundary', () => {
     expect(readNativeMetadata(current.content!)).toMatchObject({ custom: { value: 'new metadata' }, markdown: { baselineHash: await documentTextHash('Saved body\n') } });
     expect(current.baselineContent).toBe(baseline); // outer save barrier owns this baseline
     expect(useDocumentStore.getState().getDocument(MD)).toMatchObject({ content: 'Linked input received during save', baselineContent: 'Saved body\n', isDirty: true });
+  });
+  it('materializes source input arriving after an async save gap before applying a metadata-only receipt', async () => {
+    const { doc, source, metadata } = await seed();
+    useWindowStore.getState().openTab({ key: NB, displayName: 'memo.nb', path: NB, kind: 'noteboard', language: 'plaintext', isDirty: true, isPreview: false, viewMode: 'source', externalStatus: null, isDetached: false });
+    useDocumentStore.getState().setContent(NB, source);
+    vi.mocked(saveNativeBundle).mockResolvedValue({ ok: true, native: { mtime: 2, size: source.length }, markdown: { mtime: 2, size: 11 } });
+    const prepared = await persistNativeDocument(doc, source);
+    await Promise.resolve();
+    const newer = native('Typed after flush', { ...metadata, custom: { value: 'later header' } });
+    stagePendingSourceSnapshot(NB, { text: Text.of(newer.split('\n')), revision: 5, isNewGroup: true });
+    expect(useDocumentStore.getState().getDocument(NB)?.content).toBe(source);
+    commitNativeSaveMetadata(NB, prepared);
+    const current = useDocumentStore.getState().getDocument(NB)!.content!;
+    expect(decodeNativeDocument(current).content?.[0].content?.[0].text).toBe('Typed after flush');
+    expect(readNativeMetadata(current).custom).toEqual({ value: 'later header' });
   });
 });
