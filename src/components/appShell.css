@@ -77,9 +77,9 @@
 }
 
 /* The panel library maintains a 10px mouse / 20px touch resize target,
- * independently of this 3px visual boundary. Adjacent panes add no second border. */
+ * independently of this 2px visual boundary. Adjacent panes add no second border. */
 .nb-panel-separator {
-  width: 3px;
+  width: 2px;
   height: 100%;
   background: var(--editor-border);
   cursor: col-resize;

@@ -77,6 +77,7 @@ export function WelcomeScreen({
   onNewXml,
 }: WelcomeScreenProps) {
   const [showMoreFormats, setShowMoreFormats] = useState(false);
+  const [openingShowcase, setOpeningShowcase] = useState(false);
   const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
 
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
@@ -312,7 +313,11 @@ export function WelcomeScreen({
         <span style={{ fontSize: 13, color: 'var(--editor-text-muted)' }}>
           轻量双模笔记、思维导图与专业图表工作台
         </span>
-        <button type="button" className="nb-btn-secondary" style={{ padding: '6px 12px', fontSize: 'var(--ui-font-size,13px)' }} onClick={() => void openShowcase()}>浏览功能示例</button>
+        <button type="button" className="nb-btn-secondary" style={{ padding: '6px 12px', minWidth: '8em', fontSize: 'var(--ui-font-size,13px)' }}
+          disabled={openingShowcase} aria-busy={openingShowcase}
+          onClick={async () => { setOpeningShowcase(true); try { await openShowcase(); } finally { setOpeningShowcase(false); } }}>
+          {openingShowcase ? '正在打开…' : '浏览功能示例'}
+        </button>
       </div>
 
       {/* 第一部分：常用新建核心卡片区（3 列网格） */}

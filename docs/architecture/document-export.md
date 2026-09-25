@@ -4,6 +4,8 @@
 
 标题栏、Ctrl+E 和 Ctrl+P 打开同一导出入口。Ctrl+P 不调用浏览器页面打印。转换器、排版窗口和 PDF.js 按需加载。
 
+标题栏导出按钮仅在当前标签是 Markdown 或 NoteBoard 文档时显示；欢迎页及其他文档类型隐藏该入口，快捷键沿用相同的文档类型守卫。导出弹窗内生成中或尚未满足导出条件时，提交按钮继续显示禁用状态。
+
 信息图导出的 `react-dom/server` 也保持按需加载。Vite 将它的入口及 `react-dom-server*` 实现单独放入 `vendor-react-server`，首屏 `vendor-react` 只承载客户端运行时；不能因为同属 `react-dom` 就合并进首屏。构建来源清单记录具体服务端渲染模块，启动门禁按模块证据阻止其进入静态闭包，即使总字节仍低于预算也拒绝通过。
 
 - `editor-md/documentNodes.ts`、`documentExtensions.ts` 只定义文档结构、Markdown 语法及共享配置，不依赖 React、store、IPC 或 NodeView。编辑器的 `extensions/index.ts` 在同一语法上装配交互视图、历史与快捷键。

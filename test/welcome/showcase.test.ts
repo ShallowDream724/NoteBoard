@@ -8,19 +8,22 @@ import { decodeNativeDocument, visitNativeDocument } from '@/core/nativeDocument
 import { documentParser } from '@/features/editor-md/documentExtensions';
 import { parseNativeNode, serializeNativeNode } from '@/features/editor-md/editorDocumentCodec';
 import { openShowcase } from '@/features/welcome/welcomeActions';
+import { storeImageAsset } from '@/core/ipc/commands';
+import { showToast } from '@/stores/toastStore';
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'showcase-test' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@/features/explorer/explorerActions', () => ({ openExplorerDirectory: vi.fn() }));
 vi.mock('@/features/editor-code/orchestration/openDocument', () => ({ openDocument: vi.fn() }));
 vi.mock('@/features/editor-host/editorLoaders', () => ({ prefetchEditor: vi.fn(), resolveEditorKind: () => 'markdown' }));
+vi.mock('@/stores/toastStore', () => ({ showToast: vi.fn() }));
 const resources = vi.hoisted(() => new Map<string, Uint8Array>());
 vi.mock('@/core/ipc/commands', async importOriginal => ({ ...await importOriginal<typeof import('@/core/ipc/commands')>(),
   ensureStagingDirectory: async () => 'C:\\recovery',
-  storeImageAsset: async (directory: string, extension: string, bytes: Uint8Array) => {
+  storeImageAsset: vi.fn(async (directory: string, extension: string, bytes: Uint8Array) => {
     const filename = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`;
     resources.set(`${directory}\\${filename}`, bytes); return filename;
-  },
+  }),
 }));
 
 const showcase = readFileSync('src/features/welcome/showcase.nb', 'utf8');
@@ -43,6 +46,17 @@ beforeEach(() => {
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe('bundled native feature showcase', () => {
+  it('reports a failed image write without an incomplete tab and allows retry', async () => {
+    vi.mocked(storeImageAsset).mockRejectedValueOnce('无法写入图片目录');
+    await expect(openShowcase()).resolves.toBeUndefined();
+    expect(showToast).toHaveBeenCalledWith('无法打开功能示例：无法写入图片目录', 'error', 5000);
+    expect(useWindowStore.getState().tabs).toHaveLength(0);
+    expect(useDocumentStore.getState().documents.size).toBe(0);
+    await openShowcase();
+    expect(useWindowStore.getState().tabs).toHaveLength(1);
+    expect(resources.size).toBe(3);
+  });
+
   it('opens an editable native copy, preserving the empty-window guard', async () => {
     await openShowcase(true);
     const tab = useWindowStore.getState().activeTab()!;

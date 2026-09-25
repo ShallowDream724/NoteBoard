@@ -23,7 +23,7 @@ export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
-  const markdownActive = useWindowStore((s) => isRichDocument(s.tabs.find(tab => tab.key === s.activeKey)?.kind));
+  const canExportDocument = useWindowStore((s) => isRichDocument(s.tabs.find(tab => tab.key === s.activeKey)?.kind));
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
@@ -80,10 +80,10 @@ export function TitleBar() {
 
       {/* 文档导出 */}
       <div className="titlebar-utility-actions">
-      <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
-        <button type="button" className="titlebar-action" aria-label="导出" disabled={!markdownActive}
+      {canExportDocument && <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
+        <button type="button" className="titlebar-action" aria-label="导出"
           onClick={() => useExportStore.getState().open()}><FileOutput size={16}/></button>
-      </Tooltip>
+      </Tooltip>}
       {/* 设置中心按钮 */}
       <Tooltip content={hasUpdate ? '设置 · 有可用更新' : '设置'} side="bottom" sideOffset={6}>
         <button
