@@ -17,7 +17,7 @@ import {
   synchronizeCurrentDocumentHistoryContent,
 } from '../history/documentHistory';
 import { showToast } from '../../stores/toastStore';
-import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../editor-md/visualSnapshot';
+import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../core/editor/pendingSnapshots';
 
 /**
  * 🔴 R3-10：重新加载——确认并应用磁盘内容到当前会话。

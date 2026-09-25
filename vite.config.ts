@@ -246,6 +246,8 @@ export default defineConfig({
     rollupOptions: {
       input: { main: fileURLToPath(new URL('./index.html', import.meta.url)), export: fileURLToPath(new URL('./export.html', import.meta.url)) },
       output: {
+        // Shared dialog utilities must not inherit a heavy editor's manual chunk.
+        onlyExplicitManualChunks: true,
         // 🔴 S05：函数式 manualChunks，切断「入口为拿 React 归宿而静态 import 重 chunk」的回边。
         //   之前的对象形式把 react/react-dom 卷进 excalidraw chunk（因为该包体积最大），
         //   导致入口静态闭包含整个 1.1 MiB 画板库。
@@ -264,7 +266,7 @@ export default defineConfig({
             if (id.includes('mermaid')) return 'mermaid';
             if (id.includes('@excalidraw') || id.includes('excalidraw')) return 'excalidraw';
             if (id.includes('katex')) return 'katex';
-            if (/[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react';
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react';
           }
           return undefined;
         },

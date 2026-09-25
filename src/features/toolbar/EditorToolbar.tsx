@@ -7,7 +7,7 @@ import { ChevronUp } from 'lucide-react';
 import type { Editor } from '@tiptap/core';
 import type { Tab } from '../../stores/windowStore';
 import { useLayoutStore } from '../../stores/layoutStore';
-import { MarkdownToolbar } from './MarkdownToolbar';
+import { DeferredMarkdownToolbar } from './DeferredMarkdownToolbar';
 import { CodeToolbar } from './CodeToolbar';
 import { FloatingExpandHandle } from './FloatingExpandHandle';
 import { ToolbarButton } from './ToolbarComponents';
@@ -60,7 +60,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
     >
       {/* 格式针对性工具集 */}
       {isRichDocument(activeTab.kind) ? (
-        <MarkdownToolbar
+        <DeferredMarkdownToolbar
           docKey={activeTab.key}
           editor={activeEditor}
           viewMode={activeTab.viewMode}

@@ -1,5 +1,6 @@
 // 编辑器模块入口与资源生命周期分离：表内只存动态 import 工厂，不在模块求值时加载编辑器。
 import type { EditorLoaderKind, LazyEditorComponent } from './editorLoaders';
+import { loadMarkdownToolbar } from '../toolbar/DeferredMarkdownToolbar';
 
 /** 动态 import 工厂表：调用时才加载对应编辑器 chunk */
 export const loaderFactories: Record<EditorLoaderKind, () => Promise<{ default: LazyEditorComponent }>> = {
@@ -7,10 +8,12 @@ export const loaderFactories: Record<EditorLoaderKind, () => Promise<{ default: 
     import('../editor-code/CodeEditor').then(
       (m) => ({ default: m.CodeEditor as unknown as LazyEditorComponent }),
     ),
-  markdown: () =>
-    import('../editor-md/TipTapEditor').then(
+  markdown: () => {
+    void loadMarkdownToolbar().catch(() => {});
+    return import('../editor-md/TipTapEditor').then(
       (m) => ({ default: m.TipTapEditor as unknown as LazyEditorComponent }),
-    ),
+    );
+  },
   board: () =>
     import('../board/BoardEditor').then(
       (m) => ({ default: m.BoardEditor as unknown as LazyEditorComponent }),

@@ -35,6 +35,7 @@ import { materializeSourceStyles, type SourceStyles } from '../document-style/so
 // 🔴 R3-03：pending 与会话代际绑定（物化前校验会话未失效）
 import { getSessionGeneration } from '../session/documentSession';
 import { serializeNativeNode, type RichDocumentFormat } from './editorDocumentCodec';
+import { registerPendingSnapshotMaterializers } from '../../core/editor/pendingSnapshots';
 
 /** 暂存的 visual 快照（组内合并：同组多次输入只保留最新 doc 引用） */
 interface PendingVisualSnapshot {
@@ -253,3 +254,5 @@ export function flushPendingSourceSnapshot(docKey: string): string | null {
 export function discardPendingSourceSnapshot(docKey: string): void {
   pendingSourceByDoc.delete(docKey);
 }
+
+registerPendingSnapshotMaterializers({ source: flushPendingSourceSnapshot, visual: flushPendingVisualSnapshot });

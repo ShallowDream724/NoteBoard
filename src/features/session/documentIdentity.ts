@@ -2,7 +2,7 @@ import { getEditorCapabilities, getDocumentRevision } from '../../core/editor/ed
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { flushDocument, drainDocumentWrites, getSessionGeneration, isClosing, migrateDocumentSession, submitCapturedContent } from './documentSession';
-import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../editor-md/visualSnapshot';
+import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../core/editor/pendingSnapshots';
 import { getBaseline, removeBaseline } from '../editor-md/serialize';
 import { moveDocumentHistory } from '../history/documentHistory';
 import { drainStagingWrites, migrateStagedDocumentKey } from '../staging/stagingManager';

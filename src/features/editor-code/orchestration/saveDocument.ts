@@ -19,7 +19,7 @@ import { normalizePath } from '../../explorer/pathUtils';
 // 🔴 R01/N02：保存未加载的恢复标签前先按需加载正文；正文出口统一前置屏障
 import { ensureWritableContent } from '../../session/closedWindowSession';
 // 🔴 R3-02：无能力实例时保存前的 pending 物化（J2 未物化输入是正文权威）
-import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../editor-md/visualSnapshot';
+import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../../core/editor/pendingSnapshots';
 // 🔴 R3-04：另存为事务的会话身份校验（对话框/授权/写盘每个 await 后验证）
 import { getSessionGeneration } from '../../session/documentSession';
 import { assertDocumentIdentity, commitDocumentIdentity, materializeIdentityPending, prepareDocumentIdentity, protectDocumentIdentity, refreshDocumentIdentity, type DocumentIdentityLease } from '../../session/documentIdentity';
