@@ -17,7 +17,7 @@ function ordinalText(value: number, type: string) {
 
 /** The gutter belongs to the handle; list markers and folding controls remain
  * in the content lane. Coordinates are converted once into the scroll host. */
-export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, host: HTMLElement, width = 50) {
+export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, host: HTMLElement, width = 50, height = 30) {
   const rect = block.element.getBoundingClientRect(), bounds = host.getBoundingClientRect();
   const scale = bounds.width / host.offsetWidth || 1;
   let edge = rect.left;
@@ -38,6 +38,9 @@ export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, 
       edge = Math.min(edge, rect.left - width * scale);
     }
   }
-  return { top: (rect.top - bounds.top) / scale + host.scrollTop,
+  // A tall block can start above the viewport. Keep its control reachable without
+  // a browser focus/hover scroll moving the anchor out from under the pointer.
+  const viewportTop = Math.max(0, Math.min((rect.top - bounds.top) / scale, host.clientHeight - height - 4));
+  return { top: viewportTop + host.scrollTop,
     left: Math.max(4, (edge - bounds.left) / scale + host.scrollLeft - width - 8) };
 }

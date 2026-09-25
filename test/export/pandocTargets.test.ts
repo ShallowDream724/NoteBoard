@@ -23,11 +23,12 @@ describe.skipIf(!executable)('installed Pandoc target behavior', () => {
         { type: 'heading', attrs: { level: 2, textAlign: 'right' }, content: [{ type: 'text', text: 'AlignedHeading' }] },
         { type: 'paragraph', attrs: { textAlign: 'center', indent: 2 }, content: [styled, { type: 'text', text: ' NoteAnchor', marks: [{ type: 'annotationReference', attrs: { id: 'a' } }] }] },
         { type: 'paragraph', content: [styled] },
+        { type: 'image', attrs: { src: image, alt: 'FigureAlt', width: 96, caption: 'StandaloneFigureCaption' } },
         { type: 'imageCollection', attrs: { layout: 'carousel', columns: 2 }, content: [
           { type: 'imageSlot', content: [{ type: 'image', attrs: { src: image, alt: 'SizedImage', width: 96 } }, paragraph('ImageCaption')] },
           { type: 'imageSlot', content: [{ type: 'paragraph' }] },
         ] },
-        { type: 'table', content: [
+        { type: 'table', attrs: { caption: 'StandaloneTableCaption' }, content: [
           { type: 'tableRow', content: [
             { type: 'tableCell', attrs: { colspan: 2, rowspan: 2, colwidth: [100, 200], background: '#fed7aa', verticalAlign: 'bottom' }, content: [paragraph('MergedContent'), { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph('NestedList')] }] }] },
             { type: 'tableCell', attrs: { colwidth: [100], background: '#bfdbfe', verticalAlign: 'middle' }, content: [paragraph('CellB')] },
@@ -71,7 +72,7 @@ describe.skipIf(!executable)('installed Pandoc target behavior', () => {
       expect(body).toContain('w:footnoteReference');
       expect(notes).toContain('FootnoteBody');
       expect(notes).toContain('m:oMath');
-      for (const text of ['MergedContent', 'NestedList', 'CellB', 'CellC', 'ImageCaption', 'DisclosureTitle', 'DisclosureBody']) expect(body).toContain(text);
+      for (const text of ['MergedContent', 'NestedList', 'CellB', 'CellC', 'ImageCaption', 'StandaloneFigureCaption', 'StandaloneTableCaption', 'DisclosureTitle', 'DisclosureBody']) expect(body).toContain(text);
       expect(body).not.toContain('NBExportCell:');
       expect(body).not.toContain('NBExportTable:');
       expect(body).toMatch(/<w:tblStyle w:val="NBExport\d+"/);
@@ -82,6 +83,8 @@ describe.skipIf(!executable)('installed Pandoc target behavior', () => {
       for (const command of ['\\textcolor[HTML]{0A0B0C}', '\\colorbox[HTML]{FEF08A}', '\\begin{center}', '\\begin{flushright}', '\\begin{adjustwidth}{4em}', '\\cellcolor[HTML]{FED7AA}', '\\multirow', '\\multicolumn', '\\footnote{', '\\includegraphics[width=1in']) expect(latex).toContain(command);
       expect(latex).toContain('FootnoteBody');
       expect(latex).toContain('DisclosureBody');
+      expect(latex).toContain('\\caption{StandaloneFigureCaption}');
+      expect(latex).toContain('StandaloneTableCaption');
     } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30000);
 });

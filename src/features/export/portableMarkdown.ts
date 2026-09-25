@@ -11,7 +11,7 @@ import { projectRichContent } from './richProjection';
 export function withoutPresentation(node: JSONContent): JSONContent {
   const { attrs, marks, content, ...rest } = node;
   const cleanAttrs = attrs && Object.fromEntries(Object.entries(attrs)
-    .filter(([key]) => !['textColor', 'background', 'textAlign', 'verticalAlign', 'indent', 'height', 'colwidth', 'width', 'align', 'tableAlign'].includes(key)));
+    .filter(([key]) => !['textColor', 'borderColor', 'backgroundColor', 'background', 'textAlign', 'verticalAlign', 'indent', 'height', 'colwidth', 'width', 'align', 'tableAlign'].includes(key)));
   return {
     ...rest,
     ...(cleanAttrs && Object.keys(cleanAttrs).length ? { attrs: cleanAttrs } : {}),

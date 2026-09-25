@@ -2,6 +2,7 @@
 @import '../editor-md/tablePresentation.css';
 @import '../../core/math/wrapping.css';
 @import './richDocument.css';
+@import '../editor-md/callout.css';
 :root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: white; color: #18202b; }
@@ -36,6 +37,9 @@ pre code { background: transparent; padding: 0; }
 /* Separate borders belong to each completed row, so Chromium retains the last
  * row's bottom rule at a page break instead of dropping a collapsed border. */
 table { border-collapse: separate; border-spacing: 0; margin: .8em 0; max-width: none; border: 0; }
+table > caption, figure[data-nb-image] > figcaption { padding: .5em .25em 0; color:#526174; font-size:.86em; line-height:1.5; text-align:center; white-space:pre-wrap; overflow-wrap:anywhere; break-before:avoid; }
+table > caption { caption-side:bottom; }
+figure[data-nb-image] { max-width:100%; break-inside:avoid; }
 th,td { border: 0 solid #cbd3de; border-width: 0 1px 1px 0; padding: .35em .6em; text-align: left; vertical-align: top; }
 /* Mark logical edges instead of :first-child: a cell above may own the left
  * edge through rowspan. Header-owned top rules repeat with every print header. */
@@ -73,14 +77,6 @@ tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
 .export-location-host { position: relative; }
 .export-math-location { position: absolute; inset: 0; display: block; color: transparent; font-size: 1px; line-height: 1px; }
 .export-table-location { display: block; height: 1px; line-height: 1px; font-size: 1px; color: transparent; overflow: hidden; }
-.github-alert { --alert-color: #176bd1; --alert-bg: #f3f8ff; margin: .8em 0; border-left: 3px solid var(--alert-color); padding: .55em .9em; background: var(--alert-bg); border-radius: 0 4px 4px 0; }
-.github-alert-tip { --alert-color: #188448; --alert-bg: #f3faf5; }
-.github-alert-important { --alert-color: #8051ce; --alert-bg: #f8f5ff; }
-.github-alert-warning { --alert-color: #ac7200; --alert-bg: #fffbef; }
-.github-alert-caution { --alert-color: #c53d43; --alert-bg: #fff5f5; }
-.alert-title { color: var(--alert-color); display: flex; gap: .5em; align-items: center; font-weight: 700; break-after: avoid; }
-.alert-title svg { width: 1.2em; height: 1.2em; flex-shrink: 0; }
-.alert-body > :last-child { margin-bottom: 0; }
 .hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #8950a9; }
 .hljs-string,.hljs-regexp,.hljs-addition { color: #218349; }
 .hljs-number,.hljs-symbol,.hljs-bullet { color: #b55d25; }

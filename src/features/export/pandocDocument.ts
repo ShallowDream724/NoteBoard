@@ -1,12 +1,13 @@
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { isDisplayMath, type MathDelimiter } from '../editor-md/mathSyntax';
-import { ALERT_META, alertKind } from '../editor-md/alertPresentation';
+import { calloutEmoji, calloutTitle } from '../editor-md/calloutPresentation';
 import { buildLogicalTableGrid } from '../editor-md/tableGrid';
 import { isSafeHighlightColor } from '../editor-md/markdownHighlight';
 import { tableFill } from '../editor-md/tableCellPresentation';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { documentColor } from '../document-style/colors';
+import { normalizeFigureCaption } from '../editor-md/figureCaption';
 
 type Ast = { t: string; c?: unknown };
 type Attributes = Record<string, string>;
@@ -81,9 +82,13 @@ export function pandocSource(source: string | DocumentNode): string {
     if (Number.isInteger(value.attrs.indent) && value.attrs.indent > 0 && value.attrs.indent <= 8) properties['nb-indent'] = String(value.attrs.indent);
     return properties;
   }
-  function table(rows: unknown[], widths: number[], header = false, properties: Attributes = {}): Ast {
+  const captionBlocks = (value: unknown): Ast[] => {
+    const caption = normalizeFigureCaption(value);
+    return caption ? [node('Plain', caption.split('\n').flatMap((line, index) => [...(index ? [node('LineBreak')] : []), ...words(line)]))] : [];
+  };
+  function table(rows: unknown[], widths: number[], header = false, properties: Attributes = {}, caption?: unknown): Ast {
     const sum = widths.reduce((total, width) => total + width, 0);
-    return node('Table', [attr([], properties), [null, []], widths.map(width => [node('AlignDefault'), sum ? node('ColWidth', width / sum) : node('ColWidthDefault')]),
+    return node('Table', [attr([], properties), [null, captionBlocks(caption)], widths.map(width => [node('AlignDefault'), sum ? node('ColWidth', width / sum) : node('ColWidthDefault')]),
       [attr(), header ? [rows[0]] : []], [[attr(), 0, [], header ? rows.slice(1) : rows]], [attr(), []]]);
   }
   function blockContent(value: DocumentNode): Ast[] {
@@ -111,8 +116,8 @@ export function pandocSource(source: string | DocumentNode): string {
         return [node('OrderedList', [[value.attrs.start ?? 1, node('Decimal'), node('Period')], items])];
       }
       case 'githubAlert': {
-        const kind = alertKind(value.attrs.kind);
-        return [node('BlockQuote', [node('Para', [node('Strong', words(ALERT_META[kind].label))]), ...children(value, block)])];
+        const heading = [calloutEmoji(value.attrs), calloutTitle(value.attrs)].filter(Boolean).join(' ');
+        return [node('BlockQuote', [...(heading ? [node('Para', [node('Strong', words(heading))])] : []), ...children(value, block)])];
       }
       case 'disclosure': return [node('Para', [node('Strong', words(String(value.attrs.title || '折叠内容')))]), ...children(value, block)];
       case 'imageCollection': {
@@ -147,10 +152,13 @@ export function pandocSource(source: string | DocumentNode): string {
           const alignment = ({ left: 'AlignLeft', center: 'AlignCenter', right: 'AlignRight' } as Record<string, string>)[cell.attrs.textAlign ?? cell.attrs.align] ?? 'AlignDefault';
           return [attr([], properties), node(alignment), Math.min(rowspan, grid.rows.length - index), colspan, children(cell, block)];
         })]);
-        return [table(rows, widths.map(width => width || fallback), header, { 'nb-table-style': cellFills ? 'grid' : 'three-line' })];
+        return [table(rows, widths.map(width => width || fallback), header, { 'nb-table-style': cellFills ? 'grid' : 'three-line' }, value.attrs.caption)];
       }
       default:
-        if (value.type.name === 'image') return [node('Para', inline(value))];
+        if (value.type.name === 'image') {
+          const caption = captionBlocks(value.attrs.caption);
+          return caption.length ? [node('Figure', [attr(), [null, caption], [node('Plain', inline(value))]])] : [node('Para', inline(value))];
+        }
         if (['mermaidBlock', 'plantumlBlock', 'infographicBlock'].includes(value.type.name)) return [node('CodeBlock', [attr([value.type.name.replace(/Block$/, '')]), String(value.attrs.code ?? '')])];
         return [node('CodeBlock', [attr(), String(value.attrs.raw ?? JSON.stringify(value.toJSON()))])];
     }

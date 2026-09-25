@@ -1,117 +1,66 @@
-// NoteBoard GitHub Alerts 扩展
-// 5 种 alert 类型，消费 --alert-* Token，工具栏/斜杠命令插入
-// 详见 docs/09-开发路线图.md 8.6
-//
-// GitHub Alert 格式:
-// > [!NOTE] / > [!TIP] / > [!IMPORTANT] / > [!WARNING] / > [!CAUTION]
-
-import { AlertNode } from './documentNodes';
+import { lazy, Suspense, useState } from 'react';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
-import { completeAlert } from './alertCommands';
-import { useState } from 'react';
-import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
+import * as Popover from '@radix-ui/react-popover';
+import { Palette } from 'lucide-react';
+import { AlertNode } from './documentNodes';
+import { completeAlert, updateCallout } from './alertCommands';
+import { ALERT_META, type AlertKind } from './alertPresentation';
+import { calloutAttributes, calloutEmoji, calloutStyle, calloutTitle, isAlertKind, normalizeAlertInput } from './calloutPresentation';
+import { useNativeFeatureVisibility } from '../document-format/featureGate';
+import './callout.css';
 
 export type { AlertKind } from './alertPresentation';
+const CalloutMenu = lazy(() => import('./CalloutMenu'));
 
-function AlertComponent({ node, updateAttributes, selected }: NodeViewProps) {
-  const kind = alertKind(node.attrs.kind);
-  const meta = ALERT_META[kind];
-  const [choosingKind, setChoosingKind] = useState(false);
-
-  return (
-    <NodeViewWrapper
-      as="div"
-      className={'github-alert github-alert-' + kind}
-      selected={selected}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-      }}
-    >
-      <div
-        contentEditable={false}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          marginBottom: 6,
-          fontSize: '1em',
-          fontWeight: 700,
-          color: `var(--alert-${kind}-border)`,
-        }}
-      >
-        <button type="button" className="alert-kind-toggle" title="更改提示块类型"
-          aria-label={'更改提示块类型，当前 ' + meta.label} onClick={() => setChoosingKind(!choosingKind)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d={meta.icon} />
-          </svg>
-          <span>{meta.label}</span>
-        </button>
-        {choosingKind && (
-        <select
-          aria-label="提示块类型"
-          className="alert-kind-picker"
-          autoFocus
-          value={kind}
-          onChange={(e) => { updateAttributes({ kind: e.target.value }); setChoosingKind(false); }}
-          onBlur={() => setChoosingKind(false)}
-          style={{
-            marginLeft: 'auto',
-            fontSize: 11,
-            padding: '2px 4px',
-            border: '1px solid var(--editor-border)',
-            borderRadius: 3,
-            background: 'transparent',
-            color: 'var(--editor-text)',
-          }}
-        >
-          {Object.entries(ALERT_META).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v.label}
-            </option>
-          ))}
-        </select>
-        )}
-      </div>
-      <NodeViewContent className="alert-body" style={{ flex: 1, minHeight: '1.5em' }} />
-    </NodeViewWrapper>
-  );
+function AlertComponent({ node, editor, getPos, selected }: NodeViewProps) {
+  const attrs = calloutAttributes(node.attrs), title = calloutTitle(attrs), emoji = calloutEmoji(attrs);
+  const meta = ALERT_META[isAlertKind(attrs.icon) ? attrs.icon : attrs.kind];
+  const [menu, setMenu] = useState<'appearance' | 'icon' | null>(null);
+  const nativeVisible = useNativeFeatureVisibility();
+  const update = (patch: Parameters<typeof updateCallout>[2]) => {
+    const pos = getPos(); if (pos !== undefined) updateCallout(editor, pos, patch);
+  };
+  return <NodeViewWrapper as="div" className={'github-alert github-alert-' + attrs.kind + (selected ? ' is-selected' : '')}
+    data-alert={attrs.kind} data-callout-colored-text={!!(attrs.textColor || attrs.backgroundColor) || undefined}
+    data-callout-menu-open={!!menu || undefined} style={calloutStyle(attrs)}>
+    <Popover.Root open={menu !== null} onOpenChange={open => { if (!open) setMenu(null); }}>
+      <Popover.Anchor asChild><button type="button" contentEditable={false} className="callout-icon callout-icon-button"
+        title="更换提示块图标" aria-label="更换提示块图标" aria-expanded={menu === 'icon'} onPointerDown={event => event.preventDefault()} onClick={() => setMenu(menu === 'icon' ? null : 'icon')}>
+        {emoji || <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={meta.icon}/></svg>}
+      </button></Popover.Anchor>
+      {title && (nativeVisible ? <button type="button" contentEditable={false} className="alert-title callout-title-button" title="编辑提示块标题"
+        onPointerDown={event => event.preventDefault()} onClick={() => setMenu(menu === 'appearance' ? null : 'appearance')}>{title}</button>
+        : <div className="alert-title" contentEditable={false}>{title}</div>)}
+      {nativeVisible && <button type="button" contentEditable={false} className="callout-palette" title="提示块外观" aria-label="提示块外观"
+        aria-expanded={menu === 'appearance'} onPointerDown={event => event.preventDefault()} onClick={() => setMenu(menu === 'appearance' ? null : 'appearance')}><Palette size={15}/></button>}
+      {menu && <Popover.Portal><Popover.Content contentEditable={false} data-nb-editor-menu className="callout-menu" side="bottom" align="start"
+        sideOffset={8} collisionPadding={12} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}>
+        <Suspense fallback={<div className="callout-menu-heading">提示块</div>}><CalloutMenu attrs={attrs} mode={menu}
+          nativeVisible={nativeVisible} onChange={update}/></Suspense>
+      </Popover.Content></Popover.Portal>}
+    </Popover.Root>
+    <NodeViewContent className="alert-body"/>
+  </NodeViewWrapper>;
 }
 
-/** GitHub Alert 节点 */
+/** One semantic callout node, with GFM presets and native presentation attributes. */
 export const GitHubAlert = AlertNode.extend({
   addNodeView() { return ReactNodeViewRenderer(AlertComponent); },
   addKeyboardShortcuts() {
-    return {
-      Enter: () => {
-        const { state, view } = this.editor;
-        const { $from } = state.selection;
-        if (view.composing || !state.selection.empty || $from.depth < 2
-          || $from.parent.type.name !== 'paragraph' || $from.parentOffset !== $from.parent.content.size
-          || $from.node(-1).type.name !== 'blockquote' || $from.node(-1).childCount !== 1) return false;
-        const match = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/i.exec($from.parent.textContent.trim());
-        if (!match) return false;
-        return completeAlert(this.editor, match[1].toLowerCase() as AlertKind);
-      },
-    };
+    return { Enter: () => {
+      const { state, view } = this.editor, { $from } = state.selection;
+      if (view.composing || !state.selection.empty || $from.parent.type.name !== 'paragraph'
+        || $from.parentOffset !== $from.parent.content.size) return false;
+      const match = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]$/i.exec(normalizeAlertInput($from.parent.textContent.trim()));
+      return match ? completeAlert(this.editor, match[1].toLowerCase() as AlertKind) : false;
+    } };
   },
   addCommands() {
-    return {
-      insertAlert:
-        (kind: AlertKind) =>
-        ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => {
-          return commands.insertContent({
-            type: 'githubAlert',
-            attrs: { kind },
-            content: [{ type: 'paragraph' }],
-          });
-        },
-    } as never;
+    return { insertAlert: (kind: AlertKind) => ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) =>
+      commands.insertContent({ type: 'githubAlert', attrs: { kind }, content: [{ type: 'paragraph' }] }) } as never;
   },
 });
 
-/** Alert 种类列表（供斜杠命令使用） */
 export const ALERT_KINDS = Object.keys(ALERT_META) as AlertKind[];
 export { ALERT_META };

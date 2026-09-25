@@ -1,4 +1,5 @@
-.nb-annotation-anchor { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; cursor: help; }
+.nb-annotation-anchor,.nb-annotation-text-block { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; }
+.nb-annotation-anchor { cursor: help; }
 .nb-annotation-anchor:focus-visible, .nb-annotation-block-anchor:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 3px; }
 .nb-annotation-inline-marker { display:inline; position:relative; font-size:inherit; line-height:inherit; }
 .nb-annotation-block-marker { display:block; position:relative; height:0; margin:0!important; padding:0!important; overflow:visible; }

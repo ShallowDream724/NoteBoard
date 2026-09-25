@@ -3,9 +3,10 @@
 // 支持多级下拉菜单、实时 Active/Hover 状态同步、撤销/重做与丰富排版格式化工具
 
 import React, { useState, useCallback, useMemo } from 'react';
+import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import type { Editor } from '@tiptap/core';
 import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
-import { formatSourceMark, setSourceHeading, sourceMarkRange } from '../editor-md/sourceFormatting';
+import { formatSourceMark, runSourceFormatCommand, setSourceHeading, sourceMarkRange } from '../editor-md/sourceFormatting';
 import {
   Undo2,
   Redo2,
@@ -23,7 +24,6 @@ import {
   Strikethrough,
   Code,
   List,
-  ListOrdered,
   CheckSquare,
   Quote,
   Table as TableIcon,
@@ -74,6 +74,10 @@ import { requestImageLink } from '../editor-md/rich-content/imageLinkDialog';
 import { captureVisualImageInsertion, captureSourceImageInsertion } from '../editor-md/imageInsertionLease';
 import { useDocumentStore } from '../../stores/documentStore';
 import { nativeMarkdownLink } from '../document-format/nativeLink';
+import { selectionPresentation } from '../document-style/selectionPresentation';
+import { insertCallout } from '../editor-md/alertCommands';
+import { CellSelection } from '@tiptap/pm/tables';
+import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -95,6 +99,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const sourceView = isSourceMode ? getActiveSourceView(docKey) : undefined;
   const sourceHighlight = sourceView ? sourceMarkRange(sourceView, 'highlight') : null;
   const sourceStyle = sourceView ? sourceTextStyle(sourceView) : null;
+  const selectionScope = editor && !isSourceMode ? selectionPresentation(editor.state) : null;
+  const canInline = isSourceMode ? !!sourceView : !!selectionScope?.inline;
+  const selectedCells = !isSourceMode && editor?.state.selection instanceof CellSelection;
+  const canBlocks = isSourceMode ? !!sourceView : !!selectionScope?.blockText && !selectedCells;
+  const canLists = canBlocks && !selectedCells;
+  const canTextStyle = canInline || !!selectionScope?.mathBlocks.length;
 
   // 下拉菜单开闭状态
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
@@ -140,30 +150,11 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   // ── 文本样式快捷触发 ──
   const toggleMark = (mark: 'bold' | 'italic' | 'underline' | 'strike' | 'code') => {
     if (isSourceMode) {
-      const wrapMap: Record<string, string> = {
-        bold: '**',
-        italic: '*',
-        underline: '<u>$</u>',
-        strike: '~~',
-        code: '`',
-      };
-      const sym = wrapMap[mark];
-      executeSourceAction((view) => {
-        const { from, to, empty } = view.state.selection.main;
-        const selText = view.state.sliceDoc(from, to);
-        if (mark === 'underline') {
-          formatSourceMark(view, 'underline');
-        } else {
-          const insert = `${sym}${selText}${sym}`;
-          view.dispatch({
-            changes: { from, to, insert },
-            selection: empty ? { anchor: from + sym.length } : { anchor: from, head: from + insert.length },
-          });
-        }
-      });
+      executeSourceAction(view => { runSourceFormatCommand(view, `markdown.${mark}`); });
       return;
     }
     if (!editor) return;
+    if (toggleSelectedCellMark(editor, mark) !== null) return;
     switch (mark) {
       case 'bold':
         editor.chain().focus().toggleBold().run();
@@ -186,16 +177,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   // ── 列表切换 ──
   const toggleList = (type: 'bullet' | 'ordered' | 'task') => {
     if (isSourceMode) {
-      const prefixMap = { bullet: '- ', ordered: '1. ', task: '- [ ] ' };
-      const prefix = prefixMap[type];
-      executeSourceAction((view) => {
-        const { from } = view.state.selection.main;
-        const line = view.state.doc.lineAt(from);
-        view.dispatch({
-          changes: { from: line.from, to: line.from, insert: prefix },
-          scrollIntoView: true,
-        });
-      });
+      executeSourceAction(view => { runSourceFormatCommand(view, `markdown.${type}List`); });
       return;
     }
     if (!editor) return;
@@ -224,7 +206,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleInsertTable = (rows: number, cols: number) => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const tableMarkdown = '\n| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 内容 1 | 内容 2 | 内容 3 |\n\n';
+      const row = (value: (index: number) => string) => `| ${Array.from({ length: cols }, (_, index) => value(index)).join(' | ')} |`;
+      const tableMarkdown = '\n' + [row(index => `列 ${index + 1}`), row(() => '---'), ...Array.from({ length: rows - 1 }, () => row(() => ''))].join('\n') + '\n\n';
       executeSourceAction((view) => {
         const { from } = view.state.selection.main;
         view.dispatch({ changes: { from, to: from, insert: tableMarkdown } });
@@ -289,10 +272,10 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     }).run();
   };
 
-  const handleInsertAlert = (kind: 'note' | 'tip' | 'important' | 'warning' | 'caution') => {
+  const handleInsertAlert = (kind?: 'note' | 'tip' | 'important' | 'warning' | 'caution') => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const alertSnippet = `\n> [!${kind.toUpperCase()}]\n> 提示内容\n\n`;
+      const alertSnippet = `\n> [!${(kind ?? 'note').toUpperCase()}]\n> 提示内容\n\n`;
       executeSourceAction((view) => {
         const { from } = view.state.selection.main;
         view.dispatch({ changes: { from, to: from, insert: alertSnippet } });
@@ -300,6 +283,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
+    if (!kind) { insertCallout(editor); return; }
     editor.chain().focus().insertContent({
       type: 'githubAlert',
       attrs: { kind },
@@ -310,11 +294,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleInsertCodeBlock = () => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const codeBlockSnippet = '\n```typescript\n// 在此编写代码\n```\n';
-      executeSourceAction((view) => {
-        const { from } = view.state.selection.main;
-        view.dispatch({ changes: { from, to: from, insert: codeBlockSnippet } });
-      });
+      executeSourceAction(view => { runSourceFormatCommand(view, 'markdown.codeBlock'); });
       return;
     }
     if (!editor) return;
@@ -437,6 +417,10 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
     const { state } = currentEditor;
     const { from, empty } = state.selection;
+    if (state.selection instanceof CellSelection) {
+      currentEditor.chain().focus().unsetAllMarks().setParagraph().run();
+      return;
+    }
 
     if (empty) {
       // 1. 无选区时：若处于标题/列表/引用等特殊块中，重置为普通段落
@@ -508,6 +492,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
             compactLabel
             hasDropdown
             title="标题等级"
+            disabled={!canBlocks}
             active={currentHeadingLabel !== '正文'}
           />
         }
@@ -515,6 +500,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Pilcrow size={14} />}
           label="正文段落"
+          disabled={!canBlocks}
           shortcut="Ctrl+0"
           active={currentHeadingLabel === '正文'}
           onClick={() => handleSetHeading('paragraph')}
@@ -522,6 +508,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading1 size={14} />}
           label="一级标题 (H1)"
+          disabled={!canBlocks}
           shortcut="Ctrl+1"
           active={currentHeadingLabel === 'H1'}
           onClick={() => handleSetHeading(1)}
@@ -529,6 +516,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading2 size={14} />}
           label="二级标题 (H2)"
+          disabled={!canBlocks}
           shortcut="Ctrl+2"
           active={currentHeadingLabel === 'H2'}
           onClick={() => handleSetHeading(2)}
@@ -536,6 +524,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading3 size={14} />}
           label="三级标题 (H3)"
+          disabled={!canBlocks}
           shortcut="Ctrl+3"
           active={currentHeadingLabel === 'H3'}
           onClick={() => handleSetHeading(3)}
@@ -543,6 +532,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading4 size={14} />}
           label="四级标题 (H4)"
+          disabled={!canBlocks}
           shortcut="Ctrl+4"
           active={currentHeadingLabel === 'H4'}
           onClick={() => handleSetHeading(4)}
@@ -550,6 +540,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading5 size={14} />}
           label="五级标题 (H5)"
+          disabled={!canBlocks}
           shortcut="Ctrl+5"
           active={currentHeadingLabel === 'H5'}
           onClick={() => handleSetHeading(5)}
@@ -557,6 +548,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading6 size={14} />}
           label="六级标题 (H6)"
+          disabled={!canBlocks}
           shortcut="Ctrl+6"
           active={currentHeadingLabel === 'H6'}
           onClick={() => handleSetHeading(6)}
@@ -569,6 +561,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Bold size={15} strokeWidth={2.4} />}
         title="加粗"
+        disabled={!canInline}
         collapsePriority={140}
         shortcut="Ctrl+B"
         active={!isSourceMode && Boolean(editor?.isActive('bold'))}
@@ -577,6 +570,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Italic size={15} strokeWidth={2.4} />}
         title="斜体"
+        disabled={!canInline}
         collapsePriority={110}
         shortcut="Ctrl+I"
         active={!isSourceMode && Boolean(editor?.isActive('italic'))}
@@ -585,6 +579,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Underline size={15} strokeWidth={2.4} />}
         title="下划线"
+        disabled={!canInline}
         collapsePriority={100}
         shortcut="Ctrl+U"
         active={!isSourceMode && Boolean(editor?.isActive('underline'))}
@@ -593,6 +588,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Strikethrough size={15} strokeWidth={2.4} />}
         title="删除线"
+        disabled={!canInline}
         collapsePriority={90}
         active={!isSourceMode && Boolean(editor?.isActive('strike'))}
         onClick={() => toggleMark('strike')}
@@ -600,13 +596,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Code size={15} strokeWidth={2.4} />}
         title="行内代码"
+        disabled={!canInline}
         collapsePriority={50}
         shortcut="`"
         active={!isSourceMode && Boolean(editor?.isActive('code'))}
         onClick={() => toggleMark('code')}
       />
 
-      {nativeFeaturesVisible && <HighlightControl
+      {nativeFeaturesVisible && canTextStyle && <HighlightControl
         onApplyStyle={pair => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
         textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('mathBlock').textColor ?? editor?.getAttributes('textColor').color}
         onTextColor={color => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
@@ -626,14 +623,16 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<List size={15} strokeWidth={2.2} />}
         title="无序列表"
+        disabled={!canLists || !isSourceMode && !editor?.can().toggleBulletList()}
         collapsePriority={10}
         shortcut="Ctrl+Shift+8"
         active={!isSourceMode && Boolean(editor?.isActive('bulletList'))}
         onClick={() => toggleList('bullet')}
       />
       <ToolbarButton
-        icon={<ListOrdered size={15} strokeWidth={2.2} />}
+        icon={<ListOrdered size={18} />}
         title="有序列表"
+        disabled={!canLists || !isSourceMode && !editor?.can().toggleOrderedList()}
         collapsePriority={20}
         shortcut="Ctrl+Shift+7"
         active={!isSourceMode && Boolean(editor?.isActive('orderedList'))}
@@ -642,6 +641,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<CheckSquare size={15} strokeWidth={2.2} />}
         title="任务列表"
+        disabled={!canLists || !isSourceMode && !editor?.can().toggleTaskList()}
         collapsePriority={80}
         shortcut="Ctrl+Shift+9"
         active={!isSourceMode && Boolean(editor?.isActive('taskList'))}
@@ -651,7 +651,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarDivider />
 
       {/* ── 插入块级与丰富元素下拉菜单（二级/三级菜单集大成） ── */}
-      <ToolbarDropdown
+      {!selectedCells && <ToolbarDropdown
         collapsePriority={160}
         isOpen={insertDropdownOpen}
         onOpenChange={setInsertDropdownOpen}
@@ -675,32 +675,37 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         {/* 2. GitHub Alert 提示块二级菜单 */}
         <ToolbarDropdownItem
           icon={<Info size={14} color="#3b82f6" />}
-          label="提示块 (Callout)"
+          label="提示块"
           submenu={
             <>
+              {(nativeFeaturesVisible || isSourceMode) && <ToolbarDropdownItem
+                icon={<Info size={14} />}
+                label="提示块"
+                onClick={() => handleInsertAlert()}
+              />}
               <ToolbarDropdownItem
                 icon={<Info size={14} color="#3b82f6" />}
-                label="Note 补充说明"
+                label="说明"
                 onClick={() => handleInsertAlert('note')}
               />
               <ToolbarDropdownItem
                 icon={<Lightbulb size={14} color="#10b981" />}
-                label="Tip 技巧建议"
+                label="技巧"
                 onClick={() => handleInsertAlert('tip')}
               />
               <ToolbarDropdownItem
                 icon={<AlertCircle size={14} color="#8b5cf6" />}
-                label="Important 重要提示"
+                label="重要"
                 onClick={() => handleInsertAlert('important')}
               />
               <ToolbarDropdownItem
                 icon={<AlertTriangle size={14} color="#f59e0b" />}
-                label="Warning 注意警告"
+                label="警告"
                 onClick={() => handleInsertAlert('warning')}
               />
               <ToolbarDropdownItem
                 icon={<Flame size={14} color="#ef4444" />}
-                label="Caution 高危警告"
+                label="谨慎"
                 onClick={() => handleInsertAlert('caution')}
               />
             </>
@@ -781,6 +786,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarOverflowItem id="link"><ToolbarDropdownItem
           icon={<Link2 size={14} />}
           label="超链接"
+          disabled={!canInline || selectedCells}
           shortcut="Ctrl+K"
           onClick={handleOpenLink}
         /></ToolbarOverflowItem>
@@ -816,21 +822,22 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           label="水平分割线"
           onClick={handleInsertDivider}
         />
-      </ToolbarDropdown>
+      </ToolbarDropdown>}
 
       {/* ── 媒体与超链接 ── */}
       <ToolbarButton
         icon={<Link2 size={15} />}
         title="插入/编辑超链接"
+        disabled={!canInline || selectedCells}
         overflowId="link"
         collapsePriority={30}
         shortcut="Ctrl+K"
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
       />
-      <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70} overflowId="image"/>
-      {!isSourceMode && editor && <AnnotationButton editor={editor} collapsePriority={100}/>}
-      {!isSourceMode && editor && <RichSelectionMenu editor={editor}/>}
+      {!selectedCells && <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70} overflowId="image"/>}
+      {!isSourceMode && editor && canInline && !selectedCells && <AnnotationButton editor={editor} collapsePriority={100}/>}
+      {!isSourceMode && editor && canInline && !selectedCells && <RichSelectionMenu editor={editor}/>}
 
       <ToolbarDivider />
 
@@ -840,6 +847,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<RemoveFormatting size={15} color="#ef4444" />}
         title="清除选中文本格式"
+        disabled={!canBlocks}
         collapsePriority={60}
         onClick={handleClearFormat}
       />

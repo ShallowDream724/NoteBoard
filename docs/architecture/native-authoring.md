@@ -40,12 +40,12 @@ NB 源码模式直接编辑这些记录。坏记录显示可定位的局部错�
 | taskList / taskItem | taskItem 有布尔 `checked`，正文同列表项 |
 | blockquote | 普通块数组 |
 | codeBlock | `language` 可选；仅文本内容 |
-| image | `src` 必填；可选 `alt`、`title`、`width`（如 `100%`）、`align` |
+| image | `src` 必填；可选 `alt`、`title`、`width`（如 `100%`）、`align`、`caption` |
 | mathInline / mathBlock | `latex`；`delimiter` 默认分别 `$` / `$$`，无子内容 |
-| table / tableRow | 表格包含行，行包含 tableCell / tableHeader |
+| table / tableRow | 表格包含行，行包含 tableCell / tableHeader；table 可有 `tableAlign: left/center/right` 和 `caption` |
 | tableCell / tableHeader | 普通块数组；`colspan`、`rowspan` 默认 1，`colwidth` 是按逻辑列的像素宽度数组；可选 `background`、`textAlign`、`verticalAlign` |
 | tableRow | 可选 `height` 为最小行高，不会裁切内容 |
-| githubAlert | `kind: note/tip/important/warning/caution`，普通块数组 |
+| githubAlert | 提示块；`kind: note/tip/important/warning/caution`，普通块数组；可选标题、图标及颜色见下文 |
 | mermaidBlock / plantumlBlock / infographicBlock | `code` 保存完整源码 |
 | horizontalRule | 分隔线，无子内容 |
 
@@ -56,6 +56,32 @@ NB 源码模式直接编辑这些记录。坏记录显示可定位的局部错�
 ```
 
 颜色放在对应文字上，修改文字时不需要更新字符偏移。不要生成正文内容的重复快照。标准/三线表由顶层 `documentPresentation` 节点的 `tableStyle: standard/three-line` 控制，不必给每张表重复配置。
+
+## 提示块
+
+提示块统一使用 `githubAlert`，不另设平行节点。`kind` 默认 `note`，沿用五种 GFM 预设。`title` 省略或 `null` 显示预设标题，`""` 隐藏标题，非空字符串为自定义标题（单行、最多 500 字符）。正文始终是 `content` 中的完整块数组，不根据换行猜测标题。
+
+```noteboard
+@block {"type":"githubAlert","attrs":{"kind":"tip","title":"","icon":"🌱","borderColor":"#bbf7d0","backgroundColor":"#f0fdf4"},"content":[{"type":"paragraph","content":[{"type":"text","text":"给每一个灵感留一点空间。"}]},{"type":"paragraph","content":[{"type":"text","text":"这里可以继续写第二段。"}]}]}
+```
+
+`icon` 省略或 `null` 跟随预设 SVG，可指定五种 `kind` 值选择 SVG，也可写一个 emoji 字形（支持肤色、旗帜及组合 emoji，最多 32 UTF-16 单元）。`textColor`、`borderColor`、`backgroundColor` 为可选的 `#RRGGBB`，`null` 恢复主题默认。显式背景未指定文字色时，视图按亮度自动选择文字色；这一显示计算不增加存储字段。行内 `textColor` 优先于提示块文字色。
+
+通用插入默认无标题、有图标。GFM 预设输入保留预设标题；空段落直接输入 `[!]`、`【！】`（括号和感叹号可中英文混用）显示补全，也可输入完整 `[!TIP]` 后回车。Markdown 导入仍使用 `> [!TIP]`。自定义标题、图标与颜色属于 NB 能力；基本五种预设可直接保存在 MD。HTML/PDF 保留外观；通用 Markdown 保留 GFM 标记、自定义标题、语义 emoji 和全部正文，降级颜色与 SVG 图标；Pandoc 保留标题、emoji 和正文。
+
+## 图注与表注
+
+单张 `image` 和 `table` 的 `attrs.caption` 是显示在图片或表格下方的普通文字，省略或 `null` 表示无注。最多 10,000 个 UTF-16 单元，允许使用 JSON `\n` 换行，禁止 NUL 字符；不把富文本或 Markdown 标记塞入此属性。它跟随所属块移动和撤销，与弹出的 `annotationId` 补充说明独立。表注与表格同宽、图注与图片同宽，左右位置跟随所属块。
+
+```noteboard
+@block {"type":"image","attrs":{"src":"./img/result.png","alt":"实验曲线","caption":"图 1　不同条件下的结果"}}
+@block {"type":"table","attrs":{"tableAlign":"center","caption":"表 1　样本统计\n单位：毫克"}}
+@child {"type":"tableRow","content":[{"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"样本"}]}]}]}
+```
+
+图注与表注属于 NB 能力。HTML/PDF 保留可见注释，Pandoc 使用 Figure/Table 的 Caption，通用 Markdown 在图或表后输出完整普通文字。图片组合继续使用槽中的图注 paragraph。
+
+单图图注独立于替代文本 `alt` 和链接提示 `title`。悬停图片可添加图注，已有图注可点击编辑；图、表块菜单也提供添加/编辑入口。Enter 或失焦保存，Shift+Enter 换行，Escape 取消，清空后保存删除。
 
 ## 图片组合
 

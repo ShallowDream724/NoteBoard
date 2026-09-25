@@ -20,6 +20,7 @@ import {
   AlertCircle,
   RefreshCw,
   Pencil,
+  Captions,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
@@ -36,6 +37,9 @@ import { useImageWheelGesture } from '../image-viewer/imageWheelGesture';
 import { requestImageDescription } from './rich-content/imageDescriptionDialog';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import type { Transaction } from '@tiptap/pm/state';
+import { ImageCaption } from './ImageCaption';
+import { editFigureCaption } from './figureCaptionCommands';
+import { normalizeFigureCaption } from './figureCaption';
 
 /** 大图预览 Lightbox 模态框组件 */
 export function ImageLightboxModal({
@@ -286,6 +290,11 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
   const alt: string = node.attrs.alt || '';
   const align: 'left' | 'center' | 'right' = node.attrs.align || 'center';
   const width: string = node.attrs.width || '100%';
+  const position = getPos();
+  const parent = typeof position === 'number' ? editor.state.doc.resolve(position).parent : null;
+  const inCollection = parent?.type.name === 'imageSlot';
+  const showCaption = !inCollection || parent?.lastChild?.type.name !== 'paragraph'
+    || normalizeFigureCaption(parent.lastChild.textContent) !== normalizeFigureCaption(node.attrs.caption);
 
   // 动态解析图片真实 URL
   useEffect(() => {
@@ -346,7 +355,8 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
   // 处理对齐样式
   const alignContainerStyle: React.CSSProperties = {
     display: 'flex',
-    justifyContent:
+    flexDirection: 'column',
+    alignItems:
       align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
     margin: '16px 0',
     width: '100%',
@@ -556,6 +566,10 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
 
             </>}
             <Tooltip content="编辑图片描述" side="top" sideOffset={4}><button type="button" data-image-description="" aria-label="编辑图片描述" onClick={() => { void editDescription(); }} style={actionBtnStyle}><Pencil size={14}/></button></Tooltip>
+            {nativeFeaturesVisible && !inCollection && <Tooltip content={node.attrs.caption ? '编辑图注' : '添加图注'} side="top" sideOffset={4}>
+              <button type="button" data-image-caption-edit="" aria-label={node.attrs.caption ? '编辑图注' : '添加图注'}
+                onClick={() => { const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); }} style={actionBtnStyle}><Captions size={14}/></button>
+            </Tooltip>}
             {/* 删除图片 */}
             <Tooltip content="删除图片" side="top" sideOffset={4}>
               <button
@@ -667,6 +681,9 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
 
       </div>
 
+      {showCaption && <ImageCaption editor={editor} getPos={getPos} caption={node.attrs.caption} src={rawSrc}
+        width={resizePreview ?? width} editable={nativeFeaturesVisible} />}
+
       {/* 大图预览 Lightbox 模态框 */}
       {lightboxOpen && resolvedDisplaySrc && (
         <ImageLightboxModal
@@ -703,7 +720,7 @@ export const EnhancedImageBlock = ImageNode.extend({
   addCommands() {
     return {
       setImage:
-        (options: { src: string; alt?: string; title?: string; width?: string; align?: string }) =>
+        (options: { src: string; alt?: string; title?: string; width?: string; align?: string; caption?: string | null }) =>
         ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => {
           return commands.insertContent({
             type: 'image',

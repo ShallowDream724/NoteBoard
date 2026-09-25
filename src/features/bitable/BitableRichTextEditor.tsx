@@ -3,6 +3,7 @@
 // 与笔记本编辑器刻意保持独立：单元格编辑只需基础块与行内标记，避免拖入图表/公式等重型扩展
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Code } from '@tiptap/extension-code';
@@ -18,7 +19,6 @@ import {
   Heading2,
   Heading3,
   List,
-  ListOrdered,
   Quote,
   Link2,
   RemoveFormatting,

@@ -33,10 +33,12 @@ export const DOCUMENT_CAPABILITIES = {
   tableStyle: rich('表格样式', 'table presentation', 'document', '标准 GFM 表格', 'table'),
   tableHeader: rich('首列表头', 'cell header role', 'table', '保留文字，移除首列表头语义', 'table'),
   imageLayout: rich('图片布局', 'image alignment/size', 'node', '标准图片链接', 'images', 'images'),
+  figureCaption: rich('图注与表注', 'image/table caption', 'node', '在图片或表格后保留完整注释文字'),
   gallery: rich('图片组合', 'image collection layout/slots', 'node', '按顺序展开图片', 'images', 'images'),
   annotation: rich('说明', 'annotation references/content', 'document', '说明转为正文附注'),
   conceal: rich('模糊内容', 'concealed content', 'mark', '保留文字，移除模糊效果'),
   disclosure: rich('折叠块', 'disclosure title/content', 'node', '展开标题与正文'),
+  callout: rich('自定义提示块', 'githubAlert title/icon/colors', 'node', '保留预设标记、标题、语义 emoji 和全部正文，移除自定义外观'),
 } satisfies Record<string, DocumentCapability>;
 export type DocumentCapabilityId = keyof typeof DOCUMENT_CAPABILITIES;
 export function formatSupportsCapability(format: DocumentFormat, capability: DocumentCapabilityId): boolean {

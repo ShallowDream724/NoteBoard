@@ -4,6 +4,8 @@ import { findMathStart, readMath, readMathBlock, writeMath, type MathDelimiter, 
 import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
 import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
 import { currentParagraph } from './markdownLexer';
+import { calloutAttributes, calloutEmoji, calloutStyleText, calloutTitle, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle } from './calloutPresentation';
+import { markdownFigureCaption, normalizeFigureCaption, validateFigureCaption } from './figureCaption';
 
 type MathToken = MarkdownToken & MathSource;
 const inlineTokenizer: MarkdownTokenizer = {
@@ -48,18 +50,34 @@ export const MathBlockNode = Node.create({
 export const AlertNode = Node.create({
   name: 'githubAlert', group: 'block', content: 'block+', selectable: true, defining: true,
   addAttributes() {
+    const color = (attribute: string) => ({ default: null, validate: (value: unknown) => { if (!isCalloutColor(value)) throw new RangeError('Invalid callout color'); },
+      parseHTML: (element: HTMLElement) => { const value = element.getAttribute(attribute); return isCalloutColor(value) ? value : null; },
+      rendered: false });
     return { kind: { default: 'note' as AlertKind,
+      validate: (value: unknown) => { if (!isAlertKind(value)) throw new RangeError('Invalid callout kind'); },
       parseHTML: element => alertKind(element.getAttribute('data-alert') || element.getAttribute('kind')),
-      renderHTML: attributes => ({ 'data-alert': alertKind(attributes.kind) }) } };
+      renderHTML: attributes => ({ 'data-alert': alertKind(attributes.kind) }) },
+      title: { default: null, rendered: false, validate: (value: unknown) => { if (!isCalloutTitle(value)) throw new RangeError('Invalid callout title'); },
+        parseHTML: element => { const value = element.getAttribute('data-callout-title'); return isCalloutTitle(value) ? value : null; } },
+      icon: { default: null, rendered: false, validate: (value: unknown) => { if (!isCalloutIcon(value)) throw new RangeError('Invalid callout icon'); },
+        parseHTML: element => { const value = element.getAttribute('data-callout-icon'); return isCalloutIcon(value) ? value : null; } },
+      textColor: color('data-callout-text-color'), borderColor: color('data-callout-border-color'), backgroundColor: color('data-callout-background-color'),
+    };
   },
   parseHTML() { return [{ tag: 'div[data-alert]', contentElement: element => element.querySelector('.alert-body') ?? element }]; },
-  renderHTML({ HTMLAttributes }) {
-    const kind = alertKind(HTMLAttributes['data-alert']); const meta = ALERT_META[kind];
-    return ['div', mergeAttributes(HTMLAttributes, { class: 'github-alert github-alert-' + kind }),
-      ['div', { class: 'alert-title' },
+  renderHTML({ node, HTMLAttributes }) {
+    const attrs = calloutAttributes(node.attrs), title = calloutTitle(attrs), emoji = calloutEmoji(attrs);
+    const meta = ALERT_META[isAlertKind(attrs.icon) ? attrs.icon : attrs.kind];
+    return ['div', mergeAttributes(HTMLAttributes, { class: 'github-alert github-alert-' + attrs.kind,
+      'data-callout-title': attrs.title, 'data-callout-icon': attrs.icon, 'data-callout-text-color': attrs.textColor,
+      'data-callout-border-color': attrs.borderColor, 'data-callout-background-color': attrs.backgroundColor,
+      'data-callout-colored-text': attrs.textColor || attrs.backgroundColor ? '' : null,
+      style: calloutStyleText(attrs) }),
+      ['span', { class: 'callout-icon', 'aria-hidden': 'true' }, ...(emoji ? [emoji] : [
         ['http://www.w3.org/2000/svg svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
           'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
-        ['http://www.w3.org/2000/svg path', { d: meta.icon }]], ['span', {}, meta.label]],
+        ['http://www.w3.org/2000/svg path', { d: meta.icon }]]])],
+      ...(title ? [['div', { class: 'alert-title' }, title]] : []),
       ['div', { class: 'alert-body' }, 0]];
   },
   markdownTokenName: 'githubAlert',
@@ -84,26 +102,49 @@ export const AlertNode = Node.create({
   },
   renderMarkdown(node, helpers) {
     const body = helpers.renderChildren(node.content ?? [], '\n\n');
-    return '> [!' + String(node.attrs?.kind ?? 'note').toUpperCase() + ']\n' + body.split('\n').map(line => line ? '> ' + line : '>').join('\n');
+    const attrs = calloutAttributes(node.attrs), emoji = calloutEmoji(attrs);
+    const escape = (value: string) => value.replace(/[\\`*_[\]<>]/g, '\\$&');
+    const title = attrs.title === null ? '' : attrs.title;
+    const heading = [emoji, title].filter(Boolean).map(escape).join(' ');
+    const content = [heading ? '**' + heading + '**' : '', body].filter(Boolean).join('\n\n');
+    return '> [!' + attrs.kind.toUpperCase() + ']\n' + content.split('\n').map(line => line ? '> ' + line : '>').join('\n');
   },
 });
 
 export const ImageNode = Node.create<{ docKey: string }>({
   name: 'image', group: 'block', inline: false, draggable: true, selectable: true, isolating: true,
   addOptions() { return { docKey: '' }; },
-  addAttributes() { return { src: { default: null }, alt: { default: null }, title: { default: null }, width: { default: '100%' }, align: { default: 'center' } }; },
+  addAttributes() { return { src: { default: null }, alt: { default: null }, title: { default: null }, width: { default: '100%' }, align: { default: 'center' },
+    caption: { default: null, rendered: false, validate: validateFigureCaption } }; },
   parseHTML() {
-    return [{ tag: 'img[src]', getAttrs: dom => {
-      if (typeof dom === 'string') return {};
-      return { src: dom.getAttribute('data-raw-src') || dom.getAttribute('src'), alt: dom.getAttribute('alt'), title: dom.getAttribute('title'),
-        width: dom.getAttribute('data-width') || '100%', align: dom.getAttribute('data-align') || 'center' };
-    } }];
+    const attributes = (dom: HTMLElement) => {
+      const image = dom.matches('img') ? dom : dom.querySelector('img');
+      if (!image) return false;
+      return { src: image.getAttribute('data-raw-src') || image.getAttribute('src'), alt: image.getAttribute('alt'), title: image.getAttribute('title'),
+        width: dom.getAttribute('data-width') || image.getAttribute('data-width') || image.getAttribute('width') || '100%',
+        align: dom.getAttribute('data-align') || image.getAttribute('data-align') || image.getAttribute('align') || 'center',
+        caption: dom.matches('figure') ? normalizeFigureCaption(dom.querySelector('figcaption')?.textContent) : null };
+    };
+    return [{ tag: 'figure[data-nb-image]', getAttrs: attributes }, { tag: 'img[src]', getAttrs: attributes }];
   },
-  renderHTML({ HTMLAttributes }) { return ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, HTMLAttributes)]; },
+  renderHTML({ node, HTMLAttributes }) {
+    const caption = normalizeFigureCaption(node.attrs.caption);
+    if (!caption) return ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, HTMLAttributes)];
+    const rawWidth = String(node.attrs.width ?? '100%');
+    const width = /^(?:\d+(?:\.\d+)?)(?:%|px)$/.test(rawWidth) ? rawWidth : /^\d+(?:\.\d+)?$/.test(rawWidth) ? `${rawWidth}px` : '100%';
+    const align = node.attrs.align === 'left' || node.attrs.align === 'right' ? node.attrs.align : 'center';
+    const imageAttrs = { ...HTMLAttributes }; delete imageAttrs.width; delete imageAttrs.align;
+    return ['figure', { 'data-nb-image': '', 'data-width': node.attrs.width, 'data-align': align,
+      style: `width:${width};max-width:100%;margin:16px 0;margin-left:${align === 'left' ? '0' : 'auto'};margin-right:${align === 'right' ? '0' : 'auto'}` },
+      ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, imageAttrs, { style: 'display:block;width:100%;max-width:100%;height:auto' })],
+      ['figcaption', { style: 'margin-top:6px;font-size:.85em;line-height:1.6;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere' }, caption]];
+  },
   parseMarkdown(token, helpers) { return helpers.createNode('image', { src: token.href, title: token.title, alt: token.text, width: '100%', align: 'center' }); },
   renderMarkdown(node) {
     const { src = '', alt = '', title = '' } = node.attrs ?? {};
-    return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
+    const image = title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
+    const caption = markdownFigureCaption(node.attrs?.caption);
+    return caption ? `${image}\n\n${caption}` : image;
   },
 });
 

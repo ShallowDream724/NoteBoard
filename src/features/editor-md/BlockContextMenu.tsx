@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/core';
-import { Type, Table2, Image, Braces, Quote, List, ListOrdered, ListTodo, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
+import { Type, Table2, Image, Braces, Quote, List, ListTodo, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, PanelTop, Minus, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
+import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import { blockRange, copyBlock, deleteBlock, formatBlock, insertAfterBlock } from './blockActions';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
@@ -18,14 +19,16 @@ import { useFormattingUpdates } from './useFormattingUpdates';
 import './blockContextMenu.css';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 import { NodeSelection } from '@tiptap/pm/state';
-import { beginAnnotation, openAnnotation } from './annotations/commands';
+import { beginBlockAnnotation, openAnnotation } from './annotations/commands';
 import { toggleConceal } from './rich-content/commands';
 import { ImageCollectionMenu } from './rich-content/ImageCollectionMenu';
 import { TableAlignmentMenu } from './TableAlignmentMenu';
+import { canWrapBlockInCallout, wrapBlockInCallout } from './alertCommands';
+import { editFigureCaption } from './figureCaptionCommands';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
-  const Icon = type === 'table' ? Table2 : type === 'image' ? Image : type === 'imageCollection' ? Grid2X2 : type === 'disclosure' ? PanelTopClose : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
+  const Icon = type === 'table' ? Table2 : type === 'image' ? Image : type === 'imageCollection' ? Grid2X2 : type === 'disclosure' ? PanelTopClose : type === 'githubAlert' ? PanelTop : type === 'horizontalRule' ? Minus : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
   return <Icon size={15}/>;
 }
 export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: number; close: () => void }) {
@@ -35,6 +38,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const range = blockRange(editor, pos); if (!range) return null;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
   const styled = text || type === 'mathBlock';
+  const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const selectNode = () => editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
   const grid = type === 'table' ? tableGrid(range.node) : null;
   const headerRow = grid?.cells.filter(cell => cell.row === 0), headerColumn = grid?.cells.filter(cell => cell.column === 0);
@@ -55,6 +59,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         { label:'任务列表', Icon:ListTodo, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
         { label:'引用', Icon:Quote, command:'toggleBlockquote' }] as const).map(({ label, Icon, command }) =>
         <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
+      {native && canWrapCallout && <Tooltip content="设为提示块"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
     </div>}
     {native && type === 'image' && <div className="nb-block-style-row">
       {([{ value: 'left', label: '图片左对齐', Icon: AlignLeft }, { value: 'center', label: '图片居中', Icon: AlignCenter },
@@ -62,8 +67,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         <Tooltip key={value} content={label}><button type="button" aria-label={label} onClick={() => action(() => runWithDocumentCapability(editor, 'imageLayout', next => runDiscreteEdit(next, chain => chain.updateAttributes('image', { align: value }))))}><Icon size={16}/></button></Tooltip>)}
     </div>}
     {native && type === 'table' && <TableAlignmentMenu editor={editor} pos={pos} value={range.node.attrs.tableAlign} close={close}/>}
-    {native && (styled || type === 'table') && <div className="nb-block-style-row">
-      {type !== 'mathBlock' && <AlignmentMenu editor={editor} cells={type === 'table'}/>}
+    {native && (styled || type === 'table' || type === 'horizontalRule') && <div className="nb-block-style-row">
+      {type !== 'mathBlock' && <AlignmentMenu editor={editor}/>}
       {styled && <HighlightControl open={colorsOpen} onOpenChange={setColorsOpen} active={editor.isActive('highlight') || !!editor.getAttributes('mathBlock').background}
         currentColor={editor.getAttributes('mathBlock').background ?? editor.getAttributes('highlight').color} textColor={editor.getAttributes('mathBlock').textColor ?? editor.getAttributes('textColor').color}
         onApplyStyle={pair => applyTextStyle(editor, pair)} onTextColor={color => setTextColor(editor, color)}
@@ -77,7 +82,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
       <hr/>
     </>}
-    {native && Object.hasOwn(range.node.attrs, 'annotationId') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginAnnotation(editor); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
+    {native && (type === 'table' || type === 'image') && <button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button>}
+    {native && Object.hasOwn(range.node.attrs, 'annotationId') && <button role="menuitem" type="button" onClick={() => action(() => { const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
     {native && Object.hasOwn(range.node.attrs, 'concealed') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); toggleConceal(editor); })}><EyeOff size={16}/>{range.node.attrs.concealed ? '取消模糊' : '模糊内容'}</button>}
     {native && (Object.hasOwn(range.node.attrs, 'annotationId') || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
     <button role="menuitem" type="button" onClick={() => action(() => copy(true))}><Scissors size={16}/>剪切</button>

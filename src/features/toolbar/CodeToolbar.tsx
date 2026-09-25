@@ -3,6 +3,7 @@
 // 提供撤销/重做、JSON 专属格式化/压缩/校验多级菜单、文本大小写转换、视图辅助设置与搜索替换
 
 import React, { useState } from 'react';
+import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import {
   Undo2,
   Redo2,
@@ -10,7 +11,6 @@ import {
   CodeXml,
   CaseSensitive,
   WrapText,
-  ListOrdered,
   Eye,
   Search,
   Replace,

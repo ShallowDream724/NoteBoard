@@ -28,6 +28,7 @@ function splitColumns(table: HTMLTableElement, columnWidths: number[], plan: Tab
   for (const [part, band] of plan.bands.entries()) {
     const start = band.from, end = band.to, used = columnWidths[0] + columnWidths.slice(start, end).reduce((sum, width) => sum + width, 0);
     const clone = table.cloneNode(false) as HTMLTableElement;
+    if (part === plan.bands.length - 1 && table.caption) clone.append(table.caption.cloneNode(true));
     // Preserve the measured/user-adjusted column widths. A short continuation
     // must not stretch merely because the paper has space left over.
     clone.classList.add('table-wrap'); clone.style.width = `${used}px`; clone.style.minWidth = '';

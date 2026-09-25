@@ -12,6 +12,7 @@ interface Metadata { version: 1; guard: string; blocks: BlockEntry[] }
 interface Manager { serialize: (json: JSONContent) => string; parse: (markdown: string) => JSONContent }
 const installed = new WeakSet<object>();
 const textBlocks = new Set(['paragraph', 'heading']);
+const indentBlocks = new Set(['paragraph', 'heading', 'horizontalRule']);
 const cells = new Set(['tableCell', 'tableHeader']);
 
 /** Only remove our well-formed final comment, never a fenced/quoted example. */
@@ -32,7 +33,7 @@ export function presentationBody(markdown: string, lexer: { lexer: (source: stri
 function presentationAttrs(node: JSONContent): Attributes {
   const attrs: Attributes = {}, source = node.attrs ?? {};
   if (textBlocks.has(node.type!) && ['left', 'center', 'right'].includes(source.textAlign)) attrs.textAlign = source.textAlign;
-  if (textBlocks.has(node.type!) && Number.isInteger(source.indent) && source.indent > 0 && source.indent <= 8) attrs.indent = source.indent;
+  if (indentBlocks.has(node.type!) && Number.isInteger(source.indent) && source.indent > 0 && source.indent <= 8) attrs.indent = source.indent;
   if (cells.has(node.type!) && ['top', 'middle', 'bottom'].includes(source.verticalAlign)) attrs.verticalAlign = source.verticalAlign;
   if (cells.has(node.type!) && ['left', 'center', 'right'].includes(source.textAlign ?? source.align)) attrs.align = source.textAlign ?? source.align;
   if (node.type === 'mathBlock') for (const key of ['textColor', 'background']) {
@@ -54,7 +55,8 @@ function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSO
   if (Object.keys(attrs).length || ranges.length) records.push({ path, ...(Object.keys(attrs).length ? { attrs } : {}), ...(ranges.length ? { ranges } : {}) });
   const cleanAttrs = { ...node.attrs };
   if (node.type === 'table') delete cleanAttrs.tableAlign;
-  if (textBlocks.has(node.type!)) { delete cleanAttrs.textAlign; delete cleanAttrs.indent; }
+  if (textBlocks.has(node.type!)) delete cleanAttrs.textAlign;
+  if (indentBlocks.has(node.type!)) delete cleanAttrs.indent;
   if (cells.has(node.type!)) { delete cleanAttrs.align; delete cleanAttrs.textAlign; delete cleanAttrs.verticalAlign; }
   if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; }
   return { ...node, ...(node.attrs ? { attrs: cleanAttrs } : {}),

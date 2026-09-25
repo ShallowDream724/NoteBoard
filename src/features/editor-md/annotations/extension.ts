@@ -75,7 +75,9 @@ function decorationsFor(doc: ProseMirrorNode, records: Map<string, AnnotationRec
         const block = anchor.block ? doc.nodeAt(anchor.from) : null;
         const inline = !anchor.block || (block?.isTextblock && block.type.name !== 'codeBlock');
         const position = inline ? anchor.to - (anchor.block ? 1 : 0) : anchor.from;
-        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: 'nb-annotation-block-anchor', 'data-annotation-id': anchor.id }));
+        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: `nb-annotation-block-anchor${inline ? ' nb-annotation-text-block' : ''}`, 'data-annotation-id': anchor.id }));
+        // The table view owns its marker, anchored to the actual table box.
+        if (block?.type.name === 'table') continue;
         decorations.push(Decoration.widget(position, () => {
           // Zero-flow markers never wrap a paragraph or add a row after an image.
           // Text markers sit at the last character; other blocks use their top-right corner.

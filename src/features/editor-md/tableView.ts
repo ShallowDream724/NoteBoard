@@ -1,17 +1,20 @@
 import { TableView } from '@tiptap/extension-table';
 import type { Node } from '@tiptap/pm/model';
-import type { EditorView } from '@tiptap/pm/view';
+import type { EditorView, ViewMutationRecord } from '@tiptap/pm/view';
 import './tableView.css';
 import { TableRowLayout, isLargeTable, hasSimpleTableRows } from './tableRowLayout';
 import { tableAlignment, tableAlignmentMargins } from './tableAlignment';
+import { TableAccessories } from './tableAccessories';
 
 /** Independent row layout supports TableViewport's bounded content DOM while
  * ProseMirror retains the complete table and selection model. Small and merged
  * tables continue to use native layout. */
 export class EfficientTableView extends TableView {
   private rows: TableRowLayout;
+  private accessories: TableAccessories;
   constructor(node: Node, width: number, view?: EditorView, attributes?: Record<string, unknown>) {
-    super(node, width, view, attributes); this.rows = new TableRowLayout(this.table); this.applyPolicy(node);
+    super(node, width, view, attributes); this.rows = new TableRowLayout(this.table);
+    this.accessories = new TableAccessories(node, this.table, this.contentDOM, view); this.applyPolicy(node);
   }
   private applyPolicy(node: Node) {
     const large = isLargeTable(node);
@@ -28,6 +31,7 @@ export class EfficientTableView extends TableView {
     if (alignment) this.table.dataset.tableAlign = alignment;
     else delete this.table.dataset.tableAlign;
     Object.assign(this.table.style, tableAlignmentMargins(alignment));
+    this.accessories.update(node);
   }
   update(node: Node) {
     if (node === this.node) return true;
@@ -42,5 +46,7 @@ export class EfficientTableView extends TableView {
     else this.node = node;
     this.applyPolicy(node); return true;
   }
-  destroy() { this.rows.clear(); }
+  stopEvent(event: Event) { return this.accessories.owns(event.target); }
+  ignoreMutation(mutation: ViewMutationRecord) { return this.accessories.owns(mutation.target) || super.ignoreMutation(mutation); }
+  destroy() { this.accessories.destroy(); this.rows.clear(); }
 }

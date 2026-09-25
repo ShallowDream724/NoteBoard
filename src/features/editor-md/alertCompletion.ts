@@ -3,6 +3,7 @@ import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion';
 import { ALERT_META, matchAlertChoices, type AlertKind } from './alertPresentation';
 import { completeAlert } from './alertCommands';
+import { normalizeAlertInput } from './calloutPresentation';
 import './typingAssist.css';
 
 const key = new PluginKey('alertCompletion');
@@ -14,9 +15,8 @@ export const AlertCompletion = Extension.create({
       editor: this.editor, pluginKey: key, char: '!',
       findSuggestionMatch: ({ $position }) => {
         const parent = $position.parent;
-        if (parent.type.name !== 'paragraph' || parent.content.size > 14 || $position.depth < 2
-          || $position.node(-1).type.name !== 'blockquote' || $position.node(-1).childCount !== 1) return null;
-        const text = parent.textContent;
+        if (parent.type.name !== 'paragraph' || parent.content.size > 14) return null;
+        const text = normalizeAlertInput(parent.textContent);
         if (!/^\[![a-z]*\]?$/i.test(text) || !/^(?:\]|)$/.test(text.slice($position.parentOffset))) return null;
         const match = /^\[!([a-z]*)\]?$/i.exec(text.slice(0, $position.parentOffset));
         if (!match || !matchAlertChoices(match[1]).length) return null;

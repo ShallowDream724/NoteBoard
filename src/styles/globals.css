@@ -578,20 +578,10 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   font-family: var(--content-font-family);
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
-  max-width: var(--content-max-width);
+  max-width: var(--document-reading-width, var(--content-max-width));
   margin: 0 auto;
-  /* The control lane reserves space for handles, folding controls and list markers. */
-  padding: 0 24px 0 96px;
+  padding: 0 var(--document-end-gutter, 24px) var(--document-bottom-space, 80px) var(--document-control-lane, 88px);
   color: var(--editor-text);
-}
-
-/* At narrow editing widths, keep the handle 8px from the pane edge instead of
- * adding percentage-based document centering to the control lane. */
-@container document-content (max-width: 640px) {
-  .ProseMirror:not(.nb-bitable-rte-prose):not(.nb-embedded-prose) {
-    max-width: 100%;
-    padding-inline: 88px 16px;
-  }
 }
 
 .ProseMirror:focus {
@@ -1054,7 +1044,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   margin: 16px 0;
 }
 
-.ProseMirror.nb-prose { padding-block:16px; min-height:100%; outline:none; }
+.ProseMirror.nb-prose { min-height:100%; outline:none; }
 .ProseMirror :is(h1,h2,h3,h4,h5,h6):has(> .nb-heading-fold-toggle[data-nb-block-handle-active])::before { visibility:hidden; }
 .ProseMirror th, .ProseMirror td {
   min-width: 40px;
@@ -1130,10 +1120,10 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 
 /* 分割线 */
 .ProseMirror hr {
-  height: 2px;
-  margin: 24px 0;
+  height: 26px;
+  margin: 12px 0;
   border: none;
-  background: var(--editor-border);
+  background: linear-gradient(var(--editor-border), var(--editor-border)) center / 100% 2px no-repeat;
 }
 
 /* 代码块与行内代码 */
@@ -1196,36 +1186,6 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 .ProseMirror .hljs-emphasis { font-style: italic; }
 .ProseMirror .hljs-strong { font-weight: bold; }
 
-/* GitHub Alerts */
-.ProseMirror .github-alert {
-  border-left: 3px solid var(--alert-note-border);
-  background: var(--alert-note-bg);
-  padding: 12px 18px;
-  border-radius: 0 4px 4px 0;
-  margin-bottom: 16px;
-}
-.ProseMirror .alert-kind-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.ProseMirror .alert-kind-toggle:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
-.ProseMirror .alert-body > :first-child,
-.ProseMirror .alert-body > [data-node-view-content-react] > :first-child { margin-top: 0; }
-.ProseMirror .alert-body > :last-child,
-.ProseMirror .alert-body > [data-node-view-content-react] > :last-child { margin-bottom: 0; }
-.ProseMirror .github-alert-note { border-left-color: var(--alert-note-border); background: var(--alert-note-bg); }
-.ProseMirror .github-alert-tip { border-left-color: var(--alert-tip-border); background: var(--alert-tip-bg); }
-.ProseMirror .github-alert-important { border-left-color: var(--alert-important-border); background: var(--alert-important-bg); }
-.ProseMirror .github-alert-warning { border-left-color: var(--alert-warning-border); background: var(--alert-warning-bg); }
-.ProseMirror .github-alert-caution { border-left-color: var(--alert-caution-border); background: var(--alert-caution-bg); }
 
 /* 搜索匹配高亮 */
 .nb-search-result {

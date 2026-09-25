@@ -7,29 +7,34 @@ import { alignTableSelection } from '../editor-md/tablePresentationCommands';
 import './alignmentMenu.css';
 import { useHoverMenu } from '../../components/useHoverMenu';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
+import { commonPresentationValue, selectionPresentation } from './selectionPresentation';
 
-export function AlignmentMenu({ editor, cells = false }: { editor: Editor; cells?: boolean }) {
+export function AlignmentMenu({ editor }: { editor: Editor }) {
   const [open, setOpen] = useState(false);
   const hover = useHoverMenu(open, setOpen);
   const visible = useNativeFeatureVisibility();
-  const attrs = cells ? { ...editor.getAttributes('tableCell'), ...editor.getAttributes('tableHeader') }
-    : { ...editor.getAttributes('paragraph'), ...editor.getAttributes('heading') };
+  const scope = selectionPresentation(editor.state), cells = scope.cells;
+  const targets = cells ? scope.cellBlocks : scope.textBlocks;
+  const textAlign = commonPresentationValue(targets, cells ? 'align' : 'textAlign', 'left');
+  const verticalAlign = commonPresentationValue(scope.cellBlocks, 'verticalAlign', 'top');
+  const canIndent = !cells && scope.indentBlocks.length > 0;
+  const label = cells ? '单元格对齐' : targets.length ? '对齐与缩进' : '缩进';
   const horizontal = [ ['left','左对齐',AlignLeft], ['center','居中',AlignCenter], ['right','右对齐',AlignRight] ] as const;
   const vertical = [ ['top','顶部对齐',ArrowUpToLine], ['middle','垂直居中',AlignVerticalJustifyCenter], ['bottom','底部对齐',ArrowDownToLine] ] as const;
   const apply = (action: () => void) => { action(); setOpen(false); };
-  if (!visible) return null;
+  if (!visible || !targets.length && !canIndent) return null;
   return <Popover.Root open={open} onOpenChange={hover.change}>
-    <Popover.Trigger {...hover.triggerProps} className="nb-alignment-trigger" title={cells ? '单元格对齐' : '对齐与缩进'} aria-label={cells ? '单元格对齐' : '对齐与缩进'}><AlignLeft size={17}/><ChevronDown className="nb-menu-chevron" size={10}/></Popover.Trigger>
+    <Popover.Trigger {...hover.triggerProps} className="nb-alignment-trigger" title={label} aria-label={label}>{targets.length ? <AlignLeft size={17}/> : <IndentIncrease size={17}/>}<ChevronDown className="nb-menu-chevron" size={10}/></Popover.Trigger>
     <Popover.Portal><Popover.Content className="nb-alignment-menu" sideOffset={6} collisionPadding={8}
-      {...hover.contentProps} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
-      {horizontal.map(([value,label,Icon]) => <button type="button" key={value} title={label} onClick={() => apply(() => {
-        if (cells) alignTableSelection(editor, { textAlign: value }); else setParagraphPresentation(editor, { textAlign: value });
-      })}><Icon size={16}/><span>{label}</span>{(attrs.textAlign ?? attrs.align ?? 'left') === value && <Check size={14}/>}</button>)}
-      <hr/>
+      {...hover.contentProps} onMouseDown={event => event.preventDefault()} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
+      {targets.length > 0 && horizontal.map(([value,label,Icon]) => <button type="button" key={value} title={label} onClick={() => apply(() => {
+        setParagraphPresentation(editor, { textAlign: value });
+      })}><Icon size={16}/><span>{label}</span>{textAlign === value && <Check size={14}/>}</button>)}
+      {targets.length > 0 && <hr/>}
       {cells ? vertical.map(([value,label,Icon]) => <button type="button" key={value} title={label} onClick={() => apply(() => { alignTableSelection(editor, { verticalAlign: value }); })}>
-        <Icon size={16}/><span>{label}</span>{(attrs.verticalAlign ?? 'top') === value && <Check size={14}/>}</button>) : <>
-        <button type="button" title="减少缩进" onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: -1 }); })}><IndentDecrease size={16}/><span>减少缩进</span></button>
-        <button type="button" title="增加缩进" onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: 1 }); })}><IndentIncrease size={16}/><span>增加缩进</span></button>
+        <Icon size={16}/><span>{label}</span>{verticalAlign === value && <Check size={14}/>}</button>) : canIndent && <>
+        <button type="button" title="减少缩进" disabled={scope.indentBlocks.every(({ node }) => !node.attrs.indent)} onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: -1 }); })}><IndentDecrease size={16}/><span>减少缩进</span></button>
+        <button type="button" title="增加缩进" disabled={scope.indentBlocks.every(({ node }) => node.attrs.indent >= 8)} onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: 1 }); })}><IndentIncrease size={16}/><span>增加缩进</span></button>
       </>}
     </Popover.Content></Popover.Portal>
   </Popover.Root>;

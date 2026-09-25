@@ -6,4 +6,8 @@
 
 HTML 与 PDF 使用 `data-table-align` 和左右外边距表达位置。HTML 导入读取该属性。导出通用 Markdown 时移除整表位置，表格内容与结构仍按原有投影规则输出，不增加私有位置标记。
 
-`EfficientTableView.update` 对内容引用未变化的表格只更新位置样式，保留列 DOM、行布局与虚拟行状态。因此大表格的位置更新不遍历整张表。表格节点自身尺寸由已有列宽与内容布局管理；位置样式不写入宽度。
+`EfficientTableView.update` 对内容引用未变化的表格只更新位置样式、说明按钮和表注，保留列 DOM、行布局与虚拟行状态。因此大表格的属性更新不遍历整张表。表格节点自身尺寸由已有列宽与内容布局管理；位置样式不写入宽度。
+
+“添加表注 / 编辑表注”在表格下方编辑独立的可见文字，Enter 或失焦保存，Shift+Enter 换行，Escape 取消，清空后保存删除。表注保存在表格的 `caption` 属性，编辑只产生一次可撤销的 `BlockMetadataStep`。`TableAccessories` 使用 tbody 外的 owned caption DOM，ProseMirror 忽略该 UI 的事件与变动；原表内容和列组仍由原 NodeView 管理。真实 table 的宽度与左右边距同时管理表注及右上角说明按钮，无每次缩放的测量监听。
+
+表注属于 NB 的 `figureCaption` 能力，与单张图片图注共用纯数据校验和编辑命令。HTML/PDF 输出真正的底部 caption；分列续表仅在最后一组保留完整表注。Pandoc 输出表格 Caption，通用 Markdown 在表格后保留普通注释文字。它与弹出的“补充说明”互相独立。

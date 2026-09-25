@@ -5,6 +5,7 @@
 // 详见 docs/09-开发路线图.md 8.7
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import { ReactRenderer } from '@tiptap/react';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import type { Editor, Range } from '@tiptap/core';
@@ -17,7 +18,6 @@ import {
   Heading5,
   Heading6,
   List,
-  ListOrdered,
   CheckSquare,
   Table as TableIcon,
   Code2,

@@ -1,0 +1,10 @@
+.nb-block-range-feedback {
+  position: absolute;
+  z-index: 9;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--editor-accent) 22%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--editor-accent) 8%, transparent);
+}
+.nb-block-range-feedback[hidden] { display: none; }
+@media print { .nb-block-range-feedback { display: none; } }

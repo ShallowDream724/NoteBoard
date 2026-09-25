@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { normalizeFigureCaption } from '../editor-md/figureCaption';
 
 export type ExportProjection = 'portable' | 'html' | 'print';
 export interface RichExportSummary { grids: number; carousels: number; disclosures: number; concealed: number; annotations: number; recovered?: number }
@@ -67,6 +68,8 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
     if (mode !== 'html') delete attrs.concealed;
     const marks = value.marks?.filter(mark => mark.type !== 'annotationReference' && (mode === 'html' || mark.type !== 'conceal'));
     const clean: JSONContent = { ...value, attrs, ...(marks ? { marks } : {}), ...(value.content ? { content } : {}) };
+    const caption = ['table', 'image'].includes(value.type ?? '') ? normalizeFigureCaption(attrs.caption) : null;
+    if (mode === 'portable') delete attrs.caption;
     const anchor = value.attrs?.annotationId ? reference(String(value.attrs.annotationId)) : null;
     if (anchor && ['paragraph', 'heading'].includes(value.type!)) { content.push(anchor); clean.content = content; }
     let result: JSONContent[];
@@ -90,6 +93,7 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
       }
       result = [clean];
     }
+    if (mode === 'portable' && caption) result.push(paragraph(caption.split('\n').flatMap((line, index) => [...(index ? [{ type: 'hardBreak' }] : []), ...(line ? [text(line)] : [])])));
     if (anchor && !['paragraph', 'heading'].includes(value.type!)) {
       if (['listItem', 'taskItem', 'tableCell', 'tableHeader', 'blockquote', 'githubAlert', 'disclosure'].includes(value.type!) && mode !== 'portable') content.push(paragraph([anchor]));
       else result.push(paragraph([anchor]));

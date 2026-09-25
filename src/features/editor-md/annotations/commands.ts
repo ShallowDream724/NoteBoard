@@ -5,6 +5,8 @@ import { dispatchDiscreteEdit } from '../discreteEdit';
 import { annotationAnchors, annotationBodyContent, annotationId, collectAnnotations, newAnnotationId } from './model';
 import { captureAnnotationTarget, type AnnotationDraftTarget } from './draftTarget';
 import { editorSupportsCapability, runWithDocumentCapability } from '../../document-format/featureGate';
+import { BlockMetadataStep } from '../blockMetadataStep';
+import { annotationIndexKey } from './extension';
 
 export const ANNOTATION_OPEN_EVENT = 'nb-open-annotation';
 export const ANNOTATION_BEGIN_EVENT = 'nb-begin-annotation';
@@ -15,6 +17,17 @@ export function beginAnnotation(editor: Editor): string | null {
   if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { beginAnnotation(next); }); return null; }
   const id = newAnnotationId();
   editor.view.dom.dispatchEvent(new CustomEvent<AnnotationBeginRequest>(ANNOTATION_BEGIN_EVENT, { detail: { id, target: captureAnnotationTarget(editor.state.selection) } }));
+  return id;
+}
+/** Capture the block directly: tableEditing normalizes a dispatched table
+ * NodeSelection into cells, so the editor's current selection is not a target. */
+export function beginBlockAnnotation(editor: Editor, pos: number): string | null {
+  if (editor.isDestroyed || !editor.state.doc.nodeAt(pos)?.isBlock) return null;
+  const selection = NodeSelection.create(editor.state.doc, pos);
+  if (!canAddAnnotation(editor, selection)) return null;
+  if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { beginBlockAnnotation(next, pos); }); return null; }
+  const id = newAnnotationId();
+  editor.view.dom.dispatchEvent(new CustomEvent<AnnotationBeginRequest>(ANNOTATION_BEGIN_EVENT, { detail: { id, target: captureAnnotationTarget(selection) } }));
   return id;
 }
 export function openAnnotation(editor: Editor, id: string, options: { edit?: boolean } = {}) {
@@ -60,7 +73,7 @@ export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 
   try { body = schema.nodes.annotationBody.createChecked({ id }, Fragment.fromArray(annotationBodyContent(content).map(node => schema.nodeFromJSON(node)))); }
   catch { return null; }
   const tr = state.tr;
-  if (selection instanceof NodeSelection) tr.setNodeMarkup(selection.from, undefined, { ...selection.node.attrs, annotationId: id });
+  if (selection instanceof NodeSelection) tr.step(new BlockMetadataStep(selection.from, 'annotationId', id));
   else {
     state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
       if (node.type.name === 'annotationStore' || node.type.name === 'annotationBody') return false;
@@ -68,7 +81,7 @@ export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 
       if (node.isLeaf && node.isBlock && Object.hasOwn(node.attrs, 'annotationId')) tr.setNodeMarkup(pos, undefined, { ...node.attrs, annotationId: id });
     });
   }
-  if (!annotationAnchors(tr.doc).some(anchor => anchor.id === id)) return null;
+  if (selection instanceof NodeSelection ? tr.doc.nodeAt(selection.from)?.attrs.annotationId !== id : !annotationAnchors(tr.doc).some(anchor => anchor.id === id)) return null;
   let storeEnd: number | null = null;
   tr.doc.forEach((node, pos) => { if (node.type.name === 'annotationStore') storeEnd = pos + node.nodeSize - 1; });
   if (storeEnd !== null) tr.insert(storeEnd, body);
@@ -91,11 +104,11 @@ export function updateAnnotation(editor: Editor, id: string, content: JSONConten
 
 export function removeAnnotation(editor: Editor, id: string): boolean {
   const { state } = editor, record = collectAnnotations(state.doc).get(id);
-  const anchors = annotationAnchors(state.doc).filter(anchor => anchor.id === id);
+  const anchors = (annotationIndexKey.getState(state)?.anchors ?? annotationAnchors(state.doc)).filter(anchor => anchor.id === id);
   if (!record && !anchors.length) return false;
   const tr = state.tr;
   for (const anchor of anchors) {
-    if (anchor.block) { const node = tr.doc.nodeAt(anchor.from)!; tr.setNodeMarkup(anchor.from, undefined, { ...node.attrs, annotationId: null }); }
+    if (anchor.block) tr.step(new BlockMetadataStep(anchor.from, 'annotationId', null));
     else tr.removeMark(anchor.from, anchor.to, state.schema.marks.annotationReference.create({ id }));
   }
   if (record) {

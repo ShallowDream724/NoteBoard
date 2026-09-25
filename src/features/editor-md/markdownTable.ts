@@ -3,6 +3,7 @@ import type { JSONContent, MarkdownToken } from '@tiptap/core';
 import { buildLogicalTableGrid, type TableCellPlacement } from './tableGrid';
 import { tableFill } from './tableCellPresentation';
 import { tableAlignment, tableAlignmentStyle } from './tableAlignment';
+import { markdownFigureCaption, normalizeFigureCaption, validateFigureCaption } from './figureCaption';
 
 const PREFIX = '<!-- noteboard-table ';
 const tokenizer = Table.config.markdownTokenizer!;
@@ -126,17 +127,22 @@ export const MarkdownTable = Table.extend({
       validate: value => { if (value !== null && !tableAlignment(value)) throw new RangeError('Invalid table alignment'); },
       parseHTML: element => tableAlignment(element.getAttribute('data-table-align')),
       renderHTML: attrs => tableAlignment(attrs.tableAlign) ? { 'data-table-align': attrs.tableAlign } : {},
+    }, caption: { default: null, validate: validateFigureCaption,
+      parseHTML: element => normalizeFigureCaption(element.querySelector(':scope > caption')?.textContent),
+      renderHTML: () => ({}),
     } };
   },
   renderHTML(props) {
     // Let the upstream renderer derive widths from the cells before adding the
     // position. A style attribute on tableAlign would suppress those widths.
     const output = this.parent!(props), alignment = tableAlignmentStyle(props.node.attrs.tableAlign);
-    if (alignment && Array.isArray(output)) {
+    if (Array.isArray(output)) {
       const table = this.options.renderWrapper ? output[2] : output;
       if (Array.isArray(table)) {
         const attrs = table[1] as Record<string, unknown>;
-        attrs.style = [attrs.style, alignment].filter(Boolean).join('; ');
+        if (alignment) attrs.style = [attrs.style, alignment].filter(Boolean).join('; ');
+        const caption = normalizeFigureCaption(props.node.attrs.caption);
+        if (caption) table.splice(2, 0, ['caption', { style: 'caption-side: bottom; white-space: pre-wrap' }, caption]);
       }
     }
     return output;
@@ -248,6 +254,7 @@ export const MarkdownTable = Table.extend({
     const separator = alignment.map(align => align === 'center' ? ':---:' : align === 'right' ? '---:' : align === 'left' ? ':---' : '---');
     let layout = dimensions(node, grid);
     if (Object.keys(blocks).length) layout = { ...(layout ?? { widths: Array(columns).fill(0), heights: {}, grid: true, rowCount: rows.length }), blocks };
-    return '\n' + (layout ? PREFIX + commentJSON(layout) + ' -->\n' : '') + [line(header), line(separator), ...rendered.map(line)].join('\n') + '\n';
+    const caption = markdownFigureCaption(node.attrs?.caption);
+    return '\n' + (layout ? PREFIX + commentJSON(layout) + ' -->\n' : '') + [line(header), line(separator), ...rendered.map(line)].join('\n') + '\n' + (caption ? '\n' + caption + '\n' : '');
   },
 });

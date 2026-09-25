@@ -27,6 +27,7 @@ import { selectBlock } from './blockActions';
 import { foldedSectionEnd } from './headingFolding';
 import { blockHandlePosition } from './blockHandleGeometry';
 import { markHeadingHandleTarget } from './headingHandleMarker';
+import { BlockRangeFeedback } from './BlockRangeFeedback';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -142,7 +143,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const menuOpenRef = useRef(false); menuOpenRef.current = menuOpen;
   const refreshHoverRef = useRef<(() => void) | null>(null);
   const menuHover = useHoverMenu(menuOpen, open => {
-    if (open && (!editor || state.nodePos === null || dragSessionRef.current?.dragging)) return;
+    if (open && (!editor || !state.visible || state.nodePos === null || dragSessionRef.current?.dragging)) return;
     editor?.view.dom.classList.toggle('nb-block-menu-open', open);
     menuOpenRef.current = open;
     if (open) {
@@ -227,6 +228,12 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         clearHideTimer();
         return;
       }
+      // A scroll can unmount the hovered handle before React receives leave.
+      // The next real pointer hit must not carry that hover onto another block.
+      if (isHoveringHandleRef.current) {
+        isHoveringHandleRef.current = false;
+        setIsHoveringHandle(false);
+      }
 
       if (targetElement === editorDom) {
         // The control lane is padding, not a document node. Probe the content edge
@@ -248,7 +255,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
       if (!blockInfo) { scheduleHide(); return; }
 
-      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50);
+      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50, handleRef.current?.offsetHeight || 30);
 
       setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) ? current : ({
         visible: true,
@@ -512,6 +519,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   return (
     <>
+      {editor && state.nodePos !== null && !isDragging && (isHoveringHandle || menuOpen) && <BlockRangeFeedback editor={editor} pos={state.nodePos}/>}
       <Popover.Root open={menuOpen && !isDragging} onOpenChange={menuHover.change}>
       <Popover.Anchor asChild>
         <button

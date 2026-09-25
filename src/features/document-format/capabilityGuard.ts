@@ -6,6 +6,7 @@ import { editorDocumentFormat } from '../editor-md/editorDocumentCodec';
 import { runWithDocumentCapability } from './featureGate';
 import type { DocumentCapabilityId } from './capabilities';
 import { showToast } from '../../stores/toastStore';
+import { CellTextStyleStep } from '../document-style/cellTextStyle';
 
 const guardKey = new PluginKey('documentCapabilityGuard');
 type Feature = { capability: DocumentCapabilityId; signature: string };
@@ -24,16 +25,20 @@ function nodeFeatures(node: Node): Feature[] {
   if (['imageCollection', 'imageSlot'].includes(type)) add('gallery', 'type', type);
   if (type === 'imageCollection') add('gallery', 'layout', [attrs.layout, attrs.columns]);
   if (type === 'disclosure') { add('disclosure', 'type', type); add('disclosure', 'presentation', [attrs.title, attrs.open]); }
+  if (type === 'githubAlert' && [attrs.title, attrs.icon, attrs.textColor, attrs.borderColor, attrs.backgroundColor].some(value => value != null)) {
+    add('callout', 'presentation', [attrs.title, attrs.icon, attrs.textColor, attrs.borderColor, attrs.backgroundColor]);
+  }
   if (type.startsWith('annotation')) add('annotation', 'type', type);
   if (attrs.annotationId) add('annotation', 'annotationId', attrs.annotationId);
   if (attrs.concealed) add('conceal', 'concealed', true);
-  if (attrs.textColor) add('textColor', 'textColor', attrs.textColor);
+  if (attrs.textColor && type !== 'githubAlert') add('textColor', 'textColor', attrs.textColor);
   if (attrs.background) add(type === 'tableCell' || type === 'tableHeader' ? 'tableFill' : 'highlight', 'background', attrs.background);
   if (attrs.fontSize) add('fontSize', 'fontSize', attrs.fontSize);
   if (attrs.textAlign) add('alignment', 'textAlign', attrs.textAlign);
   if (attrs.indent) add('alignment', 'indent', attrs.indent);
   if (attrs.verticalAlign) add('alignment', 'verticalAlign', attrs.verticalAlign);
   if (type === 'table' && attrs.tableAlign) add('tableAlignment', 'tableAlign', attrs.tableAlign);
+  if (['table', 'image'].includes(type) && attrs.caption) add('figureCaption', 'caption', attrs.caption);
   // A GFM column's horizontal alignment is portable. Arbitrary cell alignment
   // is gated by its command and the table presentation step below.
   if (Number(attrs.colspan) > 1 || Number(attrs.rowspan) > 1) add('tableMerge', 'span', [attrs.colspan, attrs.rowspan]);
@@ -61,6 +66,20 @@ export function transactionAddedCapability(tr: Transaction, storedMarks: readonl
   }
   for (let index = 0; index < tr.steps.length; index++) {
     const step = tr.steps[index], before = tr.docs[index];
+    if (step instanceof CellTextStyleStep) {
+      const added = step.patches.map(patch => ({ patch, features: features(patch.content) })).filter(value => value.features.length);
+      if (!added.length) continue;
+      const wanted = new Set(added.map(value => value.patch.pos)), previous = new Map<number, Set<string>>();
+      before.nodeAt(step.pos)?.forEach((row, rowPos) => row.forEach((cell, cellPos) => {
+        const pos = rowPos + 1 + cellPos;
+        if (wanted.has(pos)) previous.set(pos, new Set(features(cell.content).map(feature => feature.signature)));
+      }));
+      for (const value of added) {
+        const unsupported = value.features.find(feature => !previous.get(value.patch.pos)?.has(feature.signature));
+        if (unsupported) return unsupported.capability;
+      }
+      continue;
+    }
     if (step instanceof AddMarkStep) {
       const feature = markFeature(step.mark);
       if (feature) return feature.capability;
@@ -91,6 +110,7 @@ export function transactionAddedCapability(tr: Transaction, storedMarks: readonl
     const value = step.toJSON() as { stepType: string; pos?: number; attr?: string; value?: unknown; patches?: Array<Record<string, unknown>> };
     if (value.stepType === 'noteboardTableColumnWidths' || value.stepType === 'noteboardTableRowHeights') return 'tableDimensions';
     if (value.stepType === 'noteboardTableAlignment' && value.value) return 'tableAlignment';
+    if (value.stepType === 'noteboardBlockMetadata' && value.value) return value.attr === 'caption' ? 'figureCaption' : 'annotation';
     if (value.stepType === 'noteboardTablePresentation') {
       if (value.patches?.some(patch => patch.background)) return 'tableFill';
       if (value.patches?.some(patch => patch.textAlign || patch.verticalAlign)) return 'alignment';

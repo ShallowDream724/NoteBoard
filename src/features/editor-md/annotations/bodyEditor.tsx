@@ -4,7 +4,8 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { setBlockType, toggleMark, wrapIn } from '@tiptap/pm/commands';
 import { wrapInList } from '@tiptap/pm/schema-list';
-import { Bold, ImagePlus, Italic, List, ListOrdered, Quote } from 'lucide-react';
+import { Bold, ImagePlus, Italic, List, Quote } from 'lucide-react';
+import { OrderedListIcon as ListOrdered } from '../../../components/OrderedListIcon';
 import { Tooltip } from '../../../components/Tooltip';
 import { createAnnotationBodyView, updateAnnotationBodyView } from './bodyView';
 

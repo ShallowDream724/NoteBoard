@@ -559,7 +559,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         transition: 'opacity 120ms ease',
       }}
     >
-      <AlignmentMenu editor={editor} cells/>
+      <AlignmentMenu editor={editor}/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
       <MenuDivider />
       {nativeFeaturesVisible && tableDistributionState(editor).columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}

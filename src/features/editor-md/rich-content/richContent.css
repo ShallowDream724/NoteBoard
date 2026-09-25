@@ -43,10 +43,13 @@
 .nb-disclosure[data-open=true] .nb-disclosure-toggle svg { transform:rotate(90deg); }
 .nb-disclosure-title { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--editor-text); font:600 .94em var(--content-font-family,inherit); padding:2px; }
 .nb-disclosure-title:focus { box-shadow:0 1px var(--editor-border-focus); }
-.nb-disclosure-body { padding:16px 20px 18px 43px; background:var(--editor-bg); }
+.nb-disclosure-body { padding:16px 20px 12px 43px; background:var(--editor-bg); }
 .nb-disclosure-body[hidden] { display:none; }
-.nb-disclosure-body > :first-child { margin-top:0; }
-.nb-disclosure-body > :last-child { margin-bottom:0; }
+.ProseMirror .nb-disclosure-body > :first-child,
+.ProseMirror .nb-disclosure-body > [data-node-view-content-react] > :first-child { margin-top:0; }
+.ProseMirror .nb-disclosure-body > :last-child,
+.ProseMirror .nb-disclosure-body > [data-node-view-content-react] > :last-child { margin-bottom:0; }
+.ProseMirror .nb-disclosure-body :is(ul,ol):last-child > li:last-child { margin-bottom:0; }
 .ProseMirror [data-nb-conceal] { filter:blur(4px); transition:filter 120ms ease; }
 .ProseMirror [data-nb-conceal]:hover,.ProseMirror [data-nb-conceal]:focus,.ProseMirror [data-nb-conceal]:focus-within { filter:none; }
 .nb-image-page:focus-visible,.nb-image-dot:focus-visible,.nb-image-add-slot:focus-visible,.nb-image-slot-empty:focus-visible,.nb-disclosure-toggle:focus-visible { outline:2px solid var(--editor-accent); outline-offset:2px; }
