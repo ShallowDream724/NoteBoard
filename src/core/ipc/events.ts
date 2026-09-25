@@ -2,7 +2,7 @@
 // 组件只用这些，不直接 listen
 // 详见 docs/08-数据契约与持久化.md §3
 
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
 import type { DownloadProgress, ExternalChangePayload, FontPackStatus, Settings } from './types';
 
@@ -29,6 +29,11 @@ export const EVENTS = {
 /** 队列唤醒事件：只携带队列版本，不含路径；消费方拉取队列 */
 export function onOpenRequestsAvailable(cb: (p: { queueVersion: number }) => void): Promise<UnlistenFn> {
   return listen<{ queueVersion: number }>(EVENTS.OPEN_REQUESTS_AVAILABLE, (e) => cb(e.payload));
+}
+
+/** Wake another window only after its durable open queue has been updated. */
+export function notifyOpenRequestsAvailable(label: string, queueVersion: number): Promise<void> {
+  return emitTo(label, EVENTS.OPEN_REQUESTS_AVAILABLE, { queueVersion });
 }
 
 /** 迁移提交：目标解锁可编辑；源清理本地实例和标签 */

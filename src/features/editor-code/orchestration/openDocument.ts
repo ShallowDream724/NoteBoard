@@ -4,9 +4,11 @@
 // 详见 docs/09-开发路线图.md 4.13 与启动性能计划 §G
 
 import * as ipc from '../../../core/ipc/commands';
+import { notifyOpenRequestsAvailable } from '../../../core/ipc/events';
+import type { OpenRequestSource } from '../../../core/ipc/types';
 import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../../stores/windowStore';
-import { openExplorerDirectory, revealExplorerFile } from '../../explorer/explorerActions';
+import { beginExplorerNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, revealExplorerFile, type ExplorerNavigation } from '../../explorer/explorerActions';
 import { useLayoutStore } from '../../../stores/layoutStore';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoaders';
@@ -23,7 +25,12 @@ export type OpenDocumentResult = 'opened' | 'focused' | 'failed';
  * 带发起时的活动标签与资源管理器根校验：用户已切换目录/标签时放弃旧结果，
  * 不覆盖用户新切换的目录。
  */
-function scheduleExplorerFollowUp(targetKey: string, dirPath: string): void {
+function scheduleExplorerFollowUp(targetKey: string, dirPath: string, navigation?: ExplorerNavigation): void {
+  if (navigation) {
+    void openExplorerFileParent(targetKey, dirPath, navigation, () => useWindowStore.getState().activeKey === targetKey)
+      .catch(error => console.error('加载父文件夹目录失败:', error));
+    return;
+  }
   useLayoutStore.getState().setExplorerVisible(true);
   void revealExplorerFile(targetKey, dirPath, () => useWindowStore.getState().activeKey === targetKey)
     .catch(error => console.error('加载父文件夹目录失败:', error));
@@ -52,12 +59,26 @@ function buildTab(key: string, displayName: string, kind: Tab['kind'], language:
   };
 }
 
-/** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
-export async function openDocument(path: string, options: { exportNotice?: Tab['exportNotice'] } = {}): Promise<OpenDocumentResult> {
-  return openDocumentInternal(path, 0, options);
+interface OpenDocumentOptions {
+  exportNotice?: Tab['exportNotice'];
+  /** File association / CLI requests enter the direct parent, preserving sidebar visibility. */
+  explorer?: 'parent';
+  /** Preserved when an external open is routed to the document's actual owner. */
+  openRequestSource?: OpenRequestSource;
 }
 
-async function openDocumentInternal(path: string, retryDepth: number, options: { exportNotice?: Tab['exportNotice'] }): Promise<OpenDocumentResult> {
+/** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
+export async function openDocument(path: string, options: OpenDocumentOptions = {}): Promise<OpenDocumentResult> {
+  if (!path.trim()) return 'failed';
+  const navigation = options.explorer === 'parent' ? beginExplorerNavigation(path) : undefined;
+  try {
+    return await openDocumentInternal(path, 0, options, navigation);
+  } finally {
+    if (navigation) releaseExplorerNavigation(navigation);
+  }
+}
+
+async function openDocumentInternal(path: string, retryDepth: number, options: OpenDocumentOptions, navigation?: ExplorerNavigation): Promise<OpenDocumentResult> {
   if (retryDepth > 2) {
     showToast('该文件当前处于打开状态，请稍后重试', 'warning');
     return 'failed';
@@ -96,18 +117,16 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
             const tabNow = useWindowStore.getState().getTab(prepared.key);
             if (tabNow) {
               useWindowStore.getState().activateTab(prepared.key);
+              scheduleExistingTabFollowUp(prepared.key, navigation);
               return 'focused';
             }
           }
           // 归属可能已被注销完成 → 重新尝试完整打开（受限递归）
-          return openDocumentInternal(path, retryDepth + 1, options);
+          return openDocumentInternal(path, retryDepth + 1, options, navigation);
         }
+        scheduleExistingTabFollowUp(prepared.key, navigation);
       } else {
-        try {
-          await ipc.focusWindow(prepared.ownerLabel);
-        } catch (e) {
-          console.error('聚焦已打开窗口失败:', e);
-        }
+        return focusDocumentOwner(prepared.ownerLabel, prepared.key, options);
       }
       return 'focused';
     }
@@ -115,7 +134,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
     case 'directory': {
       // 拖入/打开的是文件夹：资源管理器定位到该目录（延后执行，不阻塞返回）
       useLayoutStore.getState().setExplorerVisible(true);
-      try { await openExplorerDirectory(prepared.path); }
+      try { await openExplorerDirectory(prepared.path, navigation); }
       catch (error) { showToast(`无法打开文件夹：${String(error)}`, 'error'); return 'failed'; }
       scheduleRecentRecord(prepared.path, true);
       return 'opened';
@@ -141,17 +160,17 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
         if (regResult.type === 'already-open') {
           // 并发窗口竞争注册：聚焦已有所有者，本窗口不建 Tab
           if (regResult.ownerLabel !== label) {
-            await ipc.focusWindow(regResult.ownerLabel);
-            return 'focused';
+            return focusDocumentOwner(regResult.ownerLabel, prepared.key, options);
           }
           useWindowStore.getState().activateTab(prepared.key);
+          scheduleExistingTabFollowUp(prepared.key, navigation);
           return 'focused';
         }
       } catch (e) {
         console.error('注册图片文档失败:', e);
       }
       useWindowStore.getState().openTab(buildTab(prepared.key, prepared.displayName, 'image', 'plaintext'));
-      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath);
+      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       scheduleRecentRecord(path, false);
       return 'opened';
     }
@@ -172,7 +191,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
         readonly: true,
       });
       useWindowStore.getState().openTab({ ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'), exportNotice: options.exportNotice });
-      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath);
+      if (prepared.dirPath) scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       return 'opened';
     }
 
@@ -189,9 +208,10 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
         const regResult = await ipc.registerDocument(label, payload.key, payload.kind);
         if (regResult.type === 'already-open') {
           if (regResult.ownerLabel !== label) {
-            await ipc.focusWindow(regResult.ownerLabel);
+            return focusDocumentOwner(regResult.ownerLabel, payload.key, options);
           } else {
             useWindowStore.getState().activateTab(payload.key);
+            scheduleExistingTabFollowUp(payload.key, navigation);
           }
           return 'focused';
         }
@@ -205,12 +225,45 @@ async function openDocumentInternal(path: string, retryDepth: number, options: {
 
       // 目录展开与最近记录延后（不阻塞打开链路返回，不阻塞队列下一条）
       if (payload.dirPath && payload.key) {
-        scheduleExplorerFollowUp(payload.key, payload.dirPath);
+        scheduleExplorerFollowUp(payload.key, payload.dirPath, navigation);
       }
       scheduleRecentRecord(path, false);
       return 'opened';
     }
   }
+}
+
+/** Forward only remote ownership; the owner's already-open/self branch never re-enqueues. */
+async function focusDocumentOwner(ownerLabel: string, key: string, options: OpenDocumentOptions): Promise<OpenDocumentResult> {
+  if (options.explorer === 'parent' && ownerLabel !== getCurrentWindow().label) {
+    let queueVersion: number;
+    try {
+      [, queueVersion] = await ipc.enqueueOpenRequests(ownerLabel, [key], options.openRequestSource ?? 'second-instance');
+    } catch (error) {
+      console.error('转交文件打开请求失败:', error);
+      showToast('无法将文件打开请求转交给已有窗口，请重试', 'error');
+      return 'failed';
+    }
+    try {
+      await notifyOpenRequestsAvailable(ownerLabel, queueVersion);
+    } catch (error) {
+      // The queue remains durable; focusing the owner also triggers its recovery drain.
+      console.warn('通知已有窗口消费打开请求失败:', error);
+    }
+  }
+  try {
+    await ipc.focusWindow(ownerLabel);
+  } catch (error) {
+    console.error('聚焦已打开窗口失败:', error);
+  }
+  return 'focused';
+}
+
+/** Already-open responses carry only the canonical key; reuse the loaded document's parent. */
+function scheduleExistingTabFollowUp(key: string, navigation?: ExplorerNavigation): void {
+  if (!navigation) return;
+  const directory = useDocumentStore.getState().getDocument(key)?.dirPath;
+  if (directory) scheduleExplorerFollowUp(key, directory, navigation);
 }
 
 // ── 从路径构建 Tab（不实际打开，用于会话恢复）──

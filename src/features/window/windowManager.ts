@@ -109,7 +109,7 @@ export async function requestShellReadyAndDrain(): Promise<void> {
 /** 打开请求处理器：按序处理并返回结果（drain 循环负责 ACK） */
 async function processOpenRequest(request: OpenRequestDto): Promise<OpenRequestResult> {
   try {
-    return await openDocument(request.path);
+    return await openDocument(request.path, request.source === 'cli' || request.source === 'second-instance' ? { explorer: 'parent', openRequestSource: request.source } : undefined);
   } catch (e) {
     console.error('打开请求处理失败:', e);
     return 'failed';

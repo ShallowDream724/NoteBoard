@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
-import { revealExplorerFile } from './explorerActions';
+import { followExplorerFile } from './explorerActions';
 
 export function useReveal() {
   const activeKey = useWindowStore(s => s.activeKey);
@@ -9,7 +9,7 @@ export function useReveal() {
   useEffect(() => {
     if (!activeKey || !directory || activeKey.startsWith('untitled:')) return;
     let disposed = false;
-    void revealExplorerFile(activeKey, directory, () => !disposed && useWindowStore.getState().activeKey === activeKey)
+    void followExplorerFile(activeKey, directory, () => !disposed && useWindowStore.getState().activeKey === activeKey)
       .catch(error => console.error('定位文件失败:', error));
     return () => { disposed = true; };
   }, [activeKey, directory]);
