@@ -150,8 +150,8 @@ async function adoptTransferredDocument(transferId: string): Promise<void> {
     readonly: doc.readonly ?? false,
   });
   // 脏文档必须携带基线：迁移载荷的 content 是最新内容而非基线，需显式恢复
-  if (doc.baseline != null && doc.isDirty) {
-    docStore.updateBaseline(doc.key, doc.baseline, doc.mtime ?? 0, doc.size ?? 0);
+  if (doc.baseline != null) {
+    docStore.updateBaseline(doc.key, doc.baseline, doc.mtime ?? 0, doc.size ?? 0, doc.persistedContent);
   }
 
   // 🔴 R06：恢复可序列化统一历史（目标无历史时导入；检查点+补丁链整体迁移）
@@ -543,6 +543,7 @@ export async function moveToNewWindow(docKey: string): Promise<boolean> {
     mtime: doc.mtime,
     size: doc.size,
     baseline: doc.baselineContent,
+    persistedContent: doc.persistedContent,
     revision,
     history: serializedHistory,
     // 额外视图状态（captureViewState 的判别联合快照）

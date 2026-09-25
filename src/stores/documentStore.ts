@@ -43,6 +43,8 @@ export interface Document {
   savePolicy: 'auto' | 'manual';
   /** 上次保存的基线内容（用于判断是否脏） */
   baselineContent: string | null;
+  /** Last text read/written on disk. Editor normalization must never change this. */
+  persistedContent: string | null;
   /** 外部变更状态 */
   externalStatus: 'clean' | 'modified' | 'deleted' | 'renamed' | null;
   /** 大文档判定结果 */
@@ -66,7 +68,7 @@ interface DocumentStore {
   /** 设置基准内容并对齐脏态 */
   setBaselineContent: (key: string, baselineContent: string) => void;
   /** 使用实际写入磁盘的内容更新基线（保存后调用） */
-  updateBaseline: (key: string, savedContent: string, mtime: number, size: number) => void;
+  updateBaseline: (key: string, savedContent: string, mtime: number, size: number, persistedContent?: string | null) => void;
   /** 同步刷新所有文档的保存策略（设置改变时调用） */
   syncSavePolicies: () => void;
   /** 设置外部变更状态 */
@@ -129,6 +131,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       isDirty: existing?.isDirty ?? false,
       savePolicy: existing?.savePolicy ?? resolveSavePolicy(payload.kind),
       baselineContent: existing?.baselineContent ?? payload.content,
+      persistedContent: existing ? existing.persistedContent : payload.content,
       externalStatus: 'clean',
       largeDocVerdict: existing?.largeDocVerdict ?? null,
     };
@@ -177,7 +180,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     });
   },
 
-  updateBaseline: (key, savedContent, mtime, size) => {
+  updateBaseline: (key, savedContent, mtime, size, persistedContent = savedContent) => {
     set((state) => {
       const doc = state.documents.get(key);
       if (!doc) return {};
@@ -187,6 +190,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       newMap.set(key, {
         ...doc,
         baselineContent: savedContent,
+        persistedContent,
         mtime,
         size,
         isDirty,

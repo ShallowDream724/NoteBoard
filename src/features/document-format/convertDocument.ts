@@ -43,7 +43,7 @@ export async function convertMarkdownToNative(key: string, options: { removeMark
     if (source == null || !current) throw new Error('无法读取最新正文，请稍后重试。');
     const disk = hasFile ? await ipc.readDocument(key) : null;
     if (disk && disk.content == null) throw new Error('无法读取原 Markdown，转换未保存。');
-    if (disk && (current.baselineContent == null || await documentTextHash(disk.content!) !== await documentTextHash(current.baselineContent))) throw new Error('原 Markdown 已在外部修改，请先处理外部更新。');
+    if (disk && (current.persistedContent == null || await documentTextHash(disk.content!) !== await documentTextHash(current.persistedContent))) throw new Error('原 Markdown 已在外部修改，请先处理外部更新。');
     const native = await prepareTextExport(source, 'noteboard', hasFile ? parentDirectory(key) : '');
     const markdown = disk && !options.removeMarkdown ? await prepareTextExport(native, 'md', '', undefined, 'noteboard') : null;
     const content = markdown == null ? native : replaceNativeMetadata(native, { markdown: { path: relativeDocumentPath(newKey, key), baselineHash: await documentTextHash(markdown), projectionVersion: MARKDOWN_PROJECTION_VERSION } });

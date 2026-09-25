@@ -71,6 +71,25 @@ beforeEach(() => {
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); registerPendingSnapshotMaterializers({ source: () => null, visual: () => null }); vi.unstubAllGlobals(); });
 
 describe('conversion and native Save As', () => {
+  it('compares the original disk text after the visual editor normalizes Markdown', async () => {
+    const disk = '# Heading\r\n\r\n* item\r\n';
+    const normalized = '# Heading\n\n- item\n';
+    seed(MD, disk); authority(MD, normalized);
+    useDocumentStore.getState().setContent(MD, normalized);
+    useDocumentStore.getState().setBaselineContent(MD, normalized);
+    vi.mocked(ipc.readDocument).mockResolvedValue(payload(MD, disk));
+    expect(await convertMarkdownToNative(MD, { removeMarkdown: false })).toBe(NB);
+    expect(saveNativeBundle).toHaveBeenCalledOnce();
+  });
+
+  it('still refuses a real external edit after visual normalization', async () => {
+    seed(MD, '* item\n'); authority(MD, '- item\n');
+    useDocumentStore.getState().setBaselineContent(MD, '- item\n');
+    vi.mocked(ipc.readDocument).mockResolvedValue(payload(MD, '* changed elsewhere\n'));
+    await expect(convertMarkdownToNative(MD, { removeMarkdown: false })).rejects.toThrow('外部修改');
+    expect(saveNativeBundle).not.toHaveBeenCalled();
+  });
+
   it('cancels an untitled conversion without registering, writing or changing identity', async () => {
     const key = 'untitled:markdown:cancel'; seed(key, 'Unsaved draft');
     vi.mocked(save).mockResolvedValue(null);

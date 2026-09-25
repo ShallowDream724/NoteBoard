@@ -93,6 +93,7 @@ export interface TransferredDocument {
   mtime?: number;
   size?: number;
   baseline?: string | null;
+  persistedContent: string | null;
   revision?: number;
   history?: unknown;
   /** R06：编辑器侧 captureViewState 的判别联合快照（选区/滚动/折叠/查看变换） */

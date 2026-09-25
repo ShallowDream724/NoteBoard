@@ -16,7 +16,7 @@ export interface PreparedNativeSave {
 }
 
 /** A projection is produced only at an I/O boundary, never on an editor transaction. */
-export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineContent'>, source: string, imageTarget = doc.key): Promise<PreparedNativeSave> {
+export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineContent' | 'persistedContent'>, source: string, imageTarget = doc.key): Promise<PreparedNativeSave> {
   const captured = source;
   const assets = await prepareDocumentImageAssets(source, 'noteboard', imageTarget, imageTarget !== doc.key);
   source = assets.content;
@@ -24,8 +24,8 @@ export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineCon
   const link = markdownLinkPath(doc.key, metadata);
   const request: NativeSaveRequest = {
     path: doc.key, content: source,
-    expectedHash: doc.baselineContent == null ? undefined : await documentTextHash(doc.baselineContent),
-    createOnly: doc.baselineContent == null,
+    expectedHash: doc.persistedContent == null ? undefined : await documentTextHash(doc.persistedContent),
+    createOnly: doc.persistedContent == null,
   };
   if (link && metadata.markdown) {
     if (useDocumentStore.getState().getDocument(link)) {
@@ -53,7 +53,7 @@ export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineCon
   return { request, content: request.content, metadata, ...(assets.references.length ? { imageAssets: { captured, prepared: assets } } : {}) };
 }
 
-export async function persistNativeDocument(doc: Pick<Document, 'key' | 'baselineContent'>, source: string, expectedNativeHash?: string): Promise<PreparedNativeSave & { result: NativeSaveResult }> {
+export async function persistNativeDocument(doc: Pick<Document, 'key' | 'baselineContent' | 'persistedContent'>, source: string, expectedNativeHash?: string): Promise<PreparedNativeSave & { result: NativeSaveResult }> {
   const prepared = await prepareNativeSave(doc, source);
   if (expectedNativeHash) prepared.request.expectedHash = expectedNativeHash;
   const result = await saveNativeBundle(prepared.request);

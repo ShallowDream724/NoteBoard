@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 it('materializes the captured NB before saving and retains the original CAS baseline', async () => {
   io.prepare.mockResolvedValue({ content: native('./img/a.png'), changes: [], references: [['data:image/png;base64,AAEC', './img/a.png']] });
-  const saved = await persistNativeDocument({ key: path, baselineContent: source }, source, 'explicit-expected-hash');
+  const saved = await persistNativeDocument({ key: path, baselineContent: source, persistedContent: source }, source, 'explicit-expected-hash');
   expect(io.prepare).toHaveBeenCalledWith(source, 'noteboard', path, false);
   expect(io.save.mock.calls[0][0]).toMatchObject({ content: native('./img/a.png'), expectedHash: 'explicit-expected-hash' });
   expect(saved.imageAssets?.captured).toBe(source);
@@ -37,6 +37,6 @@ it('first Save As writes images at the target and makes only newly published ima
 });
 it('does not write the NB if preparing a recovery resource fails', async () => {
   io.prepare.mockRejectedValue(new Error('Missing recovery image'));
-  await expect(persistNativeDocument({ key: path, baselineContent: null }, source)).rejects.toThrow('Missing recovery image');
+  await expect(persistNativeDocument({ key: path, baselineContent: null, persistedContent: null }, source)).rejects.toThrow('Missing recovery image');
   expect(io.save).not.toHaveBeenCalled();
 });

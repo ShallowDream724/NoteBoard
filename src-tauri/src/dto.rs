@@ -192,6 +192,8 @@ pub struct TransferredDocument {
     /// 保存基线内容（脏文档必须携带，用于脏态判定）
     #[serde(default)]
     pub baseline: Option<String>,
+    /// Exact disk text, independent of the editor's normalized dirty baseline.
+    pub persisted_content: Option<String>,
     /// 迁移时内容版本（源实例 flush 时捕获）
     #[serde(default)]
     pub revision: u64,
