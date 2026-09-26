@@ -14,6 +14,7 @@ import { getBaseline } from '../../src/features/editor-md/serialize';
 import { prepareTextExport } from '../../src/features/export/documentConversion';
 import { convertMarkdownToNative } from '../../src/features/document-format/convertDocument';
 import { saveAs, saveDocument } from '../../src/features/editor-code/orchestration/saveDocument';
+import { restoreLastClosedWindow, loadRestoredTab } from '../../src/features/session/closedWindowSession';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'test-main' }) }));
@@ -23,12 +24,15 @@ vi.mock('../../src/core/nativeDocumentIO', async importOriginal => ({
 vi.mock('../../src/core/ipc/commands', () => ({
   readDocument: vi.fn(), pathExists: vi.fn(), writeDocument: vi.fn(),
   registerDocument: vi.fn(), unregisterDocument: vi.fn(), setDocumentDirty: vi.fn(),
+  loadSession: vi.fn(), saveSession: vi.fn().mockResolvedValue(undefined), prepareDocument: vi.fn(),
+  pushRecent: vi.fn().mockResolvedValue(undefined), readDir: vi.fn().mockResolvedValue([]),
 }));
+vi.mock('../../src/features/editor-host/editorLoaders', () => ({ prefetchEditor: vi.fn(), resolveEditorKind: () => 'markdown' }));
 vi.mock('../../src/features/export/documentConversion', () => ({ prepareTextExport: vi.fn() }));
 vi.mock('../../src/features/document-format/linkedMarkdownUpdates', () => ({ getAcceptedLinkedMarkdownHash: vi.fn(), checkLinkedMarkdownUpdates: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: vi.fn().mockResolvedValue(undefined), prepareImageAssetsForIdentity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
-vi.mock('../../src/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn() }));
+vi.mock('../../src/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn(), getStagedPath: vi.fn() }));
 
 const MD = 'C:\\notes\\memo.md', NB = 'C:\\notes\\memo.nb';
 const native = (text: string, metadata: NativeMetadata = {}, image = false) => encodeNativeDocument({ type: 'doc', content: [
@@ -71,6 +75,38 @@ beforeEach(() => {
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); registerPendingSnapshotMaterializers({ source: () => null, visual: () => null }); vi.unstubAllGlobals(); });
 
 describe('conversion and native Save As', () => {
+  it.each([false, true])('converts a restored Markdown tab with unsaved edits (external change: %s)', async external => {
+    const disk = '# Heading\r\n\r\n* item\r\n';
+    vi.mocked(ipc.loadSession).mockResolvedValue({ schemaVersion: 1, savedAt: 1, windows: [{
+      seq: 0, explorerRoot: '', activeKey: MD,
+      layout: { explorerVisible: false, explorerWidth: 260, outlineVisible: false, outlineWidth: 240 },
+      tabs: [{ key: MD, sourcePath: MD, stagedPath: null, isPinned: false, viewMode: 'visual', displayName: 'memo.md' }],
+    }] });
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: true, isDir: false });
+    vi.mocked(ipc.prepareDocument).mockResolvedValue({ type: 'text', payload: payload(MD, disk) });
+    expect(await restoreLastClosedWindow()).toBe(true);
+    expect(useDocumentStore.getState().getDocument(MD)?.content).toBeNull();
+    expect(await loadRestoredTab(MD)).toBe('loaded');
+    const editor = authority(MD, '# Heading\n\n- item\n');
+    useDocumentStore.getState().setBaselineContent(MD, '# Heading\n\n- item\n');
+    editor.edit('# Heading\n\n- edited before conversion\n');
+    vi.mocked(ipc.readDocument).mockResolvedValue(payload(MD, external ? disk + 'External change' : disk));
+    if (external) {
+      await expect(convertMarkdownToNative(MD, { removeMarkdown: false })).rejects.toThrow('外部修改');
+      expect(saveNativeBundle).not.toHaveBeenCalled();
+      expect(useDocumentStore.getState().getDocument(MD)?.isDirty).toBe(true);
+    } else {
+      expect(await convertMarkdownToNative(MD, { removeMarkdown: false })).toBe(NB);
+      expect(saveNativeBundle).toHaveBeenCalledOnce();
+      const request = vi.mocked(saveNativeBundle).mock.calls[0][0];
+      expect(request.markdown).toMatchObject({ path: MD, expectedHash: await documentTextHash(disk) });
+      expect(JSON.stringify(decodeNativeDocument(request.content))).toContain('edited before conversion');
+      expect(readNativeMetadata(request.content).markdown?.path).toBe('memo.md');
+    }
+    // Conversion owns the paired write; there is no preliminary MD save.
+    expect(ipc.writeDocument).not.toHaveBeenCalled();
+  });
+
   it('compares the original disk text after the visual editor normalizes Markdown', async () => {
     const disk = '# Heading\r\n\r\n* item\r\n';
     const normalized = '# Heading\n\n- item\n';

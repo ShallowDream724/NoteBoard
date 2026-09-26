@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { Encoding, Eol } from './ipc/types';
+import { normalizeDocumentEol } from './documentText';
 
 export interface NativeFileWrite { mtime: number; size: number }
 export interface NativeSaveRequest {
@@ -31,7 +32,7 @@ export function recoverNativeCommits(): Promise<Array<{ path: string; message: s
 
 /** Same canonical text as the native I/O service. Used only at read/write boundaries. */
 export async function documentTextHash(text: string): Promise<string> {
-  const normalized = text.includes('\r') ? text.replace(/\r\n?/g, '\n') : text;
+  const normalized = normalizeDocumentEol(text);
   const bytes = new TextEncoder().encode(normalized);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');

@@ -13,6 +13,7 @@ import {
 import { normalizePath } from '../features/explorer/pathUtils';
 import { kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
 import { emit } from '../core/emitter';
+import { normalizeDocumentEol } from '../core/documentText';
 
 export interface Document {
   /** 规范化路径 key */
@@ -87,7 +88,7 @@ interface DocumentStore {
 
 function normalizeEol(text: string | null | undefined): string {
   if (text == null) return '';
-  return text.replace(/\r\n/g, '\n');
+  return normalizeDocumentEol(text);
 }
 
 /**
@@ -131,7 +132,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       isDirty: existing?.isDirty ?? false,
       savePolicy: existing?.savePolicy ?? resolveSavePolicy(payload.kind),
       baselineContent: existing?.baselineContent ?? payload.content,
-      persistedContent: existing ? existing.persistedContent : payload.content,
+      // A restored tab starts as a content:null descriptor. Its first disk load
+      // establishes the persisted snapshot; later editor mirrors never replace it.
+      persistedContent: !existing || existing.content == null ? payload.content : existing.persistedContent,
       externalStatus: 'clean',
       largeDocVerdict: existing?.largeDocVerdict ?? null,
     };

@@ -127,6 +127,23 @@ describe('🔴 N09 外部正文修改核对链', () => {
     release();
   });
 
+  it('visual normalization and local edits do not replace the disk comparison baseline', async () => {
+    seedOpenDocument('* item\n', '* item\n');
+    useDocumentStore.getState().setBaselineContent(KEY, '- item\n');
+    useDocumentStore.getState().setContent(KEY, '- unsaved item\n');
+    const release = watchDirectory(DIR);
+    await vi.advanceTimersByTimeAsync(10);
+    readDocumentMock.mockResolvedValue({ content: '* item\r\n' });
+    watchHandler?.({ type: 'write', paths: [KEY] });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(useDocumentStore.getState().getDocument(KEY)?.externalStatus).toBe('clean');
+    readDocumentMock.mockResolvedValue({ content: '* changed elsewhere\r\n' });
+    watchHandler?.({ type: 'write', paths: [KEY] });
+    await vi.advanceTimersByTimeAsync(700);
+    expect(useDocumentStore.getState().getDocument(KEY)?.externalStatus).toBe('modified');
+    release();
+  });
+
   it('事件风暴去抖合并：多事件一次读取（不逐事件读盘）', async () => {
     seedOpenDocument('a', 'a');
     const release = watchDirectory(DIR);

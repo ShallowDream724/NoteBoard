@@ -17,6 +17,7 @@ import { useWindowStore } from '../../stores/windowStore';
 // 🔴 R3-10：异步核对结果按会话代际条件提交（旧读取不误标同路径新会话）
 import { getSessionGeneration } from '../session/documentSession';
 import { emit } from '../../core/emitter';
+import { normalizeDocumentEol } from '../../core/documentText';
 
 /** 目录监听记录 */
 interface WatchRecord {
@@ -118,7 +119,8 @@ async function recheckDocument(docKey: string): Promise<void> {
   // 🔴 R3-10：捕获读取时刻的基线与会话代际——异步返回后校验（旧读取迟到不误标新会话）
   const docAtStart = useDocumentStore.getState().getDocument(docKey);
   if (!docAtStart) return;
-  const baselineAtStart = docAtStart.baselineContent ?? '';
+  const baselineAtStart = docAtStart.persistedContent;
+  if (baselineAtStart == null) return;
   const generationAtStart = getSessionGeneration(docKey);
   try {
     const payload = await ipc.readDocument(docKey);
@@ -127,10 +129,11 @@ async function recheckDocument(docKey: string): Promise<void> {
     const docNow = useDocumentStore.getState().getDocument(docKey);
     if (!docNow) return;
     // 🔴 R3-10：基线在读取期间变化（自身保存完成）→ 按新基线重新比较（不吞也不误报）
-    const effectiveBaseline = docNow.baselineContent !== docAtStart.baselineContent
-      ? (docNow.baselineContent ?? '')
+    const effectiveBaseline = docNow.persistedContent !== baselineAtStart
+      ? docNow.persistedContent
       : baselineAtStart;
-    const nextStatus: 'modified' | 'clean' = payload.content !== effectiveBaseline ? 'modified' : 'clean';
+    if (effectiveBaseline == null || payload.content == null) return;
+    const nextStatus = normalizeDocumentEol(payload.content) === normalizeDocumentEol(effectiveBaseline) ? 'clean' : 'modified';
     if (docNow.externalStatus !== nextStatus) {
       useDocumentStore.getState().setExternalStatus(docKey, nextStatus);
       useWindowStore.getState().setTabExternalStatus(docKey, nextStatus);
