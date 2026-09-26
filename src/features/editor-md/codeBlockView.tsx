@@ -1,45 +1,19 @@
 // NoteBoard 代码块 NodeView
-// 语言选择（带模糊搜索与键盘导航） + 复制按钮 + 自由编辑 NodeViewContent
+// 语言选择、折叠、行号、换行与复制；代码内容始终由 ProseMirror 管理。
 // 详见 docs/09-开发路线图.md 7.8
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { NodeViewWrapper, NodeViewContent, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import CodeBlock from '@tiptap/extension-code-block';
-import { Copy, Check, ChevronDown, Search, X } from 'lucide-react';
+import { Copy, Check, ChevronDown, Search, X, WrapText } from 'lucide-react';
 // 语言标签是纯元数据，不让普通 Markdown 首开加载全部高亮语法。
-import { normalizeLanguage } from './codeLanguages';
+import { getCodeLanguage, normalizeLanguage, searchCodeLanguages } from './codeLanguages';
 import { Tooltip } from '../../components/Tooltip';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import { useCodeHighlight } from './codeHighlightExtension';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
-
-/** 语言配置结构定义 */
-interface LanguageItem {
-  value: string;
-  label: string;
-  aliases: string[];
-}
-
-/** 支持的代码语言完整列表及检索别名 */
-const LANGUAGES: LanguageItem[] = [
-  { value: 'plaintext', label: '纯文本', aliases: ['text', 'txt', 'plain', 'chunwenben', 'wb'] },
-  { value: 'javascript', label: 'JavaScript', aliases: ['js', 'jsx', 'node', 'react'] },
-  { value: 'typescript', label: 'TypeScript', aliases: ['ts', 'tsx'] },
-  { value: 'python', label: 'Python', aliases: ['py', 'python3', 'py3'] },
-  { value: 'java', label: 'Java', aliases: ['jvm'] },
-  { value: 'c', label: 'C', aliases: ['clang'] },
-  { value: 'cpp', label: 'C++', aliases: ['c++', 'cplusplus', 'cc'] },
-  { value: 'csharp', label: 'C#', aliases: ['c#', 'cs', 'dotnet', '.net'] },
-  { value: 'go', label: 'Go', aliases: ['golang'] },
-  { value: 'rust', label: 'Rust', aliases: ['rs', 'cargo'] },
-  { value: 'sql', label: 'SQL', aliases: ['mysql', 'postgres', 'sqlite', 'oracle'] },
-  { value: 'json', label: 'JSON', aliases: [] },
-  { value: 'yaml', label: 'YAML', aliases: ['yml'] },
-  { value: 'xml', label: 'XML', aliases: ['html', 'xhtml', 'svg'] },
-  { value: 'markdown', label: 'Markdown', aliases: ['md'] },
-  { value: 'bash', label: 'Bash', aliases: ['sh', 'shell', 'zsh', 'terminal'] },
-  { value: 'css', label: 'CSS', aliases: ['scss', 'less', 'style'] },
-  { value: 'shell', label: 'Shell', aliases: ['sh', 'bash', 'zsh'] },
-];
+import { createCodeBlockControlsPlugin, useCodeBlockControls } from './codeBlockControls';
+import './codeBlockView.css';
 
 function CodeBlockComponent({ node, updateAttributes, editor, getPos, decorations }: NodeViewProps) {
   const contentRef = useRef<HTMLPreElement>(null);
@@ -48,12 +22,28 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [wrap, setWrap] = useState(true);
+  const blockRef = useRef<HTMLDivElement>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const language = normalizeLanguage(node.attrs.language || 'plaintext');
+  useCodeBlockControls(editor, node, getPos, language, blockRef, !collapsed);
+
+  useEffect(() => {
+    if (!collapsed) return;
+    const revealSelection = () => {
+      const position = getPos();
+      if (position === undefined) return;
+      const { from, to } = editor.state.selection;
+      if (from < position + node.nodeSize && to > position) setCollapsed(false);
+    };
+    editor.on('selectionUpdate', revealSelection);
+    return () => { editor.off('selectionUpdate', revealSelection); };
+  }, [collapsed, editor, getPos, node.nodeSize]);
 
   // 当打开下拉面板时重置搜索词与焦点
   useEffect(() => {
@@ -80,32 +70,15 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
   }, [showDropdown]);
 
   // 语言搜索与模糊匹配过滤
-  const filteredLanguages = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return LANGUAGES;
-
-    return LANGUAGES.filter((item) => {
-      const matchLabel = item.label.toLowerCase().includes(q);
-      const matchValue = item.value.toLowerCase().includes(q);
-      const matchAlias = item.aliases.some((a) => a.toLowerCase().includes(q));
-      return matchLabel || matchValue || matchAlias;
-    }).sort((a, b) => {
-      // 精确或前缀匹配优先
-      const aStarts = a.value.startsWith(q) || a.label.toLowerCase().startsWith(q) || a.aliases.some((al) => al.startsWith(q));
-      const bStarts = b.value.startsWith(q) || b.label.toLowerCase().startsWith(q) || b.aliases.some((al) => al.startsWith(q));
-      if (aStarts && !bStarts) return -1;
-      if (!aStarts && bStarts) return 1;
-      return 0;
-    });
-  }, [searchQuery]);
+  const filteredLanguages = useMemo(() => searchCodeLanguages(searchQuery), [searchQuery]);
 
   // 切换目标语言
   const handleLanguageChange = useCallback(
     (lang: string) => {
-      updateAttributes({ language: lang });
+      if (lang !== language) updateAttributes({ language: lang });
       setShowDropdown(false);
     },
-    [updateAttributes],
+    [updateAttributes, language],
   );
 
   // 搜索框键盘上下选择与回车确认
@@ -148,6 +121,10 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
 
   return (
     <NodeViewWrapper
+      ref={blockRef}
+      className="nb-code-block"
+      data-wrap={wrap ? 'true' : 'false'}
+      data-collapsed={collapsed ? 'true' : 'false'}
       style={{
         position: 'relative',
         margin: '16px 0',
@@ -160,14 +137,15 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
     >
       {/* 代码块顶部工具条 */}
       <div
+        className="nb-code-block-toolbar"
         contentEditable={false}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '4px 10px',
+          padding: '5px 8px',
           background: 'var(--editor-surface)',
-          borderBottom: '1px solid var(--editor-border)',
+          borderBottom: collapsed ? 'none' : '1px solid var(--editor-border)',
           borderTopLeftRadius: 'calc(var(--radius-md) - 1px)',
           borderTopRightRadius: 'calc(var(--radius-md) - 1px)',
           fontSize: 12,
@@ -175,6 +153,16 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
           userSelect: 'none',
         }}
       >
+        <div className="nb-code-block-leading">
+        <button
+          type="button"
+          className="nb-code-block-heading"
+          aria-label={collapsed ? '展开代码块' : '折叠代码块'}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed(value => !value)}
+        >
+          <DisclosureTriangle expanded={!collapsed} size={12} />
+        </button>
         {/* 语言选择下拉 */}
         <div
           ref={dropdownRef}
@@ -182,18 +170,15 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
             position: 'relative',
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            cursor: 'pointer',
-            padding: '2px 6px',
-            borderRadius: 'var(--radius-sm)',
-            transition: 'background var(--transition-fast)',
+            minWidth: 0,
           }}
-          onClick={() => setShowDropdown(!showDropdown)}
         >
+          <button type="button" className="nb-code-block-language" aria-label="选择代码语言" aria-expanded={showDropdown} onClick={() => setShowDropdown(!showDropdown)}>
           <span style={{ fontWeight: 500, color: 'var(--editor-text)' }}>
-            {LANGUAGES.find((l) => l.value === language)?.label ?? language}
+            {getCodeLanguage(language)?.label ?? language}
           </span>
           <ChevronDown size={12} />
+          </button>
 
           {/* 独立语言检索与选择浮层（不受代码块高度限制） */}
           {showDropdown && (
@@ -321,12 +306,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
                           handleLanguageChange(lang.value);
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontWeight: isSelected ? 600 : 400 }}>{lang.label}</span>
-                          <span style={{ fontSize: 10, color: 'var(--editor-text-muted, #94a3b8)' }}>
-                            {lang.value}
-                          </span>
-                        </div>
+                        <span style={{ fontWeight: isSelected ? 600 : 400 }}>{lang.label}</span>
                         {isSelected && <Check size={13} color="var(--accent-500, #3b82f6)" />}
                       </button>
                     );
@@ -336,6 +316,13 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
             </div>
           )}
         </div>
+        </div>
+        <div className="nb-code-block-actions">
+        <Tooltip content="自动换行" side="top" sideOffset={4}>
+          <button type="button" className="nb-code-block-icon" aria-label="自动换行" aria-pressed={wrap} onMouseDown={event => event.preventDefault()} onClick={() => setWrap(value => !value)}>
+            <WrapText size={14} />
+          </button>
+        </Tooltip>
 
         {/* 复制按钮 */}
         <div className="nb-annotation-toolbar-actions">
@@ -381,14 +368,17 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
           </button>
         </Tooltip>
         </div>
+        </div>
       </div>
 
       {/* 代码内容区域（TipTap 可直接输入） */}
       <pre
         ref={contentRef}
+        hidden={collapsed}
+        className="nb-code-block-content"
         style={{
           margin: 0,
-          padding: '12px 16px',
+          padding: '12px 16px 12px 56px',
           overflowX: 'auto',
           borderBottomLeftRadius: 'calc(var(--radius-md) - 1px)',
           borderBottomRightRadius: 'calc(var(--radius-md) - 1px)',
@@ -408,6 +398,9 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
 // 导出扩展：基于 @tiptap/extension-code-block + ReactNodeViewRenderer
 export const CodeBlockView = CodeBlock.extend({
   addOptions() { return { ...this.parent!(), ownsAnnotationMarker: true }; },
+  addProseMirrorPlugins() {
+    return [...(this.parent?.() ?? []), createCodeBlockControlsPlugin()];
+  },
   addKeyboardShortcuts() {
     return {
       ...this.parent?.(),

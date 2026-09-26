@@ -4,14 +4,43 @@ import { Editor } from '@tiptap/core';
 import { EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
 import { CodeHighlight } from '../../src/features/editor-md/codeHighlightExtension';
+import type { CodeHighlightResult } from '../../src/features/editor-md/codeHighlighting';
 
-vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (_element: HTMLElement, callback: (near: boolean) => void) => { callback(true); return () => {}; } }));
-vi.mock('../../src/features/editor-md/codeHighlighting', () => ({ highlightCode: async () => [{ from: 0, to: 3, className: 'hljs-keyword' }] }));
+const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>(), immediate: true, request: vi.fn() }));
+vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (element: HTMLElement, callback: (near: boolean) => void) => {
+  fixture.observers.set(element, callback);
+  if (fixture.immediate) callback(true);
+  return () => fixture.observers.delete(element);
+} }));
+vi.mock('../../src/features/editor-md/codeHighlighting', () => ({ requestCodeHighlight: fixture.request }));
+const ready: CodeHighlightResult = { status: 'ready', tokens: [{ from: 0, to: 3, className: 'hljs-keyword' }] };
+beforeEach(() => {
+  fixture.observers.clear(); fixture.immediate = true; fixture.request.mockReset(); fixture.request.mockResolvedValue(ready);
+});
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+async function mount() {
+  (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.useFakeTimers();
+  const frames = new Map<number, FrameRequestCallback>(); let sequence = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++sequence; frames.set(id, callback); return id; });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView, CodeHighlight],
+    content: { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'def greet(name):\n    return name' }] }] } });
+  const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+  await act(async () => root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>));
+  return {
+    editor, host, frames,
+    tick: async (milliseconds = 45) => { await act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); }); },
+    flush: async () => { await act(async () => { for (const [id, callback] of [...frames]) { frames.delete(id); callback(16); } }); },
+    nearby: async (near: boolean) => { await act(async () => { fixture.observers.forEach(callback => callback(near)); }); },
+    destroy: async () => { await act(async () => { root.unmount(); editor.destroy(); }); host.remove(); },
+  };
+}
 
 it('keeps the first Python tokens when another UI plugin mounts before their batched frame', async () => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,4 +66,72 @@ it('keeps the first Python tokens when another UI plugin mounts before their bat
     await act(async () => editor.destroy());
     expect(frames.size).toBe(0);
   } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
+});
+
+it('retries a transient failure for an unchanged visible Python node', async () => {
+  fixture.request.mockResolvedValueOnce({ status: 'unavailable', tokens: [] });
+  const mounted = await mount();
+  try {
+    await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
+    await mounted.tick(250); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    expect(fixture.request).toHaveBeenCalledTimes(2);
+  } finally { await mounted.destroy(); }
+});
+
+it('cancels a pending colored batch when a block leaves nearby, then restores colors on reentry', async () => {
+  const mounted = await mount();
+  try {
+    await mounted.tick();
+    expect(mounted.frames.size).toBeGreaterThan(0);
+    await mounted.nearby(false); await mounted.tick(1); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
+    await mounted.nearby(true); await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    await mounted.nearby(false); await mounted.tick(1); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
+  } finally { await mounted.destroy(); }
+});
+
+it('publishes an async result at the current position after editing before the code block', async () => {
+  let resolve!: (result: CodeHighlightResult) => void;
+  fixture.request.mockImplementationOnce(() => new Promise<CodeHighlightResult>(done => { resolve = done; }));
+  const mounted = await mount();
+  try {
+    await mounted.tick();
+    await act(async () => { mounted.editor.view.dispatch(mounted.editor.state.tr.insert(0, mounted.editor.schema.nodes.paragraph.create(null, mounted.editor.schema.text('before')))); });
+    await act(async () => resolve(ready));
+    await mounted.flush();
+    expect(mounted.host.querySelector('p')?.textContent).toBe('before');
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+  } finally { await mounted.destroy(); }
+});
+
+it('preserves surviving colors while a remounted NodeView awaits its first observer result', async () => {
+  const mounted = await mount();
+  try {
+    await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    fixture.immediate = false;
+    const original = mounted.editor.view.props.nodeViews!.codeBlock;
+    await act(async () => { mounted.editor.view.setProps({ nodeViews: { ...mounted.editor.view.props.nodeViews, codeBlock: (...args) => original(...args) } }); });
+    await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    await mounted.nearby(false); await mounted.tick(1); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
+    await mounted.nearby(true); await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+  } finally { await mounted.destroy(); }
+});
+
+it('renders one language name in each picker option', async () => {
+  const previousScroll = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  const mounted = await mount();
+  try {
+    await act(async () => { Array.from(mounted.host.querySelectorAll('span')).find(span => span.textContent === 'Python')!.parentElement!.click(); });
+    expect(Array.from(mounted.host.querySelectorAll('button')).find(button => button.textContent?.includes('Python'))?.textContent).toBe('Python');
+    expect(Array.from(mounted.host.querySelectorAll('button')).find(button => button.textContent?.includes('PowerShell'))?.textContent).toBe('PowerShell');
+  } finally { await mounted.destroy(); HTMLElement.prototype.scrollIntoView = previousScroll; }
 });

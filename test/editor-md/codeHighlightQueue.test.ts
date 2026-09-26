@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { disposeCodeHighlighting, highlightCode, type CodeToken } from '../../src/features/editor-md/codeHighlighting';
+import { disposeCodeHighlighting, highlightCode, requestCodeHighlight, type CodeToken } from '../../src/features/editor-md/codeHighlighting';
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
   requests: { id: number; code: string; language: string }[] = [];
-  onmessage?: (event: { data: { id: number; tokens: CodeToken[] } }) => void;
+  onmessage?: (event: { data: { id: number; tokens: CodeToken[]; unavailable?: boolean } }) => void;
   onerror?: () => void;
   terminated = false;
   constructor() { FakeWorker.instances.push(this); }
@@ -62,5 +62,19 @@ describe('code worker queue', () => {
     workers[1].reply(); await next;
     await vi.advanceTimersByTimeAsync(30_000);
     expect(workers[1].terminated).toBe(true);
+  });
+
+  it('does not cache a failed grammar load as an empty successful result', async () => {
+    const workers = install();
+    const first = requestCodeHighlight('def greet(): pass', 'python');
+    workers[0].onmessage?.({ data: { id: workers[0].requests[0].id, tokens: [], unavailable: true } });
+    expect((await first).status).toBe('unavailable');
+    expect(workers[0].terminated).toBe(true);
+    const retry = requestCodeHighlight('def greet(): pass', 'python');
+    expect(workers).toHaveLength(2);
+    const tokens = [{ from: 0, to: 3, className: 'hljs-keyword' }];
+    workers[1].reply(tokens);
+    expect(await retry).toEqual({ tokens, status: 'ready' });
+    expect(await requestCodeHighlight('def greet(): pass', 'py')).toEqual({ tokens, status: 'ready' });
   });
 });

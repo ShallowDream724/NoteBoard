@@ -1,14 +1,14 @@
-import { getLowlight } from './lowlight';
+import { loadCodeLanguage } from './codeLanguageLoader';
 import type { CodeToken } from './codeTokens';
-import { normalizeLanguage } from './codeLanguages';
+import { CODE_HIGHLIGHT_LIMIT } from './codeLanguages';
 
 interface Tree { type: string; value?: string; properties?: { className?: string[] }; children?: Tree[] }
 
 /** Runs inside code/export workers (or direct engine tests), without UI state. */
-export function tokenizeCode(code: string, language: string): CodeToken[] {
-  language = normalizeLanguage(language);
-  const lowlight = getLowlight();
-  if (!code || code.length > 200_000 || !lowlight.registered(language)) return [];
+export async function tokenizeCode(code: string, language: string): Promise<CodeToken[]> {
+  if (!code || code.length > CODE_HIGHLIGHT_LIMIT) return [];
+  const loaded = await loadCodeLanguage(language);
+  if (!loaded) return [];
   const tokens: CodeToken[] = [];
   let offset = 0, bytes = 0;
   const walk = (tree: Tree, classes: string[]) => {
@@ -26,6 +26,6 @@ export function tokenizeCode(code: string, language: string): CodeToken[] {
       tree.children?.forEach(child => walk(child, next));
     }
   };
-  try { walk(lowlight.highlight(language, code) as Tree, []); } catch { return []; }
+  try { walk(loaded.lowlight.highlight(loaded.grammar, code) as Tree, []); } catch { return []; }
   return tokens;
 }

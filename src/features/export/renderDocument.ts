@@ -106,7 +106,7 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     // Conversion already owns a disposable worker. Use the pure engine here;
     // importing the editor scheduler would add a second worker and UI lifetime.
     codeEngine ??= await import('../editor-md/codeHighlightEngine');
-    code.innerHTML = codeTokensToHTML(source, codeEngine.tokenizeCode(source, language));
+    code.innerHTML = codeTokensToHTML(source, await codeEngine.tokenizeCode(source, language).catch(() => []));
   }
   const diagramElements = Array.from(container.querySelectorAll<HTMLElement>('[data-mermaid], [data-plantuml], [data-infographic]'));
   if (diagramElements.length) {

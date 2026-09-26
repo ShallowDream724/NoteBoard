@@ -1,7 +1,8 @@
-import { normalizeLanguage } from './codeLanguages';
+import { CODE_HIGHLIGHT_LIMIT, getCodeLanguage, normalizeLanguage } from './codeLanguages';
 import type { CodeToken } from './codeTokens';
 export type { CodeToken } from './codeTokens';
-interface Consumer { resolve: (tokens: CodeToken[]) => void; signal?: AbortSignal; abort: () => void }
+export interface CodeHighlightResult { tokens: CodeToken[]; status: 'ready' | 'unavailable' | 'cancelled' }
+interface Consumer { resolve: (result: CodeHighlightResult) => void; signal?: AbortSignal; abort: () => void }
 interface Work { id: number; key: string; code: string; language: string; bytes: number; consumers: Set<Consumer> }
 interface Cached { tokens: CodeToken[]; bytes: number }
 const MAX_REQUESTS = 64;
@@ -22,7 +23,7 @@ function stopWorker() {
   worker?.terminate(); worker = undefined;
 }
 
-function finish(work: Work, tokens: CodeToken[], remember = false) {
+function finish(work: Work, tokens: CodeToken[], remember = false, status: CodeHighlightResult['status'] = 'ready') {
   if (jobs.get(work.key) !== work) return;
   jobs.delete(work.key); pendingBytes -= work.bytes;
   if (active === work) { active = undefined; clearTimeout(watchdog); watchdog = undefined; }
@@ -39,7 +40,7 @@ function finish(work: Work, tokens: CodeToken[], remember = false) {
   }
   for (const consumer of work.consumers) {
     consumer.signal?.removeEventListener('abort', consumer.abort);
-    consumer.resolve(tokens);
+    consumer.resolve({ tokens, status });
   }
   work.consumers.clear();
 }
@@ -57,50 +58,56 @@ function pump() {
       // No main-thread fallback: a missing/failed worker leaves readable plain code.
       worker = new Worker(new URL('./codeHighlightWorker.ts', import.meta.url), { type: 'module' });
       const currentWorker = worker;
-      worker.onmessage = ({ data }: MessageEvent<{ id: number; tokens: CodeToken[] }>) => {
+      worker.onmessage = ({ data }: MessageEvent<{ id: number; tokens: CodeToken[]; unavailable?: boolean }>) => {
         if (worker !== currentWorker || active?.id !== data.id) return;
-        finish(active, data.tokens, true); pump();
+        if (data.unavailable) {
+          // A failed module import may remain rejected in this worker's module map.
+          // Recreate its runtime before a consumer retries, without caching failure.
+          stopWorker(); finish(active, [], false, 'unavailable');
+        } else finish(active, data.tokens, true);
+        pump();
       };
       worker.onerror = worker.onmessageerror = () => {
         if (worker !== currentWorker) return;
         stopWorker();
         // A broken worker module should not be recreated once per queued block.
-        for (const work of [...jobs.values()]) finish(work, []);
+        for (const work of [...jobs.values()]) finish(work, [], false, 'unavailable');
       };
     } catch {
-      for (const work of [...jobs.values()]) finish(work, []);
+      for (const work of [...jobs.values()]) finish(work, [], false, 'unavailable');
       return;
     }
   }
   const work = queue.shift()!;
   active = work;
   // Synchronous grammars are interruptible by terminating their dedicated worker.
-  watchdog = setTimeout(() => { if (active !== work) return; stopWorker(); finish(work, []); pump(); }, 5_000);
+  watchdog = setTimeout(() => { if (active !== work) return; stopWorker(); finish(work, [], false, 'unavailable'); pump(); }, 5_000);
   try { worker.postMessage({ id: work.id, code: work.code, language: work.language }); }
-  catch { stopWorker(); finish(work, []); pump(); }
+  catch { stopWorker(); finish(work, [], false, 'unavailable'); pump(); }
 }
 
 /** One shared worker, bounded queue/cache, deduplication and cancellation per consumer. */
-export function highlightCode(code: string, language: string, options: { signal?: AbortSignal } = {}): Promise<CodeToken[]> {
+export function requestCodeHighlight(code: string, language: string, options: { signal?: AbortSignal } = {}): Promise<CodeHighlightResult> {
   const name = normalizeLanguage(language);
   const { signal } = options;
-  if (signal?.aborted || !code || name === 'plaintext' || code.length > 200_000) return Promise.resolve([]);
+  if (signal?.aborted) return Promise.resolve({ tokens: [], status: 'cancelled' });
+  if (!code || !getCodeLanguage(name)?.grammar || code.length > CODE_HIGHLIGHT_LIMIT) return Promise.resolve({ tokens: [], status: 'ready' });
   const key = name + '\0' + code;
   const cached = cache.get(key);
-  if (cached) { cache.delete(key); cache.set(key, cached); return Promise.resolve(cached.tokens); }
+  if (cached) { cache.delete(key); cache.set(key, cached); return Promise.resolve({ tokens: cached.tokens, status: 'ready' }); }
   let work = jobs.get(key);
   if (!work) {
     const bytes = (key.length + code.length) * 2;
     // Backpressure is explicit: over-budget blocks remain plain until their next request.
-    if (jobs.size >= MAX_REQUESTS || pendingBytes + bytes > MAX_PENDING_BYTES) return Promise.resolve([]);
+    if (jobs.size >= MAX_REQUESTS || pendingBytes + bytes > MAX_PENDING_BYTES) return Promise.resolve({ tokens: [], status: 'unavailable' });
     work = { id: ++sequence, key, code, language: name, bytes, consumers: new Set() };
     jobs.set(key, work); queue.push(work); pendingBytes += bytes;
   }
   const request = work;
-  const result = new Promise<CodeToken[]>(resolve => {
+  const result = new Promise<CodeHighlightResult>(resolve => {
     const consumer: Consumer = { resolve, signal, abort: () => {
       signal?.removeEventListener('abort', consumer.abort);
-      request.consumers.delete(consumer); resolve([]);
+      request.consumers.delete(consumer); resolve({ tokens: [], status: 'cancelled' });
       if (!request.consumers.size && jobs.get(key) === request) {
         if (active === request) stopWorker();
         finish(request, []); pump();
@@ -113,9 +120,14 @@ export function highlightCode(code: string, language: string, options: { signal?
   return result;
 }
 
+/** Token-only convenience API for consumers that intentionally accept plain fallback. */
+export async function highlightCode(code: string, language: string, options: { signal?: AbortSignal } = {}): Promise<CodeToken[]> {
+  return (await requestCodeHighlight(code, language, options)).tokens;
+}
+
 export function disposeCodeHighlighting() {
   stopWorker();
-  for (const work of [...jobs.values()]) finish(work, []);
+  for (const work of [...jobs.values()]) finish(work, [], false, 'cancelled');
   cache.clear(); cacheBytes = 0;
 }
 // Consumers cancel on disposal; the scheduler releases the idle worker. Avoid

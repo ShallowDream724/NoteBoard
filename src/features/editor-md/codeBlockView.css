@@ -1,0 +1,54 @@
+.nb-code-block-toolbar { gap: 8px; min-height: 34px; }
+.nb-code-block-leading { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.nb-code-block-actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.nb-code-block-heading, .nb-code-block-language, .nb-code-block-icon {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: none; border-radius: var(--radius-sm); padding: 4px 6px;
+  background: transparent; color: var(--editor-text-muted); font: inherit; cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.nb-code-block-heading { width: 24px; height: 26px; padding: 4px; flex-shrink: 0; }
+.nb-code-block-language { min-width: 0; max-width: 220px; }
+.nb-code-block-language > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-code-block-icon { width: 28px; height: 26px; flex-shrink: 0; }
+.nb-code-block :is(.nb-code-block-heading, .nb-code-block-language, .nb-code-block-icon):hover {
+  background: var(--toolbar-hover); color: var(--editor-text);
+}
+.nb-code-block-icon[aria-pressed="true"] { color: var(--accent-500); background: var(--toolbar-active); }
+.nb-code-block :is(button, input):focus-visible { outline: 2px solid var(--accent-500); outline-offset: 2px; }
+.nb-code-block-content { tab-size: 4; }
+.nb-code-block-content[hidden] { display: none !important; }
+.nb-code-block-content > code { position: relative; display: block; min-height: 1.5em; white-space: pre !important; }
+.nb-code-block[data-wrap="true"] .nb-code-block-content > code { white-space: pre-wrap !important; overflow-wrap: anywhere; }
+.nb-code-line-gutter {
+  /* An empty logical line still needs a full line box. A zero-height widget
+     collapses that line in Chromium and places its number on the prior row. */
+  display: inline-block; position: relative; width: 0; height: 1.5em;
+  vertical-align: top; user-select: none; -webkit-user-select: none; white-space: nowrap;
+  color: var(--editor-text-muted); font-family: var(--mono-font-family); font-weight: 400;
+}
+.nb-code-line-number { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); line-height: 1; opacity: .55; font-size: .85em; }
+.nb-code-fold-toggle {
+  position: absolute; right: 2px; top: 50%; width: 16px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0; border: none;
+  background: transparent; color: var(--editor-text-muted); border-radius: 3px;
+  font: inherit; cursor: pointer; transform: translateY(-50%);
+}
+.nb-code-fold-toggle > svg { display: block; width: 12px; height: 12px; opacity: 1; transform: rotate(90deg); }
+.nb-code-fold-toggle[aria-expanded="false"] { color: var(--accent-500); }
+.nb-code-fold-toggle[aria-expanded="false"] > svg { transform: none; }
+.nb-code-fold-toggle:hover { background: var(--toolbar-hover); color: var(--editor-text); }
+.nb-code-fold-hidden { display: none !important; }
+.nb-code-fold-summary {
+  display: inline-block; padding: 0 5px; margin: 0 4px; border: 1px solid var(--editor-border);
+  border-radius: 4px; background: var(--editor-surface); color: var(--editor-text-muted);
+  font: inherit; line-height: 1; vertical-align: baseline; cursor: pointer; user-select: none;
+}
+.nb-code-fold-summary:hover { color: var(--accent-500); border-color: var(--accent-500); }
+@media (max-width: 480px) {
+  .nb-code-block-language { max-width: 112px; }
+}
+@media print {
+  .nb-code-block-toolbar, .nb-code-line-gutter, .nb-code-fold-summary { display: none !important; }
+  .nb-code-block-content[hidden], .nb-code-fold-hidden { display: revert !important; }
+}

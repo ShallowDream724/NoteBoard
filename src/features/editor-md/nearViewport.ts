@@ -1,7 +1,7 @@
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 
 type Callback = (near: boolean, visible: boolean) => void;
-interface Watch { callback: Callback; near: boolean; visible: boolean }
+interface Watch { callback: Callback; near: boolean; visible: boolean; nearKnown: boolean }
 interface Pool { callbacks: Map<Element, Watch>; observer: IntersectionObserver; visible: IntersectionObserver; resize?: ResizeObserver; lastScroll: number; onScroll: () => void }
 const pools = new Map<HTMLElement, Pool>();
 const roots = new WeakMap<Element, HTMLElement>();
@@ -25,8 +25,10 @@ export function observeNearby(element: HTMLElement, callback: Callback): () => v
       entries.forEach(entry => {
         const watch = callbacks.get(entry.target); if (!watch) return;
         const beforeNear = watch.near || watch.visible, beforeVisible = watch.visible;
-        if (visible) watch.visible = entry.isIntersecting; else watch.near = entry.isIntersecting;
-        if (beforeNear !== (watch.near || watch.visible) || beforeVisible !== watch.visible) watch.callback(watch.near || watch.visible, watch.visible);
+        const firstNear = !visible && !watch.nearKnown;
+        if (visible) watch.visible = entry.isIntersecting;
+        else { watch.near = entry.isIntersecting; watch.nearKnown = true; }
+        if (firstNear || beforeNear !== (watch.near || watch.visible) || beforeVisible !== watch.visible) watch.callback(watch.near || watch.visible, watch.visible);
       });
     };
     const create = () => new IntersectionObserver(entries => notify(entries, false), {
@@ -44,7 +46,7 @@ export function observeNearby(element: HTMLElement, callback: Callback): () => v
     }) };
     pools.set(root, pool); pool.resize?.observe(root); root.addEventListener('scroll', pool.onScroll, { passive: true });
   }
-  roots.set(element, root); pool.callbacks.set(element, { callback, near: false, visible: false }); pool.observer.observe(element); pool.visible.observe(element);
+  roots.set(element, root); pool.callbacks.set(element, { callback, near: false, visible: false, nearKnown: false }); pool.observer.observe(element); pool.visible.observe(element);
   return () => {
     roots.delete(element); pool!.observer.unobserve(element); pool!.visible.unobserve(element); pool!.callbacks.delete(element);
     if (!pool!.callbacks.size) { pool!.observer.disconnect(); pool!.visible.disconnect(); pool!.resize?.disconnect(); root.removeEventListener('scroll', pool!.onScroll); pools.delete(root); }
