@@ -2557,7 +2557,7 @@ dependencies = [
 
 [[package]]
 name = "noteboard"
-version = "1.0.0"
+version = "1.0.0-rc.2"
 dependencies = [
  "chardetng",
  "chrono",
@@ -2567,6 +2567,7 @@ dependencies = [
  "log",
  "lopdf",
  "reqwest 0.12.28",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",

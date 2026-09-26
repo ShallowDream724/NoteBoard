@@ -17,12 +17,19 @@ export const CALLOUT_DEFAULTS: CalloutAttributes = {
 };
 export const CALLOUT_EMOJI = ['💡', '📌', '✨', '🎯', '📝', '✅', '❓', '⚠️', '🔍', '🌱', '❤️', '🚀'] as const;
 export const CALLOUT_BACKGROUNDS = ['#f1f5f9', '#fff1f2', '#fff7ed', '#fefce8', '#f0fdf4', '#eff6ff', '#faf5ff'];
+/** Native icon choices are independent of the five portable GFM alert kinds. */
+export const CALLOUT_EXTRA_ICONS = {
+  success: { label: '完成', icon: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM8 12l3 3 5-6' },
+} as const;
+const CALLOUT_ICON_META = { ...ALERT_META, ...CALLOUT_EXTRA_ICONS };
+const isPresetIcon = (value: unknown): value is keyof typeof CALLOUT_ICON_META =>
+  typeof value === 'string' && Object.hasOwn(CALLOUT_ICON_META, value);
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 export const isAlertKind = (value: unknown): value is AlertKind => typeof value === 'string' && Object.hasOwn(ALERT_META, value);
 export const isCalloutTitle = (value: unknown): value is string | null => value === null
   || typeof value === 'string' && value.length <= 500 && !/\p{Cc}/u.test(value);
 export function isCalloutIcon(value: unknown): value is string | null {
-  if (value === null || isAlertKind(value)) return true;
+  if (value === null || isPresetIcon(value)) return true;
   if (typeof value !== 'string' || !value || value.length > 32 || !/[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(value)) return false;
   const segments = segmenter.segment(value)[Symbol.iterator]();
   return !segments.next().done && segments.next().done === true;
@@ -39,7 +46,11 @@ export const calloutTitle = (attrs: Record<string, unknown>) => {
   const value = calloutAttributes(attrs); return value.title === null ? ALERT_META[value.kind].label : value.title;
 };
 export const calloutEmoji = (attrs: Record<string, unknown>) => {
-  const value = calloutAttributes(attrs).icon; return value && !isAlertKind(value) ? value : '';
+  const value = calloutAttributes(attrs).icon; return value && !isPresetIcon(value) ? value : '';
+};
+export const calloutSvgIcon = (attrs: Record<string, unknown>) => {
+  const value = calloutAttributes(attrs);
+  return CALLOUT_ICON_META[isPresetIcon(value.icon) ? value.icon : value.kind].icon;
 };
 export function calloutStyle(attrs: Record<string, unknown>): CSSProperties {
   const value = calloutAttributes(attrs);

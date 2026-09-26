@@ -1,6 +1,6 @@
 [package]
 name = "noteboard"
-version = "1.0.0"
+version = "1.0.0-rc.2"
 description = "Windows 桌面笔记 + 画板软件"
 authors = ["CrazyFigure"]
 license = "GPL-3.0-only"
@@ -23,6 +23,7 @@ tauri-plugin-os = "2"
 tauri-plugin-single-instance = "2.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+semver = "1"
 encoding_rs = "0.8"
 chardetng = "0.1"
 trash = "5"

@@ -35,6 +35,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -cne "v$version") {
+            throw "Release tag '$env:GITHUB_REF_NAME' must match application version 'v$version', including the prerelease suffix."
+          }
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 

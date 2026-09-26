@@ -1,10 +1,10 @@
 // Grammar and document structure only. No React views, stores, IPC or editor lifecycle.
 import { Node, mergeAttributes, type MarkdownToken, type MarkdownTokenizer } from '@tiptap/core';
 import { findMathStart, readMath, readMathBlock, writeMath, type MathDelimiter, type MathSource } from './mathSyntax';
-import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
+import { alertKind, type AlertKind } from './alertPresentation';
 import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
 import { currentParagraph } from './markdownLexer';
-import { calloutAttributes, calloutEmoji, calloutStyleText, calloutTitle, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle } from './calloutPresentation';
+import { calloutAttributes, calloutEmoji, calloutStyleText, calloutSvgIcon, calloutTitle, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle } from './calloutPresentation';
 import { markdownFigureCaption, normalizeFigureCaption, validateFigureCaption } from './figureCaption';
 
 type MathToken = MarkdownToken & MathSource;
@@ -67,7 +67,6 @@ export const AlertNode = Node.create({
   parseHTML() { return [{ tag: 'div[data-alert]', contentElement: element => element.querySelector('.alert-body') ?? element }]; },
   renderHTML({ node, HTMLAttributes }) {
     const attrs = calloutAttributes(node.attrs), title = calloutTitle(attrs), emoji = calloutEmoji(attrs);
-    const meta = ALERT_META[isAlertKind(attrs.icon) ? attrs.icon : attrs.kind];
     return ['div', mergeAttributes(HTMLAttributes, { class: 'github-alert github-alert-' + attrs.kind,
       'data-callout-title': attrs.title, 'data-callout-icon': attrs.icon, 'data-callout-text-color': attrs.textColor,
       'data-callout-border-color': attrs.borderColor, 'data-callout-background-color': attrs.backgroundColor,
@@ -76,7 +75,7 @@ export const AlertNode = Node.create({
       ['span', { class: 'callout-icon', 'aria-hidden': 'true' }, ...(emoji ? [emoji] : [
         ['http://www.w3.org/2000/svg svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
           'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' },
-        ['http://www.w3.org/2000/svg path', { d: meta.icon }]]])],
+        ['http://www.w3.org/2000/svg path', { d: calloutSvgIcon(attrs) }]]])],
       ...(title ? [['div', { class: 'alert-title' }, title]] : []),
       ['div', { class: 'alert-body' }, 0]];
   },

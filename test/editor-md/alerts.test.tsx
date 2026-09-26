@@ -11,7 +11,7 @@ import { canWrapBlockInCallout, completeAlert, insertCallout, updateCallout, wra
 import { transactionAddedCapability } from '../../src/features/document-format/capabilityGuard';
 import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 import { pandocSource } from '../../src/features/export/pandocDocument';
-import { CALLOUT_DEFAULTS, calloutStyle, isCalloutIcon } from '../../src/features/editor-md/calloutPresentation';
+import { CALLOUT_DEFAULTS, CALLOUT_EXTRA_ICONS, calloutStyle, isCalloutIcon } from '../../src/features/editor-md/calloutPresentation';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { acceptCompletion, currentCompletions, startCompletion } from '@codemirror/autocomplete';
@@ -147,6 +147,33 @@ describe('提示块内容与保存', () => {
       const roundtrip = new Editor({ extensions: buildDocumentExtensions(), content: html });
       try { expect(roundtrip.state.doc.firstChild?.attrs).toEqual(doc.firstChild?.attrs); } finally { roundtrip.destroy(); }
     } finally { editor.destroy(); }
+  });
+  it('完成图标只改图标，NB与HTML往返保留SVG，Markdown不泄漏图标标识', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
+    const attrs = { ...CALLOUT_DEFAULTS, kind: 'tip' as const, title: '已核对', backgroundColor: '#f0fdf4' };
+    const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [
+      { type: 'githubAlert', attrs, content: [{ type: 'paragraph', content: [{ type: 'text', text: '保留正文' }] }] },
+    ] } });
+    try {
+      initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
+      await act(async () => root.render(<CalloutMenu attrs={attrs} mode="icon" nativeVisible
+        onChange={patch => { expect(patch).toEqual({ icon: 'success' }); expect(updateCallout(editor, 0, patch)).toBe(true); }}/>));
+      expect(host.querySelectorAll('[aria-label="预设图标"] button')).toHaveLength(6);
+      await act(async () => (host.querySelector('[aria-label="完成"]') as HTMLButtonElement).click());
+      expect(editor.state.doc.firstChild?.attrs).toMatchObject({ ...attrs, icon: 'success' });
+      const restored = parseNativeNode(serializeNativeNode(editor.state.doc), documentParser().schema);
+      expect(restored.toJSON()).toEqual(editor.state.doc.toJSON());
+      const html = editor.getHTML();
+      expect(html).toContain('data-callout-icon="success"');
+      expect(html).toContain(CALLOUT_EXTRA_ICONS.success.icon);
+      const reopened = new Editor({ extensions: buildDocumentExtensions(), content: html });
+      try { expect(reopened.state.doc.firstChild?.attrs).toEqual(restored.firstChild?.attrs); } finally { reopened.destroy(); }
+      for (const exported of [portableMarkdown(restored.toJSON()), pandocSource(restored)]) {
+        expect(exported).toContain('已核对'); expect(exported).toContain('保留正文'); expect(exported).not.toContain('success');
+      }
+      expect(portableMarkdown(restored.toJSON())).toContain('[!TIP]');
+    } finally { await act(async () => root.unmount()); host.remove(); editor.destroy(); vi.unstubAllGlobals(); }
   });
   it('无效原生提示块属性局部恢复原文，emoji接受组合字形且拒绝文本', () => {
     for (const attrs of [{ kind: 'bad' }, { title: 42 }, { title: '跨\n行' }, { icon: '<img>' }, { textColor: 'red' }, { backgroundColor: 'url(a)' }]) {

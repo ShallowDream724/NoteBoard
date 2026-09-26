@@ -65,7 +65,7 @@ NB 源码模式直接编辑这些记录。坏记录显示可定位的局部错�
 @block {"type":"githubAlert","attrs":{"kind":"tip","title":"","icon":"🌱","borderColor":"#bbf7d0","backgroundColor":"#f0fdf4"},"content":[{"type":"paragraph","content":[{"type":"text","text":"给每一个灵感留一点空间。"}]},{"type":"paragraph","content":[{"type":"text","text":"这里可以继续写第二段。"}]}]}
 ```
 
-`icon` 省略或 `null` 跟随预设 SVG，可指定五种 `kind` 值选择 SVG，也可写一个 emoji 字形（支持肤色、旗帜及组合 emoji，最多 32 UTF-16 单元）。`textColor`、`borderColor`、`backgroundColor` 为可选的 `#RRGGBB`，`null` 恢复主题默认。显式背景未指定文字色时，视图按亮度自动选择文字色；这一显示计算不增加存储字段。行内 `textColor` 优先于提示块文字色。
+`icon` 省略或 `null` 跟随预设 SVG，可指定五种 `kind` 值或 `success`（圆圈对勾）选择 SVG，也可写一个 emoji 字形（支持肤色、旗帜及组合 emoji，最多 32 UTF-16 单元）。`success` 只改变图标，保留原有类型、标题和配色；NB 与 HTML/PDF 保留图标，Markdown 导出沿用原有 GFM 类型。`textColor`、`borderColor`、`backgroundColor` 为可选的 `#RRGGBB`，`null` 恢复主题默认。显式背景未指定文字色时，视图按亮度自动选择文字色；这一显示计算不增加存储字段。行内 `textColor` 优先于提示块文字色。
 
 通用插入默认无标题、有图标。GFM 预设输入保留预设标题；空段落直接输入 `[!]`、`【！】`（括号和感叹号可中英文混用）显示补全，也可输入完整 `[!TIP]` 后回车。Markdown 导入仍使用 `> [!TIP]`。自定义标题、图标与颜色属于 NB 能力；基本五种预设可直接保存在 MD。HTML/PDF 保留外观；通用 Markdown 保留 GFM 标记、自定义标题、语义 emoji 和全部正文，降级颜色与 SVG 图标；Pandoc 保留标题、emoji 和正文。
 

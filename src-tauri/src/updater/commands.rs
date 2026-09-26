@@ -61,36 +61,25 @@ struct UpdateDownloadProgressEvent {
     percent: Option<u32>,
 }
 
-/// 解析语义化版本号片段
-fn parse_version_parts(version: &str) -> Option<Vec<u64>> {
-    let normalized = version
-        .trim()
-        .trim_start_matches('v')
-        .trim_start_matches('V');
-    let core = normalized.split(['-', '+']).next().unwrap_or(normalized);
-    let mut parts = Vec::new();
-    for segment in core.split('.') {
-        if segment.is_empty() {
-            return None;
-        }
-        parts.push(segment.parse::<u64>().ok()?);
-    }
-    Some(parts)
+/// GitHub 标签可带 v 前缀；保留预发布标识参与 SemVer 优先级比较。
+fn parse_release_version(version: &str) -> Option<semver::Version> {
+    let trimmed = version.trim();
+    let normalized = trimmed.strip_prefix('v')
+        .or_else(|| trimmed.strip_prefix('V'))
+        .unwrap_or(trimmed);
+    semver::Version::parse(normalized).ok()
 }
 
 /// 比较版本号大小，判断远程版本是否高于当前版本
 fn is_newer_version(latest: &str, current: &str) -> bool {
-    let Some(mut latest_parts) = parse_version_parts(latest) else {
+    let Some(latest_version) = parse_release_version(latest) else {
         return false;
     };
-    let Some(mut current_parts) = parse_version_parts(current) else {
+    let Some(current_version) = parse_release_version(current) else {
         return false;
     };
-
-    let len = latest_parts.len().max(current_parts.len());
-    latest_parts.resize(len, 0);
-    current_parts.resize(len, 0);
-    latest_parts > current_parts
+    // Build metadata identifies a build, but does not make it an upgrade.
+    latest_version.cmp_precedence(&current_version).is_gt()
 }
 
 /// 对 Release 附件资产进行打分，优先匹配 Windows 可执行安装包
@@ -575,6 +564,37 @@ pub fn open_external_url(url: String) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stable_release_updates_same_number_prerelease() {
+        for current in ["1.0.0-alpha", "1.0.0-beta.2", "1.0.0-rc.1", "1.0.0-rc.2+local"] {
+            assert!(is_newer_version("v1.0.0", current), "{current}");
+            assert!(!is_newer_version(current, "1.0.0"), "{current}");
+        }
+        assert!(!is_newer_version("v1.0.0", "1.0.0"));
+    }
+
+    #[test]
+    fn release_precedence_handles_numeric_identifiers_and_build_metadata() {
+        for (latest, current, expected) in [
+            (" V1.0.1 ", "1.0.0", true),
+            ("1.0.0-rc.10", "1.0.0-rc.2", true),
+            ("1.0.0-rc.2", "1.0.0-rc.10", false),
+            ("1.0.0", "1.0.1-rc.1", false),
+            ("1.0.0+build.2", "1.0.0+build.1", false),
+            ("1.0.0-rc.2+build.2", "1.0.0-rc.2+build.1", false),
+        ] {
+            assert_eq!(is_newer_version(latest, current), expected, "{latest} vs {current}");
+        }
+    }
+
+    #[test]
+    fn malformed_release_versions_do_not_offer_updates() {
+        for invalid in ["", "1.0", "1.0.0-", "1.0.0-rc.01", "release-1.0.1", "1.0.1garbage"] {
+            assert!(!is_newer_version(invalid, "1.0.0-rc.1"), "{invalid}");
+            assert!(!is_newer_version("1.0.0", invalid), "{invalid}");
+        }
+    }
 
     #[test]
     fn unpublished_fork_has_no_download_or_fake_latest_version() {

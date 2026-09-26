@@ -5,7 +5,7 @@ import { Palette } from 'lucide-react';
 import { AlertNode } from './documentNodes';
 import { completeAlert, updateCallout } from './alertCommands';
 import { ALERT_META, type AlertKind } from './alertPresentation';
-import { calloutAttributes, calloutEmoji, calloutStyle, calloutTitle, isAlertKind, normalizeAlertInput } from './calloutPresentation';
+import { calloutAttributes, calloutEmoji, calloutStyle, calloutSvgIcon, calloutTitle, normalizeAlertInput } from './calloutPresentation';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
 import { annotationMarkerId } from './annotations/marker';
@@ -16,7 +16,6 @@ const CalloutMenu = lazy(() => import('./CalloutMenu'));
 
 function AlertComponent({ node, editor, getPos, selected, decorations }: NodeViewProps) {
   const attrs = calloutAttributes(node.attrs), title = calloutTitle(attrs), emoji = calloutEmoji(attrs);
-  const meta = ALERT_META[isAlertKind(attrs.icon) ? attrs.icon : attrs.kind];
   const [menu, setMenu] = useState<'appearance' | 'icon' | null>(null);
   const nativeVisible = useNativeFeatureVisibility();
   const update = (patch: Parameters<typeof updateCallout>[2]) => {
@@ -29,7 +28,7 @@ function AlertComponent({ node, editor, getPos, selected, decorations }: NodeVie
       <Popover.Anchor asChild><button type="button" contentEditable={false} className="callout-icon callout-icon-button"
         title="更换提示块图标" aria-label="更换提示块图标" aria-expanded={menu === 'icon'} onPointerDown={event => event.preventDefault()} onClick={() => setMenu(menu === 'icon' ? null : 'icon')}>
         {emoji || <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={meta.icon}/></svg>}
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={calloutSvgIcon(attrs)}/></svg>}
       </button></Popover.Anchor>
       {title && (nativeVisible ? <button type="button" contentEditable={false} className="alert-title callout-title-button" title="编辑提示块标题"
         onPointerDown={event => event.preventDefault()} onClick={() => setMenu(menu === 'appearance' ? null : 'appearance')}>{title}</button>

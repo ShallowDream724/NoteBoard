@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Shuffle, RotateCcw } from 'lucide-react';
 import { ColorSwatches } from '../document-style/ColorSwatches';
 import { ALERT_CHOICES, ALERT_META } from './alertPresentation';
-import { CALLOUT_BACKGROUNDS, CALLOUT_EMOJI, calloutTitle, isCalloutIcon, type CalloutAttributes } from './calloutPresentation';
+import { CALLOUT_BACKGROUNDS, CALLOUT_EMOJI, CALLOUT_EXTRA_ICONS, calloutTitle, isCalloutIcon, type CalloutAttributes } from './calloutPresentation';
 
 export default function CalloutMenu({ attrs, mode, nativeVisible, onChange }: {
   attrs: CalloutAttributes; mode: 'appearance' | 'icon'; nativeVisible: boolean; onChange: (patch: Partial<CalloutAttributes>) => void;
@@ -18,6 +18,10 @@ export default function CalloutMenu({ attrs, mode, nativeVisible, onChange }: {
         aria-label={ALERT_META[item.kind].label} aria-pressed={(attrs.icon ?? attrs.kind) === item.kind}
         onClick={() => onChange({ kind: item.kind, icon: null })}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={ALERT_META[item.kind].icon}/></svg>
+      </button>)}
+      {nativeVisible && Object.entries(CALLOUT_EXTRA_ICONS).map(([icon, meta]) => <button key={icon} type="button" title={meta.label}
+        aria-label={meta.label} aria-pressed={attrs.icon === icon} onClick={() => onChange({ icon })}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={meta.icon}/></svg>
       </button>)}
     </div>
     {nativeVisible && <>
