@@ -4,6 +4,7 @@ import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 import { Tooltip } from '../../../components/Tooltip';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import { COLLECTION_WIDTHS } from './collectionPresentation';
+import '../blockPositionRow.css';
 
 export function ImageCollectionMenu({ editor, node, pos }: { editor: Editor; node: Node; pos: number }) {
   const apply = (attrs: { width?: string; align?: string }) => {
@@ -15,7 +16,8 @@ export function ImageCollectionMenu({ editor, node, pos }: { editor: Editor; nod
     <div className="nb-block-format-grid nb-collection-widths" role="group" aria-label="整组图片宽度">
       {COLLECTION_WIDTHS.map(width => <Tooltip key={width} content={`整组宽度 ${width}`}><button type="button" aria-label={`整组宽度 ${width}`} aria-pressed={node.attrs.width === width} onClick={() => apply({ width })}>{width}</button></Tooltip>)}
     </div>
-    {node.attrs.layout === 'grid' && <div className="nb-block-style-row nb-block-align-row" role="group" aria-label="图片组合对齐">
+    {node.attrs.layout === 'grid' && <div className="nb-block-style-row nb-block-position-row" role="group" aria-label="图片组合对齐">
+      <span>整组位置</span>
       {([{ align:'left', label:'图片组合居左', Icon:AlignLeft },{ align:'center', label:'图片组合居中', Icon:AlignCenter },{ align:'right', label:'图片组合居右', Icon:AlignRight }] as const).map(({align,label,Icon}) =>
         <Tooltip key={align} content={label}><button type="button" aria-label={label} aria-pressed={node.attrs.align === align} onClick={() => apply({align})}><Icon size={16}/></button></Tooltip>)}
     </div>}

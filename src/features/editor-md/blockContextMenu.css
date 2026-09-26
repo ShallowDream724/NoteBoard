@@ -10,8 +10,6 @@
 .nb-block-style-row { display:flex; align-items:center; gap:6px; padding:5px 3px; border-block:1px solid var(--editor-border); margin-bottom:5px; }
 .nb-block-style-row:first-child { border-top:0; }
 .nb-block-style-row + .nb-block-style-row { border-top:0; }
-.nb-block-align-row { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
-.nb-block-align-row button { display:grid; place-items:center; min-height:30px; }
 .nb-block-context-menu hr { border:0; border-top:1px solid var(--editor-border); margin:5px 0; }
 .nb-block-heading-icon { font:600 11px/1 var(--ui-font-family); color:var(--editor-accent); }
 .nb-block-drag-handle.nb-block-with-menu { width:50px; height:30px; display:flex; align-items:center; justify-content:center; gap:5px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); }
