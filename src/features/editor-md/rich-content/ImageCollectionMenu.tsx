@@ -15,7 +15,7 @@ export function ImageCollectionMenu({ editor, node, pos }: { editor: Editor; nod
     <div className="nb-block-format-grid nb-collection-widths" role="group" aria-label="整组图片宽度">
       {COLLECTION_WIDTHS.map(width => <Tooltip key={width} content={`整组宽度 ${width}`}><button type="button" aria-label={`整组宽度 ${width}`} aria-pressed={node.attrs.width === width} onClick={() => apply({ width })}>{width}</button></Tooltip>)}
     </div>
-    {node.attrs.layout === 'grid' && <div className="nb-block-style-row" role="group" aria-label="图片组合对齐">
+    {node.attrs.layout === 'grid' && <div className="nb-block-style-row nb-block-align-row" role="group" aria-label="图片组合对齐">
       {([{ align:'left', label:'图片组合居左', Icon:AlignLeft },{ align:'center', label:'图片组合居中', Icon:AlignCenter },{ align:'right', label:'图片组合居右', Icon:AlignRight }] as const).map(({align,label,Icon}) =>
         <Tooltip key={align} content={label}><button type="button" aria-label={label} aria-pressed={node.attrs.align === align} onClick={() => apply({align})}><Icon size={16}/></button></Tooltip>)}
     </div>}

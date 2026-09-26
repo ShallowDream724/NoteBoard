@@ -62,10 +62,10 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
       {native && canWrapCallout && <Tooltip content="设为提示块"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
     </div>}
-    {native && type === 'image' && <div className="nb-block-style-row">
+    {native && type === 'image' && <div className="nb-block-style-row nb-block-align-row" role="group" aria-label="图片对齐">
       {([{ value: 'left', label: '图片左对齐', Icon: AlignLeft }, { value: 'center', label: '图片居中', Icon: AlignCenter },
         { value: 'right', label: '图片右对齐', Icon: AlignRight }] as const).map(({ value, label, Icon }) =>
-        <Tooltip key={value} content={label}><button type="button" aria-label={label} onClick={() => action(() => runWithDocumentCapability(editor, 'imageLayout', next => runDiscreteEdit(next, chain => chain.updateAttributes('image', { align: value }))))}><Icon size={16}/></button></Tooltip>)}
+        <Tooltip key={value} content={label}><button type="button" aria-label={label} aria-pressed={(range.node.attrs.align || 'center') === value} onClick={() => action(() => runWithDocumentCapability(editor, 'imageLayout', next => runDiscreteEdit(next, chain => chain.updateAttributes('image', { align: value }))))}><Icon size={16}/></button></Tooltip>)}
     </div>}
     {native && type === 'table' && <TableAlignmentMenu editor={editor} pos={pos} value={range.node.attrs.tableAlign} close={close}/>}
     {native && (styled || type === 'table' || type === 'horizontalRule') && <div className="nb-block-style-row">
