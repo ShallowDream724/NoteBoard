@@ -2,8 +2,10 @@
 export interface CodeFold { line: number; endLine: number; from: number; to: number }
 export interface CodeLine { number: number; from: number; to: number }
 export interface CodeStructure { lines: CodeLine[]; folds: CodeFold[] }
-export const MAX_CODE_CONTROL_CHARACTERS = 128_000;
-export const MAX_CODE_CONTROL_LINES = 2_000;
+export const MAX_CODE_CONTROL_CHARACTERS = 512_000;
+export const MAX_CODE_CONTROL_LINES = 10_000;
+const MAX_CODE_FOLD_CHARACTERS = 128_000;
+const MAX_CODE_FOLD_LINES = 2_000;
 
 const braceLanguages = new Set(['javascript', 'typescript', 'jsx', 'tsx', 'json', 'jsonc', 'css', 'scss', 'less', 'c', 'cpp', 'csharp', 'java', 'go', 'rust', 'php', 'swift', 'kotlin', 'scala']);
 
@@ -17,7 +19,10 @@ export function getCodeStructure(source: string, language: string): CodeStructur
     if (lines.length > MAX_CODE_CONTROL_LINES) return null;
     from = i + 1;
   }
-  const folds = language === 'python' ? pythonFolds(source, lines) : braceLanguages.has(language) ? braceFolds(source, lines) : [];
+  // Large blocks still get line numbers. Structural folding retains its smaller
+  // budget, so accepting a five-digit gutter does not expand parser/fold work.
+  const folds = source.length > MAX_CODE_FOLD_CHARACTERS || lines.length > MAX_CODE_FOLD_LINES ? []
+    : language === 'python' ? pythonFolds(source, lines) : braceLanguages.has(language) ? braceFolds(source, lines) : [];
   return { lines, folds };
 }
 

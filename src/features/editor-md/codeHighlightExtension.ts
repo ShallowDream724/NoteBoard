@@ -99,10 +99,14 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
       const result = await requestCodeHighlight(node.textContent, node.attrs.language ?? '', { signal: controller.signal });
       if (cancelled || editor.isDestroyed) return;
       if (result.status === 'ready') publish(result.tokens);
-      else if (result.status === 'unavailable' && retries < 3) {
+      else if (result.status === 'unavailable') {
         // Transient worker/queue failures are not valid empty highlighting. Keep
         // current mapped colors and retry while this same visible node survives.
-        timer = setTimeout(() => { void request(); }, [250, 1000, 4000][retries++]);
+        // A temporary queue/worker failure must not strand a visible block in
+        // plain text until the user edits it. Retry with a capped backoff; the
+        // effect cancels both work and timer when this node leaves nearby.
+        const delays = [250, 1000, 4000, 15000, 30000];
+        timer = setTimeout(() => { void request(); }, delays[Math.min(retries++, delays.length - 1)]);
       }
     };
     timer = setTimeout(() => { if (near) void request(); else publish([]); }, near ? 40 : 0);

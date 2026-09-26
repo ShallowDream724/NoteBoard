@@ -6,11 +6,13 @@ import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { observeNearby } from './nearViewport';
 import { getCodeStructure, type CodeStructure, type CodeFold } from './codeBlockStructure';
 import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
+import { INITIAL_CODE_GUTTERS, WINDOWED_CODE_LINES, visibleCodeLines } from './codeBlockViewport';
 
 type Owner = () => number | undefined;
-interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean }
+interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean; visibleFrom: number; visibleTo: number }
 interface State { blocks: Map<Owner, Block>; decorations: DecorationSet }
-type Update = { owner: Owner; node?: Node; language?: string; active?: boolean; remove?: boolean } | { toggle: Owner; from: number };
+type Update = { owner: Owner; node?: Node; language?: string; active?: boolean; remove?: boolean } | { toggle: Owner; from: number }
+  | { viewport: Array<{ owner: Owner; from: number; to: number }> };
 const key = new PluginKey<State>('code-block-controls');
 
 function selectionTouches(selection: Selection, position: number, fold: CodeFold): boolean {
@@ -54,7 +56,7 @@ function blockDecorations(block: Block): Decoration[] {
   const folds = block.structure.folds.filter(fold => block.folded.has(fold.from));
   const visibleFolds = folds.filter(fold => !folds.some(parent => parent.from < fold.from && parent.to >= fold.to));
   const foldByLine = new Map(block.structure.folds.map(fold => [fold.line, fold]));
-  for (const line of block.active ? block.structure.lines : []) {
+  for (const line of block.active ? block.structure.lines.slice(block.visibleFrom, block.visibleTo) : []) {
     if (visibleFolds.some(fold => line.from > fold.from && line.from <= fold.to)) continue;
     const fold = foldByLine.get(line.number);
     result.push(Decoration.widget(start + line.from, view => {
@@ -97,7 +99,14 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
           const altered = position !== old.position || folded.size !== old.folded.size;
           blocks.set(owner, altered ? { ...old, position, folded } : old); changed ||= altered;
         }
-        if (update && 'toggle' in update) {
+        if (update && 'viewport' in update) {
+          for (const { owner, from, to } of update.viewport) {
+            const block = blocks.get(owner);
+            if (block && (block.visibleFrom !== from || block.visibleTo !== to)) {
+              blocks.set(owner, { ...block, visibleFrom: from, visibleTo: to }); changed = true;
+            }
+          }
+        } else if (update && 'toggle' in update) {
           const block = blocks.get(update.toggle);
           if (block) {
             const folded = new Set(block.folded);
@@ -111,7 +120,8 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
             if (!existing || existing.node !== update.node) {
               if (update.active) {
                 const structure = getCodeStructure(update.node.textContent, update.language ?? '');
-                if (structure) blocks.set(update.owner, { owner: update.owner, position, node: update.node, structure, folded: new Set(), active: true });
+                if (structure) blocks.set(update.owner, { owner: update.owner, position, node: update.node, structure, folded: new Set(), active: true,
+                  visibleFrom: 0, visibleTo: structure.lines.length > WINDOWED_CODE_LINES ? INITIAL_CODE_GUTTERS : structure.lines.length });
                 changed = true;
               }
             } else if (existing.active !== !!update.active) {
@@ -136,6 +146,32 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
       },
     },
     props: { decorations: state => key.getState(state)?.decorations },
+    view(view) {
+      const doc = view.dom.ownerDocument, win = doc.defaultView;
+      let frame = 0;
+      const schedule = () => {
+        if (frame || !win) return;
+        let needed = false;
+        for (const block of key.getState(view.state)?.blocks.values() ?? []) {
+          if (block.active && block.structure.lines.length > WINDOWED_CODE_LINES) { needed = true; break; }
+        }
+        if (!needed) return;
+        frame = win.requestAnimationFrame(() => {
+          frame = 0;
+          const viewport: Array<{ owner: Owner; from: number; to: number }> = [];
+          for (const block of key.getState(view.state)?.blocks.values() ?? []) {
+            if (!block.active || block.structure.lines.length <= WINDOWED_CODE_LINES) continue;
+            const range = visibleCodeLines(view, block.position, block.structure.lines);
+            if (range && (range[0] !== block.visibleFrom || range[1] !== block.visibleTo)) viewport.push({ owner: block.owner, from: range[0], to: range[1] });
+          }
+          if (viewport.length) view.dispatch(view.state.tr.setMeta(key, { viewport } satisfies Update).setMeta('addToHistory', false));
+        });
+      };
+      doc.addEventListener('scroll', schedule, true); win?.addEventListener('resize', schedule);
+      const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
+      resize?.observe(view.dom);
+      return { update: schedule, destroy() { if (frame) win?.cancelAnimationFrame(frame); resize?.disconnect(); doc.removeEventListener('scroll', schedule, true); win?.removeEventListener('resize', schedule); } };
+    },
   });
 }
 
@@ -149,6 +185,12 @@ export function useCodeBlockControls(editor: Editor, node: Node, getPos: Owner, 
       timer = setTimeout(() => {
         if (editor.isDestroyed || !key.getState(editor.state)) return;
         editor.view.dispatch(editor.state.tr.setMeta(key, { owner: getPos, node, active: near && expanded, language } satisfies Update).setMeta('addToHistory', false));
+        // Reuse the already bounded line index, without reading layout or
+        // rescanning source. Keep the last gutter width while parked offscreen.
+        const block = key.getState(editor.state)?.blocks.get(getPos);
+        if (block && element.current) {
+          element.current.style.setProperty('--nb-code-line-digits', String(Math.min(5, Math.max(2, String(block.structure.lines.length).length))));
+        }
       }, near ? 40 : 0);
     };
     const stop = observeNearby(element.current, publish);

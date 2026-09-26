@@ -39,7 +39,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   useFormattingUpdates(editor);
   const range = blockRange(editor, pos); if (!range) return null;
   if (isEmptyParagraph(range.node)) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
-  const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
+  const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem'].includes(type);
   const styled = text || type === 'mathBlock';
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
@@ -55,6 +55,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     selectTableScope(editor, axis); setSelectedTableHeader(editor, axis);
   };
   return <div className="nb-block-context-menu" role="menu" aria-label="内容块操作" onPointerDown={event => event.preventDefault()}>
+    {type === 'codeBlock' && <><button role="menuitem" type="button" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={16}/>转为正文</button><hr/></>}
     {text && <div className="nb-block-format-grid">
       <Tooltip content="正文"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
       {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level}><button type="button" aria-label={'标题 ' + level}

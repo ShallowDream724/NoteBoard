@@ -42,6 +42,7 @@ class CollectionView implements NodeView {
       const pos = this.getPos(); if (pos === undefined) return;
       dispatchDiscreteEdit(this.editor.view, this.editor.state.tr.insert(pos + this.node.nodeSize - 1, this.editor.schema.nodes.imageSlot.create()));
       this.show(this.node.childCount - 1);
+      this.editor.view.focus();
     }, '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>');
     // Keep live regions out of the editable tree: modal aria isolation would
     // otherwise mutate all sibling blocks and force ProseMirror to reparse them.

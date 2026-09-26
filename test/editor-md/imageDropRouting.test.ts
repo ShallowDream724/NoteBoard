@@ -23,9 +23,46 @@ function paste(editor: Editor, files = [new File(['png'], 'paste.png', { type: '
   const event = { clipboardData: { types: files.length ? ['Files'] : ['text/plain'], files, items: [], getData: () => text }, preventDefault: vi.fn() } as unknown as ClipboardEvent;
   return editor.view.someProp('handleDOMEvents', handlers => handlers.paste?.(editor.view, event));
 }
+function pasteOn(target: Element, images = true) {
+  const event = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'clipboardData', { value: {
+    types: images ? ['Files'] : ['text/plain'], files: images ? [new File(['png'], 'paste.png', { type: 'image/png' })] : [], items: [],
+    getData: (type: string) => !images && type === 'text/plain' ? 'ordinary text' : '',
+  } });
+  target.dispatchEvent(event); return event.defaultPrevented;
+}
 beforeEach(() => { vi.clearAllMocks(); mock.active = 'test.nb'; hit = null; Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => hit) }); });
 afterEach(() => { mock.editor?.destroy(); mock.editor = null; clearNativeFileDropTargets(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe('native image drop and current-pointer paste routing', () => {
+  it.each(['grid', 'carousel'])('routes a body/button image paste to the hovered %s slot without a text caret', layout => {
+    const editor = create(layout), slot = editor.view.dom.querySelectorAll('[data-image-slot]')[7];
+    (document.activeElement as HTMLElement)?.blur();
+    pointAt(slot.querySelector('button'));
+    expect(pasteOn(document.body)).toBe(true);
+    expect(mock.paste).toHaveBeenLastCalledWith(editor, expect.any(Array), 'test.nb', 28);
+    expect(document.activeElement).toBe(editor.view.dom);
+    mock.paste.mockClear();
+    const liveButton = editor.view.dom.querySelectorAll('[data-image-slot]')[7].querySelector('button')!;
+    pointAt(liveButton);
+    expect(pasteOn(liveButton)).toBe(true);
+    expect(mock.paste).toHaveBeenCalledTimes(1);
+  });
+  it('restores editor focus after adding a slot and does not steal other inputs or body text', () => {
+    const editor = create();
+    const outside = document.createElement('input'); document.body.append(outside); outside.focus();
+    (editor.view.dom.querySelector('.nb-image-add-slot') as HTMLButtonElement).click();
+    expect(document.activeElement).toBe(editor.view.dom);
+    pointAt(editor.view.dom.querySelector('[data-image-slot]'));
+    outside.focus(); expect(pasteOn(outside)).toBe(false);
+    outside.blur(); expect(pasteOn(document.body, false)).toBe(false);
+    expect(mock.paste).not.toHaveBeenCalled();
+    pointAt(editor.view.dom.querySelector('p')); expect(pasteOn(document.body)).toBe(false);
+    pointAt(editor.view.dom.querySelector('[data-image-slot]')); window.dispatchEvent(new Event('blur'));
+    expect(pasteOn(document.body)).toBe(false);
+    pointAt(editor.view.dom.querySelector('[data-image-slot]')); mock.active = 'another.nb';
+    expect(pasteOn(document.body)).toBe(false);
+    expect(mock.paste).not.toHaveBeenCalled();
+  });
   it.each(['grid', 'carousel'])('pastes into exactly the currently hovered %s slot while the caret stays in another paragraph', layout => {
     const editor = create(layout), slots = editor.view.dom.querySelectorAll('[data-image-slot]');
     pointAt(slots[7].querySelector('button')!);

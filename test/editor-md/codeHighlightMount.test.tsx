@@ -80,6 +80,22 @@ it('retries a transient failure for an unchanged visible Python node', async () 
   } finally { await mounted.destroy(); }
 });
 
+it('recovers an unchanged visible block after a longer worker outage and stops retries offscreen', async () => {
+  fixture.request.mockReset();
+  for (let i = 0; i < 4; i++) fixture.request.mockResolvedValueOnce({ status: 'unavailable', tokens: [] });
+  fixture.request.mockResolvedValue(ready);
+  const mounted = await mount();
+  try {
+    await mounted.tick(); await mounted.tick(250); await mounted.tick(1000); await mounted.tick(4000);
+    expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
+    await mounted.tick(15000); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    expect(fixture.request).toHaveBeenCalledTimes(5);
+    await mounted.nearby(false); await mounted.tick(30000); await mounted.flush();
+    expect(fixture.request).toHaveBeenCalledTimes(5);
+  } finally { await mounted.destroy(); }
+});
+
 it('cancels a pending colored batch when a block leaves nearby, then restores colors on reentry', async () => {
   const mounted = await mount();
   try {

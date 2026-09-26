@@ -28,4 +28,13 @@ describe('code block presentation structure', () => {
     expect(getCodeStructure('custom {\n text\n}', 'plaintext')?.folds).toEqual([]);
     expect(getCodeStructure('function broken() {\n body', 'javascript')?.folds).toEqual([]);
   });
+
+  it('numbers exactly 10000 lines while keeping structural folding bounded separately', () => {
+    const source = Array.from({ length: 5000 }, () => 'def f():\n    pass').join('\n');
+    const result = getCodeStructure(source, 'python')!;
+    expect(result.lines).toHaveLength(10000);
+    expect(result.lines.at(-1)?.number).toBe(10000);
+    expect(result.folds).toEqual([]);
+    expect(getCodeStructure(source + '\n', 'python')).toBeNull();
+  });
 });

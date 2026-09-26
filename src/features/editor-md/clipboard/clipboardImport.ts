@@ -303,6 +303,24 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
       view: view => {
         attachedView = view; dropIndicator = createImageDropIndicator(view);
         if (editor) pastePointer = trackImagePastePointer(view);
+        // Empty image slots/buttons may own focus, or leave it on body after a
+        // picker closes. Such paste events never reach ProseMirror's handlers.
+        const pasteIntoHoveredSlot = (event: ClipboardEvent) => {
+          if (event.defaultPrevented || !mainEditorCurrent(view) || adapter.ownerCurrent?.() === false || plainRequests.has(event) || Date.now() < plainUntil) return;
+          const target = event.target instanceof Element ? event.target : null;
+          if (target?.closest('input, textarea, [role="textbox"]:not(.ProseMirror), .cm-editor')) return;
+          const originEditor = target?.closest('.ProseMirror');
+          if (originEditor && originEditor !== view.dom) return;
+          // Editable content retains the existing parser and paste precedence.
+          if (originEditor === view.dom && !target?.closest('button, [contenteditable="false"]')) return;
+          if (!originEditor && target?.closest('[contenteditable="true"]')) return;
+          const data = event.clipboardData, slot = pastePointer?.slot();
+          if (!data || !slot || data.getData(DOCUMENT_SLICE_MIME) || data.getData(TABLE_SELECTION_MIME)) return;
+          const files = clipboardFiles(data); if (!files.length) return;
+          event.preventDefault(); event.stopPropagation(); view.focus();
+          void imageFiles(view, files, slot.position);
+        };
+        if (editor) view.dom.ownerDocument.addEventListener('paste', pasteIntoHoveredSlot, true);
         const unregisterDrop = editor ? registerNativeFileDropTarget({
           clear: clearDrop,
           hover(_paths, point) {
@@ -318,6 +336,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           },
         }) : undefined;
         return { destroy: () => {
+          view.dom.ownerDocument.removeEventListener('paste', pasteIntoHoveredSlot, true);
           unregisterDrop?.(); pastePointer?.destroy(); pending?.dispose(); for (const target of targets) target.cancel(); targets.clear(); attachedView = null; clearDrop();
         } };
       },

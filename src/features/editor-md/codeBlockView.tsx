@@ -378,7 +378,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
         className="nb-code-block-content"
         style={{
           margin: 0,
-          padding: '12px 16px 12px 56px',
+          padding: '12px 16px 12px calc(38px + var(--nb-code-line-digits, 2) * .85ch)',
           overflowX: 'auto',
           borderBottomLeftRadius: 'calc(var(--radius-md) - 1px)',
           borderBottomRightRadius: 'calc(var(--radius-md) - 1px)',
