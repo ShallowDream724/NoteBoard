@@ -40,6 +40,7 @@ import {
   tileMatrix,
 } from './bitableUtils';
 import { showToast } from '../../stores/toastStore';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import {
   IndentIncrease,
   IndentDecrease,
@@ -53,7 +54,6 @@ import {
   ArrowRight,
   Edit2,
   ChevronRight,
-  ChevronDown,
   CornerDownRight,
   ArrowUp,
   ArrowDown,
@@ -2652,6 +2652,8 @@ export function BitableGridView({
                         <button
                           type="button"
                           className="nb-bitable-btn-ghost"
+                          aria-label={isCollapsed ? '展开分组' : '收起分组'}
+                          aria-expanded={!isCollapsed}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleGroupCollapse(item.key);
@@ -2661,7 +2663,7 @@ export function BitableGridView({
                             color: 'var(--editor-text-muted, #64748b)',
                           }}
                         >
-                          {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                          <DisclosureTriangle expanded={!isCollapsed} size={13} />
                         </button>
 
                         {item.color ? (
@@ -3069,6 +3071,8 @@ export function BitableGridView({
                               <button
                                 type="button"
                                 className="nb-bitable-btn-ghost"
+                                aria-label={isCollapsed ? '展开子行' : '收起子行'}
+                                aria-expanded={!isCollapsed}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   toggleCollapse(row.id);
@@ -3078,7 +3082,7 @@ export function BitableGridView({
                                   color: 'var(--editor-text-muted, #64748b)',
                                 }}
                               >
-                                {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                                <DisclosureTriangle expanded={!isCollapsed} size={13} />
                               </button>
                             ) : depth > 0 ? (
                               <CornerDownRight size={11} color="var(--editor-text-muted, #94a3b8)" style={{ opacity: 0.7 }} />

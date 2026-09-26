@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { Decoration, NodeView, ViewMutationRecord } from '@tiptap/pm/view';
 import { TextSelection } from '@tiptap/pm/state';
+import { createDisclosureTriangle } from '../../../components/DisclosureTriangle';
 import { ImageCollection, ImageSlot, Disclosure } from './schema';
 import { insertLocalImageWithDialog } from '../imagePaste';
 import { dispatchDiscreteEdit } from '../discreteEdit';
@@ -144,7 +145,8 @@ class DisclosureView implements NodeView {
   constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined, decorations: readonly Decoration[]) {
     this.dom.className = 'nb-disclosure'; this.contentDOM.className = 'nb-disclosure-body'; this.open = node.attrs.open;
     const header = document.createElement('div'); header.className = 'nb-disclosure-header'; header.contentEditable = 'false';
-    this.toggle = button('收起内容', 'nb-disclosure-toggle', () => { this.open = !this.open; this.paint(); }, arrow);
+    this.toggle = button('收起内容', 'nb-disclosure-toggle', () => { this.open = !this.open; this.paint(); });
+    this.toggle.replaceChildren(createDisclosureTriangle(this.dom.ownerDocument));
     this.title.className = 'nb-disclosure-title'; this.title.value = node.attrs.title; this.title.placeholder = '标题'; this.title.setAttribute('aria-label', '折叠块标题');
     this.title.onblur = () => this.commit();
     this.title.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); } else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); } };

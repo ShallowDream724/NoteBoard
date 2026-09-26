@@ -36,6 +36,7 @@ import {
 } from '@codemirror/view';
 import { nbSyntaxHighlighting } from './highlightStyle';
 import { nbEditorTheme } from './theme';
+import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 
 // ── 热重配 Compartment ──
 // 详见 docs/09-开发路线图.md 4.3
@@ -232,7 +233,15 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
     // 换行符号高亮（默认关闭，可通过 compartment 切换）
     lineEndingCompartment.of(options?.showLineEndings ? showLineEndingsExtension : []),
     // 折叠槽
-    foldGutter(),
+    foldGutter({ markerDOM: (expanded) => {
+      const marker = document.createElement('button');
+      marker.type = 'button'; marker.className = 'nb-code-fold-marker'; marker.tabIndex = -1;
+      marker.title = expanded ? '折叠代码段' : '展开代码段';
+      marker.setAttribute('aria-label', marker.title);
+      marker.setAttribute('aria-expanded', String(expanded));
+      marker.appendChild(createDisclosureTriangle(marker.ownerDocument));
+      return marker;
+    } }),
     // 搜索底层高亮与查询支持（不使用 CM 默认 UI）
     search({ top: false }),
     // 选区匹配高亮

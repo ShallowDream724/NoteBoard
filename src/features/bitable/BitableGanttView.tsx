@@ -46,6 +46,7 @@ import {
   tileMatrix,
   todayDayIndex,
 } from './bitableUtils';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import {
   ArrowDown,
   ArrowUp,
@@ -53,7 +54,6 @@ import {
   CalendarRange,
   Check,
   ChevronDown,
-  ChevronRight,
   Clipboard,
   Copy,
   CornerDownRight,
@@ -1946,13 +1946,15 @@ export function BitableGanttView({
                           <button
                             type="button"
                             className="nb-bitable-btn-ghost"
+                            aria-label={isCollapsed ? '展开分组' : '收起分组'}
+                            aria-expanded={!isCollapsed}
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleGroupCollapse(item.key);
                             }}
                             style={{ padding: 2, color: 'var(--editor-text-muted, #64748b)' }}
                           >
-                            {isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                            <DisclosureTriangle expanded={!isCollapsed} size={13} />
                           </button>
                           {item.color ? (
                             <OptionBadge option={{ id: item.key, label: item.label, color: item.color }} />
@@ -2325,13 +2327,15 @@ export function BitableGanttView({
                                 <button
                                   type="button"
                                   className="nb-bitable-btn-ghost"
+                                  aria-label={node.isCollapsed ? '展开子任务' : '收起子任务'}
+                                  aria-expanded={!node.isCollapsed}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     toggleCollapse(row.id);
                                   }}
                                   style={{ padding: 1, color: 'var(--editor-text-muted, #64748b)' }}
                                 >
-                                  {node.isCollapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                                  <DisclosureTriangle expanded={!node.isCollapsed} size={13} />
                                 </button>
                               ) : node.depth > 0 ? (
                                 <CornerDownRight

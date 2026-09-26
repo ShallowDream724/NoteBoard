@@ -4,8 +4,6 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import {
-  ChevronRight,
-  ChevronDown,
   Plus,
   Trash2,
   GripVertical,
@@ -18,6 +16,7 @@ import type { MindNode } from './mindmapTypes';
 import { generateNodeId, moveMindNode, isMindNodeDescendant } from './mindmapConverter';
 import { MindmapIconPicker } from './MindmapIconPicker';
 import { Tooltip } from '../../components/Tooltip';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 
 interface OutlinerEditorProps {
   root: MindNode;
@@ -692,6 +691,8 @@ export function OutlinerEditor({ root, onChange }: OutlinerEditorProps) {
                   {item.hasChildren ? (
                     <button
                       type="button"
+                      aria-label={item.isExpanded ? '收起子分支' : '展开子分支'}
+                      aria-expanded={item.isExpanded}
                       onClick={() => handleToggleExpand(item.node.id)}
                       style={{
                         background: 'transparent',
@@ -713,7 +714,7 @@ export function OutlinerEditor({ root, onChange }: OutlinerEditorProps) {
                         e.currentTarget.style.color = 'var(--editor-text-secondary, #475569)';
                       }}
                     >
-                      {item.isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <DisclosureTriangle expanded={item.isExpanded} size={14} />
                     </button>
                   ) : (
                     <div

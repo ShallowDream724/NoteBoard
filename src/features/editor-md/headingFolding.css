@@ -5,7 +5,7 @@
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-secondary); background: transparent; cursor: pointer; opacity: 0;
 }
-.nb-heading-fold-toggle svg { transform: rotate(90deg); transition: transform 160ms ease; }
+.nb-heading-fold-toggle svg { width: 14px; height: 14px; transform: rotate(90deg); transition: transform 160ms ease; }
 .nb-heading-fold-toggle[aria-expanded="false"] { opacity: 1; }
 .nb-heading-fold-toggle[aria-expanded="false"] svg { transform: rotate(0); }
 .tiptap :is(h1,h2,h3,h4,h5,h6):hover > .nb-heading-fold-toggle,

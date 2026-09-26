@@ -85,6 +85,12 @@ export const nbEditorTheme: Extension = EditorView.theme(
     '.cm-indent-mark': {
       color: 'var(--cm-indent-guide)',
     },
+    '.nb-code-fold-marker': {
+      border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer',
+      padding: '0 1px', width: '14px', height: '1em', verticalAlign: 'middle',
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    },
+    '.nb-code-fold-marker[aria-expanded="true"] svg': { transform: 'rotate(90deg)' },
     // 折叠占位符
     '.cm-foldPlaceholder': {
       backgroundColor: 'var(--cm-fold-placeholder-bg)',

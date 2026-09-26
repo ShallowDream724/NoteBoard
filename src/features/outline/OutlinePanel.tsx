@@ -4,7 +4,8 @@
 // 详见 docs/09-开发路线图.md 9.2-9.10
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronRight, ChevronsRight } from 'lucide-react';
+import { ChevronsRight } from 'lucide-react';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type { Editor } from '@tiptap/core';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
@@ -298,11 +299,10 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
                           justifyContent: 'center',
                           flexShrink: 0,
                           cursor: 'pointer',
-                          transform: isCollapsedItem ? 'none' : 'rotate(90deg)',
-                          transition: 'transform var(--transition-fast), color var(--transition-fast)',
+                          transition: 'color var(--transition-fast)',
                         }}
                       >
-                        <ChevronRight size={12} strokeWidth={2.2} />
+                        <DisclosureTriangle expanded={!isCollapsedItem} size={12} style={{ transition: 'transform var(--transition-fast)' }} />
                       </button>
                     ) : (
                       <span style={{ width: 16, flexShrink: 0 }} />

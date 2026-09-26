@@ -10,8 +10,6 @@ import {
   FolderPlus,
   Search,
   X,
-  ChevronRight,
-  ChevronDown,
   Trash2,
   Edit2,
   Plus,
@@ -25,6 +23,7 @@ import {
   isDescendantOrSelf,
 } from './favoritesUtils';
 import { Tooltip } from '../../components/Tooltip';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type {
   FavoriteNode,
   FavoriteFolderItem,
@@ -1017,7 +1016,11 @@ function FolderTreeNode({
         }}
       >
         {/* 展开/收起箭头 */}
-        <span
+        <button
+          type="button"
+          aria-label={isExpanded ? '收起文件夹' : '展开文件夹'}
+          aria-expanded={hasSubFolders ? isExpanded : undefined}
+          disabled={!hasSubFolders}
           onClick={(e) => {
             e.stopPropagation();
             onToggleExpand(node.id);
@@ -1028,12 +1031,16 @@ function FolderTreeNode({
             justifyContent: 'center',
             width: 14,
             height: 14,
-            opacity: hasSubFolders ? 0.7 : 0,
+            padding: 0,
+            border: 0,
+            background: 'transparent',
+            color: 'inherit',
+            opacity: hasSubFolders ? 1 : 0,
             cursor: hasSubFolders ? 'pointer' : 'default',
           }}
         >
-          {hasSubFolders && (isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />)}
-        </span>
+          {hasSubFolders && <DisclosureTriangle expanded={isExpanded} size={12} />}
+        </button>
 
         {/* 文件夹图标 */}
         {isExpanded ? (

@@ -6,7 +6,6 @@ import { useMenuBounds } from '../../components/useMenuBounds';
 
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ChevronRight,
   FileText,
   ExternalLink,
   Copy,
@@ -16,6 +15,7 @@ import {
   FolderPlus,
 } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type { FileTreeNode } from '../../core/ipc/types';
 import { useExplorerStore } from './explorerStore';
 import { useTreeData } from './useTreeData';
@@ -348,11 +348,9 @@ export const TreeNode = memo(function TreeNode({
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                transform: expanded ? 'rotate(90deg)' : 'none',
-                transition: 'transform var(--transition-fast)',
               }}
             >
-              <ChevronRight size={12} color="var(--explorer-text-muted)" />
+              <DisclosureTriangle expanded={expanded} size={12} color="var(--explorer-text-muted)" style={{ transition: 'transform var(--transition-fast)' }} />
             </span>
           ) : (
             <span style={{ width: 12, flexShrink: 0 }} />

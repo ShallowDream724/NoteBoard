@@ -18,6 +18,7 @@ import { computeMindmapLayout, buildLinkPath, type LayoutNode } from './mindmapL
 import type { MindmapTheme } from './mindmapTheme';
 import { MindmapIconPicker } from './MindmapIconPicker';
 import { Tooltip } from '../../components/Tooltip';
+import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 
 interface MindmapRendererProps {
   root: MindNode;
@@ -1207,7 +1208,7 @@ export function MindmapRenderer({
 
               {/* 折叠/展开徽标 */}
               {hasChildren && (
-                <Tooltip content={isExpanded ? '收起子分支' : '展开子分支'} side="right" sideOffset={4}>
+                <Tooltip content={isExpanded ? '收起子分支' : `展开 ${n.node.children.length} 个子分支`} side="right" sideOffset={4}>
                   <button
                     type="button"
                     className="nb-mindmap-fold-btn"
@@ -1216,12 +1217,13 @@ export function MindmapRenderer({
                       handleToggleExpand(n.node.id);
                     }}
                     aria-label={isExpanded ? '收起子分支' : '展开子分支'}
+                    aria-expanded={isExpanded}
                     style={{
                       position: 'absolute',
-                      right: -9,
+                      right: 0,
                       top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 16,
+                      transform: 'translate(50%, -50%)',
+                      minWidth: 16,
                       height: 16,
                       borderRadius: '50%',
                       background: isRoot ? '#ffffff' : nodeColor,
@@ -1230,15 +1232,17 @@ export function MindmapRenderer({
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      gap: isExpanded ? 0 : 2,
                       fontSize: 10,
                       fontWeight: 700,
                       cursor: 'pointer',
                       boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
-                      padding: 0,
+                      padding: isExpanded ? 0 : '0 3px',
                       zIndex: 5,
                     }}
                   >
-                    {isExpanded ? '-' : n.node.children.length}
+                    <DisclosureTriangle expanded={isExpanded} size={12} />
+                    {!isExpanded && <span>{n.node.children.length}</span>}
                   </button>
                 </Tooltip>
               )}

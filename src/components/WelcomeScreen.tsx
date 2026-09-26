@@ -25,13 +25,12 @@ import {
   Database,
   CodeXml,
   ChartColumn,
-  ChevronDown,
-  ChevronUp,
   Sparkles,
   Archive,
   Table2,
   Star,
 } from 'lucide-react';
+import { DisclosureTriangle } from './DisclosureTriangle';
 
 interface WelcomeScreenProps {
   onOpenFile?: () => void;
@@ -421,6 +420,7 @@ export function WelcomeScreen({
       >
         <button
           type="button"
+          aria-expanded={showMoreFormats}
           onClick={() => setShowMoreFormats((prev) => !prev)}
           style={{
             width: '100%',
@@ -459,11 +459,7 @@ export function WelcomeScreen({
           <span style={{ fontWeight: 500 }}>
             {showMoreFormats ? '收起更多格式' : '更多格式新建'}
           </span>
-          {showMoreFormats ? (
-            <ChevronUp size={14} color="var(--editor-text-muted)" />
-          ) : (
-            <ChevronDown size={14} color="var(--editor-text-muted)" />
-          )}
+          <DisclosureTriangle expanded={showMoreFormats} size={14} color="var(--editor-text-muted)" />
         </button>
       </div>
 

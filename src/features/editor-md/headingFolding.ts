@@ -2,6 +2,7 @@ import { Extension } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 import './headingFolding.css';
 
 /** View state only: Markdown and exported/printed documents always contain the section. */
@@ -48,7 +49,7 @@ function headingButton(pos: number, folded: boolean): Decoration {
     button.className = 'nb-heading-fold-toggle';
     button.setAttribute('aria-label', folded ? '展开章节' : '折叠章节');
     button.setAttribute('aria-expanded', String(!folded));
-    button.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    button.appendChild(createDisclosureTriangle(button.ownerDocument));
     button.onpointerdown = event => event.preventDefault();
     button.onclick = event => {
       event.preventDefault();
