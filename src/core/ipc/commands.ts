@@ -235,6 +235,11 @@ export function readDir(path: string, showHidden: boolean): Promise<FileTreeNode
   return invoke<FileTreeNode[]>('read_dir', { path, showHidden });
 }
 
+/** Grant the non-recursive scope before subscribing to an opened directory. */
+export function prepareDirectoryWatch(path: string): Promise<void> {
+  return invoke<void>('prepare_directory_watch', { path });
+}
+
 export function createFile(
   dir: string,
   name: string,

@@ -215,6 +215,9 @@ async function ensureWatch(dir: string): Promise<void> {
   records.set(dir, record);
   record.pending = (async () => {
     try {
+      // Restored tabs and pasted paths do not pass through a native file dialog,
+      // so plugin-fs needs its directory scope before watch registration.
+      await ipc.prepareDirectoryWatch(dir);
       // watchImmediate：事件即时到达（防抖由消费端的增量刷新频率自然合并）
       record!.unwatch = await watchImmediate(dir, (event) => {
         void handleWatchEvent(dir, event);

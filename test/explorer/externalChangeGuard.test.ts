@@ -20,6 +20,7 @@ const readDirMock = vi.fn().mockResolvedValue([]);
 const readDocumentMock = vi.fn();
 const pathExistsMock = vi.fn();
 vi.mock('@/core/ipc/commands', () => ({
+  prepareDirectoryWatch: vi.fn().mockResolvedValue(undefined),
   readDir: (...args: unknown[]) => readDirMock(...args),
   readDocument: (...args: unknown[]) => readDocumentMock(...args),
   pathExists: (...args: unknown[]) => pathExistsMock(...args),

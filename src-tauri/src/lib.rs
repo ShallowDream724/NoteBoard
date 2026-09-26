@@ -93,6 +93,7 @@ pub fn run() {
             fsio::recovery_images::publish_recovery_image,
             fsio::recovery_images::store_image_asset,
             fsio::commands::read_dir,
+            fsio::commands::prepare_directory_watch,
             fsio::browse::browse_locations,
             fsio::commands::create_file,
             fsio::commands::create_dir,

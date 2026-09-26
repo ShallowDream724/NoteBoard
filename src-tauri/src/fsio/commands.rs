@@ -6,6 +6,7 @@ use crate::dto::{
 };
 use crate::path as nbpath;
 use std::path::{Path, PathBuf};
+use tauri_plugin_fs::FsExt;
 
 use super::dir;
 use super::read;
@@ -139,6 +140,20 @@ pub fn save_binary_file(path: String, data: Vec<u8>) -> Result<WriteResult, Stri
         size: metadata.len(),
         error: None,
     })
+}
+
+/// Prepare the exact directory selected by the explorer/open-document watcher.
+/// A watch capability permits the command, but does not grant any filesystem scope.
+#[tauri::command]
+pub async fn prepare_directory_watch(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let directory = Path::new(&path);
+        if !directory.is_absolute() || !directory.is_dir() {
+            return Err(format!("无法监听目录: {path}"));
+        }
+        // Non-recursive: no disk-wide wildcard or implicit access to descendants.
+        app.fs_scope().allow_directory(directory, false).map_err(|error| error.to_string())
+    }).await.map_err(|error| error.to_string())?
 }
 
 /// 读取目录

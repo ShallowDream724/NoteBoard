@@ -12,6 +12,9 @@ import {
 } from '@/features/editor-md/viewportWorkScheduler';
 
 // directoryWatcher 依赖 plugin-fs（测试环境 mock）
+vi.mock('@/core/ipc/commands', () => ({
+  prepareDirectoryWatch: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('@tauri-apps/plugin-fs', () => {
   const unwatchFns: Array<() => void> = [];
   return {
