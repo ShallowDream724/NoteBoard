@@ -21,6 +21,24 @@ function create(content: JSONContent[] = [paragraph('Anchor words here')]) {
 afterEach(() => { for (const editor of editors.splice(0)) editor.destroy(); vi.restoreAllMocks(); });
 
 describe('补充说明文档状态', () => {
+  it('does not create divider notes, but keeps existing divider notes readable and removable', () => {
+    const editor = create([{ type: 'horizontalRule' }, paragraph('After')]);
+    editor.commands.setNodeSelection(0);
+    expect(canAddAnnotation(editor)).toBe(false);
+    expect(addAnnotation(editor, [paragraph('No divider note')])).toBeNull();
+    const legacy = create([
+      { type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'divider-note' }, content: [paragraph('Existing explanation')] }] },
+      { type: 'horizontalRule', attrs: { annotationId: 'divider-note' } }, paragraph('After'),
+    ]);
+    const pos = legacy.state.doc.firstChild!.nodeSize;
+    legacy.commands.setNodeSelection(pos);
+    expect(selectedAnnotationId(legacy)).toBe('divider-note');
+    expect(legacy.view.dom.querySelector('[data-annotation-id="divider-note"]')).not.toBeNull();
+    expect(removeAnnotation(legacy, 'divider-note')).toBe(true);
+    expect(legacy.state.doc.firstChild?.type.name).toBe('horizontalRule');
+    expect(collectAnnotations(legacy.state.doc).size).toBe(0);
+  });
+
   it('stores one rich body for formatted text fragments and atomically undoes/replays creation', () => {
     const editor = create([{ type: 'paragraph', content: [{ type: 'text', text: 'Bold', marks: [{ type: 'bold' }] }, { type: 'text', text: ' and plain' }] }]);
     const initial = editor.state.doc;

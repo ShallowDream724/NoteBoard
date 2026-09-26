@@ -10,6 +10,7 @@ import { Copy, Check, ChevronDown, Search, X } from 'lucide-react';
 import { normalizeLanguage } from './codeLanguages';
 import { Tooltip } from '../../components/Tooltip';
 import { useCodeHighlight } from './codeHighlightExtension';
+import { AnnotationMarker } from './annotations/AnnotationMarker';
 
 /** 语言配置结构定义 */
 interface LanguageItem {
@@ -40,7 +41,7 @@ const LANGUAGES: LanguageItem[] = [
   { value: 'shell', label: 'Shell', aliases: ['sh', 'bash', 'zsh'] },
 ];
 
-function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeViewProps) {
+function CodeBlockComponent({ node, updateAttributes, editor, getPos, decorations }: NodeViewProps) {
   const contentRef = useRef<HTMLPreElement>(null);
   useCodeHighlight(editor, node, getPos, contentRef);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -337,6 +338,8 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeView
         </div>
 
         {/* 复制按钮 */}
+        <div className="nb-annotation-toolbar-actions">
+        <AnnotationMarker decorations={decorations}/>
         <Tooltip content="复制代码内容" side="top" sideOffset={4}>
           <button
             type="button"
@@ -377,6 +380,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeView
             <span>{copied ? '已复制' : '复制'}</span>
           </button>
         </Tooltip>
+        </div>
       </div>
 
       {/* 代码内容区域（TipTap 可直接输入） */}
@@ -403,6 +407,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos }: NodeView
 
 // 导出扩展：基于 @tiptap/extension-code-block + ReactNodeViewRenderer
 export const CodeBlockView = CodeBlock.extend({
+  addOptions() { return { ...this.parent!(), ownsAnnotationMarker: true }; },
   addKeyboardShortcuts() {
     return {
       ...this.parent?.(),

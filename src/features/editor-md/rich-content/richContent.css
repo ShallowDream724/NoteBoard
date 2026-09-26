@@ -43,7 +43,7 @@
 .nb-disclosure[data-open=true] .nb-disclosure-toggle svg { transform:rotate(90deg); }
 .nb-disclosure-title { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--editor-text); font:600 .94em var(--content-font-family,inherit); padding:2px; }
 .nb-disclosure-title:focus { box-shadow:0 1px var(--editor-border-focus); }
-.nb-disclosure-body { padding:16px 20px 12px 43px; background:var(--editor-bg); }
+.nb-disclosure-body { padding:16px 20px 16px 43px; background:var(--editor-bg); }
 .nb-disclosure-body[hidden] { display:none; }
 .ProseMirror .nb-disclosure-body > :first-child,
 .ProseMirror .nb-disclosure-body > [data-node-view-content-react] > :first-child { margin-top:0; }

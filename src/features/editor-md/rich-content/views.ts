@@ -1,11 +1,12 @@
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import type { NodeView, ViewMutationRecord } from '@tiptap/pm/view';
+import type { Decoration, NodeView, ViewMutationRecord } from '@tiptap/pm/view';
 import { TextSelection } from '@tiptap/pm/state';
 import { ImageCollection, ImageSlot, Disclosure } from './schema';
 import { insertLocalImageWithDialog } from '../imagePaste';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import { collectionPresentation } from './collectionPresentation';
+import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } from '../annotations/marker';
 import './richContent.css';
 import './carousel.css';
 
@@ -26,7 +27,8 @@ class CollectionView implements NodeView {
   private dotStart = -1; private dotCount = -1; private counter = document.createElement('span');
   private target: number | null = null; private scrollFrame = 0; private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private resize: ResizeObserver | undefined; private width = 0; private nearby = new Set<HTMLElement>();
-  constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined) {
+  private annotation: HTMLSpanElement;
+  constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined, decorations: readonly Decoration[]) {
     this.dom.className = 'nb-image-collection'; this.contentDOM.className = 'nb-image-slots';
     this.viewport.className = 'nb-image-viewport'; this.pagination.className = 'nb-image-pagination';
     this.dom.setAttribute('role', 'group'); this.dom.setAttribute('aria-label', '图片组合');
@@ -43,7 +45,8 @@ class CollectionView implements NodeView {
     // otherwise mutate all sibling blocks and force ProseMirror to reparse them.
     this.counter.className = 'nb-image-counter';
     this.pagination.append(this.dots, this.counter);
-    this.footer.append(this.previous, this.pagination, this.next, add); this.viewport.append(this.contentDOM); this.dom.append(this.viewport, this.footer);
+    this.annotation = createAnnotationMarker(annotationMarkerId(decorations), 'edge');
+    this.footer.append(this.previous, this.pagination, this.next, add); this.viewport.append(this.contentDOM); this.dom.append(this.viewport, this.footer, this.annotation);
     this.viewport.addEventListener('scroll', this.onScroll, { passive: true });
     this.viewport.addEventListener('wheel', this.onWheel, { passive: true });
     this.viewport.addEventListener('pointerdown', this.onPointerDown, { passive: true });
@@ -110,9 +113,9 @@ class CollectionView implements NodeView {
     for (const slot of next) if (!this.nearby.has(slot)) { slot.setAttribute('data-carousel-nearby', ''); slot.dispatchEvent(new Event('nb-carousel-proximity')); }
     this.nearby = next;
   }
-  update(node: Node) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.attrs.width !== node.attrs.width || this.node.attrs.align !== node.attrs.align || this.node.childCount !== node.childCount; this.node = node; if (changed) this.refresh(); return true; }
+  update(node: Node, decorations: readonly Decoration[]) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.attrs.width !== node.attrs.width || this.node.attrs.align !== node.attrs.align || this.node.childCount !== node.childCount; this.node = node; updateAnnotationMarker(this.annotation, annotationMarkerId(decorations)); if (changed) this.refresh(); return true; }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM || mutation.target === this.viewport) || !this.contentDOM.contains(mutation.target)); }
-  stopEvent(event: Event) { return this.footer.contains(event.target as globalThis.Node); }
+  stopEvent(event: Event) { return this.footer.contains(event.target as globalThis.Node) || this.annotation.contains(event.target as globalThis.Node); }
   destroy() { cancelAnimationFrame(this.frame); cancelAnimationFrame(this.scrollFrame); clearTimeout(this.settleTimer); this.resize?.disconnect(); this.viewport.removeEventListener('scroll', this.onScroll); this.viewport.removeEventListener('wheel', this.onWheel); this.viewport.removeEventListener('pointerdown', this.onPointerDown); }
 }
 class SlotView implements NodeView {
@@ -137,24 +140,26 @@ class SlotView implements NodeView {
 class DisclosureView implements NodeView {
   dom = document.createElement('section'); contentDOM = document.createElement('div');
   private title = document.createElement('input'); private toggle: HTMLButtonElement; private open: boolean;
-  constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined) {
+  private annotation: HTMLSpanElement;
+  constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined, decorations: readonly Decoration[]) {
     this.dom.className = 'nb-disclosure'; this.contentDOM.className = 'nb-disclosure-body'; this.open = node.attrs.open;
     const header = document.createElement('div'); header.className = 'nb-disclosure-header'; header.contentEditable = 'false';
     this.toggle = button('收起内容', 'nb-disclosure-toggle', () => { this.open = !this.open; this.paint(); }, arrow);
     this.title.className = 'nb-disclosure-title'; this.title.value = node.attrs.title; this.title.placeholder = '标题'; this.title.setAttribute('aria-label', '折叠块标题');
     this.title.onblur = () => this.commit();
     this.title.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); } else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); } };
-    header.append(this.toggle, this.title); this.dom.append(header, this.contentDOM); this.paint();
+    this.annotation = createAnnotationMarker(annotationMarkerId(decorations), 'toolbar');
+    header.append(this.toggle, this.title, this.annotation); this.dom.append(header, this.contentDOM); this.paint();
   }
   private commit() {
     const pos = this.getPos(), title = this.title.value.trim(); if (pos === undefined || title === this.node.attrs.title) return;
     dispatchDiscreteEdit(this.editor.view, this.editor.state.tr.setNodeAttribute(pos, 'title', title));
   }
   private paint() { this.contentDOM.hidden = !this.open; this.dom.dataset.open = String(this.open); this.toggle.setAttribute('aria-expanded', String(this.open)); const label = this.open ? '收起内容' : '展开内容'; this.toggle.title = label; this.toggle.setAttribute('aria-label', label); }
-  update(node: Node) { if (node.type !== this.node.type) return false; if (node.attrs.title !== this.node.attrs.title) this.title.value = node.attrs.title; if (node.attrs.open !== this.node.attrs.open) this.open = node.attrs.open; this.node = node; this.paint(); return true; }
+  update(node: Node, decorations: readonly Decoration[]) { if (node.type !== this.node.type) return false; if (node.attrs.title !== this.node.attrs.title) this.title.value = node.attrs.title; if (node.attrs.open !== this.node.attrs.open) this.open = node.attrs.open; this.node = node; updateAnnotationMarker(this.annotation, annotationMarkerId(decorations)); this.paint(); return true; }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM) || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return !this.contentDOM.contains(event.target as globalThis.Node); }
 }
-export const InteractiveImageCollection = ImageCollection.extend({ addNodeView() { return ({ node, editor, getPos }) => new CollectionView(node, editor, getPos); } });
+export const InteractiveImageCollection = ImageCollection.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new CollectionView(node, editor, getPos, decorations); } });
 export const InteractiveImageSlot = ImageSlot.extend<{ docKey: string }>({ addOptions() { return { docKey: '' }; }, addNodeView() { return ({ node, editor, getPos }) => new SlotView(node, editor, getPos, this.options.docKey); } });
-export const InteractiveDisclosure = Disclosure.extend({ addNodeView() { return ({ node, editor, getPos }) => new DisclosureView(node, editor, getPos); } });
+export const InteractiveDisclosure = Disclosure.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new DisclosureView(node, editor, getPos, decorations); } });

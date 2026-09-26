@@ -25,8 +25,9 @@ function editorTaskId(editor: object): number {
 import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
+import { AnnotationMarker } from '../editor-md/annotations/AnnotationMarker';
 
-function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
+function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, decorations }: NodeViewProps) {
   const active = useEditorActive();
   // 重新激活未变化的图形使用已有结果，不再次请求图表服务。
   const renderedCodeRef = useRef<string | null>(null);
@@ -135,7 +136,8 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos }:
             }}
           >
             <span>编辑 PlantUML / UML 图表</span>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="nb-annotation-toolbar-actions">
+              <AnnotationMarker decorations={decorations}/>
               <button
                 type="button"
                 onClick={() => {
@@ -242,6 +244,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos }:
             {loading && <span>渲染中</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AnnotationMarker decorations={decorations}/>
             {/* 编辑图表源码 */}
             <Tooltip content="编辑图表源码" side="top" sideOffset={4}>
               <button
@@ -469,6 +472,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos }:
 
 /** PlantUML 块级节点 */
 export const PlantUmlBlock = PlantUmlNode.extend({
+  addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; },
   addNodeView() {
     return ReactNodeViewRenderer(PlantUmlComponent);
   },

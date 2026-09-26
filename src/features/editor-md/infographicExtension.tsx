@@ -21,11 +21,12 @@ import { observe } from './viewportActivation';
 import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
+import { AnnotationMarker } from './annotations/AnnotationMarker';
 import './infographicExtension.css';
 
 const MemoInfographicRenderer = memo(InfographicRenderer);
 
-function InfographicComponent({ node, updateAttributes, selected }: NodeViewProps) {
+function InfographicComponent({ node, updateAttributes, selected, decorations }: NodeViewProps) {
   // 首次进入共享 observer 的 800px 预加载范围后保留预览，滚动不会重建图表或编辑状态。
   const [activated, setActivated] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -170,7 +171,8 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="nb-annotation-toolbar-actions">
+              <AnnotationMarker decorations={decorations}/>
               <button
                 type="button"
                 className="nb-info-btn-primary"
@@ -275,6 +277,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AnnotationMarker decorations={decorations}/>
             <Tooltip content="编辑信息图源码" side="top" sideOffset={4}>
               <button
                 type="button"
@@ -465,6 +468,7 @@ function InfographicComponent({ node, updateAttributes, selected }: NodeViewProp
 
 /** Infographic 块节点定义 */
 export const InfographicBlock = InfographicNode.extend({
+  addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; },
   addNodeView() {
     return ReactNodeViewRenderer(InfographicComponent);
   },

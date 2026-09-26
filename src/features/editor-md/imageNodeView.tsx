@@ -40,6 +40,7 @@ import type { Transaction } from '@tiptap/pm/state';
 import { ImageCaption } from './ImageCaption';
 import { editFigureCaption } from './figureCaptionCommands';
 import { normalizeFigureCaption } from './figureCaption';
+import { AnnotationMarker } from './annotations/AnnotationMarker';
 
 /** 大图预览 Lightbox 模态框组件 */
 export function ImageLightboxModal({
@@ -250,7 +251,7 @@ const modalBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 图片 NodeView 组件 */
-export function ImageComponent({ node, extension, editor, getPos, deleteNode }: NodeViewProps) {
+export function ImageComponent({ node, extension, editor, getPos, deleteNode, decorations }: NodeViewProps) {
   const nativeFeaturesVisible = useNativeFeatureVisibility();
   const [resizePreview, setResizePreview] = useState<string | null>(null);
   const resizeCleanup = useRef<(() => void) | null>(null);
@@ -433,6 +434,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode }: 
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
+        <AnnotationMarker decorations={decorations} placement="edge"/>
         {/* 悬停浮层快捷操作工具栏 */}
         {hovered && (
           <div
@@ -713,6 +715,7 @@ const actionBtnStyle: React.CSSProperties = {
 
 /** TipTap 增强版 Image 扩展定义 */
 export const EnhancedImageBlock = ImageNode.extend({
+  addOptions() { return { ...this.parent!(), ownsAnnotationMarker: true }; },
   addNodeView() {
     return ReactNodeViewRenderer(ImageComponent);
   },

@@ -20,6 +20,7 @@ import { scheduleTask, cancelTask } from './viewportWorkScheduler';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SvgDiagramViewport } from '../diagram-preview/SvgDiagramViewport';
+import { AnnotationMarker } from './annotations/AnnotationMarker';
 
 /** 🔴 S14：任务身份 = editor 实例（文档）+ 节点位置——不同节点互不覆盖 */
 const editorTaskIds = new WeakMap<object, number>();
@@ -49,7 +50,7 @@ import { buildExportFileName, type ChartImageSource } from '../export/chartExpor
 
 // ── React NodeView ──
 
-function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
+function MermaidComponent({ node, updateAttributes, selected, editor, getPos, decorations }: NodeViewProps) {
   const active = useEditorActive();
   const enabled = useSettingsStore(state => state.settings.editor.enableMermaid);
   // 保留已渲染图形；重新激活且正文/主题未变时不重复运行 Mermaid。
@@ -143,7 +144,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
 
   if (!enabled && !editing) return <NodeViewWrapper as="div" contentEditable={false} style={{ margin: '12px 0' }}>
     <div ref={containerRef} style={{ border: '1px solid var(--editor-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      <div style={{ padding: '6px 12px', fontSize: 12, color: 'var(--editor-text-muted)' }}>Mermaid</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', fontSize: 12, color: 'var(--editor-text-muted)' }}><span>Mermaid</span><AnnotationMarker decorations={decorations}/></div>
       <textarea aria-label="Mermaid 图表源码" value={code} readOnly={!editor.isEditable}
         onChange={event => updateAttributes({ code: event.target.value })}
         onKeyDown={event => {
@@ -182,7 +183,8 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
             }}
           >
             <span>编辑 Mermaid 图表源码</span>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div className="nb-annotation-toolbar-actions">
+              <AnnotationMarker decorations={decorations}/>
               <button
                 type="button"
                 onClick={() => {
@@ -289,6 +291,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
             {loading && <span>渲染中</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AnnotationMarker decorations={decorations}/>
             {/* 编辑图表源码 */}
             <Tooltip content="编辑图表源码" side="top" sideOffset={4}>
               <button
@@ -494,6 +497,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos }: 
 
 /** Mermaid 块节点 */
 export const MermaidBlock = MermaidNode.extend({
+  addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; },
   addNodeView() {
     return ReactNodeViewRenderer(MermaidComponent);
   },

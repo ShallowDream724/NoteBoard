@@ -3,9 +3,24 @@
 .nb-annotation-anchor:focus-visible, .nb-annotation-block-anchor:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 3px; }
 .nb-annotation-inline-marker { display:inline; position:relative; font-size:inherit; line-height:inherit; }
 .nb-annotation-block-marker { display:block; position:relative; height:0; margin:0!important; padding:0!important; overflow:visible; }
-.nb-annotation-indicator { position:absolute; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; padding:0; border:1px solid var(--editor-border); border-radius:50%; color:var(--editor-text-muted); background:var(--editor-surface); font:10px/1 var(--ui-font-family,sans-serif); cursor:help; user-select:none; }
+.nb-annotation-indicator { position:absolute; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; padding:0; border:1px solid color-mix(in srgb,var(--editor-text-secondary) 68%,var(--editor-border)); border-radius:50%; color:color-mix(in srgb,var(--editor-text-secondary) 80%,var(--editor-text)); background:color-mix(in srgb,var(--editor-accent) 7%,var(--editor-surface)); font:600 11px/1 var(--ui-font-family,sans-serif); cursor:help; user-select:none; }
+.nb-annotation-indicator:hover,.nb-annotation-indicator:focus-visible { color:var(--editor-text); border-color:var(--editor-accent); background:color-mix(in srgb,var(--editor-accent) 14%,var(--editor-surface)); }
+.nb-annotation-indicator:focus-visible { outline:2px solid var(--editor-accent); outline-offset:2px; }
 .nb-annotation-inline-marker > .nb-annotation-indicator { left:2px; bottom:.6em; }
 .nb-annotation-block-marker > .nb-annotation-indicator { right:4px; top:4px; }
+.nb-annotation-toolbar-marker { display:inline-flex; align-items:center; justify-content:center; flex:none; width:24px; height:24px; }
+.nb-annotation-toolbar-marker > .nb-annotation-indicator { position:relative; flex:none; }
+.nb-annotation-edge-marker { position:absolute; top:-8px; right:-8px; z-index:31; display:block; width:16px; height:16px; }
+.nb-annotation-edge-marker > .nb-annotation-indicator { inset:0; }
+/* A carousel clips its image frames; keep their own notes inside the free lower corner. */
+.nb-image-slot [data-image-frame] > .nb-annotation-edge-marker { top:auto; right:auto; left:6px; bottom:6px; }
+.nb-annotation-toolbar-marker[hidden],.nb-annotation-edge-marker[hidden] { display:none; }
+.nb-annotation-toolbar-actions { display:flex; align-items:center; gap:6px; flex:none; }
+.github-alert > .nb-callout-actions { position:absolute; top:5px; right:5px; }
+.github-alert > .nb-callout-actions > .callout-palette { position:static; }
+.github-alert[data-annotation-toolbar] > .alert-title { margin-right:58px; }
+.github-alert[data-annotation-toolbar] > .alert-body { padding-right:48px; }
+.github-alert[data-annotation-toolbar] > .alert-title ~ .alert-body { padding-right:0; }
 .nb-annotation-panel { position: fixed; z-index: 1300; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; max-width: calc(100vw - 16px); border: 1px solid var(--editor-border); border-radius: var(--radius-lg, 10px); background: var(--editor-surface); color: var(--editor-text); box-shadow: var(--shadow-lg, 0 8px 28px rgb(0 0 0 / 14%)); font: 13px/1.6 var(--ui-font-family, sans-serif); }
 .nb-annotation-header { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 8px 4px 12px; flex-shrink: 0; border-bottom: 1px solid var(--editor-border); user-select: none; touch-action: none; }
 .nb-annotation-panel[data-pinned] .nb-annotation-header { cursor: grab; }
@@ -42,4 +57,8 @@
 .nb-annotation-move { display: inline-flex; color: var(--editor-text-muted); cursor: move; }
 .nb-annotation-resize { position: absolute; right: 1px; bottom: 1px; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none; border-radius: 0 0 var(--radius-sm) 0; background: repeating-linear-gradient(135deg, transparent 0 3px, var(--editor-border) 3px 4px); clip-path: polygon(100% 0, 100% 100%, 0 100%); }
 .nb-annotation-error { color: var(--editor-text); padding: 6px 12px; font-size: 12px; }
-@media print { .nb-annotation-panel, .nb-annotation-indicator { display: none !important; } }
+@media print {
+  .nb-annotation-panel, .nb-annotation-indicator, .nb-annotation-toolbar-marker, .nb-annotation-edge-marker { display:none!important; }
+  .github-alert[data-annotation-toolbar] > .alert-title { margin-right:1.2em; }
+  .github-alert[data-annotation-toolbar] > .alert-body { padding-right:0; }
+}

@@ -3,6 +3,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { annotationId, type AnnotationAnchor, type AnnotationRecord } from './model';
+import { createAnnotationMarker } from './marker';
 
 interface AnnotationIndex { records: Map<string, AnnotationRecord>; anchors: AnnotationAnchor[]; decorations: DecorationSet; orphanIds: string[] }
 export const annotationIndexKey = new PluginKey<AnnotationIndex>('annotations');
@@ -68,29 +69,18 @@ function mergeAnchors(anchors: AnnotationAnchor[]): AnnotationAnchor[] {
   return merged;
 }
 
-function decorationsFor(doc: ProseMirrorNode, records: Map<string, AnnotationRecord>, anchors: AnnotationAnchor[]): DecorationSet {
+function decorationsFor(doc: ProseMirrorNode, records: Map<string, AnnotationRecord>, anchors: AnnotationAnchor[], markerOwners: ReadonlySet<string>): DecorationSet {
       const decorations: Decoration[] = [];
       for (const anchor of anchors) {
         if (!records.has(anchor.id)) continue;
         const block = anchor.block ? doc.nodeAt(anchor.from) : null;
         const inline = !anchor.block || (block?.isTextblock && block.type.name !== 'codeBlock');
         const position = inline ? anchor.to - (anchor.block ? 1 : 0) : anchor.from;
-        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: `nb-annotation-block-anchor${inline ? ' nb-annotation-text-block' : ''}`, 'data-annotation-id': anchor.id }));
-        // The table view owns its marker, anchored to the actual table box.
-        if (block?.type.name === 'table') continue;
-        decorations.push(Decoration.widget(position, () => {
-          // Zero-flow markers never wrap a paragraph or add a row after an image.
-          // Text markers sit at the last character; other blocks use their top-right corner.
-          const marker = document.createElement('span');
-          marker.className = inline ? 'nb-annotation-inline-marker' : 'nb-annotation-block-marker';
-          marker.contentEditable = 'false';
-          const button = document.createElement('button');
-          button.type = 'button'; button.className = 'nb-annotation-indicator'; button.textContent = '?';
-          button.setAttribute('aria-label', '打开补充说明'); button.dataset.annotationId = anchor.id;
-          button.contentEditable = 'false';
-          marker.append(button);
-          return marker;
-        }, { key: `annotation-${anchor.id}-${position}-${inline}`, side: -1, stopEvent: () => true }));
+        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: `nb-annotation-block-anchor${inline ? ' nb-annotation-text-block' : ''}`, 'data-annotation-id': anchor.id }, { annotationId: anchor.id }));
+        // A custom view owns its toolbar/frame geometry; document positions do not.
+        if (block && (block.type.name === 'table' || markerOwners.has(block.type.name))) continue;
+        decorations.push(Decoration.widget(position, () => createAnnotationMarker(anchor.id, inline ? 'inline' : 'block'),
+          { key: `annotation-${anchor.id}-${position}-${inline}`, side: -1, stopEvent: () => true }));
       }
       return DecorationSet.create(doc, decorations);
 }
@@ -100,14 +90,14 @@ function orphanIds(records: Map<string, AnnotationRecord>, anchors: AnnotationAn
   return [...records.keys()].filter(id => !referenced.has(id));
 }
 
-export function createAnnotationIndex(doc: ProseMirrorNode): AnnotationIndex {
+export function createAnnotationIndex(doc: ProseMirrorNode, markerOwners: ReadonlySet<string> = new Set()): AnnotationIndex {
   const records = new Map<string, AnnotationRecord>(), found: AnnotationAnchor[] = [];
   scan(doc, { from: 0, to: doc.content.size }, records, found);
   const anchors = mergeAnchors(found);
-  return { records, anchors, decorations: decorationsFor(doc, records, anchors), orphanIds: orphanIds(records, anchors) };
+  return { records, anchors, decorations: decorationsFor(doc, records, anchors, markerOwners), orphanIds: orphanIds(records, anchors) };
 }
 
-export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex): AnnotationIndex {
+export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex, markerOwners: ReadonlySet<string> = new Set()): AnnotationIndex {
   if (!tr.docChanged) return previous;
   const ranges = touchedRanges(tr), records = new Map<string, AnnotationRecord>();
   for (const [id, record] of previous.records) {
@@ -123,18 +113,24 @@ export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex
   for (const range of ranges) scan(tr.doc, range, records, found);
   const anchors = mergeAnchors(found);
   const unchanged = anchors.length === mapped.length && anchors.every((anchor, index) => {
-    const other = mapped[index]; return anchor.id === other.id && anchor.from === other.from && anchor.to === other.to && anchor.block === other.block;
+    const other = mapped[index];
+    // setNodeMarkup preserves an anchor's range while replacing its opening token.
+    // Mapping drops that node decoration (and can change its view layout), so rebuild it.
+    const boundaryChanged = anchor.block && ranges.some(range => range.from <= anchor.from && range.to > anchor.from);
+    return !boundaryChanged && anchor.id === other.id && anchor.from === other.from && anchor.to === other.to && anchor.block === other.block;
   }) && records.size === previous.records.size && [...records.keys()].every(id => previous.records.has(id));
   return { records, anchors, orphanIds: orphanIds(records, anchors),
-    decorations: unchanged ? previous.decorations.map(tr.mapping, tr.doc) : decorationsFor(tr.doc, records, anchors) };
+    decorations: unchanged ? previous.decorations.map(tr.mapping, tr.doc) : decorationsFor(tr.doc, records, anchors, markerOwners) };
 }
 
 export const AnnotationBehavior = Extension.create({
   name: 'annotationBehavior',
   addProseMirrorPlugins() {
+    // Ownership is explicit: schema-only/default views retain their widget fallback.
+    const markerOwners = new Set(this.editor.extensionManager.extensions.filter(extension => extension.options.ownsAnnotationMarker).map(extension => extension.name));
     return [new Plugin<AnnotationIndex>({
       key: annotationIndexKey,
-      state: { init: (_, state) => createAnnotationIndex(state.doc), apply: updateAnnotationIndex },
+      state: { init: (_, state) => createAnnotationIndex(state.doc, markerOwners), apply: (tr, previous) => updateAnnotationIndex(tr, previous, markerOwners) },
       props: {
         decorations: state => annotationIndexKey.getState(state)?.decorations ?? DecorationSet.empty,
         nodeViews: { annotationStore: () => {

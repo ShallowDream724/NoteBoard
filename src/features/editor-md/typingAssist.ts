@@ -1,12 +1,13 @@
 import { Extension } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
-import { Plugin } from '@tiptap/pm/state';
+import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import { resolveShortcut, isRetiredShortcut } from '../../core/shortcutBindings';
 import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { selectionPresentation } from '../document-style/selectionPresentation';
 import { setParagraphPresentation } from '../document-style/documentStyles';
 import type { Editor } from '@tiptap/core';
+import { dispatchDiscreteEdit } from './discreteEdit';
 
 /** Tables, list nesting and embedded code editors retain their own Tab keys. */
 export function handleProseTab(editor: Editor, backwards = false): boolean {
@@ -25,6 +26,19 @@ export function handleProseTab(editor: Editor, backwards = false): boolean {
   const settings = useSettingsStore.getState().settings.editor;
   const size = Math.max(1, Math.min(8, Math.trunc(settings.tabSize) || 2));
   view.dispatch(state.tr.insertText(settings.insertSpaces === false ? '\t' : ' '.repeat(size)).scrollIntoView());
+  return true;
+}
+
+/** Delete only the empty paragraph, before the default input-rule undo shortcut. */
+function removeEmptyParagraphAfterDivider(editor: Editor): boolean {
+  const { state, view } = editor, { selection } = state, { $from } = selection;
+  if (view.composing || !selection.empty || $from.parent.type.name !== 'paragraph' || $from.parent.content.size) return false;
+  const start = $from.before(), parent = $from.node(-1), index = $from.index(-1);
+  const divider = index > 0 ? parent.child(index - 1) : null;
+  if (divider?.type.name !== 'horizontalRule' || !parent.canReplace(index, index + 1)) return false;
+  const tr = state.tr.delete(start, $from.after());
+  tr.setSelection(NodeSelection.create(tr.doc, start - divider.nodeSize));
+  dispatchDiscreteEdit(view, tr.scrollIntoView());
   return true;
 }
 
@@ -52,6 +66,7 @@ export const MarkdownTypingKeys = Extension.create({
     return {
       Tab: () => handleProseTab(this.editor),
       'Shift-Tab': () => handleProseTab(this.editor, true),
+      Backspace: () => removeEmptyParagraphAfterDivider(this.editor),
       Enter: () => {
         const { state, view } = this.editor;
         const { $from, empty } = state.selection;

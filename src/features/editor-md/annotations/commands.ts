@@ -1,5 +1,5 @@
 import type { Editor, JSONContent } from '@tiptap/core';
-import { Fragment } from '@tiptap/pm/model';
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection, type Selection } from '@tiptap/pm/state';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import { annotationAnchors, annotationBodyContent, annotationId, collectAnnotations, newAnnotationId } from './model';
@@ -49,24 +49,29 @@ export function selectedAnnotationId(editor: Editor, selection = editor.state.se
   return found;
 }
 
+/** Keep legacy divider attributes readable while excluding layout-only blocks from creation. */
+export function canAnnotateBlock(node: ProseMirrorNode): boolean {
+  return node.type.name !== 'horizontalRule' && Object.hasOwn(node.attrs, 'annotationId');
+}
+
 export function canAddAnnotation(editor: Editor, selection = editor.state.selection): boolean {
   const { schema } = editor.state;
   if (!schema.nodes.annotationStore || !schema.marks.annotationReference || selection.empty || selectedAnnotationId(editor, selection)) return false;
   for (let depth = selection.$from.depth; depth > 0; depth--) if (selection.$from.node(depth).type.name.startsWith('annotation')) return false;
-  if (selection instanceof NodeSelection) return Object.hasOwn(selection.node.attrs, 'annotationId');
+  if (selection instanceof NodeSelection) return canAnnotateBlock(selection.node);
   let suitable = false;
   editor.state.doc.nodesBetween(selection.from, selection.to, (node, _pos, parent) => {
     if (suitable || node.type.name === 'annotationStore') return false;
     suitable = (node.isInline && !!parent?.type.allowsMarkType(schema.marks.annotationReference))
-      || (node.isLeaf && node.isBlock && Object.hasOwn(node.attrs, 'annotationId'));
+      || (node.isLeaf && node.isBlock && canAnnotateBlock(node));
   });
   return suitable;
 }
 
 export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 'paragraph' }], options: { id?: string; selection?: Selection; open?: boolean } = {}): string | null {
-  if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { addAnnotation(next, content, { ...options, selection: undefined }); }); return null; }
   const { state } = editor, { schema } = state, selection = options.selection ?? state.selection;
   if (!canAddAnnotation(editor, selection)) return null;
+  if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { addAnnotation(next, content, { ...options, selection: undefined }); }); return null; }
   const id = options.id === undefined ? newAnnotationId() : annotationId(options.id);
   if (!id || (options.id !== undefined && collectAnnotations(state.doc).has(id))) return null;
   let body;
@@ -78,7 +83,7 @@ export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 
     state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
       if (node.type.name === 'annotationStore' || node.type.name === 'annotationBody') return false;
       if (node.isInline) tr.addMark(Math.max(pos, selection.from), Math.min(pos + node.nodeSize, selection.to), schema.marks.annotationReference.create({ id }));
-      if (node.isLeaf && node.isBlock && Object.hasOwn(node.attrs, 'annotationId')) tr.setNodeMarkup(pos, undefined, { ...node.attrs, annotationId: id });
+      if (node.isLeaf && node.isBlock && canAnnotateBlock(node)) tr.setNodeMarkup(pos, undefined, { ...node.attrs, annotationId: id });
     });
   }
   if (selection instanceof NodeSelection ? tr.doc.nodeAt(selection.from)?.attrs.annotationId !== id : !annotationAnchors(tr.doc).some(anchor => anchor.id === id)) return null;

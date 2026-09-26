@@ -19,7 +19,7 @@ import { useFormattingUpdates } from './useFormattingUpdates';
 import './blockContextMenu.css';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 import { NodeSelection } from '@tiptap/pm/state';
-import { beginBlockAnnotation, openAnnotation } from './annotations/commands';
+import { beginBlockAnnotation, canAnnotateBlock, openAnnotation } from './annotations/commands';
 import { toggleConceal } from './rich-content/commands';
 import { ImageCollectionMenu } from './rich-content/ImageCollectionMenu';
 import { TableAlignmentMenu } from './TableAlignmentMenu';
@@ -39,6 +39,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
   const styled = text || type === 'mathBlock';
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
+  const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
   const selectNode = () => editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
   const grid = type === 'table' ? tableGrid(range.node) : null;
   const headerRow = grid?.cells.filter(cell => cell.row === 0), headerColumn = grid?.cells.filter(cell => cell.column === 0);
@@ -83,9 +84,9 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       <hr/>
     </>}
     {native && (type === 'table' || type === 'image') && <button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button>}
-    {native && Object.hasOwn(range.node.attrs, 'annotationId') && <button role="menuitem" type="button" onClick={() => action(() => { const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
+    {native && showAnnotation && <button role="menuitem" type="button" onClick={() => action(() => { const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
     {native && Object.hasOwn(range.node.attrs, 'concealed') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); toggleConceal(editor); })}><EyeOff size={16}/>{range.node.attrs.concealed ? '取消模糊' : '模糊内容'}</button>}
-    {native && (Object.hasOwn(range.node.attrs, 'annotationId') || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
+    {native && (showAnnotation || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
     <button role="menuitem" type="button" onClick={() => action(() => copy(true))}><Scissors size={16}/>剪切</button>
     <button role="menuitem" type="button" onClick={() => action(() => copy(false))}><Copy size={16}/>复制</button>
     <button role="menuitem" type="button" onClick={() => action(() => deleteBlock(editor, pos))}><Trash2 size={16}/>删除</button>

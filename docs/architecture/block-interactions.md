@@ -19,3 +19,5 @@
 `dispatchEditorShortcut` 规范化目录中的按键名，直接执行 ProseMirror keymap。这里不能使用 TipTap `keyboardShortcut` 的事务捕获：应用级撤销适配器需要同步读取替换后的文档，且替换元数据不能丢失。键盘和工具栏均进入 `documentHistory`，原生文档与 Markdown 共用时间线。`documentKeyboardHistory.test` 挂载真实协调器验证物理 Ctrl+Z、重做、尺寸操作和块移动，不用底层 `editor.commands.undo()` 替代应用撤销验收。
 
 提示块转换由 `canWrapBlockInCallout` 统一约束菜单与命令，只接收正文、标题、引用与列表；表格、分隔线、代码及媒体保留各自专用操作。表格和单图的图注入口使用共享 `editFigureCaption`，整块说明使用显式位置的 `beginBlockAnnotation`，不依赖可能被表格插件规范化的当前选区。
+
+分隔线后的空段落按 Backspace 时，由 `MarkdownTypingKeys` 在默认输入规则撤销之前处理：仅删除空段并选中分隔线，不将已经形成的分隔线还原为星号。操作只检查相邻块，保留父容器 schema 约束，并作为独立历史操作撤销、重做。

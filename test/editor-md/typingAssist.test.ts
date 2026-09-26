@@ -10,6 +10,27 @@ import { initShortcuts } from '../../src/core/shortcuts';
 import { sourceTypingAssist } from '../../src/features/editor-md/sourceTypingAssist';
 
 describe('Markdown interactive conveniences', () => {
+  it('Backspace removes the empty paragraph after a divider without undoing the divider input rule', () => {
+    const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<p>before</p><p>***</p><p>after</p>' });
+    try {
+      editor.commands.setTextSelection(12);
+      const press = (key: string) => editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      press('Enter');
+      expect(editor.state.doc.child(1).type.name).toBe('horizontalRule');
+      expect(editor.state.selection.$from.parent.textContent).toBe('');
+      press('Backspace');
+      expect(editor.state.doc.child(1).type.name).toBe('horizontalRule');
+      expect(editor.state.doc.childCount).toBe(3);
+      expect(editor.state.doc.child(2).textContent).toBe('after');
+      expect(editor.state.doc.textContent).not.toContain('*');
+      editor.commands.undo();
+      expect(editor.state.doc.child(1).type.name).toBe('horizontalRule');
+      expect(editor.state.doc.childCount).toBe(4);
+      editor.commands.redo();
+      expect(editor.state.doc.childCount).toBe(3);
+    } finally { editor.destroy(); }
+  });
+
   it('physical Ctrl digits work in both editors even when the input language changes event.key', () => {
     const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<p>heading</p>' });
     const source = new EditorView({ state: EditorState.create({ doc: 'heading', extensions: [sourceTypingAssist] }) });
