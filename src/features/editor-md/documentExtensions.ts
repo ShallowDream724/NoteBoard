@@ -13,7 +13,7 @@ import { MathInlineNode, MathBlockNode, AlertNode, ImageNode, MermaidNode, Plant
 import { serializeMarkdownFromDoc, type MarkdownManagerLike } from './serialize';
 import { createMarkdownLexer } from './markdownLexer';
 import { MarkdownOrderedList, MarkdownTaskList } from './markdownLists';
-import { TextColor, BlockPresentation } from '../document-style/documentStyles';
+import { TextColor, BlockPresentation } from '../document-style/documentStyleSchema';
 import { installPresentationCodec } from '../document-style/presentationMetadata';
 import { richContentGrammar } from './rich-content/schema';
 import { annotationSchemaExtensions } from './annotations/schema';

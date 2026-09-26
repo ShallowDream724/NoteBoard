@@ -20,6 +20,8 @@ NB 与 MD 可视编辑共用 `clipboard/external.ts`，在主线程与 Worker �
 
 ## 调度、取消与历史
 
+解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。
+
 MD 源码模式使用 CodeMirror 的文字粘贴，保留 Markdown 原文；切回可视模式先提交源码快照，再通过同一文档解析器渲染。源码粘贴不采用 HTML 备选格式，也不自动添加 Markdown 转义。NB 原生 JSON 源码不增加 Markdown 自动识别。
 
 24,000 字符以内的片段走同步快路径。更大的 HTML 由独立 Worker 使用现有 `linkedom` 解析和规范化；较大的结构化文档/表格片段、Markdown、TSV 推断及纯文本同样在 Worker 转换，包含表格单元格内的粘贴。主线程按约 8ms 时间片自底向上构造 schema 节点，因此一个大表格内部也能让出事件循环。等待时只插入事务映射的状态装饰，不改变正文；最终插入为一次独立可撤销操作。

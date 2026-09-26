@@ -1,45 +1,14 @@
-import { Extension, Mark, type Editor } from '@tiptap/core';
+import type { Editor } from '@tiptap/core';
 import { documentColor } from './colors';
 import type { TextStylePair } from './stylePreference';
 import type { Transaction } from '@tiptap/pm/state';
 import { editorSupportsCapability, runWithDocumentCapability } from '../document-format/featureGate';
-import { INDENT_BLOCK_TYPES, selectionPresentation } from './selectionPresentation';
+import { selectionPresentation } from './selectionPresentation';
 import { alignTableSelection } from '../editor-md/tablePresentationCommands';
 import { dispatchDiscreteEdit } from '../editor-md/discreteEdit';
 import { styleSelectedCells } from './cellTextStyle';
 
-export const TextColor = Mark.create({
-  name: 'textColor',
-  addAttributes() { return { color: { default: null } }; },
-  parseHTML() { return [{ tag: 'span[data-text-color]', getAttrs: node => ({ color: documentColor(node.getAttribute('data-text-color')) }) }]; },
-  renderHTML({ mark }) { const color = documentColor(mark.attrs.color); return ['span', color ? { 'data-text-color': color, style: `color:${color};print-color-adjust:exact` } : {}, 0]; },
-  renderMarkdown(node, helpers) { return helpers.renderChildren(node); },
-});
-export const BlockPresentation = Extension.create({
-  name: 'blockPresentation',
-  addGlobalAttributes() { return [
-    { types: ['mathBlock'], attributes: Object.fromEntries(['textColor', 'background'].map(key => [key, {
-      default: null,
-      parseHTML: (element: HTMLElement) => documentColor(key === 'textColor' ? element.style.color : element.style.backgroundColor),
-      renderHTML: (attrs: Record<string, unknown>) => documentColor(attrs[key]) ? { style: `${key === 'textColor' ? 'color' : 'background-color'}:${documentColor(attrs[key])};print-color-adjust:exact` } : {},
-    }])) },
-    { types: ['paragraph', 'heading'], attributes: {
-      textAlign: { default: null,
-        parseHTML: element => ['left','center','right'].includes(element.style.textAlign) ? element.style.textAlign : null,
-        renderHTML: attrs => ['left','center','right'].includes(attrs.textAlign) ? { style: `text-align:${attrs.textAlign}` } : {} },
-    } },
-    { types: INDENT_BLOCK_TYPES, attributes: {
-      indent: { default: 0,
-        parseHTML: element => Math.max(0, Math.min(8, Number(element.getAttribute('data-indent')) || 0)),
-        renderHTML: attrs => Number.isInteger(attrs.indent) && attrs.indent > 0 && attrs.indent <= 8 ? { 'data-indent': attrs.indent, style: `margin-inline-start:${attrs.indent * 2}em` } : {} },
-    } },
-    { types: ['tableCell', 'tableHeader'], attributes: {
-      verticalAlign: { default: null,
-        parseHTML: element => ['top','middle','bottom'].includes(element.style.verticalAlign) ? element.style.verticalAlign : null,
-        renderHTML: attrs => ['top','middle','bottom'].includes(attrs.verticalAlign) ? { style: `vertical-align:${attrs.verticalAlign}` } : {} },
-    } },
-  ]; },
-});
+export { TextColor, BlockPresentation } from './documentStyleSchema';
 export function setTextColor(editor: Editor, color: string | null): boolean {
   const scope = selectionPresentation(editor.state); if (!scope.inline && !scope.mathBlocks.length) return false;
   if (color && !editorSupportsCapability(editor, 'textColor')) return runWithDocumentCapability(editor, 'textColor', next => setTextColor(next, color));

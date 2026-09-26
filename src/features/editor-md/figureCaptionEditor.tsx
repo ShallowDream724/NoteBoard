@@ -7,7 +7,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { createRoot } from 'react-dom/client';
 import { EditorBubbleMenu } from './bubbleMenu';
 import { MarkdownHighlight } from './markdownHighlight';
-import { TextColor } from '../document-style/documentStyles';
+import { TextColor } from '../document-style/documentStyleSchema';
 import { figureCaptionContent, validateFigureCaptionContent } from './figureCaption';
 import { setFigureCaptionContent } from './figureCaptionCommands';
 import { initializeEditorDocument, serializeNativeNode } from './editorDocumentCodec';
