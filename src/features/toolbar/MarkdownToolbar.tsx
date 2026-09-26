@@ -631,7 +631,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       />
       <ToolbarButton
         icon={<CheckSquare size={15} strokeWidth={2.2} />}
-        title="任务列表"
+        title="待办"
         disabled={!canLists || !isSourceMode && !editor?.can().toggleTaskList()}
         collapsePriority={80}
         shortcut="Ctrl+Shift+9"

@@ -60,7 +60,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level}><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
       {([{ label:'无序列表', Icon:List, command:'toggleBulletList' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList' },
-        { label:'任务列表', Icon:ListTodo, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
+        { label:'待办', Icon:ListTodo, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
         { label:'引用', Icon:Quote, command:'toggleBlockquote' }] as const).map(({ label, Icon, command }) =>
         <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
       {native && canWrapCallout && <Tooltip content="设为提示块"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}

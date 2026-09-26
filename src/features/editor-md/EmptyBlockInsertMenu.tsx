@@ -41,16 +41,8 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
       <div className="nb-empty-block-grid">
         {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] })}
         {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] })}
-        {block('任务列表', <ListTodo size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] })}
+        {block('待办', <ListTodo size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] })}
         {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos))}
-      </div>
-    </div>
-    <div className="nb-empty-block-group" role="group" aria-label="图片">
-      <div className="nb-empty-block-label">图片</div>
-      <div className="nb-empty-block-grid">
-        {item('本地图片', <Image size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'local'))}
-        {item('图片链接', <Link2 size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'url'))}
-        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, template === 'carousel' ? <GalleryHorizontalEnd size={16}/> : <Grid2X2 size={16}/>, imageCollectionTemplate(template), 'gallery'))}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="内容块">
@@ -64,6 +56,14 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
       </div>
       <div className="nb-empty-block-table" role="group" aria-label="表格尺寸"><span>表格</span>{[2, 3, 4].map(size =>
         <button key={size} type="button" role="menuitem" aria-label={`插入 ${size} × ${size} 表格`} onClick={() => insert(tableContent(size))}>{size} × {size}</button>)}</div>
+    </div>
+    <div className="nb-empty-block-group" role="group" aria-label="图片">
+      <div className="nb-empty-block-label">图片</div>
+      <div className="nb-empty-block-grid">
+        {item('本地图片', <Image size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'local'))}
+        {item('图片链接', <Link2 size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'url'))}
+        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, template === 'carousel' ? <GalleryHorizontalEnd size={16}/> : <Grid2X2 size={16}/>, imageCollectionTemplate(template), 'gallery'))}
+      </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="公式与图表">
       <div className="nb-empty-block-label">公式与图表</div>

@@ -376,7 +376,7 @@
   },
   {
     "id": "markdown.taskList",
-    "label": "任务列表",
+    "label": "待办",
     "group": "Markdown",
     "contexts": [
       "markdown",

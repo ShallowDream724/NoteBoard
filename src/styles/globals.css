@@ -942,7 +942,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   padding-left: 1.5em;
 }
 
-/* 任务列表 TaskList & TaskItem（高度与纵向中心精确对准动态行高） */
+/* 待办 TaskList & TaskItem（高度与纵向中心精确对准动态行高） */
 .ProseMirror ul[data-type="taskList"] {
   list-style: none !important;
   padding-left: 0 !important;
@@ -1016,7 +1016,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   font-size: inherit;
 }
 
-/* 嵌套任务列表缩进与边距 */
+/* 嵌套待办缩进与边距 */
 .ProseMirror ul[data-type="taskList"] ul[data-type="taskList"] {
   padding-left: 1.6em !important;
   margin-top: 0.15em !important;
