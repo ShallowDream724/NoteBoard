@@ -7,6 +7,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
 import { BLOCK_MOVE_META, foldedSectionEnd, headingFoldingKey } from './headingFolding';
 import { isListItem, canMoveListItem, moveListItem } from './listItemActions';
+import { blockInteractionScope, isBlockInteractionTarget } from './blockInteractionScope';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
 export interface TopLevelBlockInfo {
@@ -38,14 +39,19 @@ export function findTopLevelBlockElement(
   target: EventTarget | null,
 ): HTMLElement | null {
   let element = target instanceof Element ? target : null;
+  if (!element || element.closest('.ProseMirror') !== editorDom) return null;
+  const disclosure = element.closest('.nb-disclosure');
+  if (disclosure?.parentElement?.closest('.nb-disclosure')) return null;
+  const body = element.closest('.nb-disclosure-body');
+  const container = body ?? editorDom;
   const item = element?.closest('li');
-  if (item instanceof HTMLElement && editorDom.contains(item) && !item.closest('td,th')) return item;
+  if (item instanceof HTMLElement && container.contains(item) && !item.closest('td,th')) return item;
 
-  while (element && element.parentElement && element.parentElement !== editorDom) {
+  while (element && element.parentElement && element.parentElement !== container) {
     element = element.parentElement;
   }
 
-  return element instanceof HTMLElement && element.parentElement === editorDom ? element : null;
+  return element instanceof HTMLElement && element.parentElement === container ? element : null;
 }
 
 /**
@@ -57,19 +63,19 @@ export function getTopLevelBlockInfo(
   element: HTMLElement,
 ): TopLevelBlockInfo | null {
   if (element.classList.contains('ProseMirror-widget')) return null;
-  const item = element.tagName === 'LI' && view.dom.contains(element) && !element.closest('td,th');
-  if (element.parentElement !== view.dom && !item) return null;
+  if (!view.dom.contains(element)) return null;
 
   try {
     const domPos = view.posAtDOM(element, 0);
     const $domPos = view.state.doc.resolve(domPos);
-    let depth = $domPos.depth;
-    if (item) while (depth > 0 && !isListItem($domPos.node(depth))) depth--;
-    const pos = item && depth ? $domPos.before(depth) : $domPos.depth === 0 ? domPos : $domPos.before(1);
-    const $topLevelPos = view.state.doc.resolve(pos);
+    let pos = domPos;
+    for (let depth = $domPos.depth; depth > 0; depth--) {
+      const candidate = $domPos.before(depth);
+      if (view.nodeDOM(candidate) === element) { pos = candidate; break; }
+    }
     const node = view.state.doc.nodeAt(pos);
 
-    if (($topLevelPos.depth !== 0 && !isListItem(node)) || !node?.isBlock || ['documentPresentation', 'annotationStore'].includes(node.type.name)) return null;
+    if (!node || !isBlockInteractionTarget(view.state.doc, pos)) return null;
     return { element, pos, node };
   } catch {
     // NodeView 正在重绘或 DOM 已失效时不生成落点，等待下一次指针事件重新解析。
@@ -81,21 +87,27 @@ export function getTopLevelBlockInfo(
  * 按垂直坐标解析最近的顶层块边界。
  * 仅遍历 ProseMirror 直接子节点，因此即使指针位于 td、li、pre 内部，结果仍是其所属顶层块的前/后边界。
  */
-function dropEntries(view: EditorView, items: boolean | undefined): TopLevelBlockInfo[] {
-  const elements = Array.from(view.dom.children).filter((element): element is HTMLElement =>
+function dropEntries(view: EditorView, items: boolean, scope: number): TopLevelBlockInfo[] {
+  const scopeDom = scope === -1 ? view.dom : view.nodeDOM(scope);
+  const container = scope === -1 ? view.dom : scopeDom instanceof Element ? scopeDom.querySelector(':scope > .nb-disclosure-body') : null;
+  if (!container || container instanceof HTMLElement && container.hidden) return [];
+  const parent = scope === -1 ? view.state.doc : view.state.doc.nodeAt(scope)!;
+  const start = scope === -1 ? 0 : scope + 1;
+  const elements = Array.from(container.children).filter((element): element is HTMLElement =>
     element instanceof HTMLElement && !element.classList.contains('ProseMirror-widget'));
   const entries: TopLevelBlockInfo[] = [];
   // One parallel model/DOM walk avoids posAtDOM's repeated sibling-prefix
   // walks for every drop target. Custom top-level widget layouts fall back.
-  if (elements.length === view.state.doc.childCount) {
-    view.state.doc.forEach((node, pos, index) => {
+  if (elements.length === parent.childCount) {
+    parent.forEach((node, offset, index) => {
+      const pos = start + offset;
       const element = elements[index];
       if (['documentPresentation', 'annotationStore'].includes(node.type.name) || element.classList.contains('nb-heading-fold-hidden')) return;
       if (!items || !element.matches('ul,ol')) { entries.push({ element, node, pos }); return; }
       const candidates = [...element.querySelectorAll('li')].filter(item => !item.closest('td,th'));
       const models: Array<{ node: ProseMirrorNode; pos: number }> = [];
       node.descendants((child, offset) => {
-        if (child.type.spec.tableRole === 'table') return false;
+        if (child.type.spec.tableRole === 'table' || child.type.name === 'disclosure') return false;
         if (isListItem(child)) models.push({ node: child, pos: pos + 1 + offset });
       });
       if (candidates.length === models.length) models.forEach((model, i) => entries.push({ ...model, element: candidates[i] }));
@@ -118,13 +130,20 @@ export function resolveTopLevelDropTarget(
   sourcePos?: number,
 ): TopLevelDropTarget | null {
   const items = sourcePos !== undefined && isListItem(view.state.doc.nodeAt(sourcePos));
+  const scope = sourcePos === undefined ? -1 : blockInteractionScope(view.state.doc.resolve(sourcePos));
+  if (scope === null) return null;
   const folding = headingFoldingKey.getState(view.state);
   let cached = dropIndexes.get(view);
-  if (!cached || cached.doc !== view.state.doc || cached.folding !== folding || cached.items !== items) {
-    cached = { doc: view.state.doc, folding, items, entries: dropEntries(view, items) }; dropIndexes.set(view, cached);
+  if (!cached || cached.doc !== view.state.doc || cached.folding !== folding || cached.items !== items || cached.scope !== scope) {
+    cached = { doc: view.state.doc, folding, items, scope, entries: dropEntries(view, items, scope) }; dropIndexes.set(view, cached);
   }
   const entries = cached.entries;
   if (entries.length === 0) return null;
+  if (scope !== -1) {
+    const container = entries[0].element.closest('.nb-disclosure-body');
+    const rect = container?.getBoundingClientRect();
+    if (!rect || clientY < rect.top || clientY > rect.bottom) return null;
+  }
   const rectOf = (entry: TopLevelBlockInfo) => (isListItem(entry.node) ? entry.element.firstElementChild ?? entry.element : entry.element).getBoundingClientRect();
   let low = 0, high = entries.length;
   while (low < high) {
@@ -151,7 +170,7 @@ export function resolveTopLevelDropTarget(
     element: last.element,
   };
 }
-const dropIndexes = new WeakMap<EditorView, { doc: ProseMirrorNode; folding: unknown; items: boolean; entries: TopLevelBlockInfo[] }>();
+const dropIndexes = new WeakMap<EditorView, { doc: ProseMirrorNode; folding: unknown; items: boolean; scope: number; entries: TopLevelBlockInfo[] }>();
 
 /**
  * 校验块移动是否同时满足：源节点位于文档顶层、目标是顶层边界、目标不在源节点自身范围内。
@@ -170,13 +189,16 @@ export function isTopLevelBlockMoveAllowed(
     const $source = doc.resolve(sourcePos);
     const $insert = doc.resolve(insertPos);
     const sourceNode = doc.nodeAt(sourcePos);
+    if (!isBlockInteractionTarget(doc, sourcePos)) return false;
+    const scope = blockInteractionScope($source);
+    if (scope === null || blockInteractionScope($insert) !== scope) return false;
     if (isListItem(sourceNode)) return canMoveListItem(doc, sourcePos, insertPos);
 
-    if ($source.depth !== 0 || $insert.depth !== 0 || !sourceNode?.isBlock || sourceNode.type.name === 'documentPresentation') return false;
+    if ($source.parent !== $insert.parent || !sourceNode?.isBlock) return false;
     if (insertPos === 0 && doc.firstChild?.type.name === 'documentPresentation') return false;
 
     const end = sourceEnd ?? sourcePos + sourceNode.nodeSize;
-    if (end < sourcePos + sourceNode.nodeSize || end > doc.content.size || doc.resolve(end).depth !== 0) return false;
+    if (end < sourcePos + sourceNode.nodeSize || end > doc.content.size || doc.resolve(end).parent !== $source.parent) return false;
     if (insertPos >= sourcePos && insertPos <= end) return false;
 
     return $insert.parent.canReplaceWith(
@@ -202,7 +224,7 @@ export function moveTopLevelBlock(
 ): BlockMoveResult | null {
   const { state } = view;
   const sourceNode = state.doc.nodeAt(sourcePos);
-  if (isListItem(sourceNode)) return moveListItem(view, sourcePos, insertPos);
+  if (isListItem(sourceNode)) return isTopLevelBlockMoveAllowed(state.doc, sourcePos, insertPos) ? moveListItem(view, sourcePos, insertPos) : null;
 
   const sourceEnd = foldedSectionEnd(state, sourcePos) ?? sourcePos + (sourceNode?.nodeSize ?? 0);
   if (!sourceNode || !isTopLevelBlockMoveAllowed(state.doc, sourcePos, insertPos, sourceEnd)) {
@@ -219,8 +241,7 @@ export function moveTopLevelBlock(
     const $mappedInsert = tr.doc.resolve(mappedInsertPos);
 
     if (
-      $mappedInsert.depth !== 0
-      || !$mappedInsert.parent.canReplace(
+      !$mappedInsert.parent.canReplace(
         $mappedInsert.index(),
         $mappedInsert.index(),
         fragment,

@@ -4,6 +4,9 @@ import { runDiscreteEdit, dispatchDiscreteEdit } from '../discreteEdit';
 import { editorSupportsCapability, runWithDocumentCapability } from '../../document-format/featureGate';
 
 export type ImageTemplate = 4 | 6 | 9 | 'carousel';
+export const IMAGE_TEMPLATES: { template: ImageTemplate; label: string }[] = [
+  { template: 4, label: '四宫格' }, { template: 6, label: '六宫格' }, { template: 9, label: '九宫格' }, { template: 'carousel', label: '图片轮播' },
+];
 export function imageCollectionTemplate(template: ImageTemplate): JSONContent {
   return { type: 'imageCollection', attrs: { layout: template === 'carousel' ? 'carousel' : 'grid', columns: template === 6 || template === 9 ? 3 : 2 },
     content: Array.from({ length: template === 'carousel' ? 3 : template }, () => ({ type: 'imageSlot' })) };

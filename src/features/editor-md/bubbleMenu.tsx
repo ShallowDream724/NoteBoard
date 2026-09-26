@@ -39,6 +39,7 @@ import { documentTableStyle } from './documentPresentation';
 import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distributeTableRows, tableDistributionState, tableDeleteScope, deleteTableSelection } from './tablePresentationCommands';
 import { AnnotationButton, RichSelectionMenu } from './rich-content/menus';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
+import { selectionAllowsAuxiliaryControls } from './blockInteractionScope';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -204,6 +205,7 @@ export function EditorBubbleMenu({
     if (currentEditor.isDestroyed) return false;
     if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
+    if (!selectionAllowsAuxiliaryControls(selection)) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
     // 不在代码块中显示浮层菜单
     if (currentEditor.isActive('codeBlock')) return false;
@@ -413,6 +415,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       }
 
       const { selection } = editor.state;
+      if (!selectionAllowsAuxiliaryControls(selection)) { setShow(false); return; }
       const { $from } = selection;
 
       // 判断是否有非空普通文本选区（此时用户正在进行划词文本格式化，隐藏表格工具栏避免遮挡）

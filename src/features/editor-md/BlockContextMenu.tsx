@@ -25,6 +25,8 @@ import { ImageCollectionMenu } from './rich-content/ImageCollectionMenu';
 import { TableAlignmentMenu } from './TableAlignmentMenu';
 import { canWrapBlockInCallout, wrapBlockInCallout } from './alertCommands';
 import { editFigureCaption } from './figureCaptionCommands';
+import { isEmptyParagraph } from './blockInteractionScope';
+import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -36,6 +38,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const native = useNativeFeatureVisibility();
   useFormattingUpdates(editor);
   const range = blockRange(editor, pos); if (!range) return null;
+  if (isEmptyParagraph(range.node)) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem','codeBlock'].includes(type);
   const styled = text || type === 'mathBlock';
   const canWrapCallout = canWrapBlockInCallout(editor, pos);

@@ -1,13 +1,14 @@
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { Decoration, NodeView, ViewMutationRecord } from '@tiptap/pm/view';
-import { TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { createDisclosureTriangle } from '../../../components/DisclosureTriangle';
 import { ImageCollection, ImageSlot, Disclosure } from './schema';
 import { insertLocalImageWithDialog } from '../imagePaste';
 import { dispatchDiscreteEdit } from '../discreteEdit';
 import { collectionPresentation } from './collectionPresentation';
 import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } from '../annotations/marker';
+import { appendDisclosureParagraph, needsDisclosureTail } from './disclosureEditing';
 import './richContent.css';
 import './carousel.css';
 
@@ -142,6 +143,7 @@ class DisclosureView implements NodeView {
   dom = document.createElement('section'); contentDOM = document.createElement('div');
   private title = document.createElement('input'); private toggle: HTMLButtonElement; private open: boolean;
   private annotation: HTMLSpanElement;
+  private tail: HTMLButtonElement;
   constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined, decorations: readonly Decoration[]) {
     this.dom.className = 'nb-disclosure'; this.contentDOM.className = 'nb-disclosure-body'; this.open = node.attrs.open;
     const header = document.createElement('div'); header.className = 'nb-disclosure-header'; header.contentEditable = 'false';
@@ -151,16 +153,30 @@ class DisclosureView implements NodeView {
     this.title.onblur = () => this.commit();
     this.title.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); } else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); } };
     this.annotation = createAnnotationMarker(annotationMarkerId(decorations), 'toolbar');
-    header.append(this.toggle, this.title, this.annotation); this.dom.append(header, this.contentDOM); this.paint();
+    this.tail = button('在折叠块末尾继续输入', 'nb-disclosure-tail', () => this.continueWriting()); this.tail.textContent = '';
+    this.contentDOM.addEventListener('keydown', this.onTailKeyDown);
+    header.append(this.toggle, this.title, this.annotation); this.dom.append(header, this.contentDOM, this.tail); this.paint();
   }
+  private continueWriting() {
+    const pos = this.getPos(); if (pos === undefined || !this.editor.isEditable) return;
+    const tr = this.editor.state.tr;
+    if (appendDisclosureParagraph(tr, pos)) { dispatchDiscreteEdit(this.editor.view, tr.scrollIntoView()); this.editor.view.focus(); }
+  }
+  private onTailKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || !['Enter', 'ArrowDown'].includes(event.key) || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+    const pos = this.getPos(), selection = this.editor.state.selection;
+    if (pos === undefined || !(selection instanceof NodeSelection) || !needsDisclosureTail(this.node) || selection.to !== pos + this.node.nodeSize - 1) return;
+    event.preventDefault(); this.continueWriting();
+  };
   private commit() {
     const pos = this.getPos(), title = this.title.value.trim(); if (pos === undefined || title === this.node.attrs.title) return;
     dispatchDiscreteEdit(this.editor.view, this.editor.state.tr.setNodeAttribute(pos, 'title', title));
   }
-  private paint() { this.contentDOM.hidden = !this.open; this.dom.dataset.open = String(this.open); this.toggle.setAttribute('aria-expanded', String(this.open)); const label = this.open ? '收起内容' : '展开内容'; this.toggle.title = label; this.toggle.setAttribute('aria-label', label); }
+  private paint() { this.contentDOM.hidden = !this.open; this.tail.hidden = !this.open || !needsDisclosureTail(this.node) || !this.editor.isEditable; this.dom.dataset.open = String(this.open); this.toggle.setAttribute('aria-expanded', String(this.open)); const label = this.open ? '收起内容' : '展开内容'; this.toggle.title = label; this.toggle.setAttribute('aria-label', label); }
   update(node: Node, decorations: readonly Decoration[]) { if (node.type !== this.node.type) return false; if (node.attrs.title !== this.node.attrs.title) this.title.value = node.attrs.title; if (node.attrs.open !== this.node.attrs.open) this.open = node.attrs.open; this.node = node; updateAnnotationMarker(this.annotation, annotationMarkerId(decorations)); this.paint(); return true; }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM) || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return !this.contentDOM.contains(event.target as globalThis.Node); }
+  destroy() { this.contentDOM.removeEventListener('keydown', this.onTailKeyDown); }
 }
 export const InteractiveImageCollection = ImageCollection.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new CollectionView(node, editor, getPos, decorations); } });
 export const InteractiveImageSlot = ImageSlot.extend<{ docKey: string }>({ addOptions() { return { docKey: '' }; }, addNodeView() { return ({ node, editor, getPos }) => new SlotView(node, editor, getPos, this.options.docKey); } });

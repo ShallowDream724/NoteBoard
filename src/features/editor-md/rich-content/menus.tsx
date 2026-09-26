@@ -3,12 +3,9 @@ import type { Editor } from '@tiptap/core';
 import { Image, Grid2X2, GalleryHorizontalEnd, MoreHorizontal, EyeOff, CircleHelp, X } from 'lucide-react';
 import { ToolbarButton, ToolbarDropdown, ToolbarDropdownItem } from '../../toolbar/ToolbarComponents';
 import { useNativeFeatureVisibility } from '../../document-format/featureGate';
-import { imageCollectionTemplate, insertImageCollection, selectionConcealed, toggleConceal, type ImageTemplate } from './commands';
+import { IMAGE_TEMPLATES, imageCollectionTemplate, insertImageCollection, selectionConcealed, toggleConceal } from './commands';
 import { beginAnnotation, openAnnotation, removeAnnotation, selectedAnnotationId } from '../annotations/commands';
 
-export const IMAGE_TEMPLATES: { template: ImageTemplate; label: string }[] = [
-  { template: 4, label: '四宫格' }, { template: 6, label: '六宫格' }, { template: 9, label: '九宫格' }, { template: 'carousel', label: '图片轮播' },
-];
 export function ImageInsertItems({ editor, onLocal, onNetwork, onDone }: { editor: Editor | null; onLocal(): void; onNetwork(): void; onDone(): void }) {
   const visible = useNativeFeatureVisibility();
   return <>
@@ -46,4 +43,4 @@ export function RichSelectionMenu({ editor }: { editor: Editor }) {
   </ToolbarDropdown>;
 }
 // Public recipe data is shared with authoring examples, without UI-only IDs.
-export { imageCollectionTemplate };
+export { IMAGE_TEMPLATES, imageCollectionTemplate };

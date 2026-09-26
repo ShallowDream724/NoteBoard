@@ -78,6 +78,7 @@ import { selectionPresentation } from '../document-style/selectionPresentation';
 import { insertCallout } from '../editor-md/alertCommands';
 import { CellSelection } from '@tiptap/pm/tables';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
+import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent, mathContent } from '../editor-md/insertContentRecipes';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -229,17 +230,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    if (type === 'inline') {
-      editor.chain().focus().insertContent({ type: 'mathInline', attrs: { latex: 'E=mc^2' } }).run();
-    } else {
-      editor.chain().focus().insertContent({ type: 'mathBlock', attrs: { latex: '' } }).run();
-    }
+    editor.chain().focus().insertContent(mathContent(type)).run();
   };
 
   const handleInsertMermaid = () => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const mermaidCode = '\n```mermaid\ngraph TD\n  A[开始] --> B[处理]\n  B --> C[完成]\n```\n';
+      const mermaidCode = `\n\`\`\`mermaid\n${DEFAULT_MERMAID_CODE}\n\`\`\`\n`;
       executeSourceAction((view) => {
         const { from } = view.state.selection.main;
         view.dispatch({ changes: { from, to: from, insert: mermaidCode } });
@@ -247,16 +244,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().insertContent({
-      type: 'mermaidBlock',
-      attrs: { code: 'graph TD\n  A[开始] --> B[处理]\n  B --> C[完成]' },
-    }).run();
+    editor.chain().focus().insertContent(diagramContent('mermaid')).run();
   };
 
   // 插入 Infographic 现代化信息图
   const handleInsertInfographic = () => {
     setInsertDropdownOpen(false);
-    const tmpl = `type: metric-cards\ntitle: 核心运营与业务指标\ndata:\n  - label: 日活跃用户\n    value: "128,450"\n    change: "+12.5%"\n    trend: up\n    color: blue\n  - label: 核心功能转化率\n    value: "38.6%"\n    change: "+3.2%"\n    trend: up\n    color: emerald`;
+    const tmpl = DEFAULT_INFOGRAPHIC_CODE;
     if (isSourceMode) {
       const infoSnippet = `\n\`\`\`infographic\n${tmpl}\n\`\`\`\n`;
       executeSourceAction((view) => {
@@ -266,10 +260,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().insertContent({
-      type: 'infographicBlock',
-      attrs: { code: tmpl },
-    }).run();
+    editor.chain().focus().insertContent(diagramContent('infographic')).run();
   };
 
   const handleInsertAlert = (kind?: 'note' | 'tip' | 'important' | 'warning' | 'caution') => {

@@ -81,7 +81,7 @@ async function pickAndSaveLocalImage(lease: ImageInsertionLease): Promise<Insert
   return writeImage(lease, name, bytes);
 }
 
-async function insertPickedImage(lease: ImageInsertionLease | null): Promise<void> {
+export async function insertLocalImageUsingLease(lease: ImageInsertionLease | null): Promise<void> {
   if (!lease) return;
   try {
     const image = await pickAndSaveLocalImage(lease);
@@ -92,8 +92,8 @@ async function insertPickedImage(lease: ImageInsertionLease | null): Promise<voi
 }
 
 export function insertLocalImageWithDialog(editor: Editor, docKey: string, position?: number): Promise<void> {
-  return insertPickedImage(captureVisualImageInsertion(editor, docKey, position));
+  return insertLocalImageUsingLease(captureVisualImageInsertion(editor, docKey, position));
 }
 export function insertSourceImageWithDialog(view: EditorView, docKey: string): Promise<void> {
-  return insertPickedImage(captureSourceImageInsertion(view, docKey));
+  return insertLocalImageUsingLease(captureSourceImageInsertion(view, docKey));
 }

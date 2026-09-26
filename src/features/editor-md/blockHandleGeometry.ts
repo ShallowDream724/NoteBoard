@@ -28,7 +28,7 @@ export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, 
   const rect = block.element.getBoundingClientRect(), bounds = host.getBoundingClientRect();
   const scale = bounds.width / host.offsetWidth || 1;
   let edge = rect.left;
-  if (block.node.type.name === 'imageCollection') edge = editorContentLeft(view);
+  if (block.element.closest('.nb-disclosure-body') || block.node.type.name === 'imageCollection') edge = editorContentLeft(view);
   else if (block.node.type.name === 'heading') {
     edge = block.element.querySelector('.nb-heading-fold-toggle')?.getBoundingClientRect().left ?? edge - 22 * scale;
   } else if (block.node.type.name === 'table') edge -= 22 * scale;

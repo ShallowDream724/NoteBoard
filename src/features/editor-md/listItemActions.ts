@@ -2,6 +2,7 @@ import { Fragment, type Node } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { dispatchDiscreteEdit } from './discreteEdit';
+import { blockInteractionScope } from './blockInteractionScope';
 
 export const isListItem = (node: Node | null | undefined) => node?.type.name === 'listItem' || node?.type.name === 'taskItem';
 export const isList = (node: Node) => ['bulletList', 'orderedList', 'taskList'].includes(node.type.name);
@@ -14,9 +15,11 @@ export function listItemRemovalRange(doc: Node, pos: number) {
 }
 function insertionNode(doc: Node, sourcePos: number, insertPos: number) {
   const source = doc.nodeAt(sourcePos), from = doc.resolve(sourcePos), to = doc.resolve(insertPos);
+  const scope = blockInteractionScope(from);
+  if (scope === null || scope !== blockInteractionScope(to)) return null;
   if (!isListItem(source) || !isList(from.parent)) return null;
   if (isList(to.parent)) return to.parent.canReplaceWith(to.index(), to.index(), source!.type) ? source! : null;
-  if (to.depth !== 0) return null;
+  if (to.depth !== 0 && to.parent.type.name !== 'disclosure') return null;
   const attrs = { ...from.parent.attrs };
   if (from.parent.type.name === 'orderedList') attrs.start = (attrs.start || 1) + from.index();
   const wrapper = from.parent.type.create(attrs, Fragment.from(source!));

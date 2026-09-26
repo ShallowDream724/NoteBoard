@@ -9,6 +9,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { getSessionGeneration, isClosing } from '../session/documentSession';
 import { getMdSourceView, getMdTipTapEditor } from './editorInstances';
 import { dispatchDiscreteEdit } from './discreteEdit';
+import { ensureDisclosureTail } from './rich-content/disclosureEditing';
 
 export interface InsertedImage { src: string; alt: string }
 export interface InsertionTarget<T> {
@@ -137,6 +138,7 @@ export function insertViewImages(view: import('@tiptap/pm/view').EditorView, ima
     const content = Fragment.from(images.map(image => schema.nodes.image.create(image)));
     if (position !== undefined && $pos.parent.canReplace($pos.index(), $pos.index(), content)) tr.insert(raw, content);
     else tr.setSelection(selection).replaceSelection(new Slice(content, 0, 0));
+    ensureDisclosureTail(tr, raw);
   }
   dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
 }

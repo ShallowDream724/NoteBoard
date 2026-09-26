@@ -40,11 +40,15 @@
 .nb-disclosure[data-open=true] > .nb-disclosure-header { border-bottom:1px solid var(--editor-border); }
 .nb-disclosure-toggle { width:26px; height:26px; flex:none; }
 .nb-disclosure-toggle svg { width:14px; height:14px; transition:transform 160ms ease; }
-.nb-disclosure[data-open=true] .nb-disclosure-toggle svg { transform:rotate(90deg); }
+.nb-disclosure[data-open=true] > .nb-disclosure-header .nb-disclosure-toggle svg { transform:rotate(90deg); }
 .nb-disclosure-title { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--editor-text); font:600 .94em var(--content-font-family,inherit); padding:2px; }
 .nb-disclosure-title:focus { box-shadow:0 1px var(--editor-border-focus); }
 .nb-disclosure-body { padding:16px 20px 16px 43px; background:var(--editor-bg); }
 .nb-disclosure-body[hidden] { display:none; }
+.nb-disclosure-tail { display:block; width:calc(100% - 63px); height:1.5em; margin:-8px 20px 16px 43px; padding:0; border:0; background:transparent; cursor:text; border-radius:3px; }
+.nb-disclosure-tail:focus-visible { outline:1px solid var(--editor-border-focus); }
+.nb-disclosure-tail[hidden] { display:none; }
+@media print { .nb-disclosure-tail { display:none!important; } }
 .ProseMirror .nb-disclosure-body > :first-child,
 .ProseMirror .nb-disclosure-body > [data-node-view-content-react] > :first-child { margin-top:0; }
 .ProseMirror .nb-disclosure-body > :last-child,

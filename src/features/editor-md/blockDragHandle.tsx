@@ -28,6 +28,8 @@ import { foldedSectionEnd } from './headingFolding';
 import { blockHandlePosition, editorContentLeft } from './blockHandleGeometry';
 import { markHeadingHandleTarget } from './headingHandleMarker';
 import { BlockRangeFeedback } from './BlockRangeFeedback';
+import { Plus } from 'lucide-react';
+import { isEmptyParagraph } from './blockInteractionScope';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -70,6 +72,7 @@ interface DragHandleState {
   left: number;
   nodePos: number | null;
   nodeType: string | null;
+  empty: boolean;
 }
 
 interface DragFeedbackState {
@@ -127,6 +130,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     left: 0,
     nodePos: null,
     nodeType: null,
+    empty: false,
   });
   const [isHoveringHandle, setIsHoveringHandle] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -262,14 +266,16 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       if (!blockInfo) { scheduleHide(); return; }
       hoveredCollection = blockInfo.node.type.name === 'imageCollection' ? blockElement : null;
 
-      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50, handleRef.current?.offsetHeight || 30);
+      const empty = isEmptyParagraph(blockInfo.node);
+      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, empty ? 30 : 50, handleRef.current?.offsetHeight || 30);
 
-      setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) ? current : ({
+      setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) && current.empty === empty ? current : ({
         visible: true,
         top,
         left: Math.max(left, 4),
         nodePos: blockInfo.pos,
         nodeType: blockInfo.node.type.name,
+        empty,
       }));
     };
     const handleMouseMove = (event: MouseEvent) => {
@@ -286,7 +292,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         if (mapped.deletedAcross || mapped.pos >= transaction.doc.content.size) return { ...current, visible: false };
         const node = transaction.doc.nodeAt(mapped.pos);
         if (!node?.isBlock) return { ...current, visible: false };
-        return mapped.pos === current.nodePos && node.type.name === current.nodeType ? current : { ...current, nodePos: mapped.pos, nodeType: node.type.name };
+        const empty = isEmptyParagraph(node);
+        return mapped.pos === current.nodePos && node.type.name === current.nodeType && empty === current.empty ? current : { ...current, nodePos: mapped.pos, nodeType: node.type.name, empty };
       });
       refreshHover();
     };
@@ -384,7 +391,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     const isOverSource = target?.targetPos === session.sourcePos;
     session.sourceElement.classList.toggle('nb-block-drag-source-invalid', !valid && isOverSource);
 
-    let message = '只能放在文档顶层块之间';
+    let message = '请放在同一内容区域的块之间';
     if (valid) {
       message = '释放到指示线位置';
     } else if (isOverSource) {
@@ -393,7 +400,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       message = '内容已在此位置';
     }
 
-    const editorRect = editor.view.dom.getBoundingClientRect();
+    const scope = session.sourceElement.closest('.nb-disclosure-body');
+    const editorRect = (scope ?? editor.view.dom).getBoundingClientRect();
     setDragFeedback({
       clientX,
       clientY,
@@ -532,7 +540,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         <button
           ref={handleRef}
           type="button"
-          className={`nb-block-drag-handle nb-block-with-menu${isHoveringHandle ? ' is-hovered' : ''}${isDragging ? ' is-dragging' : ''}`}
+          className={`nb-block-drag-handle nb-block-with-menu${state.empty ? ' nb-empty-block-handle' : ''}${isHoveringHandle ? ' is-hovered' : ''}${isDragging ? ' is-dragging' : ''}`}
           onPointerEnter={menuHover.enter}
           onPointerLeave={menuHover.leave}
           onClick={() => { if (suppressMenuClick.current) { suppressMenuClick.current = false; return; } if (!isDragging) menuHover.change(true); }}
@@ -558,9 +566,9 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
             top: state.top + 2,
             left: state.left,
           }}
-          aria-label={`拖动${blockLabel}`}
+          aria-label={state.empty ? '添加内容' : `拖动${blockLabel}`}
         >
-          <BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span aria-hidden="true">⠿</span>
+          {state.empty ? <Plus size={18} aria-hidden="true"/> : <><BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span aria-hidden="true">⠿</span></>}
         </button>
       </Popover.Anchor>
       <Popover.Portal><Popover.Content {...menuHover.contentProps} className="nb-block-menu-popover" side="left" align="start" sideOffset={5} collisionPadding={10}

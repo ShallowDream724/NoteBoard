@@ -6,10 +6,11 @@ import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
 import { isListItem, listItemRemovalRange } from './listItemActions';
 import { DOCUMENT_SLICE_MIME } from './clipboard/constants';
 import { documentSliceClipboardData } from './clipboard/structured';
+import { isBlockInteractionTarget } from './blockInteractionScope';
 
 export function blockRange(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
-  if (!node || ['documentPresentation', 'annotationStore'].includes(node.type.name) || editor.state.doc.resolve(pos).depth !== 0 && !isListItem(node)) return null;
+  if (!node || !isBlockInteractionTarget(editor.state.doc, pos)) return null;
   return { node, from: pos, to: foldedSectionEnd(editor.state, pos) ?? pos + node.nodeSize };
 }
 export function selectBlock(editor: Editor, pos: number, titleOnly = false): boolean {
