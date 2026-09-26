@@ -1,104 +1,141 @@
 <div align="center">
-  <img src="logo.png" alt="NoteBoard" width="120" />
 
-  # NoteBoard
+<img src="logo.png" alt="NoteBoard" width="96" />
 
-  **Windows 桌面笔记 + 画板 + 多维表格 + 知识工作台**
+# NoteBoard
 
-  像记事本一样随手打开任意文本文件，像 Typora 一样写 Markdown，像飞书一样整理多维表格，像白板一样画图，像 XMind 一样梳理脑图。
+**Windows 本地笔记与图表编辑器**
 
-  [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-  ![Platform](https://img.shields.io/badge/platform-Windows%2010%2B-lightgrey.svg)
-  ![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB.svg)
+[![预发布](https://img.shields.io/badge/1.0.0-预发布-orange)](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1)
+[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
+[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1) · [更新说明](docs/releases/1.0.0.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
+
 </div>
 
----
+NoteBoard 可以写笔记、整理表格、画流程图，也能打开代码和配置文件。文档直接保存在本地，不需要注册账号或先导入一个专用资料库。
 
-## 概览
+喜欢 Markdown，可以继续用熟悉的语法；需要颜色、图片轮播、补充说明和更细的表格排版，可以使用 NB 原生文档。写完后导出 PDF，或交给 Word、LaTeX 等工具继续处理。
 
-NoteBoard 是一款轻量、现代化的 Windows 桌面效率工具，集 Markdown 笔记、多维表格、声明式信息图、思维导图、白板绘图、代码配置编辑与图片预览于一体。
+## 安装与试用
 
-坚持本地优先（Local-First）与文件优先理念：无强制工作区绑定、无强制云端同步。双击即开，即开即写，数据完全由你掌控。
+1. 在 [1.0.0 预发布页面](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1) 的 **Assets** 中下载 `NoteBoard_1.0.0_x64-setup.exe`。
+2. 运行安装程序。需要 Windows 10 / 11 x64 和 WebView2；缺少 WebView2 时，安装程序会联网下载。
+3. 打开应用，在主页点击 **浏览功能示例**。里面的文字、表格、图片和公式都可以直接编辑。
 
-## 核心功能
+已有安装可以覆盖更新。这是预发布版，适合试用和反馈；当前限制见[下文](#当前限制)。GitHub 自动附带的 Source code 是源码，不是安装包。
 
-- **原生富文本笔记**
-  - `.nb` 与 `.nbdoc` 使用同一原生格式和专属图标，保留文字颜色、高亮、段落对齐、表格底色、合并关系及行高列宽，专注可视化编辑。
-  - 默认保存为 `.nb`；本机同时使用 Wolfram Notebook 时，可选 `.nbdoc`。安装时保留已有 `.nb` 默认程序，并提供“用 NoteBoard 打开”右键入口。
-  - 随时导出不含 NoteBoard 样式注释的 Markdown；复杂表格使用标准 HTML 保留内容。
-  - 支持标题折叠与整节拖动、表格行列排序和可撤销的结构操作。本地图片仍使用外部文件引用。
+## 文档与写作
 
-- **Markdown 富文本与源码双模笔记**
-  - 基于 TipTap 3 与 CodeMirror 6，所见即所得与源码编辑模式无缝切换。
-  - 支持 KaTeX 科学公式、Mermaid 与 PlantUML 图表、Infographic 信息图嵌入、GitHub Alerts 提示块。
-  - 斜杠命令快捷插入（`/`）、悬浮气泡工具栏、块级拖拽重排与文档大纲实时联动。
+- **可视化与源码切换**：直接编辑正文，也能查看和修改源文件。
+- **标题与大纲**：折叠章节、从大纲跳转，拖动标题时带上整节内容。
+- **选区工具栏**：选中文字就能加粗、加下划线、改颜色或高亮；段落左侧菜单负责整块操作。
+- **列表与缩进**：有序列表、无序列表、任务清单，以及正文和标题缩进。
+- **提示块**：选择图标、标题、文字色、边框和背景。输入 `[!` 或 `【！` 可调出类型补全，原有 Note、Tip、Important 等写法也能继续用。
+- **折叠与说明**：把较长的补充材料收进折叠块，或给文字、图片、表格添加可点开的说明。
 
-- **多维表格（Bitable）**
-  - 支持 `.bitable` 与 `.table` 文件，表格（Grid）与看板（Kanban）视图自由切换。
-  - 丰富字段类型：文本、多行文本（支持 Markdown 富文本编辑）、数字、单选、多选、日期、时间、日期时间、复选框等。
-  - 自研日期时间选择器、多字段联合排序、按列分组展示与折叠、记录详情抽屉侧边栏。
-  - 流畅拖拽体验：表头拖拽换列、行拖拽换序、看板泳道与卡片跨分组拖拽、视图 Tab 拖拽重排。
+## NB 与 Markdown 怎么选
 
-- **Infographic 现代化信息图**
-  - 独立 `.infographic` / `.ig` 文件分屏实时预览编辑器，支持在 Markdown 笔记中直接嵌入。
-  - 开箱即用预设模板：核心指标看板、项目里程碑时间线、业务流转步骤图、用户转化漏斗、方案对比表、四象限优先级矩阵与统计图表。
-  - 声明式轻量配置，自动适配当前主题明暗风格。
+| 文件 | 适合的用途 |
+| --- | --- |
+| `.md` / `.markdown` | 需要与其他 Markdown 编辑器交换的笔记、项目文档。 |
+| `.nb` / `.nbdoc` | 需要完整保留配色、布局、图片组合和说明的文档。两个扩展名使用同一种格式。 |
 
-- **思维导图与幕布大纲**
-  - 支持 `.mindmap`、`.xmind`（XMind 格式兼容导入导出）与 `.mm`。
-  - 脑图可视化与层级大纲双向实时同步。
-  - 支持整树拖拽与落位指示、节点图标选择器、备注说明与图片附件。
+Markdown 使用增强排版时，会提示转换为 NB。转换后的 NB 就放在原文件旁边；保留关联时，文件树中以 NB 为主体，展开能看到原 MD，不会额外创建一层文件夹。
 
-- **自由手绘白板与架构设计**
-  - **Excalidraw 白板**：支持 `.excalidraw`、`.board`、`.canvas`，自由手绘涂鸦、流程草图与图形素材库。
-  - **Draw.io 架构图**：集成 Draw.io 原生设计能力，支持 `.drawio` 与 `.dio` 专业架构图与系统流程设计。
+保存关联 NB 会同时更新 MD。能明确对应的 MD 文字修改可以合回 NB，保留原有颜色和高亮；双方改了同一段时，会提示冲突，等待处理。**自动回传有范围限制**：折叠、说明等降级后改变了块结构，当前无法自动回传。
 
-- **代码与配置文本编辑**
-  - 支持 `.txt`、`.sql`、`.json`、`.yaml`、`.yml`、`.xml`、`.log`、`.ini`、`.conf` 等格式。
-  - 语法高亮、实时语法校验（Lint）、代码折叠与格式化。
+NB 是可读的文本格式。本地图片使用外部文件引用，复制文档到别处时，要一起带上图片目录。使用 Wolfram Notebook 的电脑可选 `.nbdoc`，避免与 `.nb` 扩展名混淆。
 
-- **图片查看与图表统一导出**
-  - 图片查看器：支持 PNG、JPG、JPEG、WebP、SVG、GIF、AVIF、BMP、ICO 等格式直接预览与缩放。
-  - 统一图表导出菜单：Mermaid、PlantUML 与 Infographic 均支持一键复制或导出为高清 SVG / PNG 图片。
+## 表格与图片
 
-## 桌面特性
+### 文档表格
 
-| 特性 | 说明 |
-|---|---|
-| **文件优先** | 双击即开、右键“用 NoteBoard 打开”、文件拖拽入窗口直接查看或编辑。 |
-| **统一浏览** | 在同一窗口选择文件和文件夹，支持多选、路径导航与目录内筛选。 |
-| **多窗口与标签页** | 多窗口独立并行，标签页可自由拆分并在新窗口中打开，支持快捷切换。 |
-| **智能目录联动** | 资源管理器动态跟随当前激活标签页所在目录，切换标签自动切换目录视图。 |
-| **双侧灵活收起** | 编辑区左右两侧均配备悬浮折叠控件，一键展开或收起资源目录与文档大纲。 |
-| **草稿与暂存** | 临时笔记快速记录，未命名草稿自动暂存，关闭与异常退出安全防丢。 |
-| **精心调色主题** | 提供 `晨光`、`琥珀` 与 `墨夜` 三套主题，经过 WCAG AA 对比度优化，支持跟随系统明暗自动切换。 |
-| **排版自由调节** | 字体族、字号、行高及内容最大宽度均支持个性化调整；提供可选免安装字体包（JetBrains Mono / Maple Mono）。 |
-| **智能保存策略** | 原生笔记、Markdown、画板、多维表格与思维导图支持自动保存；代码及配置文件支持手动保存与防丢拦截。 |
-| **高性能大文档优化** | 具备分段虚拟滚动、视口懒渲染与 Worker 分段解析机制，平稳处理长篇文档与海量数据。 |
+选择单元格、整行或整列后，可以设置底色、对齐、合并或拆分。行高和列宽支持拖动调整，也可以均分；表头、标准表和三线表适合不同的资料整理与排版需求。
 
-## 技术栈
+表格自身的左、中、右位置与单元格文字对齐分开设置。表注放在表格下方，整表说明跟随表格移动。
 
-Tauri v2 · React 19 · TypeScript · Vite · Tailwind CSS v4 · Zustand · TipTap 3 · CodeMirror 6 · Excalidraw · Mermaid · KaTeX · @dnd-kit · @tanstack/react-virtual
+### 图片与图集
 
-## 快速开始
+单张图片、四宫格、六宫格、九宫格和轮播都能放进文档。支持图注、组合尺寸和图片查看；轮播固定居中，宫格可调整在正文中的位置。
 
-> 环境要求：Node.js ≥ 20、pnpm ≥ 9、Rust stable、Windows 10 1809+（含 WebView2 Runtime）
+导出 PDF 时，轮播会展开全部图片，折叠块也会展开。分享出去的人不需要点开文档里的每个控件才能读完整内容。
+
+## 公式与图示
+
+- **数学公式**：支持行内和独立公式、矩阵，以及 `$…$`、`$$…$$`、`\(…\)`、`\[…\]`。写错时保留源码，便于继续修改。
+- **Mermaid**：用文本写流程图，放大查看细节；查看时的缩放不改变打印比例。
+- **PlantUML 与 Infographic**：编辑图表脚本并预览，也可放进笔记。图表支持导出 SVG / PNG。
+- **自由画板**：用 Excalidraw 画草图、标注和梳理思路。
+- **思维导图**：在脑图与层级大纲之间切换，支持节点备注和图片。
+- **Draw.io**：编辑架构图和流程图。
+
+PlantUML 当前使用在线渲染服务，图表源码会提交给该服务；Draw.io 编辑器从 diagrams.net 加载。这两项需要网络。普通笔记、文档表格和 Mermaid 不依赖这两个在线服务。
+
+## 多维表格与其他文件
+
+用 `.bitable` / `.table` 整理项目、阅读记录或资料清单。支持表格与看板视图、排序、分组，以及文本、数字、单选、多选、日期时间、复选框等字段。
+
+同一个窗口还可以打开文本、JSON、YAML、SQL 等代码和配置文件，进行查找替换、语法高亮和格式化；图片与 PDF 可以直接预览。多标签页、多窗口和本地文件树适合在几份资料之间来回切换。
+
+## 导出与打印
+
+| 格式 | 可以得到什么 | 额外依赖 |
+| --- | --- | --- |
+| PDF | 调整纸张、页边距、字号和页码后预览；处理超宽表格与公式。 | WebView2 |
+| HTML | 可单独打开的网页，保留折叠、轮播和模糊揭示等阅读交互。 | 无需 Pandoc |
+| Word / LaTeX | 继续排版的文档，包含支持的表格、图片、公式与说明脚注。 | Pandoc 3.0+；编译 LaTeX 另需 TeX 环境 |
+| Markdown | 便于交换的文本，去掉 NB 专属表现，保留正文及可表达的结构。 | 无需 Pandoc |
+
+PDF 导出后会在新标签页打开，不改变原来的文件树目录。字体可使用本机已安装字体，也可在设置里下载可选字体包；打印使用配置的文档字体，缺少的字形仍会回退。
+
+## 按自己的习惯调整
+
+提供晨光、琥珀、墨夜三种主题，也可以跟随系统。界面、正文、代码和文件树的字体可分别设置；字号、行距、正文宽度和选区工具栏位置都能调整。
+
+快捷键支持搜索、修改、禁用和恢复默认。几个常用的默认组合：
+
+| 操作 | 快捷键 |
+| --- | --- |
+| 保存 | `Ctrl+S` |
+| 打开文件或文件夹 | `Ctrl+O` |
+| 查找 | `Ctrl+F` |
+| PDF 排版预览 | `Ctrl+P` |
+| 一级至六级标题 | `Ctrl+1` … `Ctrl+6` |
+| 恢复正文 | `Ctrl+0` |
+
+## 当前限制
+
+- 本次仅提供 **Windows x64** 安装包，未发布 macOS、Linux 或 ARM64 版本。
+- 关联 MD 的自动回传适用于能逐块对应的文字修改。包含折叠、说明等降级结构时，MD 回改会进入冲突保护，需要手动处理。
+- 图片不是打包在 NB 里的附件，移动或分享源文档时需携带外部图片。
+- Word、LaTeX 及其他 Markdown 阅读器的显示结果受各自支持的语法、字体和排版方式影响。
+- 没有内置账号同步和多人实时协作。预发布更新请从 Releases 下载；应用内更新检查面向正式版本。
+
+## 反馈与开发
+
+遇到问题请提交 [Issue](https://github.com/ShallowDream724/NoteBoard/issues)，尽量附上版本、复现步骤、预期与实际结果，以及一份不含私人内容的小样例。涉及排版时，截图通常比描述更直观。
+
+本地构建需要 Node.js 22、pnpm、Rust stable、MSVC C++ 构建工具和 Windows SDK。
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 启动开发环境
+git clone https://github.com/ShallowDream724/NoteBoard.git
+cd NoteBoard
+pnpm install --frozen-lockfile
 pnpm tauri dev
+```
 
-# 构建生产安装包（NSIS）
+生成 Windows 安装包：
+
+```bash
 pnpm tauri build
 ```
 
-## 开源协议
+项目使用 Tauri、React、TypeScript、TipTap 和 CodeMirror。格式与接口说明见 [原生文档](docs/architecture/native-documents.md)、[NB 编写规范](docs/architecture/native-authoring.md) 和 [导出设计](docs/architecture/document-export.md)。
 
-NoteBoard 遵循 **GPL-3.0-only** 开源许可协议。
+## 来源与许可
 
-## Star 走势
+本项目基于 [CrazyFigure/NoteBoard](https://github.com/CrazyFigure/NoteBoard) 继续开发，采用 [GPL-3.0-only](LICENSE) 许可。感谢原项目及 Excalidraw、Mermaid、KaTeX、diagrams.net 等开源项目。
 
-[![Star 走势图](./assets/star-history.svg)](https://github.com/CrazyFigure/NoteBoard/stargazers)
+本仓库的安装包与更新发布在 [ShallowDream724/NoteBoard Releases](https://github.com/ShallowDream724/NoteBoard/releases)。
