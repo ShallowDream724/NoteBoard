@@ -17,7 +17,7 @@ export function isMathEscaped(source: string, offset: number): boolean {
 }
 
 /** An opener never starts at the second slash of a TeX row break. */
-export function readMath(source: string, start = 0, blockContext = false): MathMatch | null {
+export function readMath(source: string, start = 0, blockContext = false, budget?: { remaining: number }): MathMatch | null {
   let delimiter: MathDelimiter;
   if (source.startsWith('$$', start)) delimiter = '$$';
   else if (source.startsWith('\\(', start)) delimiter = '\\(';
@@ -31,6 +31,8 @@ export function readMath(source: string, start = 0, blockContext = false): MathM
   let comment = false;
   let braces = 0;
   for (let cursor = payloadStart; cursor < source.length; cursor++) {
+    // Importers may share a scan budget across malformed opening delimiters.
+    if (budget && --budget.remaining < 0) return null;
     const char = source[cursor];
     if (char === '\n' || char === '\r') {
       if (!display) return null;

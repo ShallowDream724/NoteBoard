@@ -18,6 +18,8 @@ NB 与 MD 可视编辑共用 `clipboard/external.ts`，在主线程与 Worker �
 
 本应用结构化片段携带其锚点引用的补充说明正文。文档片段和表格片段都在粘贴时一起重映射引用/正文 ID，并在同一事务中插入锚点与 metadata 区域的说明实体，避免共享可编辑正文或被孤儿清理提前删除。`clipboard/structured.ts` 为 DOM copy/cut 和程序化块复制提供纯数据帮助函数，没有反向依赖编辑器插件。
 
+HTML 正文中的成对公式标记由 `clipboard/htmlMath.ts` 复用 `mathSyntax` 转换，不重新解析整份 HTML 为 Markdown。相邻样式 span 中的公式可以合并识别，公式外的样式、列表、表格保持原样；代码与链接是识别边界。独立公式拆成块节点，列表仍保留合法的首段。KaTeX/MathML 的 TeX annotation、MathJax 的 math/tex 数据脚本和本应用公式元素只导入一个公式节点，不重复导入视觉字形。其他脚本继续忽略。畸形定界符共享线性扫描预算，超过预算的内容按字面保留；小片段与 Worker 使用同一实现。
+
 ## 调度、取消与历史
 
 解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。文档级表格样式的修改命令位于 `documentPresentationCommands.ts`，不由语法模块反向导出。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。两种 Worker 共用 `workerDocumentDom` 的片段 DOM 适配，先安装再加载语法，保证大段 Markdown 中的 HTML 与主线程解析一致。

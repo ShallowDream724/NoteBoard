@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { parseClipboardMatrix } from '../../../core/clipboardMatrix';
+import { clipboardMathElement, clipboardTextMath } from './htmlMath';
 
 /** Import limits bound DOM parsing, schema materialization and one final transaction. */
 export const CLIPBOARD_LIMITS = { characters: 16_000_000, nodes: 250_000, depth: 48, cells: 100_000, rules: 2_048, synchronous: 24_000 } as const;
@@ -132,6 +133,8 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) result.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
       if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) result.push(fallback); continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
+      const math = clipboardMathElement(element);
+      if (math && style.display !== 'none') { if (math.type === 'mathInline') math.marks = marksFor(element, inherited, style); result.push(math); continue; }
       if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
       if (tag === 'BR') { result.push({ type: 'hardBreak' }); continue; }
       if (tag === 'IMG' || tag === 'V:IMAGEDATA') { result.push(image(element)); continue; }
@@ -143,13 +146,13 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     const style = styleFor(element), marks = marksFor(element, inherited, style), attrs = alignment(element, style);
     const tag = element.tagName.toUpperCase(), type = /^H[1-6]$/.test(tag) ? 'heading' : 'paragraph';
     const output: JSONContent[] = []; let content: JSONContent[] = [];
-    const flush = () => { if (content.length) output.push({ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}), content }); content = []; };
+    const flush = (trimEmpty = false) => { if (content.length && (!trimEmpty || content.some(node => node.type !== 'text' || node.text?.trim()))) output.push({ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}), content }); content = []; };
     // Split block images at their original inline position; no second descendant scan.
-    for (const child of inline(element, marks, depth + 1, preservesSpaces(style))) {
-      if (child.type === 'image' || child.type === 'paragraph') { flush(); output.push(child); }
+    for (const child of clipboardTextMath(inline(element, marks, depth + 1, preservesSpaces(style)))) {
+      if (child.type === 'image' || child.type === 'paragraph' || child.type === 'mathBlock') { flush(child.type === 'mathBlock'); output.push(child); }
       else content.push(child);
     }
-    flush(); return output.length ? output : [{ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}) }];
+    flush(output.at(-1)?.type === 'mathBlock'); return output.length ? output : [{ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}) }];
   }
   function list(element: Element, inherited: Mark[], depth: number): JSONContent {
     const content: JSONContent[] = [];
@@ -187,13 +190,24 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
   }
   function flow(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false): JSONContent[] {
     const result: JSONContent[] = []; let pending: JSONContent[] = [];
-    const flush = () => { if (pending.some(node => node.type !== 'text' || node.text?.trim())) result.push(paragraph(pending)); pending = []; };
+    const flush = () => {
+      let text: JSONContent[] = [];
+      const emit = () => { if (text.some(node => node.type !== 'text' || node.text?.trim())) result.push(paragraph(text)); text = []; };
+      for (const child of clipboardTextMath(pending)) { if (child.type === 'mathBlock') { emit(); result.push(child); } else text.push(child); }
+      emit(); pending = [];
+    };
     let wordLists: { level: number; id: string; node: JSONContent }[] = [];
     for (const node of Array.from(parent.childNodes)) {
       count(depth);
       if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
       if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) { flush(); result.push(fallback); } continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
+      const math = clipboardMathElement(element);
+      if (math && style.display !== 'none') {
+        if (math.type === 'mathBlock') { flush(); result.push(math); }
+        else { math.marks = marksFor(element, inherited, style); pending.push(math); }
+        continue;
+      }
       if (skipped.has(tag) || style.display === 'none') continue;
       if (tag === 'BR') { pending.push({ type: 'hardBreak' }); continue; }
       if (!blocks.has(tag) && tag !== 'IMG' && tag !== 'V:IMAGEDATA') {
@@ -201,7 +215,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
           flush(); result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))); continue;
         }
         for (const child of inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))) {
-          if (child.type === 'image' || child.type === 'paragraph') { flush(); result.push(child); } else pending.push(child);
+          if (child.type === 'image' || child.type === 'paragraph' || child.type === 'mathBlock') { flush(); result.push(child); } else pending.push(child);
         }
         continue;
       }
@@ -212,6 +226,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         const marker = wordListMarker(element);
         const type = /^\s*(?:\d+|[a-zA-Z]+|[一二三四五六七八九十百]+)[.)、．]/.test(marker) ? 'orderedList' : 'bulletList';
         const body = textBlock(element, inherited, depth), item: JSONContent = { type: 'listItem', content: body };
+        if (body[0]?.type !== 'paragraph') body.unshift(paragraph());
         while (wordLists.length && (wordLists.at(-1)!.id !== id || wordLists.at(-1)!.level > level || (wordLists.at(-1)!.level === level && wordLists.at(-1)!.node.type !== type))) wordLists.pop();
         let current = wordLists.at(-1);
         if (!current || current.level < level) {
