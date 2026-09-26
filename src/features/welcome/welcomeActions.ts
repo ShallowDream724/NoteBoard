@@ -96,7 +96,7 @@ function createUntitledDocument(
     | 'sql'
     | 'xml',
   seed?: { title: string; content: string },
-): void {
+): string {
   const key = nextUntitledKey(type);
   let kind: DocumentKind = 'code';
   let language: LanguageId = 'plaintext';
@@ -206,6 +206,7 @@ function createUntitledDocument(
   const loaderKind = resolveEditorKind(tab);
   if (loaderKind !== 'unsupported') prefetchEditor(loaderKind);
   useWindowStore.getState().openTab(tab);
+  return key;
 }
 
 /** 新建 Markdown 文档 */
@@ -222,14 +223,14 @@ export function newDefaultDocument(): void {
 }
 
 /** Bundled content is loaded only when requested, and edited as an unsaved copy. */
-export async function openShowcase(onlyIfEmpty = false): Promise<void> {
+export async function openShowcase(onlyIfEmpty = false): Promise<string | undefined> {
   try {
     if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
     const { default: content } = await import('./showcase.nb?raw');
     const { prepareShowcaseAssets } = await import('./showcaseAssets');
     const prepared = await prepareShowcaseAssets(content);
     if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
-    createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content: prepared });
+    return createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content: prepared });
   } catch (error) {
     showToast(`无法打开功能示例：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
   }

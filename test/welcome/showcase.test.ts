@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JSONContent } from '@tiptap/core';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { decodeNativeDocument, visitNativeDocument } from '@/core/nativeDocument';
 import { documentParser } from '@/features/editor-md/documentExtensions';
 import { parseNativeNode, serializeNativeNode } from '@/features/editor-md/editorDocumentCodec';
-import { openShowcase } from '@/features/welcome/welcomeActions';
+import { newNativeDocument, openShowcase } from '@/features/welcome/welcomeActions';
+import { INTRODUCTION_SEEN_KEY, openFirstRunShowcase } from '@/features/welcome/firstRun';
 import { storeImageAsset } from '@/core/ipc/commands';
 import { showToast } from '@/stores/toastStore';
 
@@ -42,10 +44,52 @@ beforeEach(() => {
   }));
   useWindowStore.setState({ tabs: [], activeKey: null });
   useDocumentStore.setState({ documents: new Map() });
+  localStorage.removeItem(INTRODUCTION_SEEN_KEY);
+  useSettingsStore.setState(state => ({ settings: { ...state.settings, revision: 0 } }));
 });
 afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
 describe('bundled native feature showcase', () => {
+  it('marks the first introduction only after a successful open and never repeats it', async () => {
+    vi.mocked(storeImageAsset).mockRejectedValueOnce('无法写入图片目录');
+    expect(await openFirstRunShowcase('empty')).toBeUndefined();
+    expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBeNull();
+    expect(useWindowStore.getState().tabs).toHaveLength(0);
+
+    const key = await openFirstRunShowcase('empty');
+    expect(key).toBe(useWindowStore.getState().activeKey);
+    expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBe('1');
+    useWindowStore.setState({ tabs: [], activeKey: null });
+    expect(await openFirstRunShowcase('empty')).toBeUndefined();
+    expect(useWindowStore.getState().tabs).toHaveLength(0);
+  });
+
+  it('leaves explicit opens, existing profiles and restored documents in place', async () => {
+    expect(await openFirstRunShowcase('explicit-open')).toBeUndefined();
+    expect(await openFirstRunShowcase('handoff')).toBeUndefined();
+    useSettingsStore.setState(state => ({ settings: { ...state.settings, revision: 1 } }));
+    expect(await openFirstRunShowcase('empty')).toBeUndefined();
+    useSettingsStore.setState(state => ({ settings: { ...state.settings, revision: 0 } }));
+    newNativeDocument();
+    const activeKey = useWindowStore.getState().activeKey;
+    expect(await openFirstRunShowcase('empty')).toBeUndefined();
+    expect(useWindowStore.getState().activeKey).toBe(activeKey);
+    expect(useWindowStore.getState().tabs).toHaveLength(1);
+    expect(storeImageAsset).not.toHaveBeenCalled();
+    expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBeNull();
+  });
+
+  it('lets a file arriving during showcase preparation keep its place', async () => {
+    vi.mocked(storeImageAsset).mockImplementationOnce(async () => {
+      newNativeDocument();
+      return 'prepared-image.png';
+    });
+    expect(await openFirstRunShowcase('empty')).toBeUndefined();
+    expect(useWindowStore.getState().tabs).toHaveLength(1);
+    expect(useWindowStore.getState().activeTab()?.displayName).toBe('未命名.nb');
+    expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBeNull();
+  });
+
   it('reports a failed image write without an incomplete tab and allows retry', async () => {
     vi.mocked(storeImageAsset).mockRejectedValueOnce('无法写入图片目录');
     await expect(openShowcase()).resolves.toBeUndefined();
@@ -87,6 +131,23 @@ describe('bundled native feature showcase', () => {
     expect(nodesOf(json, 'githubAlert').map(node => node.attrs?.kind)).toEqual(expect.arrayContaining(['note', 'tip', 'important', 'warning', 'caution']));
     expect(doc.textContent).toContain('顶部工具栏的图片菜单');
     expect(doc.textContent).toContain('添加说明');
+    // The walkthrough replaces existing prose rather than growing the document.
+    expect(Buffer.byteLength(showcase, 'utf8')).toBeLessThanOrEqual(31593);
+  });
+
+  it('demonstrates real color marks and narrower centered and right-aligned tables', () => {
+    const json = decodeNativeDocument(showcase);
+    const markedText = nodesOf(json, 'text');
+    expect(markedText.some(node => node.marks?.some(mark => mark.type === 'textColor'))).toBe(true);
+    expect(markedText.some(node => node.marks?.some(mark => mark.type === 'highlight'))).toBe(true);
+    expect(markedText.some(node => ['textColor', 'highlight'].every(type => node.marks?.some(mark => mark.type === type)))).toBe(true);
+    const tables = nodesOf(json, 'table');
+    expect(tables.map(table => table.attrs?.tableAlign)).toEqual(['center', 'right']);
+    for (const table of tables) {
+      const widths = table.content?.[0]?.content?.map(cell => cell.attrs?.colwidth?.[0]) ?? [];
+      expect(widths.every(width => typeof width === 'number' && width > 0)).toBe(true);
+      expect(widths.reduce((sum, width) => sum + width, 0)).toBeLessThan(600);
+    }
   });
 
   it('contains a four-slot grid with one empty slot and a working multi-image carousel', () => {
@@ -112,11 +173,12 @@ describe('bundled native feature showcase', () => {
     }
   });
 
-  it('pairs every text annotation with a useful body and preserves conceal examples', () => {
+  it('pairs text and code-block annotations with useful bodies and preserves conceal examples', () => {
     const json = decodeNativeDocument(showcase);
     const references: string[] = [];
     let concealed = false;
     visitNativeDocument(json, node => {
+      if (node.attrs?.annotationId) references.push(String(node.attrs.annotationId));
       for (const mark of node.marks ?? []) {
         if (mark.type === 'annotationReference') references.push(String(mark.attrs?.id));
         if (mark.type === 'conceal') concealed = true;
@@ -124,6 +186,7 @@ describe('bundled native feature showcase', () => {
     });
     const bodies = nodesOf(json, 'annotationBody');
     expect(references.length).toBeGreaterThan(0);
+    expect(nodesOf(json, 'codeBlock').some(node => node.attrs?.annotationId === 'showcase-code')).toBe(true);
     expect(bodies.map(body => body.attrs?.id).sort()).toEqual([...new Set(references)].sort());
     for (const body of bodies) {
       expect(nodesOf(body, 'text').map(node => node.text).join('').length).toBeGreaterThan(30);

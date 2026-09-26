@@ -30,8 +30,8 @@ import { requestDrain } from './app/bootCoordinator';
 import {
   openFileDialog,
   openFolderDialog,
-  openShowcase,
 } from './features/welcome/welcomeActions';
+import { openFirstRunShowcase } from './features/welcome/firstRun';
 import { saveAs } from './features/editor-code/orchestration/saveDocument';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { prefetchEditor } from './features/editor-host/editorLoaders';
@@ -60,6 +60,7 @@ const FavoritesManagerModal = lazy(() =>
 const AddFavoriteModal = lazy(() =>
   import('./features/favorites/AddFavoriteModal').then((m) => ({ default: m.AddFavoriteModal })),
 );
+const FirstRunGuide = lazy(() => import('./features/welcome/FirstRunGuide').then(m => ({ default: m.FirstRunGuide })));
 
 /** 一旦 open 变 true 则永久返回 true（弹窗装载后保持挂载，保留关闭动画） */
 function useEverOpened(open: boolean): boolean {
@@ -83,6 +84,7 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   // 🔴 R08：错误壳重试计数（驱动启动 effect 重跑；不整页 reload）
   const [bootRetryAttempt, setBootRetryAttempt] = useState(0);
+  const [introductionDocKey, setIntroductionDocKey] = useState<string | null>(null);
   const { settingsModalVisible, setSettingsModalVisible } = useLayoutStore();
   const activeKey = useWindowStore((s) => s.activeKey);
   const exportKey = useExportStore(s => s.docKey);
@@ -137,12 +139,10 @@ export default function App() {
       }
       perfMark('listeners_subscribed');
       // Only a fresh, empty profile gets an introduction. Updates and explicit file opens keep their context.
-      const introductionKey = 'noteboard.introduction-seen';
-      if (!disposed && !localStorage.getItem(introductionKey)) {
-        localStorage.setItem(introductionKey, '1');
-        if (boot.startupMode === 'empty' && useSettingsStore.getState().settings.revision === 0 && useWindowStore.getState().tabs.length === 0) {
-          void openShowcase(true);
-        }
+      if (!disposed) {
+        void openFirstRunShowcase(boot.startupMode).then(key => {
+          if (!disposed && key) setIntroductionDocKey(key);
+        });
       }
       // 🔴 性能诊断：启动链路完成的里程碑，批量上报一次 web spans
       void reportWebSpans('boot');
@@ -400,6 +400,9 @@ export default function App() {
       <TooltipProvider delayDuration={100} skipDelayDuration={300}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
           <div inert={!!exportKey} style={{ display: 'contents' }}><AppShell /></div>
+          {introductionDocKey && <Suspense fallback={null}>
+            <FirstRunGuide active={activeKey === introductionDocKey && !exportKey} onDismiss={() => setIntroductionDocKey(null)} />
+          </Suspense>}
           {exportKey && <Suspense fallback={null}><ExportModal docKey={exportKey} onClose={closeExport}/></Suspense>}
           {/* 🔴 S05：全局弹窗按需装载；首开前不进入首屏闭包 */}
           {settingsEverOpened && (
