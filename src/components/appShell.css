@@ -38,7 +38,7 @@
   --document-control-lane: 88px;
   --document-end-gutter: 24px;
   --document-top-space: 3.2em;
-  --document-bottom-space: clamp(64px, 12vh, 120px);
+  --document-bottom-space: calc(4em * var(--content-line-height, 1.7));
   --document-reading-width: min(100%, calc(var(--content-max-width) + 64px));
   min-height: 0;
 }

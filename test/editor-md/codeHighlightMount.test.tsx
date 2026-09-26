@@ -9,6 +9,7 @@ import { TooltipProvider } from '../../src/components/Tooltip';
 import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
 import { CodeHighlight } from '../../src/features/editor-md/codeHighlightExtension';
 import type { CodeHighlightResult } from '../../src/features/editor-md/codeHighlighting';
+import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>(), immediate: true, request: vi.fn() }));
 vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (element: HTMLElement, callback: (near: boolean) => void) => {
@@ -138,6 +139,23 @@ it('preserves surviving colors while a remounted NodeView awaits its first obser
     expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
     await mounted.nearby(true); await mounted.tick(); await mounted.flush();
     expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+  } finally { await mounted.destroy(); }
+});
+
+it('transports ready syntax tokens during a drag and republishes after the moved view mounts', async () => {
+  const mounted = await mount();
+  try {
+    const paragraph = mounted.editor.schema.nodes.paragraph.create(null, mounted.editor.schema.text('before'));
+    await act(async () => { mounted.editor.view.dispatch(mounted.editor.state.tr.insert(0, paragraph)); });
+    await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    fixture.immediate = false;
+    await act(async () => { expect(moveTopLevelBlock(mounted.editor.view, paragraph.nodeSize, 0)).not.toBeNull(); });
+    expect(mounted.host.querySelectorAll('code .hljs-keyword')).toHaveLength(1);
+    expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    await mounted.nearby(true); await mounted.tick(); await mounted.flush();
+    expect(mounted.host.querySelectorAll('code .hljs-keyword')).toHaveLength(1);
+    expect(mounted.host.querySelector('.nb-code-line-gutter')).not.toBeNull();
   } finally { await mounted.destroy(); }
 });
 

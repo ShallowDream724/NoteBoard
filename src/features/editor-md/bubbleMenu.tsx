@@ -40,6 +40,8 @@ import { tableHeaderState, setSelectedTableHeader, distributeTableColumns, distr
 import { AnnotationButton, RichSelectionMenu } from './rich-content/menus';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 import { selectionAllowsAuxiliaryControls } from './blockInteractionScope';
+import { clearSelectionTextFormatting } from './textFormatting';
+import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -348,11 +350,28 @@ export function EditorBubbleMenu({
         <BubbleButton
           title="清除格式"
           icon={<RemoveFormatting size={16} />}
-          onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+        onClick={() => clearSelectionTextFormatting(editor)}
         />
       </div>}
     </BubbleMenu>
   );
+}
+
+function TableTextControls({ editor }: { editor: Editor }) {
+  const [colorsOpen, setColorsOpen] = useState(false);
+  return <>
+    {([{ mark: 'bold', label: '粗体', Icon: Bold }, { mark: 'italic', label: '斜体', Icon: Italic },
+      { mark: 'underline', label: '下划线', Icon: Underline }, { mark: 'strike', label: '删除线', Icon: Strikethrough },
+      { mark: 'code', label: '行内代码', Icon: Code }] as const).map(({ mark, label, Icon }) =>
+      <BubbleButton key={mark} title={label} icon={<Icon size={16}/>} active={editor.isActive(mark)} onClick={() => toggleSelectedCellMark(editor, mark)}/>)}
+    <HighlightControl open={colorsOpen} onOpenChange={setColorsOpen}
+      onApplyStyle={pair => applyTextStyle(editor, pair)} textColor={editor.getAttributes('textColor').color}
+      onTextColor={color => setTextColor(editor, color)} active={editor.isActive('highlight')}
+      currentColor={editor.getAttributes('highlight').color} onApply={color => setHighlightColor(editor, color)}
+      onRemove={() => setHighlightColor(editor, null)} onReturnToEditor={() => editor.view.focus()}/>
+    <BubbleButton title="清除选中文本格式" icon={<RemoveFormatting size={16}/>} onClick={() => clearSelectionTextFormatting(editor)}/>
+    <MenuDivider/>
+  </>;
 }
 
 // ── 表格操作定制矢量图标 ──
@@ -565,6 +584,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         transition: 'opacity 120ms ease',
       }}
     >
+      {isCellSelection(editor.state.selection) && <TableTextControls editor={editor}/>}
       <AlignmentMenu editor={editor}/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
       {(distribution?.columns || distribution?.rows || canMerge || canSplit) && <MenuDivider />}

@@ -255,6 +255,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const nativeFeaturesVisible = useNativeFeatureVisibility();
   const [resizePreview, setResizePreview] = useState<string | null>(null);
   const resizeCleanup = useRef<(() => void) | null>(null);
+  const previewGesture = useRef<{ x: number; y: number; cancelled: boolean } | null>(null);
   useEffect(() => () => { resizeCleanup.current?.(); }, []);
   const editDescription = async () => {
     let pos = getPos(); if (typeof pos !== 'number') return;
@@ -296,6 +297,12 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const inCollection = parent?.type.name === 'imageSlot';
   const showCaption = !inCollection || (!!normalizeFigureCaption(node.attrs.caption) && (parent?.lastChild?.type.name !== 'paragraph'
     || normalizeFigureCaption(parent.lastChild.textContent) !== normalizeFigureCaption(node.attrs.caption)));
+  const previewControl = (target: EventTarget) => target instanceof Element
+    && !!target.closest('button, input, textarea, [data-image-toolbar], [data-image-resize]');
+  const trackPreviewGesture = (event: React.PointerEvent) => {
+    const gesture = previewGesture.current;
+    if (gesture && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 6) gesture.cancelled = true;
+  };
 
   // 动态解析图片真实 URL
   useEffect(() => {
@@ -369,6 +376,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    previewGesture.current = { x: e.clientX, y: e.clientY, cancelled: true };
 
     const startX = e.clientX;
     const initialWidth = parseInt(width, 10) || 100;
@@ -424,10 +432,17 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
           minHeight: visibility.visible ? undefined : visibility.placeholderHeight,
         }}
         data-image-frame=""
+        onPointerDownCapture={event => {
+          previewGesture.current = { x: event.clientX, y: event.clientY, cancelled: event.button !== 0 || previewControl(event.target) };
+        }}
+        onPointerMoveCapture={trackPreviewGesture}
+        onPointerUpCapture={trackPreviewGesture}
+        onPointerCancelCapture={() => { if (previewGesture.current) previewGesture.current.cancelled = true; }}
+        onDragStartCapture={() => { if (previewGesture.current) previewGesture.current.cancelled = true; }}
         onClick={event => {
-          // The small-image toolbar may cover the pointer between its buttons.
-          // Its empty surface has the same preview action as the image beneath it.
-          if (!loadError && event.currentTarget.closest('.nb-image-slot') && !(event.target as Element).closest('button, input, textarea, [data-image-resize]')) {
+          const cancelled = previewGesture.current?.cancelled;
+          previewGesture.current = null;
+          if (!cancelled && !loadError && event.button === 0 && !previewControl(event.target)) {
             event.stopPropagation(); setLightboxOpen(true);
           }
         }}
@@ -639,7 +654,6 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
             decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setLoadError(true)}
-            onDoubleClick={() => setLightboxOpen(true)}
             style={{
               width: '100%',
               height: 'auto',

@@ -41,6 +41,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { insertLocalImageWithDialog } from './imagePaste';
+import { insertDocumentTable } from './insertDocumentTable';
 import { useWindowStore } from '../../stores/windowStore';
 import { emit } from '../../core/emitter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
@@ -274,7 +275,7 @@ const TABLE_LEAFS: LeafCommandItem[] = [
     icon: <TableIcon size={17} />,
     aliases: ['biaoge', 'bg', 'table', 'grid', '3x3'],
     keywords: '表格 table grid biaoge bg',
-    action: (editor, range) => editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+    action: (editor, range) => { insertDocumentTable(editor, 3, 3, range); },
   },
   {
     id: 'tableSmall',
@@ -286,7 +287,7 @@ const TABLE_LEAFS: LeafCommandItem[] = [
     icon: <TableIcon size={17} />,
     aliases: ['biaoge2', 'bg2', 'table2', '2x2'],
     keywords: '表格 紧凑表格 table small biaoge',
-    action: (editor, range) => editor.chain().focus().deleteRange(range).insertTable({ rows: 2, cols: 2, withHeaderRow: true }).run(),
+    action: (editor, range) => { insertDocumentTable(editor, 2, 2, range); },
   },
   {
     id: 'tableLarge',
@@ -298,7 +299,7 @@ const TABLE_LEAFS: LeafCommandItem[] = [
     icon: <TableIcon size={17} />,
     aliases: ['biaoge4', 'bg4', 'table4', '4x4'],
     keywords: '表格 宽表格 table large 4x4 biaoge',
-    action: (editor, range) => editor.chain().focus().deleteRange(range).insertTable({ rows: 4, cols: 4, withHeaderRow: true }).run(),
+    action: (editor, range) => { insertDocumentTable(editor, 4, 4, range); },
   },
 ];
 

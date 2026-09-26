@@ -50,7 +50,7 @@ Step.jsonID('noteboardCellTextStyle', CellTextStyleStep);
 /** null delegates non-cell selections to ordinary text commands. */
 export function styleSelectedCells(editor: Editor, marks: MarkChange[], math?: Record<string, unknown>): boolean | null {
   const { state } = editor, { selection } = state;
-  if (!(selection instanceof CellSelection) || selection.ranges.length <= BULK_CELL_THRESHOLD) return null;
+  if (!(selection instanceof CellSelection)) return null;
   const tableStart = selection.$anchorCell.start(-1), patches: Patch[] = [];
   const changes = marks.map(change => ({ type: state.schema.marks[change.type], attrs: change.attrs }));
   const visit = (node: Node, parent: Node): Node => {
@@ -83,7 +83,7 @@ export function styleSelectedCells(editor: Editor, marks: MarkChange[], math?: R
 
 export function toggleSelectedCellMark(editor: Editor, type: string): boolean | null {
   if (!(editor.state.selection instanceof CellSelection)) return null;
-  if (editor.state.selection.ranges.length <= BULK_CELL_THRESHOLD) return runDiscreteEdit(editor, chain => chain.focus().toggleMark(type));
+  if (editor.state.selection.ranges.length <= BULK_CELL_THRESHOLD) return runDiscreteEdit(editor, chain => chain.focus(undefined, { scrollIntoView: false }).toggleMark(type));
   const mark = editor.schema.marks[type]; if (!mark) return false;
   let eligible = false, allMarked = true;
   for (const { $from } of editor.state.selection.ranges) $from.parent.descendants((node, _pos, parent) => {

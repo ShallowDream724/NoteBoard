@@ -6,6 +6,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import type { Editor } from '@tiptap/core';
 import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
+import { insertDocumentTable } from '../editor-md/insertDocumentTable';
 import { formatSourceMark, runSourceFormatCommand, setSourceHeading, sourceMarkRange } from '../editor-md/sourceFormatting';
 import {
   Undo2,
@@ -76,6 +77,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { nativeMarkdownLink } from '../document-format/nativeLink';
 import { selectionPresentation } from '../document-style/selectionPresentation';
 import { insertCallout } from '../editor-md/alertCommands';
+import { clearSelectionTextFormatting } from '../editor-md/textFormatting';
 import { CellSelection } from '@tiptap/pm/tables';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent, mathContent } from '../editor-md/insertContentRecipes';
@@ -216,7 +218,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+    insertDocumentTable(editor, rows, cols);
   };
 
   const handleInsertMath = (type: 'inline' | 'block') => {
@@ -406,42 +408,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     const currentEditor = editor || getActiveTipTapEditor(docKey);
     if (!currentEditor) return;
 
-    const { state } = currentEditor;
-    const { from, empty } = state.selection;
-    if (state.selection instanceof CellSelection) {
-      currentEditor.chain().focus().unsetAllMarks().setParagraph().run();
-      return;
-    }
-
-    if (empty) {
-      // 1. 无选区时：若处于标题/列表/引用等特殊块中，重置为普通段落
-      currentEditor.chain().focus().clearNodes().run();
-
-      // 2. 清除当前行内所有样式标记
-      const $pos = state.doc.resolve(from);
-      const start = $pos.start();
-      const end = $pos.end();
-      if (start < end) {
-        currentEditor
-          .chain()
-          .focus()
-          .setTextSelection({ from: start, to: end })
-          .unsetAllMarks()
-          .clearNodes()
-          .setTextSelection(from)
-          .run();
-      } else {
-        currentEditor.chain().focus().unsetAllMarks().clearNodes().run();
-      }
-    } else {
-      // 存在选区：同时清除所有行内 Mark（加粗/斜体/下划线/删除线/高亮/链接等）与块级 Node（标题/列表/引用/代码块等）
-      currentEditor
-        .chain()
-        .focus()
-        .unsetAllMarks()
-        .clearNodes()
-        .run();
-    }
+    clearSelectionTextFormatting(currentEditor);
   };
 
   if (isSourceMode && document?.kind === 'noteboard') return null;

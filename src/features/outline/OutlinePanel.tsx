@@ -7,11 +7,13 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { ChevronsRight } from 'lucide-react';
 import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type { Editor } from '@tiptap/core';
+import { TextSelection } from '@tiptap/pm/state';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { HeadingGeometry } from './headingGeometry';
 import { useLayoutStore } from '../../stores/layoutStore';
+import { revealEditorBlock } from '../editor-md/editorViewport';
 import './outlinePanel.css';
 
 interface OutlinePanelProps {
@@ -40,12 +42,13 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const headingItemsRef = useRef(headings);
   const invalidateGeometryRef = useRef<(() => void) | null>(null);
+  const navigationRef = useRef<{ id: string; scrollTop: number } | null>(null);
   useLayoutEffect(() => {
     headingItemsRef.current = headings;
     invalidateGeometryRef.current?.();
   }, [headings]);
 
-  useEffect(() => { setCollapsed(new Set()); setEditingId(null); }, [editor]);
+  useEffect(() => { setCollapsed(new Set()); setEditingId(null); navigationRef.current = null; }, [editor]);
   useEffect(() => {
     const ids = new Set(headings.map(heading => heading.id));
     setCollapsed(previous => {
@@ -100,28 +103,17 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   // 点击跳转
   const handleHeadingClick = useCallback(
     (heading: HeadingItem) => {
-      if (!editor) return;
+      if (!editor || editor.isDestroyed) return;
       const { pos } = heading;
       const docSize = editor.state.doc.content.size;
       const targetPos = Math.min(pos + 1, docSize);
 
-      editor.commands.focus();
-      editor.commands.setTextSelection(targetPos);
-
-      // 滚动到位置
-      requestAnimationFrame(() => {
-        try {
-          const dom = editor.view.nodeDOM(pos);
-          if (dom instanceof HTMLElement) {
-            dom.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          } else {
-            editor.commands.scrollIntoView();
-          }
-        } catch {
-          editor.commands.scrollIntoView();
-        }
-      });
-
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(targetPos))));
+      editor.view.focus();
+      const scroller = revealEditorBlock(editor.view, pos, 'start');
+      // Keep a clicked heading current when the document's end clamps its top
+      // alignment. A subsequent scroll away resumes geometry-based tracking.
+      navigationRef.current = scroller ? { id: heading.id, scrollTop: scroller.scrollTop } : null;
       setActiveId(heading.id);
     },
     [editor, setActiveId],
@@ -174,7 +166,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
     geometry.setHeadings(headingItemsRef.current);
     const invalidate = () => geometry.setHeadings(headingItemsRef.current);
     invalidateGeometryRef.current = invalidate;
-    const handleUpdate = () => geometry.invalidateStructure();
+    const handleUpdate = () => { navigationRef.current = null; geometry.invalidateStructure(); };
     editor.on('update', handleUpdate);
     let folding = headingFoldingKey.getState(editor.state);
     const handleTransaction = () => {
@@ -187,6 +179,12 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
       frame = requestAnimationFrame(() => {
         frame = 0;
         if (editor.isDestroyed || !scrollContainer.clientHeight) return;
+        const navigation = navigationRef.current;
+        if (navigation && Math.abs(scrollContainer.scrollTop - navigation.scrollTop) < 1) {
+          setActiveId(navigation.id);
+          return;
+        }
+        navigationRef.current = null;
         setActiveId(geometry.at(scrollContainer.getBoundingClientRect().top + 40));
       });
     };
@@ -208,7 +206,10 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
 
     const activeEl = listRef.current?.querySelector(`[data-heading-id="${activeId}"]`);
     if (activeEl instanceof HTMLElement) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const scroller = scrollContainerRef.current;
+      const bounds = scroller.getBoundingClientRect(), item = activeEl.getBoundingClientRect();
+      const delta = item.top < bounds.top ? item.top - bounds.top : item.bottom > bounds.bottom ? item.bottom - bounds.bottom : 0;
+      if (delta) scroller.scrollTo({ top: scroller.scrollTop + delta, behavior: 'instant' });
     }
   }, [activeId]);
 

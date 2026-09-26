@@ -143,7 +143,7 @@ export function VisualKernel({
       // Only a new group needs a starting position. Step maps describe the edit
       // without searching the unchanged document prefix on every keystroke.
       const diffPosition = startsNewGroup || !previousPendingExisted
-        ? transactionStart(transaction.mapping.maps)
+        ? transactionStart(transaction.mapping.maps, transaction.steps)
         : undefined;
       stagePendingVisualSnapshot(docKey, {
         format: editorDocumentFormat(editor),

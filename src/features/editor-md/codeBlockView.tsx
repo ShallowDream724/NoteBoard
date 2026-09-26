@@ -14,6 +14,8 @@ import { useCodeHighlight } from './codeHighlightExtension';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
 import { createCodeBlockControlsPlugin, useCodeBlockControls } from './codeBlockControls';
 import './codeBlockView.css';
+import { NodeSelection } from '@tiptap/pm/state';
+import { useCodeViewState } from './codeViewState';
 
 function CodeBlockComponent({ node, updateAttributes, editor, getPos, decorations }: NodeViewProps) {
   const contentRef = useRef<HTMLPreElement>(null);
@@ -22,8 +24,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [wrap, setWrap] = useState(true);
+  const { collapsed, setCollapsed, wrap, setWrap } = useCodeViewState(editor, node);
   const blockRef = useRef<HTMLDivElement>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -38,6 +39,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
     const revealSelection = () => {
       const position = getPos();
       if (position === undefined) return;
+      if (editor.state.selection instanceof NodeSelection) return;
       const { from, to } = editor.state.selection;
       if (from < position + node.nodeSize && to > position) setCollapsed(false);
     };
@@ -159,6 +161,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
           className="nb-code-block-heading"
           aria-label={collapsed ? '展开代码块' : '折叠代码块'}
           aria-expanded={!collapsed}
+          onMouseDown={event => event.preventDefault()}
           onClick={() => setCollapsed(value => !value)}
         >
           <DisclosureTriangle expanded={!collapsed} size={12} />

@@ -30,7 +30,7 @@ export function DialogShell({ title, description, children, onDismiss, width = 4
 }
 
 /** A short-lived, focus-trapped request; business state remains with the caller. */
-export function showTransientDialog<T>(render: (finish: (value: T) => void) => ReactNode): Promise<T> {
+export function showTransientDialog<T>(render: (finish: (value: T) => void) => ReactNode, options: { restoreFocus?: boolean } = {}): Promise<T> {
   const previousFocus = document.activeElement as HTMLElement | null;
   const host = document.createElement('div');
   document.body.appendChild(host);
@@ -43,7 +43,7 @@ export function showTransientDialog<T>(render: (finish: (value: T) => void) => R
       finished = true;
       queueMicrotask(() => {
         root.unmount(); host.remove();
-        if (previousFocus?.isConnected) previousFocus.focus();
+        if (options.restoreFocus !== false && previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
         resolve(value);
       });
     })}</TooltipProvider>);

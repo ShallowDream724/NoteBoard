@@ -5,7 +5,7 @@ import Image from '@tiptap/extension-image';
 import { InteractiveImageCollection, InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
 import { ClipboardImport } from '../../src/features/editor-md/clipboard/clipboardImport';
 import { clearNativeFileDropTargets, isNativeFileDropDuplicate, nativeDropToCssPoint, routeNativeFileDrop } from '../../src/core/editor/fileDropTargets';
-import { imageSlotAtPoint, imageDropTargetAtPoint } from '../../src/features/editor-md/imageDropTarget';
+import { createImageDropIndicator, imageSlotAtPoint, imageDropTargetAtPoint } from '../../src/features/editor-md/imageDropTarget';
 const mock = vi.hoisted(() => ({ editor: null as Editor | null, active: 'test.nb', paste: vi.fn(), paths: vi.fn(), lease: vi.fn(() => ({ dispose() {} })) }));
 vi.mock('../../src/features/editor-md/imagePaste', () => ({ handlePastedImageFiles: mock.paste, handleImagePathsUsingLease: mock.paths, insertLocalImageWithDialog: vi.fn() }));
 vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => mock.editor }));
@@ -34,6 +34,20 @@ function pasteOn(target: Element, images = true) {
 beforeEach(() => { vi.clearAllMocks(); mock.active = 'test.nb'; hit = null; Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => hit) }); });
 afterEach(() => { mock.editor?.destroy(); mock.editor = null; clearNativeFileDropTargets(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe('native image drop and current-pointer paste routing', () => {
+  it('shows only an insertion line at a block boundary and confines slot text to the slot', () => {
+    const editor = create(), indicator = createImageDropIndicator(editor.view), block = editor.view.dom.querySelector('p')!;
+    vi.spyOn(block, 'getBoundingClientRect').mockReturnValue({ top: 20, bottom: 140, left: 10, right: 310, width: 300, height: 120, x: 10, y: 20, toJSON() {} });
+    indicator.show({ position: 0, line: 20, block });
+    const line = document.querySelector<HTMLElement>('[data-image-drop-indicator="block"]')!;
+    expect(line.textContent).toBe(''); expect(line.style.height).toBe('0px'); expect(line.style.top).toBe('20px');
+    expect(line.style.padding).toBe(''); expect(line.getAttribute('aria-label')).toBe('释放图片以插入文档');
+    const slot = editor.view.dom.querySelector<HTMLElement>('[data-image-slot]')!;
+    indicator.show({ position: 14, slot });
+    expect(line.isConnected).toBe(false);
+    const hint = document.querySelector<HTMLElement>('[data-image-drop-indicator="slot"]')!;
+    expect(hint.textContent).toBe('释放图片以填入此处'); expect(hint.style.overflow).toBe('hidden');
+    indicator.clear(); expect(hint.isConnected).toBe(false);
+  });
   it('snaps a drop in the middle of wrapped prose to the whole paragraph boundary', () => {
     const editor = create(), paragraph = editor.view.dom.querySelector('p')!;
     hit = paragraph;

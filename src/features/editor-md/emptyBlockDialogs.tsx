@@ -18,7 +18,7 @@ export async function insertEmptyParagraphLink(editor: Editor, pos: number): Pro
   if (!lease) return;
   try {
     const value = await showTransientDialog<{ text: string; url: string } | null>(finish =>
-      <LinkModal isOpen onClose={() => finish(null)} onConfirm={finish}/>);
+      <LinkModal isOpen onClose={() => finish(null)} onConfirm={finish}/>, { restoreFocus: false });
     if (value) lease.commit(value);
   } finally { returnToEditor(editor, lease); }
 }

@@ -5,6 +5,8 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { observeNearby } from './nearViewport';
 import { requestCodeHighlight, type CodeToken } from './codeHighlighting';
+import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
+import { Mapping, StepMap } from '@tiptap/pm/transform';
 
 const key = new PluginKey<DecorationSet>('code-token-colors');
 interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: () => number | undefined }
@@ -64,6 +66,15 @@ export const CodeHighlight = Extension.create({
       init: () => DecorationSet.empty,
       apply(tr, previous) {
         let decorations = previous.map(tr.mapping, tr.doc);
+        const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
+        if (move) {
+          const moved = previous.find(move.from, move.to);
+          if (moved.length) {
+            const shift = new Mapping([StepMap.offset(move.inserted - move.from)]);
+            const transported = DecorationSet.create(tr.before, moved).map(shift, tr.doc);
+            decorations = decorations.add(tr.doc, transported.find());
+          }
+        }
         const updates = tr.getMeta(key) as Update[] | undefined;
         for (const update of updates ?? []) {
           if (tr.doc.nodeAt(update.position) !== update.node) continue;

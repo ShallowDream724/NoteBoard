@@ -24,6 +24,17 @@ struct GitHubReleaseResponse {
     body: Option<String>,
     #[serde(default)]
     assets: Vec<GitHubReleaseAsset>,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ReleaseFeed {
+    Latest(GitHubReleaseResponse),
+    List(Vec<GitHubReleaseResponse>),
 }
 
 // GitHub Release 单个资产定义
@@ -51,6 +62,7 @@ const UPDATE_DOWNLOAD_PROGRESS_THROTTLE: Duration = Duration::from_millis(100);
 // GitHub 仓库与 API 默认地址
 const GITHUB_REPO_URL: &str = "https://github.com/ShallowDream724/NoteBoard";
 const GITHUB_RELEASE_API_URL: &str = "https://api.github.com/repos/ShallowDream724/NoteBoard/releases/latest";
+const GITHUB_PRERELEASE_API_URL: &str = "https://api.github.com/repos/ShallowDream724/NoteBoard/releases?per_page=100";
 
 // 下载进度事件载荷
 #[derive(Debug, Clone, Serialize)]
@@ -164,6 +176,26 @@ fn is_valid_update_download_url(url: &str) -> bool {
         && parsed.fragment().is_none()
         && path.starts_with(&format!("{}/releases/download/", repository.path().to_ascii_lowercase()))
         && (path.ends_with(".exe") || path.ends_with(".msi"))
+}
+
+fn accepts_prereleases(current: &str) -> bool {
+    parse_release_version(current).is_some_and(|version| !version.pre.is_empty())
+}
+
+fn release_feed_url(current: &str) -> &'static str {
+    if accepts_prereleases(current) { GITHUB_PRERELEASE_API_URL } else { GITHUB_RELEASE_API_URL }
+}
+
+/// RC installations follow RCs and the eventual stable release. Stable users
+/// stay on the stable channel. API order is publication order, not SemVer order.
+fn select_channel_release(feed: ReleaseFeed, current: &str) -> Option<GitHubReleaseResponse> {
+    let releases = match feed { ReleaseFeed::Latest(release) => vec![release], ReleaseFeed::List(releases) => releases };
+    let previews = accepts_prereleases(current);
+    releases.into_iter().filter_map(|release| {
+        let version = parse_release_version(&release.tag_name)?;
+        if release.draft || (!previews && (release.prerelease || !version.pre.is_empty())) { return None; }
+        Some((version, release))
+    }).max_by(|(a, _), (b, _)| a.cmp_precedence(b)).map(|(_, release)| release)
 }
 
 /// An empty latest_version means this fork has not published a release yet.
@@ -352,7 +384,7 @@ async fn fetch_latest_release(use_system_proxy: bool) -> Result<reqwest::Respons
     };
 
     client
-        .get(GITHUB_RELEASE_API_URL)
+        .get(release_feed_url(env!("CARGO_PKG_VERSION")))
         .header(reqwest::header::USER_AGENT, "NoteBoard")
         .send()
         .await
@@ -404,12 +436,15 @@ async fn check_latest_release() -> Result<UpdateCheckResult, String> {
         return Ok(unpublished_release(current_version));
     }
 
-    let release = response
+    let feed = response
         .error_for_status()
         .map_err(|err| format!("update_error:http_status:{err}"))?
-        .json::<GitHubReleaseResponse>()
+        .json::<ReleaseFeed>()
         .await
         .map_err(|err| format!("update_error:parse:{err}"))?;
+    let Some(release) = select_channel_release(feed, &current_version) else {
+        return Ok(unpublished_release(current_version));
+    };
 
     let latest_version = release.tag_name.trim_start_matches(['v', 'V']).to_string();
     let update_available = is_newer_version(&release.tag_name, &current_version);
@@ -564,6 +599,31 @@ pub fn open_external_url(url: String) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn release(tag: &str, prerelease: bool, draft: bool) -> GitHubReleaseResponse {
+        GitHubReleaseResponse { tag_name: tag.into(), name: None, html_url: String::new(), published_at: None,
+            body: None, assets: vec![], draft, prerelease }
+    }
+
+    #[test]
+    fn rc_channel_finds_published_previews_without_a_stable_release() {
+        assert!(release_feed_url("1.0.0-rc.2").ends_with("releases?per_page=100"));
+        assert!(release_feed_url("1.0.0").ends_with("releases/latest"));
+        let feed = ReleaseFeed::List(vec![release("v1.0.0-rc.3", true, false), release("v1.0.0-rc.10", true, false),
+            release("v2.0.0", false, true), release("broken", false, false)]);
+        let found = select_channel_release(feed, "1.0.0-rc.2").unwrap();
+        assert_eq!(found.tag_name, "v1.0.0-rc.10");
+        assert!(is_newer_version(&found.tag_name, "1.0.0-rc.2"));
+    }
+
+    #[test]
+    fn stable_channel_excludes_previews_and_rc_can_graduate_to_stable() {
+        let feed = || ReleaseFeed::List(vec![release("v1.0.0-rc.10", true, false), release("v1.0.0", false, false)]);
+        assert_eq!(select_channel_release(feed(), "1.0.0-rc.2").unwrap().tag_name, "v1.0.0");
+        assert_eq!(select_channel_release(feed(), "0.9.0").unwrap().tag_name, "v1.0.0");
+        assert!(select_channel_release(ReleaseFeed::List(vec![release("v2.0.0-rc.1", true, false)]), "1.0.0").is_none());
+        assert!(select_channel_release(ReleaseFeed::List(vec![]), "1.0.0-rc.2").is_none());
+    }
 
     #[test]
     fn stable_release_updates_same_number_prerelease() {

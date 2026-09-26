@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
 import { withRichPresentation } from '../../src/features/editor-md/rich-content/presentedView';
+import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>() }));
 vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (element: HTMLElement, callback: (near: boolean) => void) => {
@@ -90,5 +91,24 @@ it('unloads offscreen gutters while preserving folded height and restores nested
     await mounted.click('.nb-code-fold-summary');
     expect(mounted.host.querySelector('.nb-code-fold-summary')?.getAttribute('aria-label')).toBe('展开第 2 行代码');
     expect(mounted.editor.state.doc.textContent).toBe(source);
+  } finally { await mounted.destroy(); }
+});
+
+it('retains function folds and whole-block presentation when dragging remounts its NodeView', async () => {
+  const mounted = await mount();
+  try {
+    const paragraph = mounted.editor.schema.nodes.paragraph.create(null, mounted.editor.schema.text('before'));
+    await act(async () => { mounted.editor.view.dispatch(mounted.editor.state.tr.insert(0, paragraph)); });
+    await mounted.click('[aria-label="折叠第 1 行代码"]');
+    await mounted.click('[aria-label="自动换行"]');
+    await mounted.click('[aria-label="折叠代码块"]');
+    await act(async () => { expect(moveTopLevelBlock(mounted.editor.view, paragraph.nodeSize, 0)).not.toBeNull(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(45); });
+    expect(mounted.host.querySelector('.nb-code-block')?.getAttribute('data-collapsed')).toBe('true');
+    expect(mounted.host.querySelector('.nb-code-block')?.getAttribute('data-wrap')).toBe('false');
+    await mounted.click('[aria-label="展开代码块"]');
+    await act(async () => { await vi.advanceTimersByTimeAsync(45); });
+    expect(mounted.host.querySelector('.nb-code-fold-summary')).not.toBeNull();
+    expect(mounted.host.querySelector('.nb-code-line-gutter')).not.toBeNull();
   } finally { await mounted.destroy(); }
 });

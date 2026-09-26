@@ -44,7 +44,10 @@ describe('empty paragraph insertion', () => {
     expect(replaceEmptyParagraph(mock.editor, 0, { type: 'heading', attrs: { level: 1 } })).toBe(false);
   });
   it('maps a pending image to the original empty paragraph without an extra blank line', () => {
+    mock.editor.commands.setTextSelection(2);
+    const selection = mock.editor.state.selection;
     const lease = captureImage();
+    expect(mock.editor.state.selection).toBe(selection);
     mock.editor.view.dispatch(mock.editor.state.tr.insertText('prefix ', 1));
     mock.editor.commands.setTextSelection(1);
     expect(lease.commit('image.png')).toBe(true);
@@ -52,6 +55,17 @@ describe('empty paragraph insertion', () => {
     expect(mock.editor.state.doc.child(0).textContent).toBe('prefix before');
     expect(mock.editor.state.doc.child(1).type.name).toBe('image');
     expect(mock.editor.state.doc.child(2).textContent).toBe('after');
+  });
+  it('inserts a link at the captured paragraph without requesting selection scrolling', () => {
+    const scroll = vi.fn(() => true);
+    mock.editor.setOptions({ editorProps: { handleScrollToSelection: scroll } });
+    const lease = captureEmptyParagraphInsertion(mock.editor, target(), (text: string) => ({
+      type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] }],
+    }))!;
+    expect(lease.commit('link')).toBe(true);
+    expect(mock.editor.state.doc.child(1).textContent).toBe('link');
+    expect(mock.editor.state.selection.$from.parent.textContent).toBe('link');
+    expect(scroll).not.toHaveBeenCalled();
   });
   it('does not replace content typed into the paragraph while the dialog is open', () => {
     const lease = captureImage();

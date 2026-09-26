@@ -3,6 +3,13 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 
+/** Resolve the owning package, including pnpm's nested store paths. Substring
+ * matches accidentally classify mermaid-to-excalidraw as the Mermaid engine. */
+function nodePackage(id: string): string | undefined {
+  const matches = [...id.matchAll(/node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/g)];
+  return matches.at(-1)?.[1].replace(/\\/g, '/');
+}
+
 // Server rendering is used only by on-demand infographic export. Keep both
 // entry wrappers and CJS implementations out of the client runtime chunk.
 function isReactServerModule(id: string): boolean {
@@ -189,15 +196,15 @@ function moduleSourceManifestPlugin(): import('vite').Plugin {
       // 从模块 id 提取真实包名：取路径中最后一个 node_modules/<pkg> 段
       // （pnpm 的 .pnpm/<pkg>@<v>/node_modules/<pkg>/ 布局下最后一段才是真实包名）
       const packageNameOf = (id: string): string => {
-        const matches = [...id.matchAll(/node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+)/g)];
-        if (matches.length === 0) {
+        const packageName = nodePackage(id);
+        if (!packageName) {
           // 项目内模块：以 src 下的路径前缀（保留两级目录即可定位来源特性）
           const normalized = id.replace(/\\/g, '/');
           const srcIdx = normalized.indexOf('/src/');
           if (srcIdx >= 0) return normalized.slice(srcIdx + 1, srcIdx + 1 + 60);
           return normalized.split('/').slice(-2).join('/');
         }
-        return matches[matches.length - 1][1];
+        return packageName;
       };
       const report: Record<string, { packages: string[]; reactServerModules: string[] }> = {};
       for (const [fileName, chunkUnknown] of Object.entries(bundle)) {
@@ -263,7 +270,7 @@ export default defineConfig({
         //   导致入口静态闭包含整个 1.1 MiB 画板库。
         //   规则：
         //   1. React client runtime → vendor-react；server renderer 保持按需加载
-        //   2. mermaid/excalidraw/katex → 独立库 chunk（只含库自身代码，应用代码经动态 import 进入）
+        //   2. Excalidraw/KaTeX 独立；Mermaid 保留其按图种的原生动态模块边界
         //   3. 其余 node_modules 不归组（避免所有重库变成共有前置依赖）
         manualChunks(id) {
           // 🔴 Vite 的动态 import 预载辅助（__vite__preloadHelper）默认会被放进
@@ -274,10 +281,10 @@ export default defineConfig({
           }
           if (id.includes('node_modules')) {
             if (isReactServerModule(id)) return 'vendor-react-server';
-            if (id.includes('mermaid')) return 'mermaid';
-            if (id.includes('@excalidraw') || id.includes('excalidraw')) return 'excalidraw';
-            if (id.includes('katex')) return 'katex';
-            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor-react';
+            const packageName = nodePackage(id);
+            if (packageName === '@excalidraw/excalidraw') return 'excalidraw';
+            if (packageName === 'katex') return 'katex';
+            if (['react', 'react-dom', 'scheduler'].includes(packageName ?? '')) return 'vendor-react';
           }
           return undefined;
         },

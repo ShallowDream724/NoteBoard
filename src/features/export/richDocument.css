@@ -1,6 +1,7 @@
 .export-image-collection { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8em; margin: 1em 0; }
 .export-image-collection[data-columns="3"] { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .export-image-slot { min-width: 0; margin: 0; break-inside: avoid; }
+.export-image-slot > figure[data-nb-image] { width:100%!important; margin:0!important; }
 .export-image-slot img { display: block; width:100%; max-width: 100%; height: auto; margin: 0 auto; }
 .export-image-slot > p { color: var(--editor-text-secondary, #526174); font-size: .9em; text-align: center; margin: .45em 0; }
 .export-image-slot[data-empty] { min-height: 4em; }

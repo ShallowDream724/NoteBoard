@@ -3,7 +3,8 @@
 // 详见 docs/07-UI布局与交互规范.md §1
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import { Group, Panel, type PanelImperativeHandle } from 'react-resizable-panels';
+import { Group, Panel } from 'react-resizable-panels';
+import { useRememberedPanelSize } from './useRememberedPanelSize';
 import type { Editor } from '@tiptap/core';
 import { TitleBar } from './titlebar/TitleBar';
 import { PanelResizeHandle } from './PanelResizeHandle';
@@ -119,7 +120,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   }, []);
 
   const layoutElementRef = useRef<HTMLDivElement>(null);
-  const explorerPanelRef = useRef<PanelImperativeHandle>(null);
 
   // 标签激活变化只切换大纲的数据源，不修改或重建任何 Markdown 编辑器内核。
   useEffect(() => {
@@ -428,12 +428,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   // 所有 action 都在触发时读取 store 中的活动标签，无需随文件切换反复注销和注册。
   }, []);
 
-  // defaultSize is only a mount hint; session restoration arrives afterwards.
-  useEffect(() => {
-    const panel = explorerPanelRef.current;
-    if (!layoutElementRef.current?.clientWidth) return;
-    if (explorerVisible && !isBoardPresentationMode && panel && Math.abs(panel.getSize().inPixels - explorerWidth) >= 1) panel.resize(explorerWidth);
-  }, [explorerWidth, explorerVisible, isBoardPresentationMode]);
+  const explorerPanel = useRememberedPanelSize(explorerWidth, explorerVisible && !isBoardPresentationMode);
 
   return (
     <div className="nb-app-shell" data-presentation={isBoardPresentationMode || undefined}>
@@ -455,7 +450,12 @@ export function AppShell(_props: { children?: React.ReactNode }) {
             // constraint changes must not overwrite the user's preferred width.
             const pct = layout['nb-explorer'], container = layoutElementRef.current;
             if (!isUserInteraction || !container || typeof pct !== 'number') return;
-            const width = Math.round(pct / 100 * container.clientWidth);
+            // Library percentages exclude separators; use the same pixel basis
+            // so releasing the handle does not add the separator back to the pane.
+            const availableWidth = Array.from(container.children).reduce((total, child) =>
+              total + (child.hasAttribute('data-panel') ? (child as HTMLElement).offsetWidth : 0), 0);
+            if (!availableWidth) return;
+            const width = Math.round(pct / 100 * availableWidth);
             const store = useLayoutStore.getState();
             if (Math.abs(width - store.explorerWidth) >= 1) store.setExplorerWidth(width);
           }}
@@ -465,7 +465,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
             <>
               <Panel
                 id="nb-explorer"
-                panelRef={explorerPanelRef}
+                {...explorerPanel}
                 groupResizeBehavior="preserve-pixel-size"
                 defaultSize={explorerWidth}
                 minSize={EXPLORER_MIN}

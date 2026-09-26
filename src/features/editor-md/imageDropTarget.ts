@@ -40,10 +40,13 @@ export function createImageDropIndicator(view: EditorView) {
   const clear = () => { marker?.remove(); marker = null; };
   return { clear, show(target: ImageDropTarget) {
     clear(); const box = (target.slot ?? target.block ?? view.dom).getBoundingClientRect();
-    marker = document.createElement('div');
+    marker = view.dom.ownerDocument.createElement('div');
+    marker.dataset.imageDropIndicator = target.slot ? 'slot' : 'block';
     marker.setAttribute('role', 'status');
-    marker.textContent = target.slot ? target.slot.dataset.empty === 'false' ? '释放图片以添加到后续空位' : '释放图片以填入此处' : '释放图片以插入文档';
-    marker.style.cssText = `position:fixed;pointer-events:none;z-index:9999;box-sizing:border-box;left:${box.left}px;top:${target.slot ? box.top : target.line}px;width:${box.width}px;${target.slot ? `height:${box.height}px;border:2px solid var(--editor-accent);background:color-mix(in srgb,var(--editor-accent) 10%,transparent);` : 'border-top:2px solid var(--editor-accent);'}color:var(--editor-accent);font-size:12px;padding:4px 8px;`;
+    const label = target.slot ? target.slot.dataset.empty === 'false' ? '释放图片以添加到后续空位' : '释放图片以填入此处' : '释放图片以插入文档';
+    marker.setAttribute('aria-label', label);
+    if (target.slot) marker.textContent = label;
+    marker.style.cssText = `position:fixed;pointer-events:none;z-index:9999;box-sizing:border-box;left:${box.left}px;top:${target.slot ? box.top : target.line}px;width:${box.width}px;${target.slot ? `height:${box.height}px;border:2px solid var(--editor-accent);background:color-mix(in srgb,var(--editor-accent) 10%,transparent);display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--editor-accent);font-size:12px;padding:4px 8px;` : 'height:0;border-top:2px solid var(--editor-accent);'}`;
     view.dom.ownerDocument.body.append(marker);
   } };
 }

@@ -27,6 +27,8 @@ import { canWrapBlockInCallout, wrapBlockInCallout } from './alertCommands';
 import { editFigureCaption } from './figureCaptionCommands';
 import { isEmptyParagraph } from './blockInteractionScope';
 import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
+import { RemoveFormatting } from 'lucide-react';
+import { clearBlockTextFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting, clearCaptionTextFormatting } from './textFormatting';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -82,6 +84,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         onReturnToEditor={() => editor.view.focus()}/>}
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
+    {supportsBlockTextFormatting(range.node) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockTextFormatting(editor, pos))}><RemoveFormatting size={16}/>清除文本格式</button>}
+    {native && hasCaptionTextFormatting(range.node) && <button role="menuitem" type="button" onClick={() => action(() => clearCaptionTextFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'table' ? '清除表注文字格式' : '清除图注文字格式'}</button>}
     {native && type === 'imageCollection' && <>
       <ImageCollectionMenu editor={editor} node={range.node} pos={pos}/>
       {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2 }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2 }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd }] as const).map(({ layout, columns, label, Icon }) =>

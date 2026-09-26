@@ -1,12 +1,13 @@
 import { useEffect, type RefObject } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { Plugin, PluginKey, TextSelection, type Selection } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection, NodeSelection, type Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { observeNearby } from './nearViewport';
 import { getCodeStructure, type CodeStructure, type CodeFold } from './codeBlockStructure';
 import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 import { INITIAL_CODE_GUTTERS, WINDOWED_CODE_LINES, visibleCodeLines } from './codeBlockViewport';
+import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 
 type Owner = () => number | undefined;
 interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean; visibleFrom: number; visibleTo: number }
@@ -16,6 +17,7 @@ type Update = { owner: Owner; node?: Node; language?: string; active?: boolean; 
 const key = new PluginKey<State>('code-block-controls');
 
 function selectionTouches(selection: Selection, position: number, fold: CodeFold): boolean {
+  if (selection instanceof NodeSelection) return false;
   const from = position + 1 + fold.from, to = position + 1 + fold.to;
   return selection.empty ? selection.from > from && selection.from < to : selection.from < to && selection.to > from;
 }
@@ -78,6 +80,7 @@ function blockDecorations(block: Block): Decoration[] {
 }
 
 export function createCodeBlockControlsPlugin(): Plugin<State> {
+  const rememberedFolds = new WeakMap<Node, Set<number>>();
   return new Plugin<State>({
     key,
     state: {
@@ -87,8 +90,10 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
         if (!tr.docChanged && !tr.selectionSet && !update) return previous;
         const blocks = new Map<Owner, Block>();
         let changed = false;
+        const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
         for (const [owner, old] of previous.blocks) {
-          const position = tr.mapping.map(old.position, 1);
+          const position = move && old.position >= move.from && old.position < move.to
+            ? move.inserted + old.position - move.from : tr.mapping.map(old.position, 1);
           // Edits in this block invalidate offsets immediately. Its NodeView
           // publishes fresh metadata, never hiding a newly edited source range.
           if (tr.doc.nodeAt(position) !== old.node) { changed = true; continue; }
@@ -120,7 +125,7 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
             if (!existing || existing.node !== update.node) {
               if (update.active) {
                 const structure = getCodeStructure(update.node.textContent, update.language ?? '');
-                if (structure) blocks.set(update.owner, { owner: update.owner, position, node: update.node, structure, folded: new Set(), active: true,
+                if (structure) blocks.set(update.owner, { owner: update.owner, position, node: update.node, structure, folded: rememberedFolds.get(update.node) ?? new Set(), active: true,
                   visibleFrom: 0, visibleTo: structure.lines.length > WINDOWED_CODE_LINES ? INITIAL_CODE_GUTTERS : structure.lines.length });
                 changed = true;
               }
@@ -133,6 +138,7 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
           } else changed = blocks.delete(update.owner) || changed;
         }
         if (!changed) return previous;
+        for (const block of blocks.values()) rememberedFolds.set(block.node, block.folded);
         let decorations = previous.decorations.map(tr.mapping, tr.doc);
         for (const [owner, old] of previous.blocks) {
           if (blocks.get(owner) === old) continue;

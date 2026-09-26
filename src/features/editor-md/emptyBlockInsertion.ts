@@ -9,6 +9,7 @@ import { editorDocumentKey } from './editorDocumentCodec';
 import { captureVisualInsertion, type InsertionLease } from './imageInsertionLease';
 import { ensureDisclosureTail } from './rich-content/disclosureEditing';
 import { revealInsertedImage } from './imageInsertionScroll';
+import { revealEditorBlock } from './editorViewport';
 
 /** Replace the named empty paragraph, independently of the editor's live selection. */
 export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSONContent | JSONContent[]): boolean {
@@ -24,8 +25,9 @@ export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSON
     : TextSelection.near(tr.doc.resolve(pos + (nodes[0].isTextblock ? nodes[0].nodeSize - 1 : 1))));
   ensureDisclosureTail(tr, pos + 1);
   const image = nodes[0].type.name === 'image';
-  dispatchDiscreteEdit(view, image ? tr : tr.scrollIntoView()); view.focus();
+  dispatchDiscreteEdit(view, tr); view.focus();
   if (image) revealInsertedImage(view, pos);
+  else revealEditorBlock(view, pos);
   return true;
 }
 
@@ -38,10 +40,9 @@ export function insertAtEmptyParagraph(editor: Editor, pos: number, content: JSO
 export function captureEmptyParagraphInsertion<T>(editor: Editor, pos: number, content: (value: T) => JSONContent | JSONContent[]): InsertionLease<T> | null {
   const key = editorDocumentKey(editor);
   if (!key || !isEmptyParagraph(editor.state.doc.nodeAt(pos))) return null;
-  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, pos + 1)));
   return captureVisualInsertion<T>(editor, key, (value, selection) => {
     const at = selection.$from;
     if (!selection.empty || !at.depth || !isEmptyParagraph(at.parent)) return false;
     return replaceEmptyParagraph(editor, at.before(), content(value));
-  });
+  }, pos + 1);
 }

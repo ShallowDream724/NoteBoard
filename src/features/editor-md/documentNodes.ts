@@ -131,16 +131,15 @@ export const ImageNode = Node.create<{ docKey: string }>({
   },
   renderHTML({ node, HTMLAttributes }) {
     const caption = normalizeFigureCaption(node.attrs.caption);
-    if (!caption) return ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, HTMLAttributes)];
     const rawWidth = String(node.attrs.width ?? '100%');
     const width = /^(?:\d+(?:\.\d+)?)(?:%|px)$/.test(rawWidth) ? rawWidth : /^\d+(?:\.\d+)?$/.test(rawWidth) ? `${rawWidth}px` : '100%';
     const align = node.attrs.align === 'left' || node.attrs.align === 'right' ? node.attrs.align : 'center';
     const imageAttrs = { ...HTMLAttributes }; delete imageAttrs.width; delete imageAttrs.align;
     return ['figure', { 'data-nb-image': '', 'data-width': node.attrs.width, 'data-align': align,
-      style: `width:${width};max-width:100%;margin:16px 0;margin-left:${align === 'left' ? '0' : 'auto'};margin-right:${align === 'right' ? '0' : 'auto'}` },
+      style: `width:${width};max-width:100%;margin:16px ${align === 'right' ? '0' : 'auto'} 16px ${align === 'left' ? '0' : 'auto'}` },
       ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, imageAttrs, { style: 'display:block;width:100%;max-width:100%;height:auto' })],
-      ['figcaption', { 'data-nb-caption-content': node.attrs.captionContent ? JSON.stringify(node.attrs.captionContent) : null,
-        style: 'margin-top:6px;font-size:.85em;line-height:1.6;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere' }, ...figureCaptionDOM(caption, node.attrs.captionContent)]];
+      ...(caption ? [['figcaption', { 'data-nb-caption-content': node.attrs.captionContent ? JSON.stringify(node.attrs.captionContent) : null,
+        style: 'margin-top:6px;font-size:.85em;line-height:1.6;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere' }, ...figureCaptionDOM(caption, node.attrs.captionContent)]] : [])];
   },
   parseMarkdown(token, helpers) { return helpers.createNode('image', { src: token.href, title: token.title, alt: token.text, width: '100%', align: 'center' }); },
   renderMarkdown(node, helpers) {

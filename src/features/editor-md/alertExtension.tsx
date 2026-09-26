@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { useState } from 'react';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react';
 import * as Popover from '@radix-ui/react-popover';
 import { Palette } from 'lucide-react';
@@ -10,9 +10,9 @@ import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
 import { annotationMarkerId } from './annotations/marker';
 import './callout.css';
+import CalloutMenu from './CalloutMenu';
 
 export type { AlertKind } from './alertPresentation';
-const CalloutMenu = lazy(() => import('./CalloutMenu'));
 
 function AlertComponent({ node, editor, getPos, selected, decorations }: NodeViewProps) {
   const attrs = calloutAttributes(node.attrs), title = calloutTitle(attrs), emoji = calloutEmoji(attrs);
@@ -40,8 +40,7 @@ function AlertComponent({ node, editor, getPos, selected, decorations }: NodeVie
       </div>
       {menu && <Popover.Portal><Popover.Content contentEditable={false} data-nb-editor-menu className="callout-menu" side="bottom" align="start"
         sideOffset={8} collisionPadding={12} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()}>
-        <Suspense fallback={<div className="callout-menu-heading">提示块</div>}><CalloutMenu attrs={attrs} mode={menu}
-          nativeVisible={nativeVisible} onChange={update}/></Suspense>
+        <CalloutMenu attrs={attrs} mode={menu} nativeVisible={nativeVisible} onChange={update}/>
       </Popover.Content></Popover.Portal>}
     </Popover.Root>
     <NodeViewContent className="alert-body"/>
