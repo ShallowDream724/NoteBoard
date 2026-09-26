@@ -45,14 +45,21 @@ export async function handlePastedImageFiles(editor: Editor, files: File[], docK
   return handleImageFilesUsingLease(captureVisualImageInsertion(editor, docKey, position), files);
 }
 export async function handleImageFilesUsingLease(lease: ImageInsertionLease | null, files: File[]): Promise<void> {
+  return handleImageSourcesUsingLease(lease, files.map(file => ({ name: file.name, mime: file.type, read: async () => new Uint8Array(await file.arrayBuffer()) })));
+}
+/** Native file drops share the same ownership, storage and atomic insertion as clipboard images. */
+export async function handleImagePathsUsingLease(lease: ImageInsertionLease | null, paths: readonly string[]): Promise<void> {
+  return handleImageSourcesUsingLease(lease, paths.map(path => ({ name: path.split(/[\\/]/).pop() || 'image.png', mime: '', read: () => readFile(path) })));
+}
+async function handleImageSourcesUsingLease(lease: ImageInsertionLease | null, sources: { name: string; mime: string; read(): Promise<Uint8Array> }[]): Promise<void> {
   if (!lease) return;
   try {
     const images: InsertedImage[] = [];
     // Sequential IO bounds decoded/binary memory and preserves clipboard order.
-    for (const file of files) {
+    for (const file of sources) {
       assertCurrent(lease);
-      const bytes = new Uint8Array(await file.arrayBuffer()); assertCurrent(lease);
-      images.push(await writeImage(lease, file.name, bytes, file.type));
+      const bytes = await file.read(); assertCurrent(lease);
+      images.push(await writeImage(lease, file.name, bytes, file.mime));
     }
     if (lease.commit(images)) showToast(`已插入 ${images.length} 张图片`, 'success');
   } catch (error) {

@@ -1,0 +1,53 @@
+import type { EditorView } from '@tiptap/pm/view';
+import type { FileDropPoint } from '../../core/editor/fileDropTargets';
+
+export interface ImageDropTarget { position: number; slot?: HTMLElement; line?: number }
+/** Always test the visible hit element, so an overlay or another editor cannot claim the slot below it. */
+export function imageSlotAtPoint(view: EditorView, point: FileDropPoint): ImageDropTarget | undefined {
+  const hit = view.dom.ownerDocument.elementFromPoint(point.x, point.y);
+  if (!hit || hit.closest('.ProseMirror') !== view.dom) return;
+  const slot = hit.closest<HTMLElement>('[data-image-slot], [data-nb-image-slot]');
+  if (!slot || !view.dom.contains(slot)) return;
+  try {
+    const pos = view.posAtDOM(slot, 0), $pos = view.state.doc.resolve(pos);
+    const position = $pos.parent.type.name === 'imageSlot' ? pos : pos + 1;
+    if (view.state.doc.resolve(position).parent.type.name === 'imageSlot') return { position, slot };
+  } catch { /* A node view may have been removed between the hit and its position lookup. */ }
+}
+export function imageDropTargetAtPoint(view: EditorView, point: FileDropPoint): ImageDropTarget | undefined {
+  const hitElement = view.dom.ownerDocument.elementFromPoint(point.x, point.y);
+  if (!view.editable || view.dom.closest('[inert]') || hitElement?.closest('.ProseMirror') !== view.dom) return;
+  const slot = imageSlotAtPoint(view, point); if (slot) return slot;
+  // Text inputs and embedded editors own their own editing semantics.
+  if (hitElement.closest('input, textarea, [role="textbox"]:not(.ProseMirror)')) return;
+  const hit = view.posAtCoords({ left: point.x, top: point.y }); if (!hit) return;
+  const coords = view.coordsAtPos(hit.pos);
+  return { position: hit.pos, line: coords.bottom };
+}
+export function createImageDropIndicator(view: EditorView) {
+  let marker: HTMLElement | null = null;
+  const clear = () => { marker?.remove(); marker = null; };
+  return { clear, show(target: ImageDropTarget) {
+    clear(); const box = (target.slot ?? view.dom).getBoundingClientRect();
+    marker = document.createElement('div');
+    marker.setAttribute('role', 'status');
+    marker.textContent = target.slot ? target.slot.dataset.empty === 'false' ? '释放图片以添加到后续空位' : '释放图片以填入此处' : '释放图片以插入文档';
+    marker.style.cssText = `position:fixed;pointer-events:none;z-index:9999;box-sizing:border-box;left:${box.left}px;top:${target.slot ? box.top : target.line}px;width:${box.width}px;${target.slot ? `height:${box.height}px;border:2px solid var(--editor-accent);background:color-mix(in srgb,var(--editor-accent) 10%,transparent);` : 'border-top:2px solid var(--editor-accent);'}color:var(--editor-accent);font-size:12px;padding:4px 8px;`;
+    view.dom.ownerDocument.body.append(marker);
+  } };
+}
+
+/** Coordinates expire on leaving the document/window; paste rechecks what is actually visible there. */
+export function trackImagePastePointer(view: EditorView): { slot(): ImageDropTarget | undefined; destroy(): void } {
+  const doc = view.dom.ownerDocument, win = doc.defaultView;
+  let point: FileDropPoint | null = null;
+  const move = (event: PointerEvent) => { point = { x: event.clientX, y: event.clientY }; };
+  const leave = () => { point = null; };
+  const out = (event: PointerEvent) => { if (!event.relatedTarget) leave(); };
+  doc.addEventListener('pointermove', move, true); doc.addEventListener('pointerover', move, true);
+  doc.addEventListener('pointerout', out, true); doc.addEventListener('pointerleave', leave); win?.addEventListener('blur', leave);
+  return { slot: () => point ? imageSlotAtPoint(view, point) : undefined, destroy() {
+    doc.removeEventListener('pointermove', move, true); doc.removeEventListener('pointerover', move, true);
+    doc.removeEventListener('pointerout', out, true); doc.removeEventListener('pointerleave', leave); win?.removeEventListener('blur', leave);
+  } };
+}

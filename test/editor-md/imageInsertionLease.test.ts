@@ -31,15 +31,16 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mock.open }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: mock.read }));
 vi.mock('../../src/stores/toastStore', () => ({ showToast: mock.toast }));
 vi.mock('../../src/features/explorer/refreshAfterWrite', () => ({ refreshExplorerAfterWrite: async () => {} }));
-import { handlePastedImageFile, insertLocalImageWithDialog } from '../../src/features/editor-md/imagePaste';
-import { captureSourceImageInsertion } from '../../src/features/editor-md/imageInsertionLease';
+import { handlePastedImageFile, handleImagePathsUsingLease, insertLocalImageWithDialog } from '../../src/features/editor-md/imagePaste';
+import { captureSourceImageInsertion, captureVisualImageInsertion } from '../../src/features/editor-md/imageInsertionLease';
+import { ImageCollection, ImageSlot } from '../../src/features/editor-md/rich-content/schema';
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 const file = (bytes: Promise<ArrayBuffer>) => ({ name: 'photo.png', arrayBuffer: () => bytes } as File);
 const imageCount = () => { let count = 0; mock.editor.state.doc.descendants(node => { if (node.type.name === 'image') count++; }); return count; };
 beforeEach(() => {
   vi.clearAllMocks(); mock.key = 'C:\\notes\\a.md'; mock.directory = 'C:\\notes'; mock.generation = 1; mock.activeKey = mock.key; mock.mode = 'visual'; mock.transferring = false;
-  mock.editor = new Editor({ extensions: [StarterKit, Image], content: '<p>abcd</p>' });
+  mock.editor = new Editor({ extensions: [StarterKit, Image, ImageCollection, ImageSlot], content: '<p>abcd</p>' });
   mock.editor.commands.setTextSelection(3);
   mock.save.mockResolvedValue(`${'a'.repeat(64)}.png`); mock.read.mockResolvedValue(new Uint8Array([1]));
   mock.stage.mockReset().mockResolvedValue(`${'a'.repeat(64)}.png`);
@@ -107,5 +108,38 @@ describe('async image insertion ownership', () => {
     mock.source.dispatch({ changes: { from: 0, insert: 'X' } }); mock.source.dispatch({ selection: { anchor: 0 } });
     expect(lease.commit({ src: './img/a.png', alt: 'photo' })).toBe(true);
     expect(mock.source.state.doc.toString()).toBe('Xab![photo](<./img/a.png>)cd');
+  });
+  it.each(['grid', 'carousel'])('keeps a pending %s slot target through edits and skips occupied slots for multiple native images', async layout => {
+    mock.editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'text' }] }, { type: 'imageCollection', attrs: { layout }, content: [
+      { type: 'imageSlot' }, { type: 'imageSlot' }, { type: 'imageSlot', content: [{ type: 'image', attrs: { src: './existing.png' } }] }, { type: 'imageSlot' },
+    ] }] });
+    const read = deferred<Uint8Array>(); mock.read.mockReturnValueOnce(read.promise);
+    const lease = captureVisualImageInsertion(mock.editor, mock.key, 10);
+    const pending = handleImagePathsUsingLease(lease, ['C:\\one.png', 'C:\\two.png', 'C:\\three.png']);
+    mock.editor.commands.insertContentAt(1, 'prefix'); mock.editor.commands.setTextSelection(1);
+    read.resolve(new Uint8Array([1])); await pending;
+    const collection = mock.editor.state.doc.child(1);
+    expect(collection.child(0).childCount).toBe(0);
+    expect(collection.child(1).firstChild?.attrs.alt).toBe('one');
+    expect(collection.child(2).firstChild?.attrs.src).toBe('./existing.png');
+    expect(collection.child(3).firstChild?.attrs.alt).toBe('two');
+    expect(collection.child(4).firstChild?.attrs.alt).toBe('three');
+  });
+  it('cancels native image insertion when the original empty slot is removed', async () => {
+    mock.editor.commands.setContent({ type: 'doc', content: [{ type: 'imageCollection', content: [{ type: 'imageSlot' }, { type: 'imageSlot' }, { type: 'imageSlot' }] }] });
+    const read = deferred<Uint8Array>(); mock.read.mockReturnValue(read.promise);
+    const pending = handleImagePathsUsingLease(captureVisualImageInsertion(mock.editor, mock.key, 4), ['C:\\one.png']);
+    mock.editor.commands.deleteRange({ from: 3, to: 5 });
+    read.resolve(new Uint8Array([1])); await pending;
+    expect(mock.save).not.toHaveBeenCalled(); expect(imageCount()).toBe(0);
+  });
+  it('does not overwrite a slot filled while image bytes were pending', async () => {
+    mock.editor.commands.setContent({ type: 'doc', content: [{ type: 'imageCollection', content: [{ type: 'imageSlot' }, { type: 'imageSlot' }] }] });
+    const read = deferred<Uint8Array>(); mock.read.mockReturnValue(read.promise);
+    const pending = handleImagePathsUsingLease(captureVisualImageInsertion(mock.editor, mock.key, 2), ['C:\\one.png']);
+    mock.editor.view.dispatch(mock.editor.state.tr.insert(2, mock.editor.schema.nodes.image.create({ src: './concurrent.png' })));
+    read.resolve(new Uint8Array([1])); await pending;
+    expect(mock.editor.state.doc.firstChild?.firstChild?.firstChild?.attrs.src).toBe('./concurrent.png');
+    expect(mock.editor.state.doc.firstChild?.child(1).firstChild?.attrs.alt).toBe('one');
   });
 });

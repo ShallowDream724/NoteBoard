@@ -1,18 +1,20 @@
 import { DOMParser } from 'linkedom';
-import { CLIPBOARD_LIMITS, normalizeClipboardDocument, normalizeClipboardText } from './normalize';
+import { CLIPBOARD_LIMITS } from './normalize';
 import { parseStructuredClipboard } from './structured';
+import { clipboardHtmlSource, normalizeExternalHtml, normalizeExternalText, type ExternalTextOptions } from './external';
 
-self.onmessage = (event: MessageEvent<{ raw: string; kind: 'html' | 'document' | 'table' | 'text'; stripAnnotations?: boolean; inferTable?: boolean; tableContext?: boolean }>) => {
+self.onmessage = (event: MessageEvent<ExternalTextOptions & { raw: string; kind: 'html' | 'document' | 'table' | 'text' | 'markdown'; plainText?: string }>) => {
   try {
     const { raw, kind } = event.data;
     if (raw.length > CLIPBOARD_LIMITS.characters) throw new Error('剪贴板内容过大，请分段粘贴');
-    if (kind === 'text') {
-      self.postMessage({ ok: true, result: normalizeClipboardText(raw, event.data.inferTable, event.data.tableContext) });
+    if (kind === 'text' || kind === 'markdown') {
+      self.postMessage({ ok: true, result: normalizeExternalText(raw, event.data, kind === 'markdown') });
     } else if (kind === 'document' || kind === 'table') {
       self.postMessage({ ok: true, result: parseStructuredClipboard(raw, kind === 'table', event.data.stripAnnotations) });
     } else {
-      const document = new DOMParser().parseFromString(/<html[\s>]/i.test(raw) ? raw : `<html><body>${raw}</body></html>`, 'text/html');
-      self.postMessage({ ok: true, result: normalizeClipboardDocument(document as unknown as Document, raw.length) });
+      const html = clipboardHtmlSource(raw);
+      const document = new DOMParser().parseFromString(/<html[\s>]/i.test(html) ? html : `<html><body>${html}</body></html>`, 'text/html');
+      self.postMessage({ ok: true, result: normalizeExternalHtml(document as unknown as Document, raw, event.data.plainText, event.data) });
     }
   } catch (error) { self.postMessage({ ok: false, error: error instanceof Error ? error.message : String(error) }); }
 };

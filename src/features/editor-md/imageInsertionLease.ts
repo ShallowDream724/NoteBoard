@@ -75,6 +75,15 @@ export function captureVisualInsertion<T>(editor: Editor, docKey: string, insert
   let bookmark = selection.getBookmark();
   let from = selection.from, to = selection.to;
   let rawPosition = position;
+  // Empty slots have no text selection of their own. Track their enclosing node
+  // independently so deleting/replacing it cannot redirect pending image IO.
+  let slotRange: { from: number; to: number } | undefined;
+  if (position !== undefined) {
+    const $pos = editor.state.doc.resolve(position);
+    for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === 'imageSlot') {
+      slotRange = { from: $pos.before(depth), to: $pos.after(depth) }; break;
+    }
+  }
   return captureDocumentInsertion(docKey, {
     current: () => !editor.isDestroyed && editor.isEditable && getMdTipTapEditor(docKey) === editor && !editor.view.dom.closest('[inert]'),
     insert: value => insert(value, bookmark.resolve(editor.state.doc), rawPosition),
@@ -82,6 +91,11 @@ export function captureVisualInsertion<T>(editor: Editor, docKey: string, insert
       const update = ({ transaction, appendedTransactions }: { transaction: Transaction; appendedTransactions: Transaction[] }) => {
         for (const tr of [transaction, ...appendedTransactions]) {
           if (!tr.docChanged) continue;
+          if (slotRange) {
+            const start = tr.mapping.mapResult(slotRange.from, 1), end = tr.mapping.mapResult(slotRange.to, -1);
+            if (start.deletedAcross || end.deletedAcross || (start.deleted && end.deleted)) { cancel(); return; }
+            slotRange = { from: start.pos, to: end.pos };
+          }
           const start = tr.mapping.mapResult(from, 1), end = tr.mapping.mapResult(to, -1);
           if (rawPosition !== undefined) { const mapped = tr.mapping.mapResult(rawPosition, 1); if (mapped.deletedAcross) { cancel(); return; } rawPosition = mapped.pos; }
           if (tr.getMeta('noteboard-document-replacement') || (rawPosition === undefined && (start.deletedAcross || end.deletedAcross || (from < to && start.deleted && end.deleted)))) { cancel(); return; }

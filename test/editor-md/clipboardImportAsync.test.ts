@@ -6,6 +6,7 @@ import { readClipboardSnapshot, pasteFromSystemClipboard } from '../../src/featu
 import { registerMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { useDocumentStore, type Document } from '../../src/stores/documentStore';
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
+import { normalizeExternalText } from '../../src/features/editor-md/clipboard/external';
 
 vi.mock('../../src/features/editor-md/imagePaste', () => ({ handlePastedImageFiles: vi.fn() }));
 class WorkerMock {
@@ -91,5 +92,25 @@ describe('asynchronous rich paste ownership', () => {
     expect(editor.state.doc.textContent).toBe('abcd');
     editor.view.someProp('handleKeyDown', handler => handler(editor.view, new KeyboardEvent('keydown', { key: 'Escape' })));
     await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
+  });
+  it('large Markdown uses the shared Worker policy and inserts parsed nodes at the mapped target', async () => {
+    const raw = '# heading\n\n' + 'body '.repeat(6000);
+    editor.commands.selectAll(); importClipboardSnapshot(editor.view, { formats: { 'text/plain': raw } });
+    const worker = WorkerMock.instances.at(-1)!;
+    expect(worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: 'text', inferMarkdown: true }));
+    worker.onmessage?.({ data: { ok: true, result: normalizeExternalText(raw, { inferMarkdown: true, inferTable: true }) } } as MessageEvent);
+    await vi.waitFor(() => expect(editor.state.doc.firstChild?.type.name).toBe('heading'));
+    expect(editor.state.doc.firstChild?.textContent).toBe('heading');
+    editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
+  });
+  it('large code-context paste stays inside its original code block with literal newlines', async () => {
+    editor.commands.setContent('<pre><code>code</code></pre>'); editor.commands.setTextSelection({ from: 1, to: 5 });
+    const raw = '# literal $x$\n'.repeat(2500);
+    importClipboardSnapshot(editor.view, { formats: { 'text/plain': raw, 'text/html': '<h1>wrong</h1>' } });
+    const worker = WorkerMock.instances.at(-1)!;
+    expect(worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: 'text', inferMarkdown: false, inferTable: false }));
+    worker.onmessage?.({ data: { ok: true, result: normalizeExternalText(raw) } } as MessageEvent);
+    await vi.waitFor(() => expect(editor.state.doc.firstChild?.textContent).toBe(raw));
+    expect(editor.state.doc.firstChild?.type.name).toBe('codeBlock');
   });
 });

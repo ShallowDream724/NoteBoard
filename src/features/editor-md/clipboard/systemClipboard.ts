@@ -4,6 +4,7 @@ import { showToast } from '../../../stores/toastStore';
 import { captureVisualInsertion } from '../imageInsertionLease';
 import { importClipboardSnapshot, type ClipboardSnapshot } from './clipboardImport';
 import { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
+import { MARKDOWN_MIMES, needsClipboardImageFallback } from './external';
 
 /** Read rich formats without decoding a redundant PNG when HTML is available. */
 export async function readClipboardSnapshot(plain = false): Promise<ClipboardSnapshot> {
@@ -12,10 +13,10 @@ export async function readClipboardSnapshot(plain = false): Promise<ClipboardSna
     const items = await navigator.clipboard.read(), formats: Record<string, string> = {};
     for (const item of items) for (const type of item.types) {
       const canonical = type.replace(/^web /, '');
-      if (['text/html', 'text/plain', DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME].includes(canonical) && formats[canonical] === undefined) formats[canonical] = await (await item.getType(type)).text();
+      if (['text/html', 'text/plain', ...MARKDOWN_MIMES, DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME].includes(canonical) && formats[canonical] === undefined) formats[canonical] = await (await item.getType(type)).text();
     }
     const files: File[] = [];
-    if (!formats['text/html'] && !formats[DOCUMENT_SLICE_MIME] && !formats[TABLE_SELECTION_MIME]) {
+    if ((!formats['text/html'] || needsClipboardImageFallback(formats['text/html'])) && !MARKDOWN_MIMES.some(type => formats[type]) && !formats[DOCUMENT_SLICE_MIME] && !formats[TABLE_SELECTION_MIME]) {
       for (const item of items) for (const type of item.types) if (type.startsWith('image/')) {
         const blob = await item.getType(type); files.push(new File([blob], `clipboard-${files.length + 1}.${type.split('/')[1]}`, { type }));
       }

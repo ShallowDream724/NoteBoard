@@ -34,6 +34,7 @@ import { serializeDocumentHistory, restoreDocumentHistory } from '../history/doc
 // 🔴 R06：迁移视图状态快照经回收恢复存储传递
 import { saveViewState } from '../session/editorSuspension';
 import { reportWebSpans } from '../../core/perf/reportWebSpans';
+import { clearNativeFileDropTargets, routeNativeFileDrop } from '../../core/editor/fileDropTargets';
 import {
   acquireBootCoordinator,
   releaseBootCoordinator,
@@ -286,13 +287,14 @@ export async function startEventListeners(): Promise<void> {
   // 拖拽：drop 事件入队本窗口打开队列并唤醒消费（不再在监听里直接打开）
   if (!unlistenDragDrop) {
     const unlisten = await onDragDrop(async (payload) => {
+      const editorClaimed = routeNativeFileDrop(payload);
       if (payload.type === 'enter' || payload.type === 'over') {
-        useLayoutStore.getState().setIsDraggingFile(true);
+        useLayoutStore.getState().setIsDraggingFile(!editorClaimed);
       } else if (payload.type === 'leave') {
         useLayoutStore.getState().setIsDraggingFile(false);
       } else if (payload.type === 'drop') {
         useLayoutStore.getState().setIsDraggingFile(false);
-        if (payload.paths.length > 0) {
+        if (!editorClaimed && payload.paths.length > 0) {
           try {
             await ipc.enqueueOpenRequests(label, payload.paths, 'drop');
           } catch (e) {
@@ -375,6 +377,8 @@ export async function startEventListeners(): Promise<void> {
  * 停止事件监听（卸载时；bootCoordinator 的队列监听由 releaseBootCoordinator 管理）
  */
 export function stopEventListeners(): void {
+  clearNativeFileDropTargets();
+  useLayoutStore.getState().setIsDraggingFile(false);
   unlistenCloseRequested?.();
   unlistenFocusTab?.();
   unlistenDragDrop?.();

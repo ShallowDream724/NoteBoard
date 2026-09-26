@@ -5,11 +5,19 @@ import { parseClipboardMatrix } from '../../../core/clipboardMatrix';
 export const CLIPBOARD_LIMITS = { characters: 16_000_000, nodes: 250_000, depth: 48, cells: 100_000, rules: 2_048, synchronous: 24_000 } as const;
 export interface ClipboardImportResult { content: JSONContent[]; diagnostics: string[]; nodes: number; openStart?: number; openEnd?: number; tableScope?: 'row' | 'column' | 'table' | 'cells' }
 export class ClipboardImportError extends Error {}
-/** The same text/TSV policy runs synchronously for tiny input and in Worker for large input. */
-export function normalizeClipboardText(raw: string, inferTable = false, tableContext = false): ClipboardImportResult {
+/** Bound text parsing before constructing either paragraph or Markdown trees. */
+export function clipboardTextLineCount(raw: string): number {
   if (raw.length > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴');
   let lines = 1;
-  for (let at = raw.indexOf('\n'); at >= 0; at = raw.indexOf('\n', at + 1)) if (++lines * 2 > CLIPBOARD_LIMITS.nodes) throw new ClipboardImportError('剪贴板行数过多，请分段粘贴');
+  for (let at = 0; at < raw.length; at++) if (raw[at] === '\n' || raw[at] === '\r') {
+    if (raw[at] === '\r' && raw[at + 1] === '\n') at++;
+    if (++lines * 2 > CLIPBOARD_LIMITS.nodes) throw new ClipboardImportError('剪贴板行数过多，请分段粘贴');
+  }
+  return lines;
+}
+/** The same text/TSV policy runs synchronously for tiny input and in Worker for large input. */
+export function normalizeClipboardText(raw: string, inferTable = false, tableContext = false): ClipboardImportResult {
+  const lines = clipboardTextLineCount(raw);
   if (inferTable && (tableContext || (raw.includes('\t') && raw.includes('\n')))) {
     const matrix = parseClipboardMatrix(raw);
     const explicit = matrix && matrix.length >= 2 && matrix[0].length >= 2 && matrix.every(row => row.length === matrix[0].length)
@@ -95,21 +103,39 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     return textAlign && ['left', 'center', 'right'].includes(textAlign) ? { textAlign } : undefined;
   }
   function image(element: Element): JSONContent {
-    const raw = element.getAttribute('src') ?? '', src = safeClipboardUrl(raw, true), alt = element.getAttribute('alt') ?? '';
+    const raw = element.getAttribute('src') ?? '', src = safeClipboardUrl(raw, true), alt = element.getAttribute('alt') || element.getAttribute('o:title') || '';
     if (!src) { diagnostics.add('无法读取的图片已保留替代文字和来源'); return paragraph([{ type: 'text', text: `[图片：${alt || '不可读取'}${raw ? `；来源：${raw.slice(0, 300)}` : ''}]` }]); }
     return { type: 'image', attrs: { src, alt, title: element.getAttribute('title') } };
+  }
+  const visibleImageSources = new Set(Array.from(document.querySelectorAll('img')).map(element => element.getAttribute('src')));
+  function officeCommentImage(node: globalThis.Node): JSONContent | null {
+    if (node.nodeType !== 8 || !/<v:imagedata\b/i.test(node.textContent ?? '')) return null;
+    const wrapper = document.createElement('div'); wrapper.innerHTML = node.textContent ?? '';
+    const element = Array.from(wrapper.querySelectorAll('*')).find(child => child.tagName.toUpperCase() === 'V:IMAGEDATA');
+    return element && !visibleImageSources.has(element.getAttribute('src')) ? image(element) : null;
+  }
+  const preservesSpaces = (style: Style) => /^(?:pre|pre-wrap|break-spaces)$/.test(style['white-space'] ?? '') || style['mso-spacerun'] === 'yes';
+  function wordListMarker(element: Element): string {
+    const marker = Array.from(element.querySelectorAll('[style]')).find(child => declarations(child.getAttribute('style') ?? '')['mso-list']?.toLowerCase() === 'ignore');
+    if (marker) return marker.textContent ?? '';
+    for (const child of Array.from(element.childNodes)) if (child.nodeType === 8 && /mso-list\s*:\s*Ignore/i.test(child.textContent ?? '')) {
+      const wrapper = document.createElement('div'); wrapper.innerHTML = child.textContent ?? '';
+      const marker = Array.from(wrapper.querySelectorAll('[style]')).find(node => declarations(node.getAttribute('style') ?? '')['mso-list']?.toLowerCase() === 'ignore');
+      if (marker) return marker.textContent ?? '';
+    }
+    return element.textContent ?? '';
   }
   function inline(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false): JSONContent[] {
     const result: JSONContent[] = [];
     for (const node of Array.from(parent.childNodes)) {
       count(depth);
       if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) result.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
-      if (node.nodeType !== 1) continue;
+      if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) result.push(fallback); continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
-      if (skipped.has(tag) || style['mso-list'] === 'Ignore' || style.display === 'none') continue;
+      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
       if (tag === 'BR') { result.push({ type: 'hardBreak' }); continue; }
-      if (tag === 'IMG') { result.push(image(element)); continue; }
-      result.push(...inline(element, marksFor(element, inherited, style), depth + 1, preserve || style['white-space'] === 'pre-wrap'));
+      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { result.push(image(element)); continue; }
+      result.push(...inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
     }
     return result;
   }
@@ -119,7 +145,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     const output: JSONContent[] = []; let content: JSONContent[] = [];
     const flush = () => { if (content.length) output.push({ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}), content }); content = []; };
     // Split block images at their original inline position; no second descendant scan.
-    for (const child of inline(element, marks, depth + 1)) {
+    for (const child of inline(element, marks, depth + 1, preservesSpaces(style))) {
       if (child.type === 'image' || child.type === 'paragraph') { flush(); output.push(child); }
       else content.push(child);
     }
@@ -145,7 +171,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       for (const cell of Array.from(row.children)) {
         if (!['TD', 'TH'].includes(cell.tagName.toUpperCase())) continue;
         if (++cells > CLIPBOARD_LIMITS.cells) throw new ClipboardImportError('表格过大，请分段粘贴（每次最多 10 万个单元格）');
-        const style = styleFor(cell), align = alignment(cell, style), body = flow(cell, marksFor(cell, inherited, style), depth + 1);
+        const style = styleFor(cell), align = alignment(cell, style), body = flow(cell, marksFor(cell, inherited, style), depth + 1, preservesSpaces(style));
         if (align) for (const block of body) if (['paragraph', 'heading'].includes(block.type ?? '')) block.attrs = { ...block.attrs, ...align };
         const span = (name: string) => Math.min(100, Math.max(1, Number(cell.getAttribute(name)) || 1));
         const colspan = span('colspan'), rowspan = span('rowspan'); rowWidth += colspan;
@@ -159,19 +185,22 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     }
     return rows.length ? { type: 'table', content: rows } : paragraph();
   }
-  function flow(parent: globalThis.Node, inherited: Mark[], depth: number): JSONContent[] {
+  function flow(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false): JSONContent[] {
     const result: JSONContent[] = []; let pending: JSONContent[] = [];
     const flush = () => { if (pending.some(node => node.type !== 'text' || node.text?.trim())) result.push(paragraph(pending)); pending = []; };
-    let wordLists: { level: number; node: JSONContent }[] = [];
+    let wordLists: { level: number; id: string; node: JSONContent }[] = [];
     for (const node of Array.from(parent.childNodes)) {
       count(depth);
-      if (node.nodeType === 3) { const text = (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
-      if (node.nodeType !== 1) continue;
+      if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
+      if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) { flush(); result.push(fallback); } continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
       if (skipped.has(tag) || style.display === 'none') continue;
       if (tag === 'BR') { pending.push({ type: 'hardBreak' }); continue; }
-      if (!blocks.has(tag) && tag !== 'IMG') {
-        for (const child of inline(element, marksFor(element, inherited, style), depth + 1)) {
+      if (!blocks.has(tag) && tag !== 'IMG' && tag !== 'V:IMAGEDATA') {
+        if (Array.from(element.children).some(child => blocks.has(child.tagName.toUpperCase()))) {
+          flush(); result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))); continue;
+        }
+        for (const child of inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))) {
           if (child.type === 'image' || child.type === 'paragraph') { flush(); result.push(child); } else pending.push(child);
         }
         continue;
@@ -179,27 +208,28 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       flush();
       if (tag === 'P' && /\bl\d+\s+level\d+/.test(style['mso-list'] ?? '')) {
         const level = Math.min(9, Number(/level(\d+)/.exec(style['mso-list'])?.[1]) || 1);
-        const marker = element.querySelector('[style*="mso-list:Ignore"], [style*="mso-list: Ignore"]')?.textContent ?? element.textContent ?? '';
+        const id = (style['mso-list'] ?? '').replace(/\s*level\d+\s*/, ' ').trim();
+        const marker = wordListMarker(element);
         const type = /^\s*(?:\d+|[a-zA-Z]+|[一二三四五六七八九十百]+)[.)、．]/.test(marker) ? 'orderedList' : 'bulletList';
         const body = textBlock(element, inherited, depth), item: JSONContent = { type: 'listItem', content: body };
-        while (wordLists.length && (wordLists.at(-1)!.level > level || (wordLists.at(-1)!.level === level && wordLists.at(-1)!.node.type !== type))) wordLists.pop();
+        while (wordLists.length && (wordLists.at(-1)!.id !== id || wordLists.at(-1)!.level > level || (wordLists.at(-1)!.level === level && wordLists.at(-1)!.node.type !== type))) wordLists.pop();
         let current = wordLists.at(-1);
         if (!current || current.level < level) {
           const next: JSONContent = { type, ...(type === 'orderedList' ? { attrs: { start: Number(/^\s*(\d+)/.exec(marker)?.[1]) || 1 } } : {}), content: [] };
           if (current) current.node.content!.at(-1)!.content!.push(next); else result.push(next);
-          current = { level, node: next }; wordLists.push(current);
+          current = { level, id, node: next }; wordLists.push(current);
         }
         current.node.content!.push(item); continue;
       }
       wordLists = [];
-      if (tag === 'IMG') result.push(image(element));
+      if (tag === 'IMG' || tag === 'V:IMAGEDATA') result.push(image(element));
       else if (tag === 'UL' || tag === 'OL') result.push(list(element, inherited, depth));
       else if (tag === 'TABLE') result.push(table(element, inherited, depth));
       else if (tag === 'HR') result.push({ type: 'horizontalRule' });
       else if (tag === 'PRE') result.push({ type: 'codeBlock', content: element.textContent ? [{ type: 'text', text: element.textContent }] : [] });
       else if (tag === 'BLOCKQUOTE') { const content = flow(element, inherited, depth + 1); result.push({ type: 'blockquote', content: content.length ? content : [paragraph()] }); }
       else if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) result.push(...textBlock(element, inherited, depth));
-      else result.push(...flow(element, marksFor(element, inherited, style), depth + 1));
+      else result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
     }
     flush(); return result;
   }
