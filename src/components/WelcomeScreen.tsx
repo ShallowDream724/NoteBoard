@@ -30,7 +30,7 @@ import {
   Table2,
   Star,
 } from 'lucide-react';
-import { DisclosureTriangle } from './DisclosureTriangle';
+import { ChevronRight } from 'lucide-react';
 
 interface WelcomeScreenProps {
   onOpenFile?: () => void;
@@ -459,7 +459,7 @@ export function WelcomeScreen({
           <span style={{ fontWeight: 500 }}>
             {showMoreFormats ? '收起更多格式' : '更多格式新建'}
           </span>
-          <DisclosureTriangle expanded={showMoreFormats} size={14} color="var(--editor-text-muted)" />
+          <ChevronRight size={14} color="var(--editor-text-muted)" style={{ transform: showMoreFormats ? 'rotate(90deg)' : undefined }} />
         </button>
       </div>
 

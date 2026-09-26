@@ -9,6 +9,14 @@ import { create } from 'zustand';
 const EXPLORER_MIN = 180;
 const EXPLORER_MAX = 480;
 const EXPLORER_DEFAULT = 260;
+const EXPLORER_WIDTH_PREFERENCE = 'noteboard.explorer-width';
+function preferredExplorerWidth(): number {
+  try {
+    const stored = localStorage.getItem(EXPLORER_WIDTH_PREFERENCE), width = Number(stored);
+    if (stored && Number.isFinite(width)) return clamp(width, EXPLORER_MIN, EXPLORER_MAX);
+  } catch { /* Storage can be unavailable in embedded / test runtimes. */ }
+  return EXPLORER_DEFAULT;
+}
 
 const OUTLINE_MIN = 200;
 const OUTLINE_MAX = 480;
@@ -74,7 +82,7 @@ function clamp(value: number, min: number, max: number): number {
 
 export const useLayoutStore = create<LayoutStore>((set, get) => ({
   explorerVisible: true,
-  explorerWidth: EXPLORER_DEFAULT,
+  explorerWidth: preferredExplorerWidth(),
   outlineVisible: true,
   outlineWidth: OUTLINE_DEFAULT,
   statusBarVisible: true,
@@ -94,8 +102,13 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   toggleEditorToolbar: () => set((s) => ({ editorToolbarVisible: !s.editorToolbarVisible })),
   setExplorerVisible: (visible) => set({ explorerVisible: visible }),
   setOutlineVisible: (visible) => set({ outlineVisible: visible }),
-  setExplorerWidth: (width) =>
-    set({ explorerWidth: clamp(width, EXPLORER_MIN, EXPLORER_MAX) }),
+  setExplorerWidth: (width) => {
+    if (!Number.isFinite(width)) return;
+    const next = clamp(width, EXPLORER_MIN, EXPLORER_MAX);
+    // A Home-only window has no session snapshot; retain its preference too.
+    try { localStorage.setItem(EXPLORER_WIDTH_PREFERENCE, String(next)); } catch { /* Session persistence remains available. */ }
+    set({ explorerWidth: next });
+  },
   setOutlineWidth: (width) =>
     set({ outlineWidth: clamp(width, OUTLINE_MIN, OUTLINE_MAX) }),
   setStatusBarVisible: (visible) => set({ statusBarVisible: visible }),
