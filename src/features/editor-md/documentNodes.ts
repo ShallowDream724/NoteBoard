@@ -5,7 +5,7 @@ import { alertKind, type AlertKind } from './alertPresentation';
 import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
 import { currentParagraph } from './markdownLexer';
 import { calloutAttributes, calloutEmoji, calloutStyleText, calloutSvgIcon, calloutTitle, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle } from './calloutPresentation';
-import { markdownFigureCaption, normalizeFigureCaption, validateFigureCaption } from './figureCaption';
+import { figureCaptionDOM, figureCaptionText, markdownFigureCaption, normalizeFigureCaption, parseFigureCaptionContent, validateFigureCaption, validateFigureCaptionContent } from './figureCaption';
 
 type MathToken = MarkdownToken & MathSource;
 const inlineTokenizer: MarkdownTokenizer = {
@@ -114,15 +114,18 @@ export const ImageNode = Node.create<{ docKey: string }>({
   name: 'image', group: 'block', inline: false, draggable: true, selectable: true, isolating: true,
   addOptions() { return { docKey: '' }; },
   addAttributes() { return { src: { default: null }, alt: { default: null }, title: { default: null }, width: { default: '100%' }, align: { default: 'center' },
-    caption: { default: null, rendered: false, validate: validateFigureCaption } }; },
+    caption: { default: null, rendered: false, validate: validateFigureCaption },
+    captionContent: { default: null, rendered: false, validate: validateFigureCaptionContent } }; },
   parseHTML() {
     const attributes = (dom: HTMLElement) => {
       const image = dom.matches('img') ? dom : dom.querySelector('img');
       if (!image) return false;
+      const captionDOM = dom.matches('figure') ? dom.querySelector('figcaption') : null;
+      const captionContent = parseFigureCaptionContent(captionDOM);
       return { src: image.getAttribute('data-raw-src') || image.getAttribute('src'), alt: image.getAttribute('alt'), title: image.getAttribute('title'),
         width: dom.getAttribute('data-width') || image.getAttribute('data-width') || image.getAttribute('width') || '100%',
         align: dom.getAttribute('data-align') || image.getAttribute('data-align') || image.getAttribute('align') || 'center',
-        caption: dom.matches('figure') ? normalizeFigureCaption(dom.querySelector('figcaption')?.textContent) : null };
+        caption: captionContent ? figureCaptionText(captionContent) : normalizeFigureCaption(captionDOM?.textContent), captionContent };
     };
     return [{ tag: 'figure[data-nb-image]', getAttrs: attributes }, { tag: 'img[src]', getAttrs: attributes }];
   },
@@ -136,13 +139,14 @@ export const ImageNode = Node.create<{ docKey: string }>({
     return ['figure', { 'data-nb-image': '', 'data-width': node.attrs.width, 'data-align': align,
       style: `width:${width};max-width:100%;margin:16px 0;margin-left:${align === 'left' ? '0' : 'auto'};margin-right:${align === 'right' ? '0' : 'auto'}` },
       ['img', mergeAttributes({ referrerpolicy: 'no-referrer' }, imageAttrs, { style: 'display:block;width:100%;max-width:100%;height:auto' })],
-      ['figcaption', { style: 'margin-top:6px;font-size:.85em;line-height:1.6;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere' }, caption]];
+      ['figcaption', { 'data-nb-caption-content': node.attrs.captionContent ? JSON.stringify(node.attrs.captionContent) : null,
+        style: 'margin-top:6px;font-size:.85em;line-height:1.6;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere' }, ...figureCaptionDOM(caption, node.attrs.captionContent)]];
   },
   parseMarkdown(token, helpers) { return helpers.createNode('image', { src: token.href, title: token.title, alt: token.text, width: '100%', align: 'center' }); },
-  renderMarkdown(node) {
+  renderMarkdown(node, helpers) {
     const { src = '', alt = '', title = '' } = node.attrs ?? {};
     const image = title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`;
-    const caption = markdownFigureCaption(node.attrs?.caption);
+    const caption = markdownFigureCaption(node.attrs?.caption, node.attrs?.captionContent, content => helpers.renderChildren(content));
     return caption ? `${image}\n\n${caption}` : image;
   },
 });

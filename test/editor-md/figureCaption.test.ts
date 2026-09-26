@@ -10,7 +10,7 @@ import { AnnotationBehavior } from '../../src/features/editor-md/annotations/ext
 import { ANNOTATION_BEGIN_EVENT, addAnnotation, beginBlockAnnotation, type AnnotationBeginRequest } from '../../src/features/editor-md/annotations/commands';
 import { resolveAnnotationTarget } from '../../src/features/editor-md/annotations/draftTarget';
 import { annotationAnchors } from '../../src/features/editor-md/annotations/model';
-import { editFigureCaption, setFigureCaption } from '../../src/features/editor-md/figureCaptionCommands';
+import { editFigureCaption, setFigureCaption, setFigureCaptionContent } from '../../src/features/editor-md/figureCaptionCommands';
 import { BlockMetadataStep } from '../../src/features/editor-md/blockMetadataStep';
 import { DocumentCapabilityGuard, transactionAddedCapability } from '../../src/features/document-format/capabilityGuard';
 import { parseNativeNode, serializeNativeNode } from '../../src/features/editor-md/editorDocumentCodec';
@@ -53,24 +53,51 @@ describe('whole-table notes and figure captions', () => {
     expect(dom.classList.contains('nb-annotation-anchor')).toBe(false);
   });
 
-  it('edits, cancels, removes and undoes a table caption without touching rows or selection', () => {
+  it('edits inline, removes and undoes a table caption without touching rows or selection', async () => {
     const editor = create(), before = editor.state.doc.firstChild!, selection = editor.state.selection;
     const layout = vi.spyOn(TableRowLayout.prototype, 'update');
     expect(editFigureCaption(editor, 0)).toBe(true);
-    const input = editor.view.dom.querySelector<HTMLTextAreaElement>('.nb-table-caption-input')!;
-    expect(input.closest('table')!.lastElementChild).toBe(input.parentElement);
-    expect(input.hidden).toBe(false); expect(document.activeElement).toBe(input);
-    input.value = '  Table details\nSecond line  ';
+    await vi.dynamicImportSettled();
+    const input = editor.view.dom.querySelector<HTMLElement & { editor: Editor }>('.nb-caption-editor')!;
+    expect(input.closest('table')!.lastElementChild).toBe(input.closest('caption'));
+    expect(document.activeElement).toBe(input); expect(editor.view.dom.querySelector('textarea')).toBeNull();
+    input.editor.commands.insertContent('Table details');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input.editor.commands.insertContent('Second line');
     expect(editor.state.doc.firstChild!.attrs.caption).toBe('Table details\nSecond line');
     expect(editor.state.doc.firstChild!.content).toBe(before.content);
     expect(editor.state.selection.eq(selection)).toBe(true); expect(layout).not.toHaveBeenCalled();
-    editFigureCaption(editor, 0); input.value = 'discard'; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(editor.state.doc.firstChild!.attrs.caption).toBe('Table details\nSecond line');
-    editFigureCaption(editor, 0); input.value = ''; input.dispatchEvent(new FocusEvent('blur'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(editor.view.dom.querySelector('.nb-caption-editor')).toBeNull();
+    editFigureCaption(editor, 0);
+    await vi.dynamicImportSettled();
+    const reopened = editor.view.dom.querySelector<HTMLElement & { editor: Editor }>('.nb-caption-editor')!;
+    reopened.editor.commands.clearContent();
     expect(editor.state.doc.firstChild!.attrs.caption).toBeNull();
     editor.commands.undo(); expect(editor.state.doc.firstChild!.attrs.caption).toBe('Table details\nSecond line');
     editor.commands.undo(); expect(editor.state.doc.firstChild!.eq(before)).toBe(true);
+  });
+
+  it('preserves rich caption formatting through native reopening, HTML, print, Markdown and Pandoc', async () => {
+    const editor = create(), table = editor.state.doc.firstChild!;
+    const content = [{ type: 'text', text: 'Rich result', marks: [{ type: 'bold' }, { type: 'textColor', attrs: { color: '#2563eb' } }, { type: 'highlight', attrs: { color: '#fef08a' } }, { type: 'link', attrs: { href: 'https://example.com' } }] }];
+    expect(setFigureCaptionContent(editor.view, 0, content)).toBe(true);
+    expect(editor.state.doc.firstChild!.content).toBe(table.content);
+    expect(parseNativeNode(serializeNativeNode(editor.state.doc), editor.schema).eq(editor.state.doc)).toBe(true);
+    for (const mode of ['html', 'print'] as const) {
+      const output = await renderDocument('', 'Rich caption', '', undefined, editor.state.doc, undefined, undefined, mode);
+      const host = document.createElement('div'); host.innerHTML = output.html;
+      expect(host.querySelector('caption strong')?.textContent).toBe('Rich result');
+      expect(host.querySelector('caption [data-text-color]')?.getAttribute('data-text-color')).toBe('#2563eb');
+      expect(host.querySelector('caption mark')?.getAttribute('data-color')).toBe('#fef08a');
+      expect(host.querySelector('caption a')?.getAttribute('href')).toBe('https://example.com');
+    }
+    const restored = new Editor({ extensions: buildDocumentExtensions(), content: editor.getHTML() }); editors.push(restored);
+    expect(restored.state.doc.firstChild!.attrs.captionContent).toEqual(content);
+    const markdown = portableMarkdown(editor.getJSON());
+    expect(markdown).toContain('Rich result'); expect(markdown).toContain('**');
+    const ast = pandocSource(editor.state.doc);
+    for (const token of ['Strong', 'nb-color', '#2563eb', 'nb-background', '#fef08a', 'Link']) expect(ast).toContain(token);
   });
 
   it('keeps native captions on moved tables and preserves text in Markdown, HTML, print and Pandoc', async () => {
@@ -105,5 +132,9 @@ describe('whole-table notes and figure captions', () => {
     const bad = serializeNativeNode(before).replace('"type":"table"', '"type":"table","attrs":{"caption":7}');
     const recovered = parseNativeNode(bad, editor.schema);
     expect(recovered.firstChild!.type.name).toBe('nativeError'); expect(serializeNativeNode(recovered)).toBe(bad);
+    const invalidRich = serializeNativeNode(before).replace('"type":"table"', '"type":"table","attrs":{"captionContent":[{"type":"image","attrs":{"src":"x"}}]}');
+    const recoveredRich = parseNativeNode(invalidRich, editor.schema);
+    expect(recoveredRich.firstChild!.type.name).toBe('nativeError'); expect(serializeNativeNode(recoveredRich)).toBe(invalidRich);
+    expect(setFigureCaptionContent(editor.view, 0, [{ type: 'text', text: 'unsafe', marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }] }])).toBe(false);
   });
 });

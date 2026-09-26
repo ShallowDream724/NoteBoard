@@ -7,7 +7,7 @@ import { isSafeHighlightColor } from '../editor-md/markdownHighlight';
 import { tableFill } from '../editor-md/tableCellPresentation';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { documentColor } from '../document-style/colors';
-import { normalizeFigureCaption } from '../editor-md/figureCaption';
+import { figureCaptionContent, normalizeFigureCaption } from '../editor-md/figureCaption';
 
 type Ast = { t: string; c?: unknown };
 type Attributes = Record<string, string>;
@@ -82,13 +82,13 @@ export function pandocSource(source: string | DocumentNode): string {
     if (Number.isInteger(value.attrs.indent) && value.attrs.indent > 0 && value.attrs.indent <= 8) properties['nb-indent'] = String(value.attrs.indent);
     return properties;
   }
-  const captionBlocks = (value: unknown): Ast[] => {
+  const captionBlocks = (value: unknown, rich?: unknown): Ast[] => {
     const caption = normalizeFigureCaption(value);
-    return caption ? [node('Plain', caption.split('\n').flatMap((line, index) => [...(index ? [node('LineBreak')] : []), ...words(line)]))] : [];
+    return caption ? [node('Plain', figureCaptionContent(caption, rich).flatMap(item => inline(document.type.schema.nodeFromJSON(item))))] : [];
   };
-  function table(rows: unknown[], widths: number[], header = false, properties: Attributes = {}, caption?: unknown): Ast {
+  function table(rows: unknown[], widths: number[], header = false, properties: Attributes = {}, caption?: unknown, richCaption?: unknown): Ast {
     const sum = widths.reduce((total, width) => total + width, 0);
-    return node('Table', [attr([], properties), [null, captionBlocks(caption)], widths.map(width => [node('AlignDefault'), sum ? node('ColWidth', width / sum) : node('ColWidthDefault')]),
+    return node('Table', [attr([], properties), [null, captionBlocks(caption, richCaption)], widths.map(width => [node('AlignDefault'), sum ? node('ColWidth', width / sum) : node('ColWidthDefault')]),
       [attr(), header ? [rows[0]] : []], [[attr(), 0, [], header ? rows.slice(1) : rows]], [attr(), []]]);
   }
   function blockContent(value: DocumentNode): Ast[] {
@@ -152,11 +152,11 @@ export function pandocSource(source: string | DocumentNode): string {
           const alignment = ({ left: 'AlignLeft', center: 'AlignCenter', right: 'AlignRight' } as Record<string, string>)[cell.attrs.textAlign ?? cell.attrs.align] ?? 'AlignDefault';
           return [attr([], properties), node(alignment), Math.min(rowspan, grid.rows.length - index), colspan, children(cell, block)];
         })]);
-        return [table(rows, widths.map(width => width || fallback), header, { 'nb-table-style': cellFills ? 'grid' : 'three-line' }, value.attrs.caption)];
+        return [table(rows, widths.map(width => width || fallback), header, { 'nb-table-style': cellFills ? 'grid' : 'three-line' }, value.attrs.caption, value.attrs.captionContent)];
       }
       default:
         if (value.type.name === 'image') {
-          const caption = captionBlocks(value.attrs.caption);
+          const caption = captionBlocks(value.attrs.caption, value.attrs.captionContent);
           return caption.length ? [node('Figure', [attr(), [null, caption], [node('Plain', inline(value))]])] : [node('Para', inline(value))];
         }
         if (['mermaidBlock', 'plantumlBlock', 'infographicBlock'].includes(value.type.name)) return [node('CodeBlock', [attr([value.type.name.replace(/Block$/, '')]), String(value.attrs.code ?? '')])];

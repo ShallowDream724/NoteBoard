@@ -294,8 +294,8 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const position = getPos();
   const parent = typeof position === 'number' ? editor.state.doc.resolve(position).parent : null;
   const inCollection = parent?.type.name === 'imageSlot';
-  const showCaption = !inCollection || parent?.lastChild?.type.name !== 'paragraph'
-    || normalizeFigureCaption(parent.lastChild.textContent) !== normalizeFigureCaption(node.attrs.caption);
+  const showCaption = !inCollection || (!!normalizeFigureCaption(node.attrs.caption) && (parent?.lastChild?.type.name !== 'paragraph'
+    || normalizeFigureCaption(parent.lastChild.textContent) !== normalizeFigureCaption(node.attrs.caption)));
 
   // 动态解析图片真实 URL
   useEffect(() => {
@@ -683,7 +683,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
 
       </div>
 
-      {showCaption && <ImageCaption editor={editor} getPos={getPos} caption={node.attrs.caption} src={rawSrc}
+      {showCaption && <ImageCaption editor={editor} getPos={getPos} caption={node.attrs.caption} captionContent={node.attrs.captionContent} src={rawSrc}
         width={resizePreview ?? width} editable={nativeFeaturesVisible} />}
 
       {/* 大图预览 Lightbox 模态框 */}

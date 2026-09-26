@@ -71,7 +71,7 @@ NB 源码模式直接编辑这些记录。坏记录显示可定位的局部错�
 
 ## 图注与表注
 
-单张 `image` 和 `table` 的 `attrs.caption` 是显示在图片或表格下方的普通文字，省略或 `null` 表示无注。最多 10,000 个 UTF-16 单元，允许使用 JSON `\n` 换行，禁止 NUL 字符；不把富文本或 Markdown 标记塞入此属性。它跟随所属块移动和撤销，与弹出的 `annotationId` 补充说明独立。表注与表格同宽、图注与图片同宽，左右位置跟随所属块。
+单张 `image` 和 `table` 的 `attrs.caption` 保留兼容的普通文字，省略或 `null` 表示无注。最多 10,000 个 UTF-16 单元，允许使用 JSON `\n` 换行，禁止 NUL 字符。可选 `captionContent` 保存同一段注释的行内 JSON 数组，仅允许 text/hardBreak，以及 bold、italic、underline、strike、code、link、textColor、highlight 标记；旧文档仅有 caption 时仍按普通文字显示。编辑器同步维护两者。它跟随所属块移动和撤销，与弹出的 `annotationId` 补充说明独立。表注与表格同宽、图注与图片同宽，左右位置跟随所属块。
 
 ```noteboard
 @block {"type":"image","attrs":{"src":"./img/result.png","alt":"实验曲线","caption":"图 1　不同条件下的结果"}}
@@ -79,9 +79,9 @@ NB 源码模式直接编辑这些记录。坏记录显示可定位的局部错�
 @child {"type":"tableRow","content":[{"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"样本"}]}]}]}
 ```
 
-图注与表注属于 NB 能力。HTML/PDF 保留可见注释，Pandoc 使用 Figure/Table 的 Caption，通用 Markdown 在图或表后输出完整普通文字。图片组合继续使用槽中的图注 paragraph。
+图注与表注属于 NB 能力。HTML/PDF 保留行内样式与链接，Pandoc 使用 Figure/Table 的 Caption，通用 Markdown 在图或表后输出保留格式的段落。图片组合继续使用槽中的图注 paragraph。
 
-单图图注独立于替代文本 `alt` 和链接提示 `title`。悬停图片可添加图注，已有图注可点击编辑；图、表块菜单也提供添加/编辑入口。Enter 或失焦保存，Shift+Enter 换行，Escape 取消，清空后保存删除。
+单图图注独立于替代文本 `alt` 和链接提示 `title`。鼠标进入图片或表格下方已有间距时显示添加入口，空注不增加文档高度或空段落；图、表块菜单也提供添加/编辑入口。已有图注可点击编辑，选中文字显示共用浮动文字工具栏，可修改文字颜色、高亮等行内格式。编辑即时进入文档和自动保存，Enter 换行，Escape 或移出编辑区域结束编辑，清空文字删除图注；Ctrl+Z/Y 使用正文的撤销历史。仅活动图注按需加载并挂载轻量编辑器，结束后释放，静态图注不各自持有编辑器实例。
 
 ## 图片组合
 

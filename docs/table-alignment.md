@@ -8,6 +8,6 @@ HTML 与 PDF 使用 `data-table-align` 和左右外边距表达位置。HTML 导
 
 `EfficientTableView.update` 对内容引用未变化的表格只更新位置样式、说明按钮和表注，保留列 DOM、行布局与虚拟行状态。因此大表格的属性更新不遍历整张表。表格节点自身尺寸由已有列宽与内容布局管理；位置样式不写入宽度。
 
-“添加表注 / 编辑表注”在表格下方编辑独立的可见文字，Enter 或失焦保存，Shift+Enter 换行，Escape 取消，清空后保存删除。表注保存在表格的 `caption` 属性，编辑只产生一次可撤销的 `BlockMetadataStep`。`TableAccessories` 使用 tbody 外的 owned caption DOM，ProseMirror 忽略该 UI 的事件与变动；原表内容和列组仍由原 NodeView 管理。真实 table 的宽度与左右边距同时管理表注及右上角说明按钮，无每次缩放的测量监听。
+“添加表注 / 编辑表注”在表格下方直接编辑文字，选区使用正文同款浮动格式工具栏。Enter 换行，Escape 或点击其他区域结束编辑，修改即时保存，清空文字删除表注。`caption` 保留普通文字兼容属性，`captionContent` 保存经校验的行内 JSON。活动图注按需挂载共用轻量编辑器，通过 `BlockMetadataStep` 更新父文档；连续输入按时间段分组，格式操作独立撤销，Ctrl+Z/Y 与正文共用历史。`TableAccessories` 使用 tbody 外的 owned caption DOM，ProseMirror 忽略该 UI 的事件与变动；原表内容和列组仍由原 NodeView 管理。真实 table 的宽度与左右边距同时管理表注及右上角说明按钮，无每次缩放的测量监听。无表注时，添加入口只在既有底部间距悬停或键盘聚焦时显示，不生成额外文档内容或固定空白高度。
 
-表注属于 NB 的 `figureCaption` 能力，与单张图片图注共用纯数据校验和编辑命令。HTML/PDF 输出真正的底部 caption；分列续表仅在最后一组保留完整表注。Pandoc 输出表格 Caption，通用 Markdown 在表格后保留普通注释文字。它与弹出的“补充说明”互相独立。
+表注属于 NB 的 `figureCaption` 能力，与单张图片图注共用纯数据校验和编辑命令。HTML/PDF 输出真正的底部 caption，保留行内格式；分列续表仅在最后一组保留完整表注。Pandoc 输出表格 Caption，通用 Markdown 在表格后保留带格式的注释段落。它与弹出的“补充说明”互相独立。

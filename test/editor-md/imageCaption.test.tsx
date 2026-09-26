@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { EditorContent } from '@tiptap/react';
@@ -12,6 +12,8 @@ import { editFigureCaption, setFigureCaption } from '../../src/features/editor-m
 import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 import { renderDocument } from '../../src/features/export/renderDocument';
 import { nativeTestEditor } from './nativeTestEditor';
+
+vi.mock('@tiptap/react/menus', () => ({ BubbleMenu: ({ children }: { children: ReactNode }) => children }));
 
 const editors: Editor[] = [], roots: Root[] = [];
 const image = (caption: unknown = null): JSONContent => ({ type: 'image', attrs: { src: './assets/a.png', alt: 'Accessible description', title: 'Original filename', width: '50%', align: 'right', caption } });
@@ -26,10 +28,7 @@ async function mount(content: JSONContent[] = [image()]) {
   await act(async () => { root.render(<EditorContent editor={editor}/>); await new Promise(resolve => setTimeout(resolve, 0)); });
   return { editor, host };
 }
-function type(textarea: HTMLTextAreaElement, value: string) {
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, value);
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-}
+const captionEditor = (host: HTMLElement) => host.querySelector<HTMLElement & { editor: Editor }>('.nb-caption-editor')!;
 afterEach(async () => {
   await act(async () => { roots.splice(0).forEach(root => root.unmount()); editors.splice(0).forEach(editor => editor.destroy()); });
   document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals();
@@ -61,33 +60,48 @@ describe('single image captions', () => {
     expect(markdown).toContain('说明'); expect(markdown).toContain('原样文字'); expect(markdown).not.toContain('caption=');
   });
 
-  it('does not show alt or title as a caption, commits one undo step, cancels and clears without scrolling', async () => {
+  it('offers an empty caption without document content, edits normal text and shares native undo without scrolling', async () => {
     const { editor, host } = await mount();
     expect(host.querySelector('[data-image-caption]')).toBeNull();
+    expect(host.querySelector('.nb-caption-empty [aria-label="添加图注"]')).not.toBeNull();
     const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     await act(async () => { expect(editFigureCaption(editor, 0)).toBe(true); });
-    let textarea = host.querySelector('textarea')!;
-    expect(textarea).not.toBeNull(); expect(textarea.value).toBe(''); expect(document.activeElement).toBe(textarea);
-    await act(async () => { type(textarea, '新图注\n第二行'); });
-    expect(editor.state.doc.firstChild?.attrs.caption).toBeNull();
-    const newline = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true });
-    await act(async () => { textarea.dispatchEvent(newline); });
-    expect(newline.defaultPrevented).toBe(false); expect(host.querySelector('textarea')).toBe(textarea);
-    await act(async () => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-    expect(editor.state.doc.firstChild?.attrs.caption).toBe('新图注\n第二行'); expect(host.querySelector('[data-image-caption]')?.textContent).toBe('新图注\n第二行');
-    await act(async () => { expect(editor.commands.undo()).toBe(true); });
-    expect(editor.state.doc.firstChild?.attrs.caption).toBeNull();
-    await act(async () => { editor.commands.redo(); editFigureCaption(editor, 0); });
-    textarea = host.querySelector('textarea')!;
-    await act(async () => { type(textarea, '取消此修改'); });
-    await act(async () => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+    await act(async () => { await vi.dynamicImportSettled(); });
+    let input = captionEditor(host);
+    expect(input).not.toBeNull(); expect(document.activeElement).toBe(input); expect(host.querySelector('textarea')).toBeNull();
+    await act(async () => { input.editor.commands.insertContent('新图注'); });
+    expect(editor.state.doc.firstChild?.attrs.caption).toBe('新图注');
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); input.editor.commands.insertContent('第二行'); });
     expect(editor.state.doc.firstChild?.attrs.caption).toBe('新图注\n第二行');
-    await act(async () => { editFigureCaption(editor, 0); });
-    textarea = host.querySelector('textarea')!;
-    await act(async () => { type(textarea, ''); });
-    await act(async () => { textarea.blur(); });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })); });
+    expect(editor.state.doc.firstChild?.attrs.caption).toBeNull();
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); });
+    expect(editor.state.doc.firstChild?.attrs.caption).toBe('新图注\n第二行');
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+    expect(captionEditor(host)).toBeNull();
+    await act(async () => { editFigureCaption(editor, 0); await vi.dynamicImportSettled(); });
+    input = captionEditor(host);
+    await act(async () => { input.editor.commands.clearContent(); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     expect(editor.state.doc.firstChild?.attrs.caption).toBeNull(); expect(host.querySelector('[data-image-caption]')).toBeNull();
     expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it('selects caption text with the shared color toolbar and keeps formatting on reopening', async () => {
+    const { editor, host } = await mount([image('Editable caption')]);
+    await act(async () => { editFigureCaption(editor, 0); await vi.dynamicImportSettled(); });
+    const input = captionEditor(host);
+    await act(async () => { input.editor.commands.setTextSelection({ from: 1, to: 9 }); await new Promise(resolve => setTimeout(resolve, 30)); });
+    expect(document.querySelector('[data-caption-toolbar] [aria-label="选择文字颜色与高亮"]')).not.toBeNull();
+    await act(async () => { input.editor.chain().toggleBold().setMark('textColor', { color: '#2563eb' }).setHighlight({ color: '#fef08a' }).run(); });
+    expect(editor.state.doc.firstChild?.attrs.captionContent[0].marks.map((mark: { type: string }) => mark.type)).toEqual(expect.arrayContaining(['bold', 'highlight', 'textColor']));
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(host.querySelector('.nb-image-caption-text strong')?.textContent).toBe('Editable');
+    const reopened = parseNativeNode(serializeNativeNode(editor.state.doc), editor.schema);
+    expect(reopened.firstChild?.attrs.captionContent).toEqual(editor.state.doc.firstChild?.attrs.captionContent);
+    await act(async () => { editFigureCaption(editor, 0); await vi.dynamicImportSettled(); });
+    await act(async () => { captionEditor(host).editor.chain().setTextSelection({ from: 1, to: 9 }).setLink({ href: './notes/source.nbdoc' }).run(); });
+    const moved = parseNativeNode(serializeNativeNode(editor.state.doc, 'C:/notes'), editor.schema);
+    expect(moved.firstChild?.attrs.captionContent[0].marks.find((mark: { type: string }) => mark.type === 'link').attrs.href).toBe('C:/notes/notes/source.nbdoc');
   });
 
   it('keeps gallery paragraph captions singular and retains image asset attributes through edits', async () => {

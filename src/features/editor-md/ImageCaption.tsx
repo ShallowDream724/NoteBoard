@@ -1,53 +1,48 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import { FIGURE_CAPTION_MAX_LENGTH, normalizeFigureCaption } from './figureCaption';
-import { editFigureCaption, FIGURE_CAPTION_EDIT_EVENT, setFigureCaption } from './figureCaptionCommands';
+import { normalizeFigureCaption, renderFigureCaption } from './figureCaption';
+import { editFigureCaption, FIGURE_CAPTION_EDIT_EVENT } from './figureCaptionCommands';
+import type { mountFigureCaptionEditor } from './figureCaptionEditor';
 import './imageCaption.css';
 
-/** The draft stays outside the document until one explicit commit. */
-export function ImageCaption({ editor, getPos, caption, src, width, editable }: {
-  editor: Editor; getPos: () => number | undefined; caption: unknown; src: string;
+export function ImageCaption({ editor, getPos, caption, captionContent, src, width, editable }: {
+  editor: Editor; getPos: () => number | undefined; caption: unknown; captionContent?: unknown; src: string;
   width: string; editable: boolean;
 }) {
-  const text = normalizeFigureCaption(caption);
-  const [draft, setDraft] = useState(''), [editing, setEditing] = useState(false);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const activeSource = useRef<string | null>(null);
-
+  const text = normalizeFigureCaption(caption), canEdit = editable && editor.isEditable;
+  const [editing, setEditing] = useState(false);
+  const host = useRef<HTMLDivElement>(null), label = useRef<HTMLSpanElement>(null);
+  const session = useRef<ReturnType<typeof mountFigureCaptionEditor> | null>(null);
+  const position = useRef(getPos); position.current = getPos;
   useEffect(() => {
     const open = (event: Event) => {
-      if (!editable || !editor.isEditable || (event as CustomEvent<{ pos: number }>).detail?.pos !== getPos()) return;
-      activeSource.current = src; setDraft(text ?? ''); setEditing(true);
+      if (canEdit && (event as CustomEvent<{ pos: number }>).detail?.pos === position.current()) setEditing(true);
     };
     const dom = editor.view.dom;
     dom.addEventListener(FIGURE_CAPTION_EDIT_EVENT, open);
     return () => dom.removeEventListener(FIGURE_CAPTION_EDIT_EVENT, open);
-  }, [editor, editable, getPos, src, text]);
-  useEffect(() => { if (editing) input.current?.focus({ preventScroll: true }); }, [editing]);
-
-  const finish = (commit: boolean, restoreFocus = false) => {
-    if (activeSource.current === null) return;
-    const originalSource = activeSource.current; activeSource.current = null;
-    const pos = getPos();
-    if (commit && typeof pos === 'number' && !editor.isDestroyed && editor.state.doc.nodeAt(pos)?.attrs.src === originalSource) {
-      setFigureCaption(editor.view, pos, draft);
-    }
-    setEditing(false);
-    if (restoreFocus && !editor.isDestroyed) editor.view.dom.focus({ preventScroll: true });
-  };
-  if (!editing && !text) return null;
-  return <div className="nb-image-caption" data-image-caption="" contentEditable={false} style={{ width }}
+  }, [editor, canEdit]);
+  useLayoutEffect(() => {
+    if (!editing || !host.current) return;
+    let cancelled = false;
+    void import('./figureCaptionEditor').then(({ mountFigureCaptionEditor }) => {
+      if (cancelled || !host.current || editor.isDestroyed) return;
+      session.current = mountFigureCaptionEditor(host.current, { view: editor.view, getPos: () => position.current(), label: '图片图注', close: () => setEditing(false) });
+    });
+    return () => { cancelled = true; session.current?.destroy(); session.current = null; };
+  }, [editing, editor, src]);
+  useLayoutEffect(() => {
+    session.current?.sync();
+    if (!editing && label.current) renderFigureCaption(label.current, caption, captionContent);
+  }, [caption, captionContent, editing]);
+  if (!editing && !text && !canEdit) return null;
+  return <div className={`nb-image-caption${!text && !editing ? ' nb-caption-empty' : ''}`} data-image-caption={text || editing ? '' : undefined}
+    data-caption-host="" contentEditable={false} style={{ width }}
     onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
-    {editing ? <textarea ref={input} className="nb-image-caption-input" aria-label="图片图注" placeholder="添加图注"
-      value={draft} maxLength={FIGURE_CAPTION_MAX_LENGTH} rows={Math.min(6, Math.max(1, draft.split('\n').length))}
-      onChange={event => setDraft(event.target.value)} onBlur={() => finish(true)}
-      onKeyDown={event => {
-        event.stopPropagation();
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === 'Escape') { event.preventDefault(); finish(false, true); }
-        else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); finish(true, true); }
-      }} /> : editable && editor.isEditable ? <button type="button" className="nb-image-caption-text" aria-label="编辑图注"
-        onClick={() => { const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); }}>{text}</button>
-      : <span className="nb-image-caption-text">{text}</span>}
+    {editing ? <div ref={host} className="nb-caption-edit-host"/> : <span ref={label} className="nb-image-caption-text"
+      role={canEdit ? 'button' : undefined} tabIndex={canEdit ? 0 : undefined} aria-label={canEdit ? text ? '编辑图注' : '添加图注' : undefined}
+      data-placeholder={!text ? '添加图注' : undefined}
+      onClick={canEdit ? () => { const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); } : undefined}
+      onKeyDown={event => { if (canEdit && ['Enter', ' '].includes(event.key)) { event.preventDefault(); const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); } }}/>}
   </div>;
 }

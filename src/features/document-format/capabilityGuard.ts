@@ -39,6 +39,7 @@ function nodeFeatures(node: Node): Feature[] {
   if (attrs.verticalAlign) add('alignment', 'verticalAlign', attrs.verticalAlign);
   if (type === 'table' && attrs.tableAlign) add('tableAlignment', 'tableAlign', attrs.tableAlign);
   if (['table', 'image'].includes(type) && attrs.caption) add('figureCaption', 'caption', attrs.caption);
+  if (['table', 'image'].includes(type) && attrs.captionContent) add('figureCaption', 'captionContent', attrs.captionContent);
   // A GFM column's horizontal alignment is portable. Arbitrary cell alignment
   // is gated by its command and the table presentation step below.
   if (Number(attrs.colspan) > 1 || Number(attrs.rowspan) > 1) add('tableMerge', 'span', [attrs.colspan, attrs.rowspan]);
@@ -110,7 +111,7 @@ export function transactionAddedCapability(tr: Transaction, storedMarks: readonl
     const value = step.toJSON() as { stepType: string; pos?: number; attr?: string; value?: unknown; patches?: Array<Record<string, unknown>> };
     if (value.stepType === 'noteboardTableColumnWidths' || value.stepType === 'noteboardTableRowHeights') return 'tableDimensions';
     if (value.stepType === 'noteboardTableAlignment' && value.value) return 'tableAlignment';
-    if (value.stepType === 'noteboardBlockMetadata' && value.value) return value.attr === 'caption' ? 'figureCaption' : 'annotation';
+    if (value.stepType === 'noteboardBlockMetadata' && value.value) return value.attr === 'caption' || value.attr === 'captionContent' ? 'figureCaption' : 'annotation';
     if (value.stepType === 'noteboardTablePresentation') {
       if (value.patches?.some(patch => patch.background)) return 'tableFill';
       if (value.patches?.some(patch => patch.textAlign || patch.verticalAlign)) return 'alignment';

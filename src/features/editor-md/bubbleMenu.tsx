@@ -154,10 +154,12 @@ export function EditorBubbleMenu({
   editor,
   onOpenLinkModal,
   enabled = true,
+  inlineOnly = false,
 }: {
   editor: Editor;
   onOpenLinkModal?: () => void;
   enabled?: boolean;
+  inlineOnly?: boolean;
 }) {
   const enabledRef = useRef(enabled); enabledRef.current = enabled;
   useEffect(() => {
@@ -244,7 +246,7 @@ export function EditorBubbleMenu({
       style={{ zIndex: 1000 }}
     >
       {enabled && editor.state.selection instanceof TextSelection && !editor.state.selection.empty && <div
-        ref={bubbleRoot} role="toolbar" aria-label="文字工具栏"
+        ref={bubbleRoot} role="toolbar" aria-label="文字工具栏" data-caption-toolbar={inlineOnly || undefined}
         style={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -302,9 +304,7 @@ export function EditorBubbleMenu({
           onApply={color => setHighlightColor(editor, color)}
           onReturnToEditor={() => editor.commands.focus()}
           onRemove={() => { setHighlightColor(editor, null); }}/>
-        <AlignmentMenu editor={editor}/>
-        <AnnotationButton editor={editor}/>
-        <RichSelectionMenu editor={editor}/>
+        {!inlineOnly && <><AlignmentMenu editor={editor}/><AnnotationButton editor={editor}/><RichSelectionMenu editor={editor}/></>}
 
         <MenuDivider />
 

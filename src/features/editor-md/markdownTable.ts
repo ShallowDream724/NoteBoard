@@ -3,7 +3,7 @@ import type { JSONContent, MarkdownToken } from '@tiptap/core';
 import { buildLogicalTableGrid, type TableCellPlacement } from './tableGrid';
 import { tableFill } from './tableCellPresentation';
 import { tableAlignment, tableAlignmentStyle } from './tableAlignment';
-import { markdownFigureCaption, normalizeFigureCaption, validateFigureCaption } from './figureCaption';
+import { figureCaptionDOM, figureCaptionText, markdownFigureCaption, normalizeFigureCaption, parseFigureCaptionContent, validateFigureCaption, validateFigureCaptionContent } from './figureCaption';
 
 const PREFIX = '<!-- noteboard-table ';
 const tokenizer = Table.config.markdownTokenizer!;
@@ -128,8 +128,10 @@ export const MarkdownTable = Table.extend({
       parseHTML: element => tableAlignment(element.getAttribute('data-table-align')),
       renderHTML: attrs => tableAlignment(attrs.tableAlign) ? { 'data-table-align': attrs.tableAlign } : {},
     }, caption: { default: null, validate: validateFigureCaption,
-      parseHTML: element => normalizeFigureCaption(element.querySelector(':scope > caption')?.textContent),
+      parseHTML: element => { const caption = element.querySelector(':scope > caption'), content = parseFigureCaptionContent(caption); return content ? figureCaptionText(content) : normalizeFigureCaption(caption?.textContent); },
       renderHTML: () => ({}),
+    }, captionContent: { default: null, validate: validateFigureCaptionContent,
+      parseHTML: element => parseFigureCaptionContent(element.querySelector(':scope > caption')), renderHTML: () => ({}),
     } };
   },
   renderHTML(props) {
@@ -142,7 +144,8 @@ export const MarkdownTable = Table.extend({
         const attrs = table[1] as Record<string, unknown>;
         if (alignment) attrs.style = [attrs.style, alignment].filter(Boolean).join('; ');
         const caption = normalizeFigureCaption(props.node.attrs.caption);
-        if (caption) table.splice(2, 0, ['caption', { style: 'caption-side: bottom; white-space: pre-wrap' }, caption]);
+        if (caption) table.splice(2, 0, ['caption', { style: 'caption-side: bottom; white-space: pre-wrap',
+          'data-nb-caption-content': props.node.attrs.captionContent ? JSON.stringify(props.node.attrs.captionContent) : null }, ...figureCaptionDOM(caption, props.node.attrs.captionContent)]);
       }
     }
     return output;
@@ -254,7 +257,7 @@ export const MarkdownTable = Table.extend({
     const separator = alignment.map(align => align === 'center' ? ':---:' : align === 'right' ? '---:' : align === 'left' ? ':---' : '---');
     let layout = dimensions(node, grid);
     if (Object.keys(blocks).length) layout = { ...(layout ?? { widths: Array(columns).fill(0), heights: {}, grid: true, rowCount: rows.length }), blocks };
-    const caption = markdownFigureCaption(node.attrs?.caption);
+    const caption = markdownFigureCaption(node.attrs?.caption, node.attrs?.captionContent, content => helpers.renderChildren(content));
     return '\n' + (layout ? PREFIX + commentJSON(layout) + ' -->\n' : '') + [line(header), line(separator), ...rendered.map(line)].join('\n') + '\n' + (caption ? '\n' + caption + '\n' : '');
   },
 });

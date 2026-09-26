@@ -42,6 +42,10 @@ function nodeJson(node: Node, directory: string, skeleton = false): string {
     ? resolveRelativeDocPath(directory, value).replace(/\\/g, '/') : value;
   const attrs = compactAttrs(node.attrs, node.type.spec.attrs);
   if (directory && node.type.name === 'image' && attrs?.src) attrs.src = resolve(attrs.src);
+  if (directory && Array.isArray(attrs?.captionContent)) attrs.captionContent = attrs.captionContent.map(item => ({ ...item,
+    ...(item.marks ? { marks: item.marks.map((mark: { type: string; attrs?: Record<string, unknown> }) => mark.type === 'link' && mark.attrs?.href
+      ? { ...mark, attrs: { ...mark.attrs, href: resolve(mark.attrs.href) } } : mark) } : {}),
+  }));
   const head: NativeNode = { type: node.type.name, ...(attrs ? { attrs } : {}), ...(node.isText ? { text: node.text } : {}) };
   if (node.marks.length) head.marks = node.marks.map(mark => {
     const attrs = compactAttrs(mark.attrs, mark.type.spec.attrs);
