@@ -54,7 +54,7 @@ describe('HTML formula boundaries', () => {
     expect(JSON.stringify(result.content)).toContain('unclosed');
   });
   it('imports a single formula from KaTeX/MathML and MathJax TeX scripts without visual duplicates', () => {
-    const katex = '<span class="katex"><span class="katex-mathml"><math><semantics><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></semantics></math></span><span class="katex-html">DUPLICATE</span></span>';
+    const katex = '<span class="katex"><span class="katex-mathml"><math><semantics><mi>x</mi><annotation encoding="application/X-TEX">x^2</annotation></semantics></math></span><span class="katex-html">DUPLICATE</span></span>';
     const source = `<p>before ${katex} after</p><div class="katex-display">${katex}</div><div><script type="math/tex; mode=display">y=2</script></div><p><span data-math-inline latex="z" delimiter="$"></span></p><script>bad()</script>`;
     const result = normalize(source);
     expect(mathNodes(result.content).map(node => [node.type, node.attrs?.latex])).toEqual([['mathInline', 'x^2'], ['mathBlock', 'x^2'], ['mathBlock', 'y=2'], ['mathInline', 'z']]);

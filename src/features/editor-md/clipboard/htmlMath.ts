@@ -9,7 +9,7 @@ export function clipboardMathElement(element: Element): JSONContent | null {
   const rendered = tag === 'MATH' || classes.contains('katex') || classes.contains('katex-display');
   if (!ownInline && !ownBlock && !script && !rendered) return null;
   const latex = ownInline || ownBlock ? element.getAttribute('latex') ?? element.getAttribute('data-latex')
-    : script ? element.textContent : element.querySelector('annotation[encoding="application/x-tex"], annotation[encoding="application/x-latex"]')?.textContent;
+    : script ? element.textContent : Array.from(element.querySelectorAll('annotation')).find(node => /^application\/x-(?:tex|latex)$/i.test(node.getAttribute('encoding')?.trim() ?? ''))?.textContent;
   if (latex == null) return null;
   const block = ownBlock || classes.contains('katex-display') || element.getAttribute('display') === 'block'
     || script && /mode\s*=\s*display/i.test(element.getAttribute('type') ?? '');
