@@ -2,6 +2,12 @@
 
 内容展开/折叠统一使用 `components/DisclosureTriangle` 的实心 SVG 三角：折叠向右，展开向下；React 控件与编辑器 DOM widget 共用同一路径，旋转图标时不旋转点击区域。标题章节、独立折叠块、大纲、代码块及代码段、文件/收藏树、多维表子行和分组、思维导图分支、欢迎页更多格式均遵循此约定。普通菜单、导航及布局面板开关保留各自图标。
 
+## 扩展装配与视图包装
+
+`buildExtensions` 是 NB、MD 可视编辑器共用的完整装配入口。`withRichPresentation` 仅在 `configure()` 生成的独立定义上包装 NodeView，用 `getExtensionField` 保留原视图的上下文；不修改原定义、不增加继承层。当前 TipTap 的 `extend()` 会复制父配置，若通用视图包装再用它派生，含 `this.parent()` 的插件 hook 会重复执行，导致同 key 插件使整个编辑器无法加载。
+
+装配回归覆盖空文档、NB 节点树与 Markdown 的初始化、并存和重建，代码控件测试使用实际外观包装。发布前还必须启动打包程序，检查首次示例页、NB/MD 打开及实际编辑；独立组件或转换 Worker 检查不能代替应用入口验收。
+
 ## 标题折叠
 
 `headingFolding` 以 ProseMirror DecorationSet 保存视图状态，不写入 Markdown，不参与导出。章节范围为顶层标题至下一个同级或更高级标题之前。下级标题和所有正文块都属于该范围；嵌套折叠独立保存。

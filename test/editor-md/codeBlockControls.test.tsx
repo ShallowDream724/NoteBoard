@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { afterEach, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
+import { withRichPresentation } from '../../src/features/editor-md/rich-content/presentedView';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>() }));
 vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (element: HTMLElement, callback: (near: boolean) => void) => {
@@ -19,7 +20,7 @@ const source = 'def greet(name):\n    if name:\n        return name\n    return 
 async function mount() {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
-  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView],
+  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), withRichPresentation(CodeBlockView)],
     content: { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: source }] }] } });
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   await act(async () => root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>));

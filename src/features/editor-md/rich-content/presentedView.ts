@@ -1,11 +1,15 @@
-import type { Node as NodeExtension } from '@tiptap/core';
+import { getExtensionField, type Node as NodeExtension } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 
 /** Custom views bypass schema.toDOM. Apply shared block presentation at their
  * boundary, without a document scan or a second decoration plugin. */
 export function withRichPresentation<T extends NodeExtension>(extension: T): T {
-  return extension.extend({ addNodeView() {
-    const create = this.parent?.();
+  // configure clones the definition without adding an inheritance level. In
+  // TipTap 3, extend also copies hooks: a copied hook calling this.parent can
+  // execute itself again (including keyed plugin registration).
+  const presented = extension.configure();
+  presented.config.addNodeView = function () {
+    const create = getExtensionField<NodeExtension['config']['addNodeView']>(extension, 'addNodeView', this)?.();
     if (!create) throw new Error(`Missing node view: ${this.name}`);
     return props => {
       const view = create(props);
@@ -24,5 +28,6 @@ export function withRichPresentation<T extends NodeExtension>(extension: T): T {
       };
       paint(props.node); return view;
     };
-  } }) as T;
+  };
+  return presented as T;
 }
