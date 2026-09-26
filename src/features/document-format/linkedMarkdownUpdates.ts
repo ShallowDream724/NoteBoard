@@ -205,8 +205,11 @@ export async function acceptLinkedMarkdownOverwrite(nativeKey: string): Promise<
   const doc = useDocumentStore.getState().getDocument(nativeKey), link = doc && nativeMarkdownLink(nativeKey, doc.content);
   if (!doc || !link) return false;
   const generation = getSessionGeneration(nativeKey);
+  if (useDocumentStore.getState().getDocument(link.path)?.isDirty) {
+    publish(nativeKey, { nativeKey, markdownPath: link.path, reason: 'busy', message: '关联 Markdown 有未保存的修改，请先处理它。' });
+    return false;
+  }
   try {
-    if (useDocumentStore.getState().getDocument(link.path)?.isDirty) throw new Error('关联 Markdown 有未保存的修改，请先处理它。');
     const disk = await ipc.readDocument(link.path);
     if (disk.content == null) throw new Error('无法读取关联 Markdown。');
     const hash = await documentTextHash(disk.content);

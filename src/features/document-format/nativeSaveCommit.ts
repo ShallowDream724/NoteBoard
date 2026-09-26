@@ -2,8 +2,9 @@ import { NATIVE_DOCUMENT_HEADER, readNativeMetadata, replaceNativeMetadata } fro
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getMdSourceView, getMdTipTapEditor } from '../editor-md/editorInstances';
-import { setEditorNativeMetadata } from '../editor-md/editorDocumentCodec';
-import { setSourceNativeMetadata } from '../editor-md/sourceDocumentSync';
+import { parseEditorDocument, setEditorNativeMetadata } from '../editor-md/editorDocumentCodec';
+import { setSourceNativeMetadata, sourceReplacement } from '../editor-md/sourceDocumentSync';
+import { Transaction } from '@codemirror/state';
 import { getBaseline } from '../editor-md/serialize';
 import { synchronizeCurrentDocumentHistoryContent } from '../history/documentHistory';
 import { noteSelfWrite } from '../explorer/directoryWatcher';
@@ -39,11 +40,23 @@ export function commitNativeSaveMetadata(key: string, prepared: PreparedNativeSa
     noteSelfWrite(markdown.path);
     // A paired save is refused while the linked tab is dirty. Never erase edits
     // entered there while the native write was running.
+    const mode = useWindowStore.getState().getTab(markdown.path)?.viewMode === 'source' ? 'source' : 'visual';
+    if (mode === 'source') flushPendingSourceSnapshot(markdown.path);
+    else flushPendingVisualSnapshot(markdown.path);
     const linked = useDocumentStore.getState().getDocument(markdown.path);
     if (linked) {
-      if (!linked.isDirty) {
+      const source = getMdSourceView(markdown.path);
+      const editor = getMdTipTapEditor(markdown.path);
+      if (!linked.isDirty && !source?.composing && !editor?.view.composing) {
+        // Both mounted editor representations must agree with the committed disk
+        // snapshot, otherwise a later flush resurrects the old Markdown as edits.
+        if (source && source.state.doc.toString() !== markdown.content) source.dispatch({
+          changes: { from: 0, to: source.state.doc.length, insert: markdown.content },
+          annotations: [Transaction.addToHistory.of(false), sourceReplacement.of(true)],
+        });
+        if (editor) parseEditorDocument(editor, markdown.content, 'sync');
         useDocumentStore.getState().setContent(markdown.path, markdown.content);
-        synchronizeCurrentDocumentHistoryContent(markdown.path, markdown.content, 'source');
+        synchronizeCurrentDocumentHistoryContent(markdown.path, markdown.content, mode);
       }
       useDocumentStore.getState().updateBaseline(markdown.path, markdown.content, prepared.result.markdown.mtime, prepared.result.markdown.size);
       getBaseline(markdown.path).updateBaseline(markdown.content);

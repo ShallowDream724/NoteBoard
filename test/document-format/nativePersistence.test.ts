@@ -11,7 +11,9 @@ import { prepareTextExport } from '../../src/features/export/documentConversion'
 import { persistNativeDocument, prepareNativeSave } from '../../src/features/document-format/nativePersistence';
 import { commitNativeSaveMetadata } from '../../src/features/document-format/nativeSaveCommit';
 import { writeDocumentWithBarrier } from '../../src/features/session/documentSession';
-import { Text } from '@codemirror/state';
+import { EditorState, Text } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import { getMdSourceView } from '../../src/features/editor-md/editorInstances';
 import { stagePendingSourceSnapshot } from '../../src/features/editor-md/visualSnapshot';
 
 vi.mock('../../src/core/nativeDocumentIO', async importOriginal => ({
@@ -24,9 +26,8 @@ vi.mock('../../src/features/editor-md/imageAssetLifecycle', () => ({ restoreImag
 vi.mock('../../src/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('../../src/features/editor-code/orchestration/saveDocument', () => ({ showWriteError: vi.fn() }));
-vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => null, getMdSourceView: () => null }));
+vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => null, getMdSourceView: vi.fn(() => null) }));
 vi.mock('../../src/features/editor-md/editorDocumentCodec', () => ({ setEditorNativeMetadata: vi.fn() }));
-vi.mock('../../src/features/editor-md/sourceDocumentSync', () => ({ setSourceNativeMetadata: vi.fn() }));
 
 const NB = 'C:\\notes\\memo.nb', MD = 'C:\\notes\\memo.md';
 const native = (text: string, metadata: NativeMetadata) => encodeNativeDocument({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }, metadata);
@@ -47,6 +48,7 @@ async function seed() {
 
 beforeEach(() => {
   vi.clearAllMocks(); vi.stubGlobal('crypto', webcrypto);
+  vi.mocked(getMdSourceView).mockReturnValue(undefined);
   useDocumentStore.setState({ documents: new Map() });
   useWindowStore.setState({ tabs: [], activeKey: null });
 });
@@ -111,6 +113,18 @@ describe('native linked-save boundary', () => {
     expect(readNativeMetadata(current.content!)).toMatchObject({ custom: { value: 'new metadata' }, markdown: { baselineHash: await documentTextHash('Saved body\n') } });
     expect(current.baselineContent).toBe(baseline); // outer save barrier owns this baseline
     expect(useDocumentStore.getState().getDocument(MD)).toMatchObject({ content: 'Linked input received during save', baselineContent: 'Saved body\n', isDirty: true });
+  });
+  it('updates the mounted linked source so a later flush cannot revive the pre-save Markdown', async () => {
+    const { doc, source, markdown } = await seed();
+    const view = new EditorView({ state: EditorState.create({ doc: markdown }) });
+    vi.mocked(getMdSourceView).mockImplementation(key => key === MD ? view : undefined);
+    try {
+      vi.mocked(saveNativeBundle).mockResolvedValue({ ok: true, native: { mtime: 2, size: source.length }, markdown: { mtime: 2, size: 11 } });
+      const prepared = await persistNativeDocument(doc, source);
+      commitNativeSaveMetadata(NB, prepared);
+      expect(view.state.doc.toString()).toBe('Saved body\n');
+      expect(useDocumentStore.getState().getDocument(MD)).toMatchObject({ content: view.state.doc.toString(), baselineContent: 'Saved body\n', isDirty: false });
+    } finally { view.destroy(); }
   });
   it('materializes source input arriving after an async save gap before applying a metadata-only receipt', async () => {
     const { doc, source, metadata } = await seed();
