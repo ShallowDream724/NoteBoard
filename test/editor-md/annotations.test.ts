@@ -77,7 +77,7 @@ describe('补充说明文档状态', () => {
     const id = addAnnotation(editor, [paragraph('Whole paragraph')], { open: false })!;
     const anchor = annotationAnchors(editor.state.doc)[0];
     const element = editor.view.nodeDOM(anchor.from) as HTMLElement;
-    expect(element.querySelector('.nb-annotation-inline-marker > button')?.getAttribute('data-annotation-id')).toBe(id);
+    expect(element.querySelector('.nb-annotation-inline-marker button')?.getAttribute('data-annotation-id')).toBe(id);
     expect(editor.view.dom.querySelectorAll('.nb-annotation-indicator')).toHaveLength(1);
     editor.commands.setTextSelection(anchor.to - 1);
     expect(editor.commands.splitBlock()).toBe(true);

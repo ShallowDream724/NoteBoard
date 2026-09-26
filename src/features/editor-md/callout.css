@@ -24,8 +24,10 @@
 .callout-title-actions, .callout-menu-actions { display: flex; justify-content: space-between; gap: 6px; margin-top: 7px; }
 .callout-title-actions button, .callout-menu-action { border: 0; padding: 3px 0; color: var(--editor-text-muted); background: transparent; }
 .callout-color-tabs { display: flex; padding: 3px; margin: 12px 0 10px; border-radius: 7px; background: var(--editor-surface, #f1f5f9); }
-.callout-color-tabs button { flex: 1; border: 0; border-radius: 5px; padding: 4px; background: transparent; }
-.callout-color-tabs button[aria-pressed=true] { background: var(--editor-bg, white); box-shadow: 0 1px 3px #0001; }
+.callout-color-tabs button { flex: 1; border: 0; border-radius: 5px; padding: 4px; background: transparent; transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+.callout-color-tabs button:hover { background: color-mix(in srgb, var(--editor-accent) 6%, var(--editor-bg, white)); }
+.callout-color-tabs button[aria-pressed=true] { color: var(--editor-accent); font-weight: 600; background: color-mix(in srgb, var(--editor-accent) 12%, var(--editor-bg, white)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--editor-accent) 30%, transparent), 0 1px 3px #0001; }
+.callout-color-tabs button:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 2px; }
 .callout-custom-color { display: flex; justify-content: space-between; align-items: center; margin-top: 9px; color: var(--editor-text-muted); }
 .callout-custom-color input { width: 32px; height: 24px; padding: 2px; }
 .callout-menu-actions { padding-top: 8px; border-top: 1px solid var(--editor-border); }
@@ -37,5 +39,5 @@
 .callout-emoji-input input { flex: 1; }
 .callout-emoji-input button { border: 1px solid var(--editor-border); border-radius: 5px; padding: 4px 9px; background: var(--editor-surface); }
 .callout-emoji-input button:disabled { opacity: .4; cursor: default; }
-@media (prefers-reduced-motion: reduce) { .github-alert .callout-palette { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .github-alert .callout-palette, .callout-color-tabs button { transition: none; } }
 @media print { .github-alert .callout-palette, .callout-menu { display: none; } }

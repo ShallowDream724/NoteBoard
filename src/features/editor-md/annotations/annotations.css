@@ -1,12 +1,18 @@
 .nb-annotation-anchor,.nb-annotation-text-block { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; }
 .nb-annotation-anchor { cursor: help; }
 .nb-annotation-anchor:focus-visible, .nb-annotation-block-anchor:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 3px; }
-.nb-annotation-inline-marker { display:inline; position:relative; font-size:inherit; line-height:inherit; }
+.nb-annotation-inline-marker { display:inline; font-size:inherit; line-height:inherit; user-select:none; }
+/* Join the zero-width anchor to the previous glyph, then allow following text
+ * to wrap. The separate collapsible gap hangs at line end instead of moving
+ * the marker or adding an empty line. Generated characters never enter the doc. */
+.nb-annotation-inline-anchor { display:inline; position:relative; font-size:inherit; line-height:inherit; }
+.nb-annotation-inline-anchor::before { content:"\2060\200b"; }
+.nb-annotation-inline-marker::after { content:" "; font-size:0; word-spacing:22px; white-space:normal; }
 .nb-annotation-block-marker { display:block; position:relative; height:0; margin:0!important; padding:0!important; overflow:visible; }
 .nb-annotation-indicator { position:absolute; z-index:2; display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; padding:0; border:1px solid color-mix(in srgb,var(--editor-text-secondary) 68%,var(--editor-border)); border-radius:50%; color:color-mix(in srgb,var(--editor-text-secondary) 80%,var(--editor-text)); background:color-mix(in srgb,var(--editor-accent) 7%,var(--editor-surface)); font:600 11px/1 var(--ui-font-family,sans-serif); cursor:help; user-select:none; }
 .nb-annotation-indicator:hover,.nb-annotation-indicator:focus-visible { color:var(--editor-text); border-color:var(--editor-accent); background:color-mix(in srgb,var(--editor-accent) 14%,var(--editor-surface)); }
 .nb-annotation-indicator:focus-visible { outline:2px solid var(--editor-accent); outline-offset:2px; }
-.nb-annotation-inline-marker > .nb-annotation-indicator { left:2px; bottom:.6em; }
+.nb-annotation-inline-anchor > .nb-annotation-indicator { left:3px; bottom:1em; }
 .nb-annotation-block-marker > .nb-annotation-indicator { right:4px; top:4px; }
 .nb-annotation-toolbar-marker { display:inline-flex; align-items:center; justify-content:center; flex:none; width:24px; height:24px; }
 .nb-annotation-toolbar-marker > .nb-annotation-indicator { position:relative; flex:none; }

@@ -20,13 +20,18 @@ export function createAnnotationMarker(id: string | null, placement: AnnotationM
   const attributes = annotationIndicatorAttributes(id ?? '');
   button.className = attributes.className;
   button.setAttribute('aria-label', attributes['aria-label']);
-  marker.append(button); updateAnnotationMarker(marker, id);
+  if (placement === 'inline') {
+    const anchor = document.createElement('span');
+    anchor.className = 'nb-annotation-inline-anchor';
+    anchor.append(button); marker.append(anchor);
+  } else marker.append(button);
+  updateAnnotationMarker(marker, id);
   return marker;
 }
 
 export function updateAnnotationMarker(marker: HTMLElement, id: string | null): void {
   marker.hidden = !id;
-  const button = marker.firstElementChild as HTMLElement;
+  const button = marker.querySelector<HTMLButtonElement>('.nb-annotation-indicator')!;
   if (id) button.dataset.annotationId = id;
   else delete button.dataset.annotationId;
 }
