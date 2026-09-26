@@ -1,7 +1,6 @@
-import { Node, type Editor } from '@tiptap/core';
+import { Node } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
-import { editorSupportsCapability, runWithDocumentCapability } from '../document-format/featureGate';
 
 export type TableStyle = 'standard' | 'three-line';
 export const tableStyle = (value: unknown): TableStyle => value === 'three-line' ? value : 'standard';
@@ -11,17 +10,6 @@ const PREFIX = '<!-- noteboard-document ';
 export function documentTableStyle(doc: DocumentNode): TableStyle {
   return doc.firstChild?.type.name === NAME ? tableStyle(doc.firstChild.attrs.tableStyle) : 'standard';
 }
-export function setDocumentTableStyle(editor: Editor, value: TableStyle) {
-  if (value !== 'standard' && !editorSupportsCapability(editor, 'tableStyle')) { runWithDocumentCapability(editor, 'tableStyle', next => setDocumentTableStyle(next, value)); return; }
-  const { doc, tr } = editor.state;
-  if (documentTableStyle(doc) === value) return;
-  if (doc.firstChild?.type.name === NAME) {
-    if (value === 'standard') tr.delete(0, doc.firstChild.nodeSize);
-    else tr.setNodeMarkup(0, undefined, { tableStyle: value });
-  } else tr.insert(0, editor.schema.nodes[NAME].create({ tableStyle: value }));
-  editor.view.dispatch(tr);
-}
-
 /** One metadata node, not root document attributes: changing root attributes
  * makes ProseMirror recreate all NodeViews. Normal transactions/history retain
  * every content subtree while the container's CSS attribute controls painting. */

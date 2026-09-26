@@ -1,21 +1,9 @@
-import { DOMParser, parseHTML } from 'linkedom/worker';
+import { installWorkerDocumentDom } from '../../core/workerDocumentDom';
 import type { ExportDocument, ExportInputFormat } from './model';
 import type { JSONContent } from '@tiptap/core';
 import type { DiagramRenderer, DiagramResult } from './diagramRendering';
 
-// A DOM implementation only inside this disposable worker. It also preserves
-// raw-HTML Markdown parsing, which TipTap otherwise treats literally in workers.
-const dom = parseHTML('<!doctype html><html><body></body></html>');
-class FragmentDOMParser {
-  parseFromString(source: string, type: string) {
-    // TipTap passes <body> fragments. Browser DOMParser supplies <html>; LinkeDOM
-    // deliberately does not, so normalize that boundary explicitly.
-    const html = type === 'text/html' && !/<html[\s>]/i.test(source)
-      ? `<html><head></head>${/<body[\s>]/i.test(source) ? source : `<body>${source}</body>`}</html>` : source;
-    return new DOMParser().parseFromString(html, type as 'text/html');
-  }
-}
-Object.assign(globalThis, { window: { document: dom.document, DOMParser: FragmentDOMParser }, document: dom.document, DOMParser: FragmentDOMParser });
+installWorkerDocumentDom();
 
 type Request = { type: 'convert'; markdown: string | JSONContent; title: string; directory: string; format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard'; inputFormat?: ExportInputFormat; imageSources?: Array<[string, string]> }
   | { type: 'asset-urls'; urls: string[] } | { type: 'diagram-results'; results: DiagramResult[] };

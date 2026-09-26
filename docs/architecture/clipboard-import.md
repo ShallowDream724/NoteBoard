@@ -20,7 +20,7 @@ NB 与 MD 可视编辑共用 `clipboard/external.ts`，在主线程与 Worker �
 
 ## 调度、取消与历史
 
-解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。
+解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。文档级表格样式的修改命令位于 `documentPresentationCommands.ts`，不由语法模块反向导出。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。两种 Worker 共用 `workerDocumentDom` 的片段 DOM 适配，先安装再加载语法，保证大段 Markdown 中的 HTML 与主线程解析一致。
 
 MD 源码模式使用 CodeMirror 的文字粘贴，保留 Markdown 原文；切回可视模式先提交源码快照，再通过同一文档解析器渲染。源码粘贴不采用 HTML 备选格式，也不自动添加 Markdown 转义。NB 原生 JSON 源码不增加 Markdown 自动识别。
 

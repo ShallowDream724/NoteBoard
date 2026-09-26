@@ -5,7 +5,8 @@ import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/featur
 import { parseMarkdown, serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { mapModeSelection } from '../../src/features/editor-md/sourcePosition';
 import { renderDocument } from '../../src/features/export/renderDocument';
-import { documentTableStyle, setDocumentTableStyle } from '../../src/features/editor-md/documentPresentation';
+import { documentTableStyle } from '../../src/features/editor-md/documentPresentation';
+import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentationCommands';
 import { isTopLevelBlockMoveAllowed } from '../../src/features/editor-md/blockReorder';
 import { nativeTestEditor } from './nativeTestEditor';
 

@@ -5,7 +5,7 @@ import { CellSelection } from '@tiptap/pm/tables';
 import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { serializeMarkdown, parseMarkdown } from '../../src/features/editor-md/serialize';
 import { fillTableSelection, selectTableScope, tableHeaderState, setSelectedTableHeader } from '../../src/features/editor-md/tablePresentationCommands';
-import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentation';
+import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentationCommands';
 import { renderDocument } from '../../src/features/export/renderDocument';
 import { nativeTestEditor } from './nativeTestEditor';
 
