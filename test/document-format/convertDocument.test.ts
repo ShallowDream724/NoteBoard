@@ -2,9 +2,9 @@ import { webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { save } from '@tauri-apps/plugin-dialog';
 import * as ipc from '../../src/core/ipc/commands';
-import type { DocumentPayload } from '../../src/core/ipc/types';
+import type { DocumentPayload, FileTreeNode } from '../../src/core/ipc/types';
 import { decodeNativeDocument, encodeNativeDocument, readNativeMetadata, type NativeMetadata } from '../../src/core/nativeDocument';
-import { documentTextHash, saveNativeBundle } from '../../src/core/nativeDocumentIO';
+import { documentTextHash, readNativeHeaders, saveNativeBundle } from '../../src/core/nativeDocumentIO';
 import { rebaseDocumentReferences } from '../../src/core/documentReferences';
 import { registerEditorCapabilities, resetEditorRegistryForTest, bumpDocumentRevision } from '../../src/core/editor/editorRegistry';
 import { registerPendingSnapshotMaterializers } from '../../src/core/editor/pendingSnapshots';
@@ -15,11 +15,13 @@ import { prepareTextExport } from '../../src/features/export/documentConversion'
 import { convertMarkdownToNative } from '../../src/features/document-format/convertDocument';
 import { saveAs, saveDocument } from '../../src/features/editor-code/orchestration/saveDocument';
 import { restoreLastClosedWindow, loadRestoredTab } from '../../src/features/session/closedWindowSession';
+import { useExplorerStore } from '../../src/features/explorer/explorerStore';
+import { groupMarkdownAssociations, invalidateMarkdownAssociations } from '../../src/features/document-format/markdownAssociationIndex';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'test-main' }) }));
 vi.mock('../../src/core/nativeDocumentIO', async importOriginal => ({
-  ...await importOriginal<typeof import('../../src/core/nativeDocumentIO')>(), saveNativeBundle: vi.fn(),
+  ...await importOriginal<typeof import('../../src/core/nativeDocumentIO')>(), saveNativeBundle: vi.fn(), readNativeHeaders: vi.fn(),
 }));
 vi.mock('../../src/core/ipc/commands', () => ({
   readDocument: vi.fn(), pathExists: vi.fn(), writeDocument: vi.fn(),
@@ -58,11 +60,14 @@ beforeEach(() => {
   vi.clearAllMocks(); vi.stubGlobal('crypto', webcrypto);
   useDocumentStore.setState({ documents: new Map() });
   useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [], isWindowClosing: false });
+  useExplorerStore.getState().clear(); invalidateMarkdownAssociations();
   resetEditorRegistryForTest();
   vi.mocked(ipc.registerDocument).mockResolvedValue({ type: 'ok' });
   vi.mocked(ipc.unregisterDocument).mockResolvedValue(undefined);
   vi.mocked(ipc.setDocumentDirty).mockResolvedValue(undefined);
   vi.mocked(ipc.pathExists).mockResolvedValue({ exists: false, isDir: false });
+  vi.mocked(ipc.readDir).mockResolvedValue([]);
+  vi.mocked(readNativeHeaders).mockResolvedValue([]);
   vi.mocked(saveNativeBundle).mockResolvedValue({ ok: true, native: { mtime: 2, size: 100 }, markdown: { mtime: 2, size: 20 } });
   vi.mocked(prepareTextExport).mockImplementation(async (content, format, directory, _signal, inputFormat) => {
     const json = typeof content === 'string' ? inputFormat === 'noteboard' ? decodeNativeDocument(content)
@@ -75,6 +80,26 @@ beforeEach(() => {
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); registerPendingSnapshotMaterializers({ source: () => null, visual: () => null }); vi.unstubAllGlobals(); });
 
 describe('conversion and native Save As', () => {
+  it.each([false, true])('publishes the same-directory NB in the tree after conversion (remove Markdown: %s)', async removeMarkdown => {
+    seed(MD, 'Text'); authority(MD, 'Text');
+    const entry = (path: string, kind: FileTreeNode['kind']): FileTreeNode => ({ path, name: path.split('\\').pop()!, kind, isDir: false, size: 20, mtime: 2, isHidden: false, isSymlink: false });
+    const md = entry(MD, 'markdown'), nb = entry(NB, 'noteboard');
+    useExplorerStore.getState().setRoot('C:\\notes', [md]);
+    vi.mocked(ipc.readDocument).mockResolvedValue(payload(MD, 'Text'));
+    vi.mocked(ipc.readDir).mockImplementation(async () => {
+      expect(saveNativeBundle).toHaveBeenCalledOnce();
+      return removeMarkdown ? [nb] : [md, nb];
+    });
+    vi.mocked(readNativeHeaders).mockImplementation(async () => [{ path: NB, header: vi.mocked(saveNativeBundle).mock.calls[0][0].content }]);
+    expect(await convertMarkdownToNative(MD, { removeMarkdown })).toBe(NB);
+    expect(vi.mocked(saveNativeBundle).mock.calls[0][0].path).toBe(NB);
+    const state = useExplorerStore.getState();
+    expect(groupMarkdownAssociations(state.getChildren('C:\\notes')!)).toEqual([{ node: nb, ...(!removeMarkdown ? { markdown: md } : {}) }]);
+    expect(state.root).toBe('C:\\notes');
+    expect(state.revealed).toBe(NB);
+    expect(state.associationExpanded.has(NB.toLowerCase())).toBe(!removeMarkdown);
+  });
+
   it.each([false, true])('converts a restored Markdown tab with unsaved edits (external change: %s)', async external => {
     const disk = '# Heading\r\n\r\n* item\r\n';
     vi.mocked(ipc.loadSession).mockResolvedValue({ schemaVersion: 1, savedAt: 1, windows: [{
@@ -105,6 +130,19 @@ describe('conversion and native Save As', () => {
     }
     // Conversion owns the paired write; there is no preliminary MD save.
     expect(ipc.writeDocument).not.toHaveBeenCalled();
+  });
+
+  it('keeps a completed conversion when only the explorer refresh fails', async () => {
+    seed(MD, 'Saved'); authority(MD, 'Saved');
+    vi.mocked(ipc.readDocument).mockResolvedValue(payload(MD, 'Saved'));
+    vi.mocked(ipc.readDir).mockRejectedValue(new Error('Directory unavailable'));
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(await convertMarkdownToNative(MD, { removeMarkdown: false })).toBe(NB);
+      expect(useDocumentStore.getState().getDocument(NB)?.kind).toBe('noteboard');
+      expect(useWindowStore.getState().activeKey).toBe(NB);
+      expect(ipc.unregisterDocument).not.toHaveBeenCalledWith('test-main', NB);
+    } finally { error.mockRestore(); }
   });
 
   it('compares the original disk text after the visual editor normalizes Markdown', async () => {

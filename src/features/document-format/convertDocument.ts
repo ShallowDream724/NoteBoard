@@ -11,6 +11,7 @@ import { getBaseline } from '../editor-md/serialize';
 import { prepareTextExport } from '../export/documentConversion';
 import { normalizePath } from '../explorer/pathUtils';
 import { noteSelfWrite } from '../explorer/directoryWatcher';
+import { revealWrittenExplorerFile } from '../explorer/explorerActions';
 import { assertDocumentIdentity, commitDocumentIdentity, prepareDocumentIdentity, protectDocumentIdentity, type DocumentIdentityLease } from '../session/documentIdentity';
 import { flushDocument, getSessionGeneration } from '../session/documentSession';
 import { MARKDOWN_PROJECTION_VERSION, parentDirectory, relativeDocumentPath } from './nativeLink';
@@ -78,6 +79,13 @@ export async function convertMarkdownToNative(key: string, options: { removeMark
       useWindowStore.getState().setTabDirty(newKey, finalContent !== content);
     });
     committed = true;
+    lease.release(); lease = undefined;
+    await revealWrittenExplorerFile(newKey, parentDirectory(newKey),
+      () => useWindowStore.getState().activeKey === newKey && useDocumentStore.getState().hasDocument(newKey), markdown != null)
+      .catch(error => {
+        console.error('转换后刷新文件树失败:', error);
+        showToast(`NB 已保存到 ${newKey}，文件树刷新失败，请点击刷新。`, 'warning');
+      });
     return newKey;
   } finally {
     lease?.release();

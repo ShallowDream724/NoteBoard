@@ -8,9 +8,10 @@ import { refreshMarkdownAssociations } from '../document-format/markdownAssociat
 
 // Directory entries and bounded NB headers share one navigation/refresh request.
 const reads = new Map<string, { force: boolean; work: Promise<FileTreeNode[]> }>();
+const directoryReadKey = (path: string) => `${useSettingsStore.getState().settings.file.showHiddenFiles}:${normalizePath(path).toLowerCase()}`;
 export function readExplorerDirectory(path: string, forceAssociations = false): Promise<FileTreeNode[]> {
   const hidden = useSettingsStore.getState().settings.file.showHiddenFiles;
-  const key = `${hidden}:${normalizePath(path).toLowerCase()}`;
+  const key = directoryReadKey(path);
   let request = reads.get(key);
   if (!request) {
     const state = { force: forceAssociations, work: Promise.resolve([] as FileTreeNode[]) };
@@ -152,17 +153,40 @@ export function followExplorerFile(filePath: string, directory: string, isCurren
 
 /** Shared by ordinary tab following and the explicit locate button. */
 export async function revealExplorerFile(filePath: string, directory: string, isCurrent: () => boolean = () => true): Promise<void> {
-  const revision = ++revealRevision;
+  return revealFile(filePath, directory, beginExplorerNavigation(), isCurrent);
+}
+
+/** A completed write must not rely on a watcher or reuse a pre-write directory snapshot. */
+export function revealWrittenExplorerFile(filePath: string, directory: string, isCurrent: () => boolean, expandAssociation = false): Promise<void> {
+  const request = beginExplorerNavigation(filePath);
+  const current = () => isCurrentNavigation(request) && isCurrent();
+  const navigation = { filePath, request, work: Promise.resolve() };
+  parentNavigation = navigation;
+  navigation.work = (async () => {
+    await afterDocumentPaint();
+    if (!current()) return;
+    // Let a read started before the write settle, then request a fresh snapshot.
+    await reads.get(directoryReadKey(directory))?.work.catch(() => undefined);
+    if (!current()) return;
+    const children = await readExplorerDirectory(directory, true);
+    if (!current()) return;
+    await revealFile(filePath, directory, request, isCurrent, children, expandAssociation);
+  })().finally(() => { if (parentNavigation === navigation) parentNavigation = null; });
+  return navigation.work;
+}
+
+async function revealFile(filePath: string, directory: string, request: ExplorerNavigation, isCurrent: () => boolean,
+  freshChildren?: FileTreeNode[], expandAssociation = false): Promise<void> {
   let root = useExplorerStore.getState().root;
-  let rootRevision = useExplorerStore.getState().rootRevision;
-  const current = () => revision === revealRevision && isCurrent() && useExplorerStore.getState().rootRevision === rootRevision;
+  const current = () => isCurrentNavigation(request) && isCurrent();
+  if (!current()) return;
   if (!root || !isSubPath(root, filePath)) {
-    const children = await readExplorerDirectory(directory);
+    const children = freshChildren ?? await readExplorerDirectory(directory);
     if (!current()) return;
     useExplorerStore.getState().setRoot(directory, children);
-    rootRevision = useExplorerStore.getState().rootRevision;
+    request.rootRevision = useExplorerStore.getState().rootRevision;
     root = directory;
-  }
+  } else if (freshChildren) useExplorerStore.getState().updateChildren(directory, freshChildren);
   for (const dir of getPathChain(root, filePath)) {
     if (!current()) return;
     if (!useExplorerStore.getState().isExpanded(dir)) {
@@ -171,5 +195,8 @@ export async function revealExplorerFile(filePath: string, directory: string, is
       useExplorerStore.getState().expand(dir, children);
     }
   }
-  if (current()) useExplorerStore.getState().setRevealed(filePath, true);
+  if (current()) {
+    if (expandAssociation) useExplorerStore.getState().expandAssociation(filePath);
+    useExplorerStore.getState().setRevealed(filePath, true);
+  }
 }
