@@ -1,4 +1,5 @@
-.titlebar-document-actions { display:flex; align-items:center; flex-shrink:0; gap:2px; padding-right:8px; margin-right:4px; }
+.titlebar-document-actions { display:flex; align-items:center; flex-shrink:0; gap:2px; }
+.titlebar-document-actions[data-has-tabs="true"] { padding-right:8px; margin-right:4px; }
 .titlebar-tab-group { display:flex; align-items:center; height:100%; min-width:0; flex:0 1 auto; }
 .titlebar-new-document { flex:0 0 auto; margin:0 8px 0 4px; transform:translateX(calc(-1 * var(--tab-trim-end,0px))); }
 .titlebar-update-dot { position:absolute; top:6px; right:7px; width:6px; height:6px; border-radius:50%; background:var(--editor-accent); box-shadow:0 0 0 2px var(--window-chrome-bg,var(--titlebar-bg)); }

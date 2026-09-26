@@ -580,8 +580,13 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   line-height: var(--content-line-height);
   max-width: var(--document-reading-width, var(--content-max-width));
   margin: 0 auto;
-  padding: 0 var(--document-end-gutter, 24px) var(--document-bottom-space, 80px) var(--document-control-lane, 88px);
+  padding: var(--document-top-space, 32px) var(--document-end-gutter, 24px) var(--document-bottom-space, 80px) var(--document-control-lane, 88px);
   color: var(--editor-text);
+}
+
+/* The document owns its leading space, independent of the first block type. */
+.ProseMirror:not(.nb-bitable-rte-prose):not(.nb-embedded-prose) > :first-child {
+  margin-top: 0;
 }
 
 .ProseMirror:focus {

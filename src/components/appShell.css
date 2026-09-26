@@ -37,6 +37,7 @@
   --document-outline-space: 0px;
   --document-control-lane: 88px;
   --document-end-gutter: 24px;
+  --document-top-space: 32px;
   --document-bottom-space: clamp(64px, 12vh, 120px);
   --document-reading-width: min(100%, calc(var(--content-max-width) + 64px));
   min-height: 0;
@@ -73,6 +74,7 @@
 
 @container document-pane (max-width: 720px) {
   .nb-document-stage {
+    --document-top-space: 24px;
     --document-outline-width: 164px;
     --document-outline-inset: 20px;
   }

@@ -23,6 +23,7 @@ export function TitleBar() {
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
+  const hasTabs = useWindowStore((s) => s.tabs.length > 0);
   const canExportDocument = useWindowStore((s) => isRichDocument(s.tabs.find(tab => tab.key === s.activeKey)?.kind));
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
@@ -46,7 +47,7 @@ export function TitleBar() {
         <SidebarToggle className="titlebar-action" side="left" visible={explorerVisible} onToggle={toggleExplorer} />
       </div>
 
-      <div className="titlebar-document-actions">
+      <div className="titlebar-document-actions" data-has-tabs={hasTabs}>
         <Tooltip content="回到主界面" side="bottom">
           <button type="button" className="titlebar-action" aria-label="回到主界面" onClick={() => {
             emit('close-titlebar-menus', undefined);
@@ -56,7 +57,7 @@ export function TitleBar() {
       </div>
 
       {/* Tab 栏 */}
-      <div className="titlebar-tab-group"><TabBar /><NewDocumentMenu /></div>
+      <div className="titlebar-tab-group">{hasTabs && <TabBar />}<NewDocumentMenu /></div>
 
       {/* 拖拽空白区：当有菜单打开时临时解除 drag-region，点击直接关闭菜单且避免触发原生窗口拖动；无菜单时保留原生拖拽，双击最大化 */}
       <div
