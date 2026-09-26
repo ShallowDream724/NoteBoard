@@ -15,13 +15,21 @@ function ordinalText(value: number, type: string) {
   return String(value);
 }
 
-/** The gutter belongs to the handle; list markers and folding controls remain
- * in the content lane. Coordinates are converted once into the scroll host. */
+/** Shared viewport-space edge for document-gutter placement and hit testing. */
+export function editorContentLeft(view: EditorView) {
+  const rect = view.dom.getBoundingClientRect();
+  const scale = rect.width / view.dom.offsetWidth || 1;
+  return rect.left + parseFloat(getComputedStyle(view.dom).paddingLeft || '0') * scale;
+}
+
+/** List markers and folding controls stay in the content lane. Convert the
+ * resulting anchor once into the scroll host's coordinate space. */
 export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, host: HTMLElement, width = 50, height = 30) {
   const rect = block.element.getBoundingClientRect(), bounds = host.getBoundingClientRect();
   const scale = bounds.width / host.offsetWidth || 1;
   let edge = rect.left;
-  if (block.node.type.name === 'heading') {
+  if (block.node.type.name === 'imageCollection') edge = editorContentLeft(view);
+  else if (block.node.type.name === 'heading') {
     edge = block.element.querySelector('.nb-heading-fold-toggle')?.getBoundingClientRect().left ?? edge - 22 * scale;
   } else if (block.node.type.name === 'table') edge -= 22 * scale;
   else if (block.element.tagName === 'LI') {

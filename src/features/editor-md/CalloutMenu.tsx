@@ -42,7 +42,7 @@ export default function CalloutMenu({ attrs, mode, nativeVisible, onChange }: {
         {(['textColor', 'borderColor', 'backgroundColor'] as const).map(key => <button type="button" key={key} aria-pressed={scope === key} onClick={() => setScope(key)}>
           {{ textColor: '文字', borderColor: '边框', backgroundColor: '背景' }[key]}</button>)}
       </div>
-      <ColorSwatches label={label + '颜色'} kind={scope === 'backgroundColor' ? 'background' : 'text'} value={attrs[scope]} onChange={value => onChange({ [scope]: value })}/>
+      <ColorSwatches label={label + '颜色'} kind={scope === 'backgroundColor' ? 'background' : scope === 'borderColor' ? 'border' : 'text'} value={attrs[scope]} onChange={value => onChange({ [scope]: value })}/>
       <label className="callout-custom-color">自定义{label}<input type="color" aria-label={'自定义' + label + '颜色'} value={attrs[scope] ?? (scope === 'backgroundColor' ? '#eff6ff' : '#64748b')}
         onChange={event => onChange({ [scope]: event.target.value })}/></label>
       <div className="callout-menu-actions"><button type="button" onClick={() => {

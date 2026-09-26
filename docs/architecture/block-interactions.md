@@ -14,6 +14,8 @@
 
 `BlockRangeFeedback` 在把手悬停及菜单展开时标出当前块，段落、分隔线、提示块、图片和表格共用一个视图覆盖层。覆盖层位于可编辑 DOM 外，不通过修改块的 class 或创建选区来表达悬停。只测量当前块与滚动容器，按帧合并尺寸/事务更新，并把大表格的覆盖层裁到可见区域；不遍历文档，不保留整篇 DOM 快照。关闭、目标变化或卸载时释放 ResizeObserver、滚动及事务监听。实际打开菜单仍由 `selectBlock` 建立命令选区。分隔线用 26px 命中区包住居中的 2px 线条，获得稳定的选取与缩进入口。
 
+图片宫格和轮播的把手以 `editorContentLeft` 计算正文操作列，不随组合宽度或对齐移动。图像本身及范围反馈仍使用真实块边界；鼠标从缩小的组合跨过左侧空白去往把手时，保留当前块，仅测量这一块的纵向范围，不扫描文档。
+
 `dispatchEditorShortcut` 规范化目录中的按键名，直接执行 ProseMirror keymap。这里不能使用 TipTap `keyboardShortcut` 的事务捕获：应用级撤销适配器需要同步读取替换后的文档，且替换元数据不能丢失。键盘和工具栏均进入 `documentHistory`，原生文档与 Markdown 共用时间线。`documentKeyboardHistory.test` 挂载真实协调器验证物理 Ctrl+Z、重做、尺寸操作和块移动，不用底层 `editor.commands.undo()` 替代应用撤销验收。
 
 提示块转换由 `canWrapBlockInCallout` 统一约束菜单与命令，只接收正文、标题、引用与列表；表格、分隔线、代码及媒体保留各自专用操作。表格和单图的图注入口使用共享 `editFigureCaption`，整块说明使用显式位置的 `beginBlockAnnotation`，不依赖可能被表格插件规范化的当前选区。

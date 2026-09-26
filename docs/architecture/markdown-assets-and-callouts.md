@@ -4,7 +4,7 @@
 
 提示块统一使用 `githubAlert` 节点，正文是普通块数组，支持多段文字、列表、公式和嵌套引用。MD 的五种预设使用标准引用加 `[!NOTE]`、`[!TIP]`、`[!IMPORTANT]`、`[!WARNING]` 或 `[!CAUTION]`；未识别该扩展的阅读器仍能显示引用正文。NB 可另外保存单行标题、SVG/emoji 图标、文字/边框/背景颜色，完整字段见 [原生编写规范](native-authoring.md#提示块)。不增加另一套兼容节点。
 
-`documentNodes.ts` 的 `AlertNode` 负责文法与序列化，`alertExtension.tsx` 负责 NodeView，正文由 `NodeViewContent` 承载。`alertPresentation.ts` 只保存五种预设元数据；`calloutPresentation.ts` 提供属性验证、输入归一化、标题和外观计算，`callout.css` 是编辑和导出的统一圆角全边框样式。标题与所有正文在图标右侧统一缩进，不从第一段猜标题。显式行内文字颜色优先于块色。
+`documentNodes.ts` 的 `AlertNode` 负责文法与序列化，`alertExtension.tsx` 负责 NodeView，正文由 `NodeViewContent` 承载。`alertPresentation.ts` 只保存五种预设元数据；`calloutPresentation.ts` 提供属性验证、输入归一化、标题和外观计算，`callout.css` 是编辑和导出的统一圆角全边框样式。有标题时，图标与标题共用首行，正文从下一行的容器左内边距开始；无标题时正文保留图标右侧缩进，不从第一段猜标题。标题行高与图标槽统一，避免随正文行距而错位。显式行内文字颜色优先于块色。
 
 悬停块内显示画板按钮，按需加载菜单；图标按钮支持五种 SVG、少量精选 emoji 与单个任意 emoji 输入，不附带大型图标库。所有外观操作只更新当前节点属性，进入单次可撤销事务；随机仅写背景字段，重置颜色不改标题、图标或正文。自定义功能共用 `callout` 能力门控，纯 Markdown 偏好隐藏原生入口，基本五预设仍可编辑。通用 Markdown 导出降级颜色/SVG，保留标题、语义 emoji 和所有正文；HTML/PDF 保留外观。
 

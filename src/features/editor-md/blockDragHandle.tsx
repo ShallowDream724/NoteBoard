@@ -25,7 +25,7 @@ import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 import { BlockContextMenu, BlockTypeIcon } from './BlockContextMenu';
 import { selectBlock } from './blockActions';
 import { foldedSectionEnd } from './headingFolding';
-import { blockHandlePosition } from './blockHandleGeometry';
+import { blockHandlePosition, editorContentLeft } from './blockHandleGeometry';
 import { markHeadingHandleTarget } from './headingHandleMarker';
 import { BlockRangeFeedback } from './BlockRangeFeedback';
 
@@ -214,8 +214,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
     let hoverFrame = 0;
     let pointer = { x: 0, y: 0 };
+    let hoveredCollection: HTMLElement | null = null;
     const updateHover = () => {
       hoverFrame = 0;
+      if (hoveredCollection && !hoveredCollection.isConnected) hoveredCollection = null;
       if (dragSessionRef.current || menuOpenRef.current) return;
       if (editorDom.classList.contains('nb-table-resizing')) {
         setState(current => current.visible ? { ...current, visible: false } : current);
@@ -238,10 +240,14 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       if (targetElement === editorDom) {
         // The control lane is padding, not a document node. Probe the content edge
         // at the same y without walking every block (including large tables).
-        const bounds = editorDom.getBoundingClientRect();
-        const scale = bounds.width / editorDom.offsetWidth || 1;
-        const left = bounds.left + parseFloat(getComputedStyle(editorDom).paddingLeft) * scale;
+        const left = editorContentLeft(editor.view);
         if (pointer.x < left) targetElement = document.elementFromPoint(left + 2, pointer.y);
+        // Resized collections can leave a wide blank corridor before their
+        // fixed gutter control. Keep the current block while crossing it.
+        if (targetElement === editorDom && hoveredCollection?.isConnected) {
+          const rect = hoveredCollection.getBoundingClientRect();
+          if (pointer.x < rect.left && pointer.y >= rect.top && pointer.y <= rect.bottom) targetElement = hoveredCollection;
+        }
       }
       if (!targetElement || !editorDom.contains(targetElement)) {
         scheduleHide();
@@ -254,6 +260,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
       if (!blockInfo) { scheduleHide(); return; }
+      hoveredCollection = blockInfo.node.type.name === 'imageCollection' ? blockElement : null;
 
       const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, handleRef.current?.offsetWidth || 50, handleRef.current?.offsetHeight || 30);
 

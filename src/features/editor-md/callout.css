@@ -1,9 +1,11 @@
-/* Shared editor/export layout. Body starts at the same inset for every title mode. */
-.github-alert.github-alert { position: relative; display: block; margin: .85em 0; padding: .8em 1em .8em 2.9em; border: 1px solid var(--callout-border, color-mix(in srgb, var(--callout-accent, #0969da) 24%, transparent)); border-radius: 10px; background: var(--callout-background, color-mix(in srgb, var(--callout-accent, #0969da) 5%, var(--editor-bg, white))); color: var(--callout-text, inherit); }
+/* Shared editor/export layout. A visible title owns the icon row; its body uses
+ * the full content width. Untitled text retains the icon's horizontal inset. */
+.github-alert.github-alert { position: relative; display: block; margin: .85em 0; padding: .8em 1em; border: 1px solid var(--callout-border, color-mix(in srgb, var(--callout-accent, #0969da) 24%, transparent)); border-radius: 10px; background: var(--callout-background, color-mix(in srgb, var(--callout-accent, #0969da) 5%, var(--editor-bg, white))); color: var(--callout-text, inherit); }
 .github-alert .callout-icon { position: absolute; left: .9em; top: .8em; display: flex; align-items: center; justify-content: center; width: 1.3em; height: 1.5em; padding: 0; color: var(--callout-text, var(--callout-accent, #0969da)); font-size: 1em; line-height: 1.5; }
 .github-alert .callout-icon svg { width: 1.15em; height: 1.15em; flex: none; }
-.github-alert .alert-title { display: block; padding: 0; margin: 0 1.2em .3em 0; color: var(--callout-text, var(--callout-accent, #0969da)); font-size: 1em; font-weight: 650; line-height: inherit; text-align: left; overflow-wrap: anywhere; break-after: avoid; }
-.github-alert .alert-body { min-width: 0; min-height: 1.5em; color: inherit; }
+.github-alert .alert-title { display: block; padding: 0; margin: 0 1.2em .3em 1.9em; color: var(--callout-text, var(--callout-accent, #0969da)); font-size: 1em; font-weight: 650; line-height: 1.5; text-align: left; overflow-wrap: anywhere; break-after: avoid; }
+.github-alert .alert-body { min-width: 0; min-height: 1.5em; padding-left: 1.9em; color: inherit; }
+.github-alert .alert-title ~ .alert-body { padding-left: 0; }
 .github-alert .alert-body > :first-child, .github-alert .alert-body > div > :first-child { margin-top: 0; }
 .github-alert .alert-body > :last-child, .github-alert .alert-body > div > :last-child { margin-bottom: 0; }
 .github-alert .alert-body :is(p,h1,h2,h3,h4,h5,h6,li,blockquote) { color: inherit; }
