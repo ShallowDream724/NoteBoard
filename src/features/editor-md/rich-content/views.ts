@@ -136,7 +136,15 @@ class SlotView implements NodeView {
     });
     this.dom.append(this.add, this.contentDOM, this.caption); this.update(node);
   }
-  update(node: Node) { if (node.type !== this.node.type) return false; this.node = node; const empty = node.firstChild?.type.name !== 'image'; this.add.hidden = !empty; this.caption.hidden = empty || node.lastChild?.type.name === 'paragraph'; this.dom.dataset.empty = String(empty); return true; }
+  update(node: Node) {
+    if (node.type !== this.node.type) return false;
+    this.node = node;
+    const empty = node.firstChild?.type.name !== 'image', paragraph = node.lastChild?.type.name === 'paragraph' ? node.lastChild : null;
+    this.add.hidden = !empty; this.caption.hidden = empty || !!paragraph;
+    this.dom.dataset.empty = String(empty);
+    this.dom.dataset.captionEmpty = String(!empty && !!paragraph && !paragraph.content.size);
+    return true;
+  }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.target === this.dom || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return this.add.contains(event.target as globalThis.Node) || this.caption.contains(event.target as globalThis.Node); }
 }

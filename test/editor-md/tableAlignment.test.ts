@@ -23,6 +23,16 @@ function create(native = true, source = content) {
 }
 
 describe('whole-table alignment', () => {
+  it('centers ordinary inserted MD tables without introducing a native-only attribute', () => {
+    const editor = create(false, '<p></p>');
+    try {
+      expect(editor.commands.insertTable({ rows: 2, cols: 2 })).toBe(true);
+      expect(editor.state.doc.firstChild!.type.name).toBe('table');
+      expect(editor.state.doc.firstChild!.attrs.tableAlign).toBeNull();
+      const table = editor.view.dom.querySelector('table')!;
+      expect(table.style.marginLeft).toBe('auto'); expect(table.style.marginRight).toBe('auto');
+    } finally { editor.destroy(); }
+  });
   it('updates one table attribute, preserves cells and selection, and has independent undo', () => {
     const editor = create();
     try {
@@ -100,7 +110,7 @@ describe('whole-table alignment', () => {
         expect(view.table.style.marginLeft).toBe('auto'); expect(view.table.style.marginRight).toBe('auto');
         expect(view.table.style.width).toBe('200px'); expect(view.colgroup.innerHTML).toBe(columns);
         expect(view.update(table)).toBe(true); expect(view.table.dataset.tableAlign).toBeUndefined();
-        expect(view.table.style.marginLeft).toBe('0px');
+        expect(view.table.style.marginLeft).toBe('auto');
       } finally { traversal.mockRestore(); view.destroy(); }
     } finally { editor.destroy(); }
   });

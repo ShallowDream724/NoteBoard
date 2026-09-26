@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
+import { TooltipProvider } from './Tooltip';
 
 export function DialogShell({ title, description, children, onDismiss, width = 480 }: {
   title: string; description: string; children: ReactNode; onDismiss: () => void; width?: number;
@@ -36,7 +37,8 @@ export function showTransientDialog<T>(render: (finish: (value: T) => void) => R
   const root = createRoot(host);
   let finished = false;
   return new Promise((resolve) => {
-    root.render(render((value) => {
+    // This root is outside AppShell's React tree and cannot inherit its providers.
+    root.render(<TooltipProvider>{render((value) => {
       if (finished) return;
       finished = true;
       queueMicrotask(() => {
@@ -44,6 +46,6 @@ export function showTransientDialog<T>(render: (finish: (value: T) => void) => R
         if (previousFocus?.isConnected) previousFocus.focus();
         resolve(value);
       });
-    }));
+    })}</TooltipProvider>);
   });
 }

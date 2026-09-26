@@ -1,7 +1,7 @@
 import type { EditorView } from '@tiptap/pm/view';
 import type { FileDropPoint } from '../../core/editor/fileDropTargets';
 
-export interface ImageDropTarget { position: number; slot?: HTMLElement; line?: number }
+export interface ImageDropTarget { position: number; slot?: HTMLElement; line?: number; block?: HTMLElement }
 /** Always test the visible hit element, so an overlay or another editor cannot claim the slot below it. */
 export function imageSlotAtPoint(view: EditorView, point: FileDropPoint): ImageDropTarget | undefined {
   const hit = view.dom.ownerDocument.elementFromPoint(point.x, point.y);
@@ -21,14 +21,25 @@ export function imageDropTargetAtPoint(view: EditorView, point: FileDropPoint): 
   // Text inputs and embedded editors own their own editing semantics.
   if (hitElement.closest('input, textarea, [role="textbox"]:not(.ProseMirror)')) return;
   const hit = view.posAtCoords({ left: point.x, top: point.y }); if (!hit) return;
-  const coords = view.coordsAtPos(hit.pos);
-  return { position: hit.pos, line: coords.bottom };
+  const { doc } = view.state;
+  const at = doc.resolve(hit.pos);
+  // Only walk the hit's ancestors. A visual line is never an insertion boundary;
+  // lists, tables and code stay intact. First-level disclosures keep local drops.
+  let depth = 1;
+  if (at.depth > 1 && at.node(1).type.name === 'disclosure') depth = 2;
+  let start = at.depth >= depth ? at.before(depth) : hit.pos;
+  if (start === doc.content.size && start > 0) start -= doc.lastChild!.nodeSize;
+  const node = doc.nodeAt(start), block = view.nodeDOM(start);
+  if (!node?.isBlock || !(block instanceof HTMLElement)) return;
+  const box = block.getBoundingClientRect();
+  const after = point.y >= (box.top + box.bottom) / 2;
+  return { position: after ? start + node.nodeSize : start, line: after ? box.bottom : box.top, block };
 }
 export function createImageDropIndicator(view: EditorView) {
   let marker: HTMLElement | null = null;
   const clear = () => { marker?.remove(); marker = null; };
   return { clear, show(target: ImageDropTarget) {
-    clear(); const box = (target.slot ?? view.dom).getBoundingClientRect();
+    clear(); const box = (target.slot ?? target.block ?? view.dom).getBoundingClientRect();
     marker = document.createElement('div');
     marker.setAttribute('role', 'status');
     marker.textContent = target.slot ? target.slot.dataset.empty === 'false' ? '释放图片以添加到后续空位' : '释放图片以填入此处' : '释放图片以插入文档';

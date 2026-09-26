@@ -1,5 +1,5 @@
 import type { Editor } from '@tiptap/core';
-import { TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { MapMode, StateEffect } from '@codemirror/state';
 import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view';
@@ -10,6 +10,7 @@ import { getSessionGeneration, isClosing } from '../session/documentSession';
 import { getMdSourceView, getMdTipTapEditor } from './editorInstances';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { ensureDisclosureTail } from './rich-content/disclosureEditing';
+import { revealInsertedImage } from './imageInsertionScroll';
 
 export interface InsertedImage { src: string; alt: string }
 export interface InsertionTarget<T> {
@@ -119,6 +120,7 @@ export function insertViewImages(view: import('@tiptap/pm/view').EditorView, ima
   if (!images.length || !schema.nodes.image) return false;
   const tr = view.state.tr, raw = Math.max(0, Math.min(position ?? selection.from, tr.doc.content.size));
   const $pos = tr.doc.resolve(raw);
+  let firstImage: number | undefined;
   let slotDepth = -1;
   for (let depth = $pos.depth; depth > 0; depth--) if ($pos.node(depth).type.name === 'imageSlot') { slotDepth = depth; break; }
   if (slotDepth >= 0 && $pos.node(slotDepth - 1).type.name === 'imageCollection') {
@@ -136,11 +138,26 @@ export function insertViewImages(view: import('@tiptap/pm/view').EditorView, ima
     if (appended.length) tr.insert(tr.mapping.map(collectionPos + collection.nodeSize - 1, -1), appended);
   } else {
     const content = Fragment.from(images.map(image => schema.nodes.image.create(image)));
-    if (position !== undefined && $pos.parent.canReplace($pos.index(), $pos.index(), content)) tr.insert(raw, content);
+    if (position !== undefined && $pos.parent.canReplace($pos.index(), $pos.index(), content)) {
+      tr.insert(raw, content);
+      tr.setSelection(NodeSelection.create(tr.doc, raw));
+    }
     else tr.setSelection(selection).replaceSelection(new Slice(content, 0, 0));
+    tr.mapping.maps[0]?.forEach((_from, _to, from, to) => {
+      tr.doc.nodesBetween(from, to, (node, pos) => {
+        if (firstImage !== undefined) return false;
+        if (node.type.name === 'image') { firstImage = pos; return false; }
+      });
+    });
+    if (firstImage !== undefined) tr.setSelection(NodeSelection.create(tr.doc, firstImage));
     ensureDisclosureTail(tr, raw);
   }
-  dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
+  // Pointer-targeted drops/pastes are already in view. Scrolling the previous
+  // caret can jump to a different paragraph; image decode must not pull it back.
+  dispatchDiscreteEdit(view, tr);
+  view.focus();
+  if (position === undefined && firstImage !== undefined) revealInsertedImage(view, firstImage);
+  return true;
 }
 
 export function captureVisualImageInsertion(editor: Editor, docKey: string, position?: number): ImageInsertionLease | null {

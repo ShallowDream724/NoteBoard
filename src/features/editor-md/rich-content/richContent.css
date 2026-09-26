@@ -13,7 +13,10 @@
 .nb-image-slot-empty[hidden] { display:none; }
 .nb-image-slot-content > p { font-size:.85em; color:var(--editor-text-secondary); text-align:center; margin:6px 0!important; }
 .nb-image-caption-add { display:block; margin:5px auto 0; border:0; background:transparent; color:var(--editor-text-muted); font:12px var(--ui-font-family); cursor:pointer; opacity:0; padding:4px 8px; border-radius:4px; }
-.nb-image-slot:hover .nb-image-caption-add,.nb-image-slot:focus-within .nb-image-caption-add { opacity:1; }
+.nb-image-collection:hover .nb-image-caption-add,.nb-image-slot:focus-within .nb-image-caption-add { opacity:1; }
+.nb-image-slot[data-caption-empty=true] .nb-image-slot-content > p:last-child { position:relative; }
+.nb-image-slot[data-caption-empty=true] .nb-image-slot-content > p:last-child::before { content:'添加图注'; position:absolute; inset:0; font-size:12px; color:var(--editor-text-muted); pointer-events:none; opacity:0; }
+.nb-image-collection:hover .nb-image-slot[data-caption-empty=true] .nb-image-slot-content > p:last-child::before,.nb-image-slot[data-caption-empty=true]:focus-within .nb-image-slot-content > p:last-child::before { opacity:1; }
 .nb-image-caption-add:hover { background:var(--toolbar-hover); }
 .nb-image-caption-add[hidden] { display:none; }
 .nb-image-counter { color:var(--editor-text-muted); font:11px var(--ui-font-family); font-variant-numeric:tabular-nums; }

@@ -6,7 +6,7 @@ import { setTableAlignment } from './tableAlignmentCommands';
 import './blockPositionRow.css';
 
 export function TableAlignmentMenu({ editor, pos, value, close }: { editor: Editor; pos: number; value: unknown; close: () => void }) {
-  const current = tableAlignment(value) ?? 'left';
+  const current = tableAlignment(value) ?? 'center';
   return <div className="nb-block-style-row nb-block-position-row" role="group" aria-label="整表位置">
     <span>整表位置</span>
     {([{ value: 'left', label: '整张表格居左', Icon: AlignLeft }, { value: 'center', label: '整张表格居中', Icon: AlignCenter },

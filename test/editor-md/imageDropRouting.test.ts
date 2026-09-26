@@ -5,7 +5,7 @@ import Image from '@tiptap/extension-image';
 import { InteractiveImageCollection, InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
 import { ClipboardImport } from '../../src/features/editor-md/clipboard/clipboardImport';
 import { clearNativeFileDropTargets, isNativeFileDropDuplicate, nativeDropToCssPoint, routeNativeFileDrop } from '../../src/core/editor/fileDropTargets';
-import { imageSlotAtPoint } from '../../src/features/editor-md/imageDropTarget';
+import { imageSlotAtPoint, imageDropTargetAtPoint } from '../../src/features/editor-md/imageDropTarget';
 const mock = vi.hoisted(() => ({ editor: null as Editor | null, active: 'test.nb', paste: vi.fn(), paths: vi.fn(), lease: vi.fn(() => ({ dispose() {} })) }));
 vi.mock('../../src/features/editor-md/imagePaste', () => ({ handlePastedImageFiles: mock.paste, handleImagePathsUsingLease: mock.paths, insertLocalImageWithDialog: vi.fn() }));
 vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => mock.editor }));
@@ -34,6 +34,14 @@ function pasteOn(target: Element, images = true) {
 beforeEach(() => { vi.clearAllMocks(); mock.active = 'test.nb'; hit = null; Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => hit) }); });
 afterEach(() => { mock.editor?.destroy(); mock.editor = null; clearNativeFileDropTargets(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe('native image drop and current-pointer paste routing', () => {
+  it('snaps a drop in the middle of wrapped prose to the whole paragraph boundary', () => {
+    const editor = create(), paragraph = editor.view.dom.querySelector('p')!;
+    hit = paragraph;
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: 5, inside: 0 });
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue({ top: 20, bottom: 140, left: 0, right: 300, width: 300, height: 120, x: 0, y: 20, toJSON() {} });
+    expect(imageDropTargetAtPoint(editor.view, { x: 30, y: 50 })).toMatchObject({ position: 0, line: 20 });
+    expect(imageDropTargetAtPoint(editor.view, { x: 30, y: 110 })).toMatchObject({ position: editor.state.doc.firstChild!.nodeSize, line: 140 });
+  });
   it.each(['grid', 'carousel'])('routes a body/button image paste to the hovered %s slot without a text caret', layout => {
     const editor = create(layout), slot = editor.view.dom.querySelectorAll('[data-image-slot]')[7];
     (document.activeElement as HTMLElement)?.blur();

@@ -39,7 +39,7 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
     CaptionDocument, Code.extend({ excludes: '' }), MarkdownHighlight.configure({ multicolor: true }), TextColor,
   ], content: captionDocument(figureCaptionContent(original?.attrs.caption, original?.attrs.captionContent)),
   editorProps: {
-    attributes: { class: 'nb-caption-editor', role: 'textbox', 'aria-label': options.label, 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' },
+    attributes: { class: 'nb-embedded-prose nb-caption-editor', role: 'textbox', 'aria-label': options.label, 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' },
     handleScrollToSelection: () => true,
     handleKeyDown: (_inner, event) => {
       if (event.isComposing) return false;

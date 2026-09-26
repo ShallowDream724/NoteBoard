@@ -4,7 +4,6 @@
 
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Group, Panel } from 'react-resizable-panels';
-import type { PanelSize } from 'react-resizable-panels';
 import type { Editor } from '@tiptap/core';
 import { TitleBar } from './titlebar/TitleBar';
 import { PanelResizeHandle } from './PanelResizeHandle';
@@ -119,7 +118,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     return handler;
   }, []);
 
-  const explorerWidthRef = useRef<number>(explorerWidth);
+  const layoutElementRef = useRef<HTMLDivElement>(null);
 
   // 标签激活变化只切换大纲的数据源，不修改或重建任何 Markdown 编辑器内核。
   useEffect(() => {
@@ -428,18 +427,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   // 所有 action 都在触发时读取 store 中的活动标签，无需随文件切换反复注销和注册。
   }, []);
 
-  // 组件卸载时将 ref 中的宽度写回 store（持久化）
-  useEffect(() => {
-    return () => {
-      // 卸载时同步最终宽度到 store
-      const finalExplorerW = explorerWidthRef.current;
-      const store = useLayoutStore.getState();
-      if (Math.abs(finalExplorerW - store.explorerWidth) > 1) {
-        store.setExplorerWidth(finalExplorerW);
-      }
-    };
-  }, []);
-
   return (
     <div className="nb-app-shell" data-presentation={isBoardPresentationMode || undefined}>
       {/* 标题栏 */}
@@ -453,18 +440,16 @@ export function AppShell(_props: { children?: React.ReactNode }) {
         <Group
           id="nb-layout"
           orientation="horizontal"
+          elementRef={layoutElementRef}
           style={{ width: '100%', height: '100%' }}
-          onLayoutChanged={(layout) => {
-            // layout 是 Map<panelId, percentage>
-            // ⚠️ 不能在此调用 setExplorerWidth，
-            // 否则会触发 Group 重渲染 → 再次 onLayoutChanged → 无限循环 → 白屏。
-            // 宽度持久化通过 onResize 回调 + 组件卸载时写入 store。
-            if (explorerVisible) {
-              const pct = layout['nb-explorer'];
-              if (typeof pct === 'number') {
-                explorerWidthRef.current = (pct / 100) * window.innerWidth;
-              }
-            }
+          onLayoutChanged={(layout, { isUserInteraction }) => {
+            // Publish once on pointer release / resize key. Mount, restore and
+            // constraint changes must not overwrite the user's preferred width.
+            const pct = layout['nb-explorer'], container = layoutElementRef.current;
+            if (!isUserInteraction || !container || typeof pct !== 'number') return;
+            const width = Math.round(pct / 100 * container.clientWidth);
+            const store = useLayoutStore.getState();
+            if (Math.abs(width - store.explorerWidth) >= 1) store.setExplorerWidth(width);
           }}
         >
           {/* 资源管理器 */}
@@ -475,9 +460,6 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 defaultSize={explorerWidth}
                 minSize={EXPLORER_MIN}
                 maxSize={EXPLORER_MAX}
-                onResize={(size: PanelSize) => {
-                  explorerWidthRef.current = size.inPixels;
-                }}
                 style={{
                   background: 'var(--explorer-bg)',
                   overflow: 'hidden',

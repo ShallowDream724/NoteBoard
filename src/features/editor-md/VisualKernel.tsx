@@ -188,6 +188,8 @@ export function VisualKernel({
       }, 800);
     },
     editorProps: {
+      scrollThreshold: { top: 24, bottom: 112, left: 0, right: 0 },
+      scrollMargin: { top: 32, bottom: 112, left: 0, right: 0 },
       attributes: {
         class: 'nb-prose',
       },

@@ -536,6 +536,9 @@ export function TableToolbar({ editor }: { editor: Editor }) {
 
   if (!show) return null;
   const headers = tableHeaderState(editor);
+  const distribution = nativeFeaturesVisible ? tableDistributionState(editor) : null;
+  const canMerge = nativeFeaturesVisible && isCellSelection(editor.state.selection) && editor.can().mergeCells();
+  const canSplit = editor.can().splitCell();
 
   return (
     <div
@@ -564,13 +567,13 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     >
       <AlignmentMenu editor={editor}/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
-      <MenuDivider />
-      {nativeFeaturesVisible && tableDistributionState(editor).columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
-      {nativeFeaturesVisible && tableDistributionState(editor).rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
-      {nativeFeaturesVisible && isCellSelection(editor.state.selection) && editor.can().mergeCells() && <BubbleButton
+      {(distribution?.columns || distribution?.rows || canMerge || canSplit) && <MenuDivider />}
+      {distribution?.columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
+      {distribution?.rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
+      {canMerge && <BubbleButton
         title="合并选中单元格" icon={<Merge size={16}/>}
         onClick={() => runWithDocumentCapability(editor, 'tableMerge', next => runDiscreteEdit(next, chain => chain.mergeCells()))}/>}
-      {editor.can().splitCell() && <BubbleButton
+      {canSplit && <BubbleButton
         title="拆分合并单元格" icon={<Split size={16}/>}
         onClick={() => runDiscreteEdit(editor, chain => chain.splitCell())}/>}
       <MenuDivider />

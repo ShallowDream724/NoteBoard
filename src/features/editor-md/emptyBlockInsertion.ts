@@ -8,6 +8,7 @@ import { dispatchDiscreteEdit } from './discreteEdit';
 import { editorDocumentKey } from './editorDocumentCodec';
 import { captureVisualInsertion, type InsertionLease } from './imageInsertionLease';
 import { ensureDisclosureTail } from './rich-content/disclosureEditing';
+import { revealInsertedImage } from './imageInsertionScroll';
 
 /** Replace the named empty paragraph, independently of the editor's live selection. */
 export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSONContent | JSONContent[]): boolean {
@@ -22,7 +23,10 @@ export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSON
     ? NodeSelection.create(tr.doc, pos)
     : TextSelection.near(tr.doc.resolve(pos + (nodes[0].isTextblock ? nodes[0].nodeSize - 1 : 1))));
   ensureDisclosureTail(tr, pos + 1);
-  dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
+  const image = nodes[0].type.name === 'image';
+  dispatchDiscreteEdit(view, image ? tr : tr.scrollIntoView()); view.focus();
+  if (image) revealInsertedImage(view, pos);
+  return true;
 }
 
 export function insertAtEmptyParagraph(editor: Editor, pos: number, content: JSONContent, capability?: DocumentCapabilityId): boolean {
