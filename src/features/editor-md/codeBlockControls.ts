@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection, NodeSelection, type Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import { observeNearby } from './nearViewport';
+import { observeCodeVisibility } from './codeVisibility';
 import { getCodeStructure, type CodeStructure, type CodeFold } from './codeBlockStructure';
 import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 import { INITIAL_CODE_GUTTERS, WINDOWED_CODE_LINES, visibleCodeLines } from './codeBlockViewport';
@@ -12,9 +12,23 @@ import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 type Owner = () => number | undefined;
 interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean; visibleFrom: number; visibleTo: number }
 interface State { blocks: Map<Owner, Block>; decorations: DecorationSet }
-type Update = { owner: Owner; node?: Node; language?: string; active?: boolean; remove?: boolean } | { toggle: Owner; from: number }
-  | { viewport: Array<{ owner: Owner; from: number; to: number }> };
+type BlockUpdate = { owner: Owner; node?: Node; language?: string; active?: boolean; remove?: boolean; structure?: CodeStructure; range?: [number, number] };
+type Update = BlockUpdate | { updates: BlockUpdate[] } | { toggle: Owner; from: number };
 const key = new PluginKey<State>('code-block-controls');
+const batches = new WeakMap<Editor, Map<Owner, BlockUpdate>>();
+
+function publishControls(editor: Editor, update: BlockUpdate) {
+  let batch = batches.get(editor);
+  if (!batch) {
+    batch = new Map(); batches.set(editor, batch);
+    queueMicrotask(() => {
+      const pending = batches.get(editor); batches.delete(editor);
+      if (!pending || editor.isDestroyed || !key.getState(editor.state)) return;
+      editor.view.dispatch(editor.state.tr.setMeta(key, { updates: [...pending.values()] } satisfies Update).setMeta('addToHistory', false));
+    });
+  }
+  batch.set(update.owner, update);
+}
 
 function selectionTouches(selection: Selection, position: number, fold: CodeFold): boolean {
   if (selection instanceof NodeSelection) return false;
@@ -53,6 +67,17 @@ function button(view: EditorView, block: Block, fold: CodeFold, summary: boolean
 
 function blockDecorations(block: Block): Decoration[] {
   const result: Decoration[] = [], start = block.position + 1;
+  if (block.structure.lines.length > WINDOWED_CODE_LINES) {
+    // Keep the large plain tail in stable small DOM text runs. Replacing a single
+    // 10,000-line text node makes Chromium reserialize its entire accessibility
+    // inline-text tree on each visible-gutter/token update (hundreds of ms).
+    const chunkLines = WINDOWED_CODE_LINES;
+    for (let line = 0; line < block.structure.lines.length; line += chunkLines) {
+      const from = block.structure.lines[line].from;
+      const to = block.structure.lines[line + chunkLines]?.from ?? block.node.content.size;
+      if (to > from) result.push(Decoration.inline(start + from, start + to, { 'data-code-chunk': String(line / chunkLines) }));
+    }
+  }
   // Nested folds retain their state, but only their outermost visible range
   // contributes DOM. This keeps hidden controls out of the keyboard sequence.
   const folds = block.structure.folds.filter(fold => block.folded.has(fold.from));
@@ -104,14 +129,7 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
           const altered = position !== old.position || folded.size !== old.folded.size;
           blocks.set(owner, altered ? { ...old, position, folded } : old); changed ||= altered;
         }
-        if (update && 'viewport' in update) {
-          for (const { owner, from, to } of update.viewport) {
-            const block = blocks.get(owner);
-            if (block && (block.visibleFrom !== from || block.visibleTo !== to)) {
-              blocks.set(owner, { ...block, visibleFrom: from, visibleTo: to }); changed = true;
-            }
-          }
-        } else if (update && 'toggle' in update) {
+        if (update && 'toggle' in update) {
           const block = blocks.get(update.toggle);
           if (block) {
             const folded = new Set(block.folded);
@@ -119,23 +137,25 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
             blocks.set(update.toggle, { ...block, folded }); changed = true;
           }
         } else if (update) {
-          const position = update.owner();
-          if (!update.remove && position !== undefined && update.node && tr.doc.nodeAt(position) === update.node) {
-            const existing = blocks.get(update.owner);
-            if (!existing || existing.node !== update.node) {
-              if (update.active) {
-                const structure = getCodeStructure(update.node.textContent, update.language ?? '');
-                if (structure) blocks.set(update.owner, { owner: update.owner, position, node: update.node, structure, folded: rememberedFolds.get(update.node) ?? new Set(), active: true,
-                  visibleFrom: 0, visibleTo: structure.lines.length > WINDOWED_CODE_LINES ? INITIAL_CODE_GUTTERS : structure.lines.length });
+          for (const item of 'updates' in update ? update.updates : [update]) {
+            const position = item.owner();
+            if (!item.remove && position !== undefined && item.node && tr.doc.nodeAt(position) === item.node) {
+              const existing = blocks.get(item.owner);
+              if (!existing || existing.node !== item.node) {
+                if (item.active) {
+                  const structure = item.structure ?? getCodeStructure(item.node.textContent, item.language ?? '');
+                  if (structure) blocks.set(item.owner, { owner: item.owner, position, node: item.node, structure, folded: rememberedFolds.get(item.node) ?? new Set(), active: true,
+                    visibleFrom: item.range?.[0] ?? 0, visibleTo: item.range?.[1] ?? (structure.lines.length > WINDOWED_CODE_LINES ? INITIAL_CODE_GUTTERS : structure.lines.length) });
+                  changed = true;
+                }
+              } else if (existing.active !== !!item.active || (item.range && (item.range[0] !== existing.visibleFrom || item.range[1] !== existing.visibleTo))) {
+                // Keep folded heights and stable long-code text runs offscreen.
+                if (!item.active && !existing.folded.size && existing.structure.lines.length <= WINDOWED_CODE_LINES) blocks.delete(item.owner);
+                else blocks.set(item.owner, { ...existing, active: !!item.active, visibleFrom: item.range?.[0] ?? existing.visibleFrom, visibleTo: item.range?.[1] ?? existing.visibleTo });
                 changed = true;
               }
-            } else if (existing.active !== !!update.active) {
-              // Removing only the gutter preserves folded heights offscreen.
-              if (!update.active && !existing.folded.size) blocks.delete(update.owner);
-              else blocks.set(update.owner, { ...existing, active: !!update.active });
-              changed = true;
-            }
-          } else changed = blocks.delete(update.owner) || changed;
+            } else changed = blocks.delete(item.owner) || changed;
+          }
         }
         if (!changed) return previous;
         for (const block of blocks.values()) rememberedFolds.set(block.node, block.folded);
@@ -152,60 +172,33 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
       },
     },
     props: { decorations: state => key.getState(state)?.decorations },
-    view(view) {
-      const doc = view.dom.ownerDocument, win = doc.defaultView;
-      let frame = 0;
-      const schedule = () => {
-        if (frame || !win) return;
-        let needed = false;
-        for (const block of key.getState(view.state)?.blocks.values() ?? []) {
-          if (block.active && block.structure.lines.length > WINDOWED_CODE_LINES) { needed = true; break; }
-        }
-        if (!needed) return;
-        frame = win.requestAnimationFrame(() => {
-          frame = 0;
-          const viewport: Array<{ owner: Owner; from: number; to: number }> = [];
-          for (const block of key.getState(view.state)?.blocks.values() ?? []) {
-            if (!block.active || block.structure.lines.length <= WINDOWED_CODE_LINES) continue;
-            const range = visibleCodeLines(view, block.position, block.structure.lines);
-            if (range && (range[0] !== block.visibleFrom || range[1] !== block.visibleTo)) viewport.push({ owner: block.owner, from: range[0], to: range[1] });
-          }
-          if (viewport.length) view.dispatch(view.state.tr.setMeta(key, { viewport } satisfies Update).setMeta('addToHistory', false));
-        });
-      };
-      doc.addEventListener('scroll', schedule, true); win?.addEventListener('resize', schedule);
-      const resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
-      resize?.observe(view.dom);
-      return { update: schedule, destroy() { if (frame) win?.cancelAnimationFrame(frame); resize?.disconnect(); doc.removeEventListener('scroll', schedule, true); win?.removeEventListener('resize', schedule); } };
-    },
   });
 }
 
-/** One shared observer entry per mounted block, no layout reads or document scan. */
+/** One shared geometry service per editor; gutters never wait for syntax work. */
 export function useCodeBlockControls(editor: Editor, node: Node, getPos: Owner, language: string, element: RefObject<HTMLElement | null>, expanded: boolean) {
   useEffect(() => {
     if (!element.current) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const publish = (near: boolean) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (editor.isDestroyed || !key.getState(editor.state)) return;
-        editor.view.dispatch(editor.state.tr.setMeta(key, { owner: getPos, node, active: near && expanded, language } satisfies Update).setMeta('addToHistory', false));
-        // Reuse the already bounded line index, without reading layout or
-        // rescanning source. Keep the last gutter width while parked offscreen.
-        const block = key.getState(editor.state)?.blocks.get(getPos);
-        if (block && element.current) {
-          element.current.style.setProperty('--nb-code-line-digits', String(Math.min(5, Math.max(2, String(block.structure.lines.length).length))));
-        }
-      }, near ? 40 : 0);
-    };
-    const stop = observeNearby(element.current, publish);
-    return () => { clearTimeout(timer); stop(); };
+    let structure: CodeStructure | null | undefined;
+    return observeCodeVisibility(editor.view.dom, element.current, ({ visible, viewport }) => {
+      if (editor.isDestroyed || !key.getState(editor.state)) return;
+      const active = visible && expanded, existing = key.getState(editor.state)?.blocks.get(getPos);
+      if (active && structure === undefined) structure = existing?.structure ?? getCodeStructure(node.textContent, language);
+      const position = getPos();
+      const range = active && structure && structure.lines.length > WINDOWED_CODE_LINES && position !== undefined
+        ? visibleCodeLines(editor.view, position, structure.lines, viewport) : undefined;
+      if (existing?.node === node && existing.active === active && (!range || (range[0] === existing.visibleFrom && range[1] === existing.visibleTo))) return;
+      if (!active && !existing) return;
+      publishControls(editor, { owner: getPos, node, active, language, structure: structure ?? undefined, range });
+      if (structure && element.current) {
+        element.current.style.setProperty('--nb-code-line-digits', String(Math.min(5, Math.max(2, String(structure.lines.length).length))));
+      }
+    });
   }, [editor, node, getPos, language, element, expanded]);
   useEffect(() => () => {
     queueMicrotask(() => {
       if (!editor.isDestroyed && key.getState(editor.state)?.blocks.has(getPos)) {
-        editor.view.dispatch(editor.state.tr.setMeta(key, { owner: getPos, remove: true } satisfies Update).setMeta('addToHistory', false));
+        publishControls(editor, { owner: getPos, remove: true });
       }
     });
   }, [editor, getPos]);

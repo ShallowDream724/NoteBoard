@@ -67,4 +67,4 @@ export const HIGHLIGHT_AUTO_LIMIT = 5000;
 export const SINGLE_BLOCK_LIMIT = 20000;
 
 /** Worker 单个代码块的字符上限 */
-export const CODE_HIGHLIGHT_LIMIT = 200_000;
+export const CODE_HIGHLIGHT_LIMIT = 512_000;

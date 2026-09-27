@@ -1,10 +1,12 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, type RefObject } from 'react';
 import { Extension, type Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { observeNearby } from './nearViewport';
+import { observeCodeVisibility } from './codeVisibility';
 import { requestCodeHighlight, type CodeToken } from './codeHighlighting';
+import { getCodeStructure, type CodeStructure } from './codeBlockStructure';
+import { visibleCodeLines, WINDOWED_CODE_LINES } from './codeBlockViewport';
 import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 import { Mapping, StepMap } from '@tiptap/pm/transform';
 
@@ -91,25 +93,37 @@ export const CodeHighlight = Extension.create({
 });
 
 export function useCodeHighlight(editor: Editor, node: Node, getPos: () => number | undefined, element: RefObject<HTMLElement | null>) {
-  // Unknown is different from offscreen. A surviving decoration set must not be
-  // erased when a NodeView remounts before its first observer notification.
-  const [near, setNear] = useState<boolean | null>(null);
-  useEffect(() => element.current ? observeNearby(element.current, setNear) : undefined, []);
   useEffect(() => {
-    if (near === null || !key.getState(editor.state)) return;
-    let cancelled = false;
-    let retries = 0;
+    if (!element.current || !key.getState(editor.state)) return;
+    let cancelled = false, active = false, retries = 0;
     let timer: ReturnType<typeof setTimeout>;
-    const controller = new AbortController();
+    let controller: AbortController | undefined;
+    let tokens: CodeToken[] | undefined, structure: CodeStructure | null | undefined;
+    let range: [number, number] = [0, node.content.size], published = '';
     const publish = (tokens: CodeToken[]) => {
       const position = getPos();
       if (cancelled || editor.isDestroyed || position === undefined || editor.state.doc.nodeAt(position) !== node) return;
       publishHighlight(editor, { position, node, tokens, getPosition: getPos });
     };
-    const request = async () => {
-      const result = await requestCodeHighlight(node.textContent, node.attrs.language ?? '', { signal: controller.signal });
-      if (cancelled || editor.isDestroyed) return;
-      if (result.status === 'ready') publish(result.tokens);
+    const publishVisible = () => {
+      if (!tokens || !active) return;
+      const identity = `${range[0]}:${range[1]}`;
+      if (published === identity) return;
+      published = identity;
+      // Tokenization remains in the worker; the main thread installs only a
+      // bounded line window, including when a block contains 10,000 lines.
+      let low = 0, high = tokens.length;
+      while (low < high) { const mid = (low + high) >>> 1; if (tokens[mid].to <= range[0]) low = mid + 1; else high = mid; }
+      const visible: CodeToken[] = [];
+      for (let i = low; i < tokens.length && tokens[i].from < range[1]; i++) {
+        const token = tokens[i]; visible.push({ ...token, from: Math.max(range[0], token.from), to: Math.min(range[1], token.to) });
+      }
+      publish(visible);
+    };
+    const request = async (current: AbortController) => {
+      const result = await requestCodeHighlight(node.textContent, node.attrs.language ?? '', { signal: current.signal });
+      if (cancelled || editor.isDestroyed || current.signal.aborted || !active) return;
+      if (result.status === 'ready') { tokens = result.tokens; publishVisible(); }
       else if (result.status === 'unavailable') {
         // Transient worker/queue failures are not valid empty highlighting. Keep
         // current mapped colors and retry while this same visible node survives.
@@ -117,10 +131,24 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
         // plain text until the user edits it. Retry with a capped backoff; the
         // effect cancels both work and timer when this node leaves nearby.
         const delays = [250, 1000, 4000, 15000, 30000];
-        timer = setTimeout(() => { void request(); }, delays[Math.min(retries++, delays.length - 1)]);
+        timer = setTimeout(() => { void request(current); }, delays[Math.min(retries++, delays.length - 1)]);
       }
     };
-    timer = setTimeout(() => { if (near) void request(); else publish([]); }, near ? 40 : 0);
-    return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [editor, node, near]);
+    const stop = observeCodeVisibility(editor.view.dom, element.current, sample => {
+      if (!sample.visible) {
+        active = false; clearTimeout(timer); controller?.abort(); tokens = undefined; published = ''; publish([]); return;
+      }
+      if (structure === undefined) {
+        structure = getCodeStructure(node.textContent, node.attrs.language ?? '');
+        if (structure && structure.lines.length > WINDOWED_CODE_LINES) range = [0, structure.lines[WINDOWED_CODE_LINES - 1].to];
+      }
+      const position = getPos();
+      const lines = structure && structure.lines.length > WINDOWED_CODE_LINES && position !== undefined
+        ? visibleCodeLines(editor.view, position, structure.lines, sample.viewport) : undefined;
+      if (lines && structure) range = [structure.lines[lines[0]].from, structure.lines[lines[1] - 1].to];
+      if (!active) { active = true; retries = 0; controller = new AbortController(); void request(controller); }
+      else publishVisible();
+    });
+    return () => { cancelled = true; clearTimeout(timer); controller?.abort(); stop(); };
+  }, [editor, node, getPos, element]);
 }

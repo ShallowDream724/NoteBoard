@@ -12,9 +12,10 @@ import type { CodeHighlightResult } from '../../src/features/editor-md/codeHighl
 import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>(), immediate: true, request: vi.fn() }));
-vi.mock('../../src/features/editor-md/nearViewport', () => ({ observeNearby: (element: HTMLElement, callback: (near: boolean) => void) => {
-  fixture.observers.set(element, callback);
-  if (fixture.immediate) callback(true);
+vi.mock('../../src/features/editor-md/codeVisibility', () => ({ observeCodeVisibility: (_editor: HTMLElement, element: HTMLElement, callback: (sample: { visible: boolean; viewport: { top: number; bottom: number; left: number; right: number } }) => void) => {
+  const notify = (visible: boolean) => callback({ visible, viewport: { top: 0, bottom: 800, left: 0, right: 1000 } });
+  fixture.observers.set(element, notify);
+  if (fixture.immediate) notify(true);
   return () => fixture.observers.delete(element);
 } }));
 vi.mock('../../src/features/editor-md/codeHighlighting', () => ({ requestCodeHighlight: fixture.request }));

@@ -18,7 +18,9 @@ export async function tokenizeCode(code: string, language: string): Promise<Code
       if (classes.length && end > offset) {
         const className = classes.join(' ');
         bytes += 48 + className.length * 2;
-        if (tokens.length >= 16_384 || bytes > 2 * 1024 * 1024) throw new TokenBudgetExceeded();
+        // A 10,000-line block is parsed off-thread, then only its visible token
+        // window enters the editor DOM. Keep a separate bounded worker budget.
+        if (tokens.length >= 131_072 || bytes > 12 * 1024 * 1024) throw new TokenBudgetExceeded();
         tokens.push({ from: offset, to: end, className });
       }
       offset = end;

@@ -62,5 +62,12 @@ it('propagates parser failures so the worker cannot cache them as ready empty to
 });
 
 it('returns a stable plain-code fallback when the token budget is exceeded', async () => {
-  expect(await tokenizeCode('1 '.repeat(16_385), 'python')).toEqual([]);
+  expect(await tokenizeCode('1 '.repeat(131_073), 'python')).toHaveLength(0);
+});
+
+it('keeps real syntax tokens beyond the old limit for 10,000-line code', async () => {
+  const source = Array.from({ length: 10_000 }, (_, line) => `const value${line} = ${line};`).join('\n');
+  const tokens = await tokenizeCode(source, 'javascript');
+  expect(tokens.length).toBeGreaterThan(16_384);
+  expect(tokens.some(token => token.from >= source.lastIndexOf('\n') && token.className.includes('keyword'))).toBe(true);
 });
