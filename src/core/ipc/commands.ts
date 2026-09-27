@@ -197,8 +197,8 @@ export function probeDocument(path: string): Promise<ProbeResult> {
  * S07 统一文件准备：读盘前归属查询（本窗口在途/已开、其他窗口已开直接返回）、
  * 在途去重、blocking worker 读取与判别。
  */
-export function prepareDocument(label: string, path: string): Promise<PreparedDocument> {
-  return invoke<PreparedDocument>('prepare_document', { label, path });
+export function prepareDocument(label: string, path: string, maxReadBytes?: number): Promise<PreparedDocument> {
+  return invoke<PreparedDocument>('prepare_document', { label, path, maxReadBytes });
 }
 
 export function writeDocument(
@@ -217,6 +217,13 @@ export function publishRecoveryImage(source: string, directory: string): Promise
 export function storeImageAsset(directory: string, extension: string, data: Uint8Array): Promise<string> {
   return invoke<string>('store_image_asset', data, { headers: {
     'x-noteboard-image': `directory=${encodeURIComponent(directory)}&extension=${encodeURIComponent(extension)}`,
+  } });
+}
+
+/** Keep encoded image bytes out of JSON and atomically save the chosen export. */
+export function writeImageEdit(path: string, data: Uint8Array): Promise<WriteResult> {
+  return invoke<WriteResult>('write_image_edit', data, { headers: {
+    'x-noteboard-image-edit': `path=${encodeURIComponent(path)}`,
   } });
 }
 

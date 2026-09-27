@@ -11,6 +11,8 @@ import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 import { nativeTestEditor } from './nativeTestEditor';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import collectionStyles from '../../src/features/export/richDocument.css?raw';
+import editorCollectionStyles from '../../src/features/editor-md/rich-content/richContent.css?raw';
+import { InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
 
 vi.mock('@tiptap/react/menus', () => ({ BubbleMenu: ({ children }: { children: ReactNode }) => children }));
 
@@ -18,13 +20,13 @@ const editors: Editor[] = [], roots: Root[] = [];
 const image = (attrs: Record<string, unknown> = {}): JSONContent => ({ type: 'image', attrs: {
   src: './assets/photo.png', alt: 'A photo', title: 'Original', width: '50%', align: 'center', ...attrs,
 } });
-function create(content: JSONContent[], interactive = false) {
-  const editor = nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(interactive ? { image: EnhancedImageBlock } : {}), content: { type: 'doc', content } }));
+function create(content: JSONContent[], interactive = false, collectionView = false) {
+  const editor = nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(interactive ? { image: EnhancedImageBlock, ...(collectionView ? { imageSlot: InteractiveImageSlot } : {}) } : {}), content: { type: 'doc', content } }));
   editors.push(editor); return editor;
 }
-async function mount(content: JSONContent[]) {
+async function mount(content: JSONContent[], collectionView = false) {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const editor = create(content, true), host = document.body.appendChild(document.createElement('div')), root = createRoot(host);
+  const editor = create(content, true, collectionView), host = document.body.appendChild(document.createElement('div')), root = createRoot(host);
   roots.push(root);
   await act(async () => { root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>); await new Promise(resolve => setTimeout(resolve, 0)); });
   return { editor, host };
@@ -37,6 +39,21 @@ afterEach(async () => {
 });
 
 describe('image presentation contract', () => {
+  it('routes the public image command through block and collection insertion rules', () => {
+    const editor = create([{ type: 'paragraph' }], true);
+    const insert = () => (editor.commands as unknown as { setImage(options: { src: string }): boolean }).setImage({ src: './inserted.png' });
+    expect(insert()).toBe(true);
+    expect(editor.state.doc.child(0).type.name).toBe('image');
+    expect(editor.state.doc.child(1).type.name).toBe('paragraph');
+    expect(editor.state.selection.$from.parent.type.name).toBe('paragraph');
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'imageCollection', content: [{ type: 'imageSlot', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Retained caption' }] }] }] }] });
+    editor.commands.setTextSelection(3);
+    expect(insert()).toBe(true);
+    const slot = editor.state.doc.firstChild!.firstChild!;
+    expect(slot.firstChild!.attrs.src).toBe('./inserted.png');
+    expect(slot.lastChild!.textContent).toBe('Retained caption');
+  });
+
   it.each(['left', 'center', 'right'])('preserves %s alignment and width without a caption in HTML and print', async align => {
     const editor = create([image({ align })]), html = editor.getHTML(), host = document.createElement('div');
     for (const output of [html, (await renderDocument('', 'Images', '', undefined, editor.state.doc, undefined, undefined, 'html')).html,
@@ -86,6 +103,21 @@ describe('image presentation contract', () => {
 });
 
 describe('image preview gestures', () => {
+  it.each(['grid', 'carousel'])('keeps preview, edit and delete visibly available in %s while hiding image layout controls', async layout => {
+    const { host } = await mount([{ type: 'imageCollection', attrs: { layout }, content: [{ type: 'imageSlot', content: [image()] }] }], true);
+    const style = document.body.appendChild(document.createElement('style')); style.textContent = editorCollectionStyles;
+    await act(async () => { host.querySelector('img')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
+    const toolbar = host.querySelector<HTMLElement>('.nb-image-slot [data-image-toolbar]')!;
+    expect(getComputedStyle(host.querySelector<HTMLElement>('.nb-image-slot [data-image-frame]')!).maxHeight).toBe('440px');
+    for (const label of ['查看大图 / 放大预览', '编辑图片', '删除图片']) {
+      const action = toolbar.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+      expect(action).not.toBeNull(); expect(getComputedStyle(action).display).not.toBe('none');
+    }
+    for (const label of ['居左对齐', '居中对齐', '居右对齐', '缩放为 50%', '缩放为 75%', '缩放为 100%']) {
+      expect(getComputedStyle(toolbar.querySelector<HTMLElement>(`[aria-label="${label}"]`)!).display).toBe('none');
+    }
+  });
+
   it.each(['single', 'grid', 'carousel'])('opens the shared preview on one %s image click without editing the document', async layout => {
     const content: JSONContent[] = layout === 'single' ? [image()] : [{ type: 'imageCollection', attrs: { layout }, content: [{ type: 'imageSlot', content: [image()] }] }];
     const { editor, host } = await mount(content), before = editor.state.doc, img = host.querySelector('img')!;

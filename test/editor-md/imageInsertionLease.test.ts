@@ -10,7 +10,7 @@ const mock = vi.hoisted(() => ({
   editor: null as unknown as Editor, source: null as EditorView | null, capabilities: {},
   activeKey: 'C:\\notes\\a.md', mode: 'visual', transferring: false,
   documents: new Set<() => void>(), windows: new Set<() => void>(),
-  save: vi.fn(), stage: vi.fn(), open: vi.fn(), read: vi.fn(), toast: vi.fn(), queue: vi.fn(),
+  save: vi.fn(), stage: vi.fn(), open: vi.fn(), read: vi.fn(), toast: vi.fn(), queue: vi.fn(), confirm: vi.fn(async () => true), probe: vi.fn(async () => ({ size: 1 })),
 }));
 vi.mock('../../src/stores/documentStore', () => ({ useDocumentStore: {
   getState: () => ({ getDocument: (key: string) => key === mock.key ? { key, dirPath: mock.directory } : undefined }),
@@ -26,8 +26,8 @@ vi.mock('../../src/features/session/documentSession', () => ({ getSessionGenerat
   enqueueDocumentWrite: (key: string, writer: () => Promise<unknown>) => { mock.queue(key); return Promise.resolve().then(writer); },
 }));
 vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => mock.editor, getMdSourceView: () => mock.source }));
-vi.mock('../../src/core/ipc/commands', () => ({ storeImageAsset: (directory: string, extension: string, bytes: Uint8Array) => directory.includes('.noteboard-assets') ? mock.stage(directory, extension, bytes) : mock.save(directory, extension, bytes), ensureStagingDirectory: async () => 'C:\\recovery' }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mock.open }));
+vi.mock('../../src/core/ipc/commands', () => ({ storeImageAsset: (directory: string, extension: string, bytes: Uint8Array) => directory.includes('.noteboard-assets') ? mock.stage(directory, extension, bytes) : mock.save(directory, extension, bytes), ensureStagingDirectory: async () => 'C:\\recovery', probeDocument: mock.probe }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mock.open, confirm: mock.confirm }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: mock.read }));
 vi.mock('../../src/stores/toastStore', () => ({ showToast: mock.toast }));
 vi.mock('../../src/features/explorer/refreshAfterWrite', () => ({ refreshExplorerAfterWrite: async () => {} }));
@@ -36,7 +36,7 @@ import { captureSourceImageInsertion, captureVisualImageInsertion } from '../../
 import { ImageCollection, ImageSlot } from '../../src/features/editor-md/rich-content/schema';
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
-const file = (bytes: Promise<ArrayBuffer>) => ({ name: 'photo.png', arrayBuffer: () => bytes } as File);
+const file = (bytes: Promise<ArrayBuffer>) => ({ name: 'photo.png', size: 1, arrayBuffer: () => bytes } as File);
 const imageCount = () => { let count = 0; mock.editor.state.doc.descendants(node => { if (node.type.name === 'image') count++; }); return count; };
 beforeEach(() => {
   vi.clearAllMocks(); mock.key = 'C:\\notes\\a.md'; mock.directory = 'C:\\notes'; mock.generation = 1; mock.activeKey = mock.key; mock.mode = 'visual'; mock.transferring = false;
@@ -48,6 +48,19 @@ beforeEach(() => {
 afterEach(() => { mock.editor.destroy(); mock.source?.destroy(); mock.source = null; expect(mock.documents.size).toBe(0); expect(mock.windows.size).toBe(0); });
 
 describe('async image insertion ownership', () => {
+  it('asks before reading a large clipboard image and leaves no files when cancelled', async () => {
+    const read = vi.fn(async () => new ArrayBuffer(1));
+    mock.confirm.mockResolvedValueOnce(false);
+    await handlePastedImageFile(mock.editor, { name: 'large.png', size: 51 * 1024 * 1024, arrayBuffer: read } as unknown as File, mock.key);
+    expect(mock.confirm).toHaveBeenCalledOnce(); expect(read).not.toHaveBeenCalled();
+    expect(mock.save).not.toHaveBeenCalled(); expect(imageCount()).toBe(0);
+  });
+  it('checks native image size through the existing file probe before reading its bytes', async () => {
+    mock.probe.mockResolvedValueOnce({ size: 51 * 1024 * 1024 }); mock.confirm.mockResolvedValueOnce(false);
+    await handleImagePathsUsingLease(captureVisualImageInsertion(mock.editor, mock.key), ['C:\\pictures\\large.png']);
+    expect(mock.probe).toHaveBeenCalledWith('C:\\pictures\\large.png'); expect(mock.read).not.toHaveBeenCalled();
+    expect(mock.save).not.toHaveBeenCalled(); expect(imageCount()).toBe(0);
+  });
   it('writes an untitled pasted image to durable recovery storage before inserting its path', async () => {
     mock.key = 'untitled:note'; mock.activeKey = mock.key; mock.directory = '';
     await handlePastedImageFile(mock.editor, file(Promise.resolve(new Uint8Array([1, 2]).buffer)), mock.key);

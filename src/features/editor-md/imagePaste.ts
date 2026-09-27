@@ -8,6 +8,8 @@ import { enqueueDocumentWrite } from '../session/documentSession';
 import { resolveRelativeDocPath } from '../../core/documentPath';
 import { captureSourceImageInsertion, captureVisualImageInsertion, type ImageInsertionLease, type InsertedImage } from './imageInsertionLease';
 import { imageExtension, publishImageAsset, storeTransientImage } from './imageAssetStorage';
+import { confirmLargeFile } from '../../core/files/largeFilePolicy';
+import { probeDocument } from '../../core/ipc/commands';
 
 const invalidName = new Set('<>:"/\\|?*');
 function safeName(name: string): string {
@@ -45,16 +47,18 @@ export async function handlePastedImageFiles(editor: Editor, files: File[], docK
   return handleImageFilesUsingLease(captureVisualImageInsertion(editor, docKey, position), files);
 }
 export async function handleImageFilesUsingLease(lease: ImageInsertionLease | null, files: File[]): Promise<void> {
-  return handleImageSourcesUsingLease(lease, files.map(file => ({ name: file.name, mime: file.type, read: async () => new Uint8Array(await file.arrayBuffer()) })));
+  return handleImageSourcesUsingLease(lease, files.map(file => ({ name: file.name, mime: file.type, size: async () => file.size, read: async () => new Uint8Array(await file.arrayBuffer()) })));
 }
 /** Native file drops share the same ownership, storage and atomic insertion as clipboard images. */
 export async function handleImagePathsUsingLease(lease: ImageInsertionLease | null, paths: readonly string[]): Promise<void> {
-  return handleImageSourcesUsingLease(lease, paths.map(path => ({ name: path.split(/[\\/]/).pop() || 'image.png', mime: '', read: () => readFile(path) })));
+  return handleImageSourcesUsingLease(lease, paths.map(path => ({ name: path.split(/[\\/]/).pop() || 'image.png', mime: '', size: async () => (await probeDocument(path)).size, read: () => readFile(path) })));
 }
-async function handleImageSourcesUsingLease(lease: ImageInsertionLease | null, sources: { name: string; mime: string; read(): Promise<Uint8Array> }[]): Promise<void> {
+async function handleImageSourcesUsingLease(lease: ImageInsertionLease | null, sources: { name: string; mime: string; size(): Promise<number>; read(): Promise<Uint8Array> }[]): Promise<void> {
   if (!lease) return;
   try {
     const images: InsertedImage[] = [];
+    // Ask before reading any bytes or publishing any file in the batch.
+    for (const file of sources) { assertCurrent(lease); if (!await confirmLargeFile(file.name, await file.size())) return; }
     // Sequential IO bounds decoded/binary memory and preserves clipboard order.
     for (const file of sources) {
       assertCurrent(lease);
@@ -77,6 +81,8 @@ async function pickAndSaveLocalImage(lease: ImageInsertionLease): Promise<Insert
   assertCurrent(lease);
   if (!selected || typeof selected !== 'string') return null;
   const name = selected.split(/[\\/]/).pop() || 'image.png';
+  if (!await confirmLargeFile(name, (await probeDocument(selected)).size)) return null;
+  assertCurrent(lease);
   const bytes = await readFile(selected); assertCurrent(lease);
   return writeImage(lease, name, bytes);
 }

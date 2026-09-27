@@ -92,6 +92,7 @@ pub fn run() {
             fsio::commands::save_binary_file,
             fsio::recovery_images::publish_recovery_image,
             fsio::recovery_images::store_image_asset,
+            fsio::image_edit::write_image_edit,
             fsio::commands::read_dir,
             fsio::commands::prepare_directory_watch,
             fsio::browse::browse_locations,

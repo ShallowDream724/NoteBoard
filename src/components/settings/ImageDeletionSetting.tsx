@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 export function ImageDeletionSetting() {
   const id = useId();
   const policy = useSettingsStore((state) => state.settings.file.imageDeletionPolicy ?? 'ask');
+  const captionPolicy = useSettingsStore((state) => state.settings.file.imageCaptionDeletionPolicy ?? 'ask');
   const setFile = useSettingsStore((state) => state.setFile);
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
     <label htmlFor={id} style={{ fontSize: 'var(--settings-font-base)', fontWeight: 500, color: 'var(--editor-text)' }}>从正文移除图片时</label>
@@ -18,5 +19,10 @@ export function ImageDeletionSetting() {
     <p style={{ fontSize: 'var(--settings-font-xs)', color: 'var(--editor-text-muted)', margin: 0 }}>
       仅清理图片目录中未被引用的文件，不会替你保存正文；保存前撤销或放弃修改会保留图片。
     </p>
+    <label htmlFor={`${id}-caption`} style={{ fontSize: 'var(--settings-font-base)', fontWeight: 500, color: 'var(--editor-text)', marginTop: 12 }}>移除图片时的图注与补充说明</label>
+    <select id={`${id}-caption`} value={captionPolicy} onChange={event => setFile({ imageCaptionDeletionPolicy: event.target.value as 'ask' | 'remove' | 'keep' })}
+      style={{ width: '100%', minWidth: 0, maxWidth: '28em', padding: '6px 10px', fontSize: 'var(--settings-font-sm)', border: '1px solid var(--editor-border)', borderRadius: 4, color: 'var(--editor-text)', background: 'var(--editor-bg)' }}>
+      <option value="ask">每次询问</option><option value="remove">随图片一起移除</option><option value="keep">保留文字和说明</option>
+    </select>
   </div>;
 }

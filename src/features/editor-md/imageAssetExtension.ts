@@ -16,7 +16,10 @@ export const ImageAssetLifecycle = Extension.create<{ docKey: string }>({
               && transaction.getMeta('noteboard-document-replacement') !== 'history');
           transaction.steps.forEach((step, index) => {
             step.getMap().forEach((oldStart, oldEnd, newStart, newEnd) => {
-              if (!isSync && oldEnd > oldStart) transaction.docs[index].nodesBetween(oldStart, oldEnd, (node) => {
+              // Cut owns a portable clipboard reference until the user pastes it.
+              // It is a move, so never recycle its source while it is on the clipboard.
+              const moving = transaction.getMeta('noteboard-image-cut') || transaction.getMeta('appendedTransaction')?.getMeta('noteboard-image-cut');
+              if (!isSync && !moving && oldEnd > oldStart) transaction.docs[index].nodesBetween(oldStart, oldEnd, (node) => {
                 if (node.type.name === 'image') removed.add(String(node.attrs.src));
               });
               const after = index + 1 < transaction.docs.length ? transaction.docs[index + 1] : transaction.doc;

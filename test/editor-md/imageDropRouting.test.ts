@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import Image from '@tiptap/extension-image';
+import { ImageNode as Image } from '../../src/features/editor-md/documentNodes';
 import { InteractiveImageCollection, InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
 import { ClipboardImport, DOCUMENT_SLICE_MIME, documentSliceClipboardData, insertImportedSlice } from '../../src/features/editor-md/clipboard/clipboardImport';
 import { Fragment, Slice } from '@tiptap/pm/model';
@@ -42,6 +42,18 @@ function richPasteOn(target: Element, formats: Record<string, string>) {
 beforeEach(() => { vi.clearAllMocks(); mock.active = 'test.nb'; hit = null; Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => hit) }); });
 afterEach(() => { mock.editor?.destroy(); mock.editor = null; clearNativeFileDropTargets(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe('native image drop and current-pointer paste routing', () => {
+  it.each(['grid', 'carousel'])('shows one rich caption and no second add-caption control after image copy into an empty %s slot', layout => {
+    const editor = create(layout), slotElement = editor.view.dom.querySelectorAll('[data-image-slot]')[2]; pointAt(slotElement.querySelector('button'));
+    const image = editor.schema.nodes.image.create({ src: 'caption.png', caption: 'Caption', captionContent: [{ type: 'text', text: 'Caption', marks: [{ type: 'bold' }] }] });
+    const payload = documentSliceClipboardData(editor.state.doc, new Slice(Fragment.from(image), 0, 0));
+    expect(richPasteOn(document.body, { [DOCUMENT_SLICE_MIME]: payload })).toBe(true);
+    const slot = editor.state.doc.child(1).child(2);
+    expect(slot.childCount).toBe(2); expect(slot.firstChild?.attrs.caption).toBeNull();
+    expect(slot.lastChild?.firstChild?.marks[0].type.name).toBe('bold');
+    expect(slotElement.querySelectorAll('p')).toHaveLength(1);
+    expect((slotElement.querySelector('.nb-image-caption-add') as HTMLButtonElement).hidden).toBe(true);
+    expect(slotElement.querySelectorAll('figcaption')).toHaveLength(0);
+  });
   it.each(['grid', 'carousel'])('pastes an internally copied picture into the hovered %s slot from editor or body focus', layout => {
     const editor = create(layout), image = editor.schema.nodes.image.create({ src: 'morning.png', alt: '01 晨光' });
     editor.view.dispatch(editor.state.tr.replaceWith(13, 15, editor.schema.nodes.imageSlot.create(null, image)));

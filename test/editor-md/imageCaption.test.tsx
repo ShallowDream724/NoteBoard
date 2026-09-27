@@ -111,6 +111,7 @@ describe('single image captions', () => {
     const attrs = editor.state.doc.nodeAt(2)!.attrs;
     await act(async () => { setFigureCaption(editor.view, 2, '单图补充说明'); });
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ ...attrs, caption: '单图补充说明' });
-    expect(host.querySelector('[data-image-caption]')?.textContent).toBe('单图补充说明');
+    expect(host.querySelectorAll('[data-image-caption]')).toHaveLength(0);
+    expect(editor.state.doc.firstChild?.firstChild?.lastChild?.textContent).toBe('已有图注');
   });
 });

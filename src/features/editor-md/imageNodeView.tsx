@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ImageNode } from './documentNodes';
+import type { CommandProps } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import {
   ZoomIn,
@@ -20,10 +21,12 @@ import {
   AlertCircle,
   RefreshCw,
   Captions,
+  Pencil,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
 import { useDocumentStore } from '../../stores/documentStore';
+import { showToast } from '../../stores/toastStore';
 import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
 import { useExplorerStore } from '../explorer/explorerStore';
@@ -35,8 +38,10 @@ import { runWithDocumentCapability, useNativeFeatureVisibility } from '../docume
 import { useImageWheelGesture } from '../image-viewer/imageWheelGesture';
 import { ImageCaption } from './ImageCaption';
 import { editFigureCaption } from './figureCaptionCommands';
-import { normalizeFigureCaption } from './figureCaption';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
+import { requestImageRemoval } from './imageRemoval';
+import { imageInsertionTransaction } from './imageInsertionTransaction';
+import { useImageDisplayPreview } from './imagePreviewCache';
 
 /** 大图预览 Lightbox 模态框组件 */
 export function ImageLightboxModal({
@@ -45,12 +50,14 @@ export function ImageLightboxModal({
   onClose,
   onOpenInTab,
   onRevealInDir,
+  onEdit,
 }: {
   src: string;
   alt?: string;
   onClose: () => void;
   onOpenInTab?: () => void;
   onRevealInDir?: () => void;
+  onEdit?: () => void;
 }) {
   const [scale, setScale] = useState(1);
   const [rotate, setRotate] = useState(0);
@@ -162,6 +169,10 @@ export function ImageLightboxModal({
           </button>
         </Tooltip>
 
+        {onEdit && <Tooltip content="编辑图片" side="bottom" sideOffset={6}>
+          <button type="button" aria-label="编辑图片" onClick={onEdit} style={modalBtnStyle}><Pencil size={16} /></button>
+        </Tooltip>}
+
         {onOpenInTab && (
           <Tooltip content="在独立图片标签页中打开" side="bottom" sideOffset={6}>
             <button
@@ -247,7 +258,7 @@ const modalBtnStyle: React.CSSProperties = {
 };
 
 /** TipTap 图片 NodeView 组件 */
-export function ImageComponent({ node, extension, editor, getPos, deleteNode, decorations }: NodeViewProps) {
+export function ImageComponent({ node, extension, editor, getPos, decorations }: NodeViewProps) {
   const nativeFeaturesVisible = useNativeFeatureVisibility();
   const [resizePreview, setResizePreview] = useState<string | null>(null);
   const resizeCleanup = useRef<(() => void) | null>(null);
@@ -257,7 +268,9 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
     const pos = getPos(); if (typeof pos !== 'number') return;
     runWithDocumentCapability(editor, 'imageLayout', next => {
       const image = next.state.doc.nodeAt(pos); if (image?.type.name !== 'image') return false;
-      next.view.dispatch(next.state.tr.setNodeMarkup(pos, undefined, { ...image.attrs, ...attrs })); return true;
+      const tr = next.state.tr;
+      for (const [name, value] of Object.entries(attrs)) tr.setNodeAttribute(pos, name, value);
+      next.view.dispatch(tr); return true;
     });
   };
   const visibility = useImageVisibility();
@@ -266,6 +279,8 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [resolvedDisplaySrc, setResolvedDisplaySrc] = useState<string>('');
   const [resolvedAbsPath, setResolvedAbsPath] = useState<string | null>(null);
+  const [loadedDisplaySrc, setLoadedDisplaySrc] = useState<string | null>(null);
+  const [imageAspect, setImageAspect] = useState<{ source: string; value: number } | null>(null);
 
   const rawSrc: string = node.attrs.src || '';
   const ownerKey = String(extension.options.docKey ?? '');
@@ -275,8 +290,11 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const position = getPos();
   const parent = typeof position === 'number' ? editor.state.doc.resolve(position).parent : null;
   const inCollection = parent?.type.name === 'imageSlot';
-  const showCaption = !inCollection || (!!normalizeFigureCaption(node.attrs.caption) && (parent?.lastChild?.type.name !== 'paragraph'
-    || normalizeFigureCaption(parent.lastChild.textContent) !== normalizeFigureCaption(node.attrs.caption)));
+  const showCaption = !inCollection;
+  const previewWidth = editor.view.dom.clientWidth * (parseFloat(resizePreview ?? width) || 100) / 100;
+  const displayPreviewSrc = useImageDisplayPreview(resolvedDisplaySrc, previewWidth, visibility.visible, visibility.ref);
+  const knownAspect = imageAspect?.source === rawSrc ? imageAspect.value : undefined;
+  const waitingForPreview = !visibility.visible || !displayPreviewSrc || loadedDisplaySrc !== displayPreviewSrc;
   const previewControl = (target: EventTarget) => target instanceof Element
     && !!target.closest('button, input, textarea, [data-image-toolbar], [data-image-resize]');
   const trackPreviewGesture = (event: React.PointerEvent) => {
@@ -398,6 +416,19 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
     }
   };
 
+  const handleEdit = async () => {
+    setLightboxOpen(false);
+    const original = node;
+    try {
+      const { editDocumentImage } = await import('../image-editor/integration');
+      if (editor.isDestroyed) return;
+      const position = getPos();
+      if (position === undefined || editor.state.doc.nodeAt(position) !== original) return;
+      const name = alt || (/^(?:data|blob):/i.test(rawSrc) ? '图片' : rawSrc.split(/[\\/]/).pop()?.split(/[?#]/)[0]);
+      await editDocumentImage(editor, ownerKey, position, resolvedDisplaySrc, name);
+    } catch { showToast('图片编辑器加载失败', 'error'); }
+  };
+
   return (
     <NodeViewWrapper className="nb-image" style={alignContainerStyle}>
       <div
@@ -409,7 +440,8 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
           maxWidth: '100%',
           borderRadius: 8,
           transition: 'width 150ms ease',
-          minHeight: visibility.visible ? undefined : visibility.placeholderHeight,
+          aspectRatio: knownAspect,
+          minHeight: waitingForPreview && !knownAspect ? visibility.placeholderHeight : undefined,
         }}
         data-image-frame=""
         onPointerDownCapture={event => {
@@ -456,10 +488,17 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
               <button
                 type="button"
                 aria-label="查看大图 / 放大预览"
+                data-image-collection-action="preview"
                 onClick={() => setLightboxOpen(true)}
                 style={actionBtnStyle}
               >
                 <Maximize2 size={14} color="var(--accent-strong)" />
+              </button>
+            </Tooltip>
+
+            <Tooltip content="编辑图片" side="top" sideOffset={4}>
+              <button type="button" aria-label="编辑图片" data-image-collection-action="edit" onClick={() => void handleEdit()} disabled={!resolvedDisplaySrc || loadError || !editor.isEditable} style={actionBtnStyle}>
+                <Pencil size={14} />
               </button>
             </Tooltip>
 
@@ -571,7 +610,8 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
               <button
                 type="button"
                 aria-label="删除图片"
-                onClick={deleteNode}
+                data-image-collection-action="delete"
+                onClick={() => void requestImageRemoval(editor.view, getPos())}
                 style={{ ...actionBtnStyle, color: '#ef4444' }}
               >
                 <Trash2 size={14} />
@@ -627,12 +667,20 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
         ) : (
           /* 禁用 Referer 携带，防止防盗链拦截并支持跨域图片原生渲染 */
           <img
-            src={visibility.visible && resolvedDisplaySrc ? resolvedDisplaySrc : undefined}
+            src={displayPreviewSrc}
             alt={alt}
             loading={visibility.visible ? 'eager' : 'lazy'}
             decoding="async"
             referrerPolicy="no-referrer"
-            onError={() => setLoadError(true)}
+            onLoad={event => {
+              if (!displayPreviewSrc || event.currentTarget.getAttribute('src') !== displayPreviewSrc) return;
+              const { naturalWidth, naturalHeight } = event.currentTarget;
+              if (naturalWidth > 0 && naturalHeight > 0) setImageAspect({ source: rawSrc, value: naturalWidth / naturalHeight });
+              setLoadedDisplaySrc(displayPreviewSrc);
+            }}
+            onError={event => {
+              if (displayPreviewSrc && event.currentTarget.getAttribute('src') === displayPreviewSrc) setLoadError(true);
+            }}
             style={{
               width: '100%',
               height: 'auto',
@@ -687,6 +735,7 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
           onClose={() => setLightboxOpen(false)}
           onOpenInTab={resolvedAbsPath ? handleOpenInTab : undefined}
           onRevealInDir={resolvedAbsPath ? handleRevealInDir : undefined}
+          onEdit={editor.isEditable ? () => void handleEdit() : undefined}
         />
       )}
     </NodeViewWrapper>
@@ -717,11 +766,11 @@ export const EnhancedImageBlock = ImageNode.extend({
     return {
       setImage:
         (options: { src: string; alt?: string; title?: string; width?: string; align?: string; caption?: string | null }) =>
-        ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => {
-          return commands.insertContent({
-            type: 'image',
-            attrs: options,
-          });
+        ({ state, dispatch }: CommandProps) => {
+          const image = state.schema.nodes.image;
+          if (!image) return false;
+          if (dispatch) dispatch(imageInsertionTransaction(state, [image.create(options)], state.selection).tr);
+          return true;
         },
     } as never;
   },

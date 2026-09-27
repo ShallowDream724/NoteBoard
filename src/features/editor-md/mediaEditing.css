@@ -1,0 +1,9 @@
+.ProseMirror .ProseMirror-selectednode:is(.nb-image, .nb-image-collection),
+.ProseMirror .ProseMirror-selectednode:has(> .nb-image),
+.nb-annotation-richtext .nb-annotation-image.ProseMirror-selectednode {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.nb-annotation-image { display: block; margin: 12px 0; }
+.nb-annotation-image figcaption { margin-top: 6px; text-align: center; font-size: .85em; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

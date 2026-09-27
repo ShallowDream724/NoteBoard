@@ -1,6 +1,6 @@
 import { Extension, type Editor, type JSONContent } from '@tiptap/core';
 import { Fragment, Slice, type Node as PMNode, type Schema } from '@tiptap/pm/model';
-import { Plugin, PluginKey, TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Selection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { CellSelection, isInTable } from '@tiptap/pm/tables';
 import { documentSliceClipboardData, mergeImportedAnnotationBodies, parseStructuredClipboard, withoutNestedAnnotations } from './structured';
@@ -18,6 +18,8 @@ import { CLIPBOARD_LIMITS, ClipboardImportError, type ClipboardImportResult } fr
 import { clipboardHtmlSource, MARKDOWN_MIMES, needsClipboardImageFallback, normalizeExternalHtml, normalizeExternalText, type ExternalTextOptions } from './external';
 import { ensureContainerTail } from '../containerEditing';
 import { imageOnlySlice, imageInsertionTransaction, imageSlotPosition } from '../imageInsertionTransaction';
+import { imageSelectionSlice, normalizeImageSlot } from '../imageCaptions';
+import { imageRemovalTransaction } from '../imageRemoval';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -59,7 +61,8 @@ function supportedNode(schema: Schema, value: JSONContent, children: PMNode[]): 
   const type = value.type && schema.nodes[value.type];
   if (!type) throw new ClipboardImportError(`剪贴板包含不支持的内容类型：${value.type ?? '未知'}`);
   const marks = (value.marks ?? []).map(mark => schema.markFromJSON(mark));
-  return type.createChecked(value.attrs, children, marks);
+  const node = type.createChecked(value.attrs, children, marks);
+  return node.type.name === 'imageSlot' ? normalizeImageSlot(node) : node;
 }
 /** Bottom-up materialization yields by elapsed time, including inside a single large table. */
 export async function materializeClipboard(content: JSONContent[], schema: Schema, signal?: AbortSignal): Promise<PMNode[]> {
@@ -88,7 +91,7 @@ function synchronousNodes(content: JSONContent[], schema: Schema): PMNode[] {
 }
 export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection, imagePosition?: number): boolean {
   const images = imageOnlySlice(imported.slice);
-  if (images && imageSlotPosition(view.state, imagePosition ?? selection.from) !== undefined) {
+  if (images) {
     const { tr } = imageInsertionTransaction(view.state, images, selection, imagePosition);
     mergeImportedAnnotationBodies(tr, imported.bodies);
     dispatchDiscreteEdit(view, tr); view.focus(); return true;
@@ -135,12 +138,19 @@ function smallClipboardImages(view: EditorView, data: DataTransfer): ImportedSli
 
 export function writeDocumentClipboard(view: EditorView, event: ClipboardEvent, cut: boolean): boolean {
   if (!event.clipboardData || view.state.selection.empty || view.state.selection instanceof CellSelection) return false;
-  const slice = view.state.selection.content();
+  const slice = imageSelectionSlice(view.state);
   const serialized = view.serializeForClipboard(slice);
   event.clipboardData.setData(DOCUMENT_SLICE_MIME, documentSliceClipboardData(view.state.doc, slice));
   event.clipboardData.setData('text/html', serialized.dom.innerHTML);
   event.clipboardData.setData('text/plain', customClipboardTextSerializer(slice, view));
-  event.preventDefault(); if (cut) dispatchDiscreteEdit(view, view.state.tr.deleteSelection()); return true;
+  event.preventDefault();
+  if (cut) {
+    const selection = view.state.selection;
+    const tr = selection instanceof NodeSelection && selection.node.type.name === 'image'
+      ? imageRemovalTransaction(view.state, selection.from, 'remove')! : view.state.tr.deleteSelection();
+    dispatchDiscreteEdit(view, tr.setMeta('noteboard-image-cut', true));
+  }
+  return true;
 }
 
 function workerNormalize(raw: string, kind: Exclude<ClipboardChoice, 'images'>, signal: AbortSignal, stripAnnotations = false, textOptions: ExternalTextOptions & { plainText?: string } = {}): Promise<ClipboardImportResult> {
@@ -238,7 +248,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
         decorations: state => pendingKey.getState(state),
         transformPasted: stripAnnotations ? slice => withoutNestedAnnotations(slice) : undefined,
         handlePaste: stripAnnotations ? (view, _event, slice) => {
-          if (!insertTableSlice(view, slice)) dispatchDiscreteEdit(view, view.state.tr.replaceSelection(slice));
+          if (!insertTableSlice(view, slice)) insertImportedSlice(view, { slice, bodies: [], diagnostics: [] }, view.state.selection);
           return true;
         } : undefined,
         handleKeyDown: (_view, event) => { if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') plainUntil = Date.now() + 1000; if (event.key === 'Escape' && (pending || targets.size)) { cancel(); for (const target of targets) target.cancel(); return true; } return false; },

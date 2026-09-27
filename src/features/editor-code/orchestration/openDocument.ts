@@ -14,11 +14,12 @@ import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoaders';
 import { showToast } from '../../../stores/toastStore';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { confirmLargeFile, getLargeFileThresholdBytes } from '../../../core/files/largeFilePolicy';
 
 // ── 打开文件 ──
 
 /** 打开结果（S04：映射到打开队列 ACK 的 OpenOutcome） */
-export type OpenDocumentResult = 'opened' | 'focused' | 'failed';
+export type OpenDocumentResult = 'opened' | 'focused' | 'cancelled' | 'failed';
 
 /**
  * 目录展开任务（G 节：目录及最近记录在可编辑后有序执行，不阻塞打开链路返回）。
@@ -105,7 +106,13 @@ async function openDocumentInternal(path: string, retryDepth: number, options: O
   // 1. 🔴 S07：统一文件准备（归属查询在读盘前；已打开/在途直接返回）
   let prepared: Awaited<ReturnType<typeof ipc.prepareDocument>>;
   try {
-    prepared = await ipc.prepareDocument(label, path);
+    prepared = await ipc.prepareDocument(label, path, getLargeFileThresholdBytes());
+    while (prepared.type === 'confirmation-required') {
+      if (!await confirmLargeFile(prepared.displayName, prepared.size)) return 'cancelled';
+      // Approval applies to this observed size. A growing file must be checked
+      // again; ownership is also rechecked before the native reader proceeds.
+      prepared = await ipc.prepareDocument(label, path, Math.max(getLargeFileThresholdBytes(), prepared.size));
+    }
   } catch (e) {
     console.error('文件准备失败:', e);
     showToast(`无法打开文件: ${fileName}`, 'error');

@@ -15,6 +15,9 @@ import { createTableViewportPlugin } from '../tableViewport';
 import { EfficientTableView } from '../tableView';
 import { createTableRowView } from '../tableRowView';
 import { TableCellView } from '../tableCellView';
+import { createMediaEditingPlugin } from '../mediaEditing';
+import { normalizeImageSlots } from '../imageCaptions';
+import { normalizeFigureCaption, renderFigureCaption } from '../figureCaption';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
@@ -36,7 +39,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
   const plugins = [
     ...(editable ? [
       createClipboardImportPlugin({ docKey, ownerCurrent: () => !editor.isDestroyed, stripAnnotations: true }),
-      history(), keymap(bindings), keymap(baseKeymap),
+      createMediaEditingPlugin(), history(), keymap(bindings), keymap(baseKeymap),
       ...(tables ? [tableEditing()] : []),
     ] : []),
     ...(tables ? [createTableViewportPlugin()] : []),
@@ -46,7 +49,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
     return { dom };
   };
   const bodyView = new EditorView(host, {
-    state: EditorState.create({ schema, doc: schema.nodes.doc.create(null, body.content), plugins }),
+    state: EditorState.create({ schema, doc: normalizeImageSlots(schema.nodes.doc.create(null, body.content)), plugins }),
     editable: () => editable,
     attributes: { class: 'nb-annotation-richtext nb-embedded-prose', 'aria-label': editable ? '说明正文' : '补充说明正文', ...(editable ? { role: 'textbox', 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' } : {}) },
     dispatchTransaction(tr) { bodyView.updateState(bodyView.state.apply(tr)); },
@@ -57,6 +60,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
         tableCell: node => new TableCellView(node), tableHeader: node => new TableCellView(node),
       } satisfies NonNullable<ConstructorParameters<typeof EditorView>[1]['nodeViews']> : {}),
       image(node) {
+        const figure = document.createElement('figure'); figure.className = 'nb-annotation-image'; figure.contentEditable = 'false';
         const dom = document.createElement('img'); dom.alt = String(node.attrs.alt ?? '');
         const raw = String(node.attrs.src ?? '');
         const base = docKey ? useDocumentStore.getState().getDocument(docKey)?.dirPath : null;
@@ -64,8 +68,12 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
           try { dom.src = convertFileSrc(base ? resolveRelativeDocPath(base, raw) : raw); } catch { dom.src = raw; }
         } else dom.src = raw;
         dom.loading = 'lazy'; dom.referrerPolicy = 'no-referrer';
-        dom.style.maxWidth = '100%'; dom.style.height = 'auto';
-        return { dom };
+        dom.style.maxWidth = '100%'; dom.style.height = 'auto'; dom.style.display = 'block';
+        figure.append(dom);
+        if (normalizeFigureCaption(node.attrs.caption)) {
+          const caption = document.createElement('figcaption'); renderFigureCaption(caption, node.attrs.caption, node.attrs.captionContent); figure.append(caption);
+        }
+        return { dom: figure };
       },
       annotationStore() { const dom = document.createElement('span'); dom.hidden = true; return { dom }; },
       mathInline: sourceView(true, 'latex'), mathBlock: sourceView(false, 'latex'),
@@ -78,5 +86,5 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
 /** Keep viewport/plugin ownership when the parent updates an open read panel. */
 export function updateAnnotationBodyView(view: EditorView, body: ProseMirrorNode): void {
   if (view.state.doc.content.eq(body.content)) return;
-  view.updateState(EditorState.create({ schema: view.state.schema, doc: view.state.schema.nodes.doc.create(null, body.content), plugins: view.state.plugins }));
+  view.updateState(EditorState.create({ schema: view.state.schema, doc: normalizeImageSlots(view.state.schema.nodes.doc.create(null, body.content)), plugins: view.state.plugins }));
 }

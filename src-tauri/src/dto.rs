@@ -430,6 +430,8 @@ pub struct PathExistsResult {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum PreparedDocument {
     #[serde(rename_all = "camelCase")]
+    ConfirmationRequired { key: String, display_name: String, size: u64 },
+    #[serde(rename_all = "camelCase")]
     Directory { path: String },
     #[serde(rename_all = "camelCase")]
     Image {

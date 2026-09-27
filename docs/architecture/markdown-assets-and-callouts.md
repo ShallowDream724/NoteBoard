@@ -6,7 +6,7 @@
 
 `documentNodes.ts` 的 `AlertNode` 负责文法与序列化，`alertExtension.tsx` 负责 NodeView，正文由 `NodeViewContent` 承载。`alertPresentation.ts` 只保存五种预设元数据；`calloutPresentation.ts` 提供属性验证、输入归一化、标题和外观计算，`callout.css` 是编辑和导出的统一圆角全边框样式。有标题时，图标与标题共用首行，正文从下一行的容器左内边距开始；无标题时正文保留图标右侧缩进，不从第一段猜标题。标题行高与图标槽统一，避免随正文行距而错位。显式行内文字颜色优先于块色。
 
-悬停块内显示画板按钮，按需加载菜单；图标按钮支持五种预设 SVG、独立的完成图标、少量精选 emoji 与单个任意 emoji 输入，不附带大型图标库。文字、边框、背景的当前选项使用主题强调色文字、浅底与内轮廓，三套主题共享同一选中状态规则。所有外观操作只更新当前节点属性，进入单次可撤销事务；随机仅写背景字段，重置颜色不改标题、图标或正文。自定义功能共用 `callout` 能力门控，纯 Markdown 偏好隐藏原生入口，基本五预设仍可编辑。通用 Markdown 导出降级颜色/SVG，保留标题、语义 emoji 和所有正文；HTML/PDF 保留外观。
+悬停块内显示画板按钮，按需加载菜单；图标按钮提供两排共十二个单色 SVG：五种预设与完成，以及收藏、摘录、时间、代码、附件、目标。Caution 使用盾牌叉号，避免与 Warning 的感叹号重复。另保留少量精选 emoji 与单个任意 emoji 输入，不附带大型图标库。文字、边框、背景的当前选项使用主题强调色文字、浅底与内轮廓，三套主题共享同一选中状态规则。所有外观操作只更新当前节点属性，进入单次可撤销事务；随机仅写背景字段，重置颜色不改标题、图标或正文。自定义功能共用 `callout` 能力门控，纯 Markdown 偏好隐藏原生入口，基本五预设仍可编辑。通用 Markdown 导出降级颜色/SVG，保留标题、语义 emoji 和所有正文；HTML/PDF 保留外观。
 
 ## 路径和文件目录
 
@@ -26,11 +26,13 @@ NB 的 `image.attrs.src` 与 Markdown 图片目的地只需保存文件路径或
 
 欢迎示例与 `examples/rich-document.nb` 共用三份 `examples/assets/*.png`。欢迎入口按需读取打包资源并存入恢复资源目录，因此未保存的示例、暂存、导出与首次保存都不依赖开发服务器 URL；仓库示例使用同目录 `./assets/` 相对引用，源码中不再重复图片二进制。
 
-安装包 CSP 的 `connect-src` 为 `'self' data: ipc: http://ipc.localhost`：允许应用自身的打包图片、data 图片解码和 Tauri 内部 IPC。内部地址不能省略：Tauri 的自定义协议 fetch 被 CSP 拦截后，会将当前 WebView 的通信回退为 JSON postMessage，原始二进制载荷随之失效。资源读取测试必须包含真实桌面 IPC，不能只以普通 HTTP 页面加载 PNG 代替。其余网络来源仍受限制。
+安装包 CSP 的 `connect-src` 为 `'self' data: blob: asset: http://asset.localhost https://asset.localhost ipc: http://ipc.localhost`：允许打包图片、data/Blob 解码、本机资产及 Tauri 内部 IPC。图片编辑和显示预览需要 fetch 本机资产，不能仅配置 `img-src`。内部 IPC 地址不能省略：自定义协议 fetch 被 CSP 拦截后，会回退为 JSON postMessage，原始二进制载荷随之失效。资源读取测试必须包含真实桌面 IPC，不能只以普通 HTTP 页面加载 PNG 代替。其余网络来源仍受限制。
 
 示例打开只在图片准备成功后创建未命名副本；按钮在准备期间显示打开中并禁止重复点击。准备失败通过统一 Toast 显示原因，不创建缺图副本、不产生未处理的 Promise 拒绝，用户可以直接重试。
 
 ## 删除图片
+
+图片附带图注/说明的处理先由 `imageRemoval` 与 `imageCaptionRemoval` 决定：询问、一起移除或保留文字。可记住偏好，写入 `file.imageCaptionDeletionPolicy`，设置中可修改；保留说明时把说明锚点交给保留段落。它与下述磁盘文件回收偏好独立。宫格/轮播每个槽位只有一个富文本图注段落，内部复制和粘贴会归一化旧图片属性中的图注，避免出现两个编辑入口。
 
 - 编辑器适配层只收集语义图片节点的增删，程序化加载及模式同步不触发清理。
 - `imageAssetLifecycle.ts` 串行处理决定，支持询问、保留文件、同步删除三种偏好。界面和 NodeView 不直接操作磁盘。

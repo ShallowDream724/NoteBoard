@@ -8,6 +8,7 @@ import { Bold, ImagePlus, Italic, List, Quote } from 'lucide-react';
 import { OrderedListIcon as ListOrdered } from '../../../components/OrderedListIcon';
 import { Tooltip } from '../../../components/Tooltip';
 import { createAnnotationBodyView, updateAnnotationBodyView } from './bodyView';
+import { insertViewImages } from '../imageInsertionLease';
 
 export interface AnnotationDraftHandle { content(): JSONContent[]; focus(): void }
 
@@ -58,7 +59,7 @@ export function AnnotationBodyEditor({ editor, body, editable, draft }: {
     {editable && imageInput && <form className="nb-annotation-image-input" onSubmit={event => {
       event.preventDefault(); const current = view.current, src = imageSource.trim();
       if (!current || !src || /^(javascript|vbscript):/i.test(src)) return;
-      current.dispatch(current.state.tr.replaceSelectionWith(current.state.schema.nodes.image.create({ src, alt: imageAlt.trim() || null })));
+      insertViewImages(current, [{ src, alt: imageAlt.trim() }], current.state.selection);
       setImageInput(false); setImageSource(''); setImageAlt(''); current.focus();
     }}>
       <input autoFocus aria-label="图片地址或相对路径" placeholder="图片地址或相对路径" value={imageSource} onChange={event => setImageSource(event.target.value)}/>

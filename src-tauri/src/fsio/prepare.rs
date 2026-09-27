@@ -25,6 +25,7 @@ pub async fn prepare_document(
     state: State<'_, Mutex<AppState>>,
     label: String,
     path: String,
+    max_read_bytes: Option<u64>,
 ) -> Result<PreparedDocument, String> {
     // 1. 工作线程规范化 key（canonicalize 访问文件系统）
     let raw_path = path.clone();
@@ -91,7 +92,7 @@ pub async fn prepare_document(
     let io_path = path.clone();
     let io_key = key.clone();
     let prepared = tauri::async_runtime::spawn_blocking(move || {
-        prepare_on_worker(&io_path, &io_key)
+        prepare_on_worker(&io_path, &io_key, max_read_bytes)
     })
     .await
     .map_err(|e| format!("prepare_error:{e}"));
@@ -133,7 +134,7 @@ pub async fn prepare_document(
 }
 
 /// 工作线程判别与读取（无锁；复用既有 read::read_file 的编码检测与解码）
-fn prepare_on_worker(path: &str, key: &str) -> Result<PreparedDocument, String> {
+fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Result<PreparedDocument, String> {
     super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(path);
 
@@ -158,6 +159,13 @@ fn prepare_on_worker(path: &str, key: &str) -> Result<PreparedDocument, String> 
     let display_name = nbpath::basename(path);
     let dir_path = nbpath::parent_dir(path).unwrap_or_default();
     let size = metadata.len();
+    // Return before text probing/reading or image decoding. This result does not
+    // retain a registration reservation; cancelling needs no cleanup IPC.
+    if max_read_bytes.is_some_and(|limit| size > limit) {
+        return Ok(PreparedDocument::ConfirmationRequired {
+            key: key.to_string(), display_name, size,
+        });
+    }
     let mtime = metadata
         .modified()
         .map(|t| {
@@ -230,16 +238,29 @@ mod classification_tests {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
-            assert!(matches!(prepare_on_worker(path, path).unwrap(), PreparedDocument::Unsupported { .. }));
+            assert!(matches!(prepare_on_worker(path, path, None).unwrap(), PreparedDocument::Unsupported { .. }));
         }
         for (extension, expected) in [("md", DocumentKind::Markdown), ("txt", DocumentKind::Code), ("dot", DocumentKind::Code)] {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
-            match prepare_on_worker(path, path).unwrap() {
+            match prepare_on_worker(path, path, None).unwrap() {
                 PreparedDocument::Text { payload } => assert_eq!(payload.kind, expected),
                 other => panic!("unexpected classification: {other:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn size_confirmation_precedes_text_read_and_image_decode() {
+        let directory = tempfile::tempdir().unwrap();
+        for extension in ["md", "png"] {
+            let path = directory.path().join(format!("large.{extension}"));
+            std::fs::write(&path, "content larger than limit").unwrap();
+            let path = path.to_str().unwrap();
+            let size = std::fs::metadata(path).unwrap().len();
+            assert!(matches!(prepare_on_worker(path, path, Some(size - 1)).unwrap(), PreparedDocument::ConfirmationRequired { size: actual, .. } if actual == size));
+            assert!(!matches!(prepare_on_worker(path, path, Some(size)).unwrap(), PreparedDocument::ConfirmationRequired { .. }));
         }
     }
 }

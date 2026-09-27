@@ -5,7 +5,7 @@ export const ALERT_META: Record<AlertKind, { label: string; icon: string; color:
   tip: { label: 'Tip', color: '#1a7f37', icon: 'M9 18h6M10 22h4M9 14a6 6 0 1 1 6 0c-1 .7-1 1.7-1 4h-4c0-2.3 0-3.3-1-4Z' },
   important: { label: 'Important', color: '#8250df', icon: 'M21 15V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4v4l5-4h7a1 1 0 0 0 1-1ZM12 7v5M12 14h.01' },
   warning: { label: 'Warning', color: '#9a6700', icon: 'm10.3 3.9-8.6 14.4a2 2 0 0 0 1.7 3h17.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01' },
-  caution: { label: 'Caution', color: '#cf222e', icon: 'm9 2-7 7v6l7 7h6l7-7V9l-7-7H9ZM12 7v6M12 17h.01' },
+  caution: { label: 'Caution', color: '#cf222e', icon: 'M12 22s9-4 9-11V5l-9-3-9 3v6c0 7 9 11 9 11ZM9 8l6 6m0-6-6 6' },
 };
 export function alertKind(value: unknown): AlertKind {
   const kind = String(value ?? '').toLowerCase();

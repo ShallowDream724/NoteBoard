@@ -160,7 +160,7 @@ function delayedBytes() {
   const promise = new Promise<ArrayBuffer>(done => { resolve = done; });
   return { promise, resolve };
 }
-const imageFile = (name: string, bytes: Promise<ArrayBuffer>) => ({ name, type: 'image/png', arrayBuffer: () => bytes } as File);
+const imageFile = (name: string, bytes: Promise<ArrayBuffer>) => ({ name, type: 'image/png', size: 4, arrayBuffer: () => bytes } as File);
 function imageSources(view: EditorView) {
   const sources: string[] = []; view.state.doc.descendants(node => { if (node.type.name === 'image') sources.push(node.attrs.src); }); return sources;
 }

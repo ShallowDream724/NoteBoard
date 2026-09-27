@@ -20,6 +20,12 @@ export const CALLOUT_BACKGROUNDS = ['#f1f5f9', '#fff1f2', '#fff7ed', '#fefce8', 
 /** Native icon choices are independent of the five portable GFM alert kinds. */
 export const CALLOUT_EXTRA_ICONS = {
   success: { label: '完成', icon: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM8 12l3 3 5-6' },
+  bookmark: { label: '收藏', icon: 'M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-7-4Z' },
+  quote: { label: '摘录', icon: 'M3 5h7v7a7 7 0 0 1-7 7v-3a4 4 0 0 0 4-4H3ZM14 5h7v7a7 7 0 0 1-7 7v-3a4 4 0 0 0 4-4h-4Z' },
+  clock: { label: '时间', icon: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM12 6v6l4 2' },
+  code: { label: '代码', icon: 'm8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16' },
+  attachment: { label: '附件', icon: 'm21 11-9 9a6 6 0 0 1-8.5-8.5l10-10a4 4 0 0 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8L16 5' },
+  target: { label: '目标', icon: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0ZM18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0ZM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z' },
 } as const;
 const CALLOUT_ICON_META = { ...ALERT_META, ...CALLOUT_EXTRA_ICONS };
 const isPresetIcon = (value: unknown): value is keyof typeof CALLOUT_ICON_META =>

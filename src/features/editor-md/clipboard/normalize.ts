@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { parseClipboardMatrix } from '../../../core/clipboardMatrix';
 import { clipboardMathElement, clipboardTextMath } from './htmlMath';
+import { figureCaptionText } from '../figureCaption';
 
 /** Import limits bound DOM parsing, schema materialization and one final transaction. */
 export const CLIPBOARD_LIMITS = { characters: 16_000_000, nodes: 250_000, depth: 48, cells: 100_000, rules: 2_048, synchronous: 24_000 } as const;
@@ -209,6 +210,16 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         continue;
       }
       if (skipped.has(tag) || style.display === 'none') continue;
+      if (tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
+        flush();
+        const picture = image(element.querySelector('img')!), caption = element.querySelector('figcaption')!;
+        if (picture.type === 'image') {
+          const content = inline(caption, [], depth + 1, true).filter(child => child.type === 'text' || child.type === 'hardBreak');
+          picture.attrs = { ...picture.attrs, caption: figureCaptionText(content), captionContent: content.length ? content : null };
+          result.push(picture);
+        } else result.push(picture, ...textBlock(caption, inherited, depth + 1));
+        continue;
+      }
       if (tag === 'BR') { pending.push({ type: 'hardBreak' }); continue; }
       if (!blocks.has(tag) && tag !== 'IMG' && tag !== 'V:IMAGEDATA') {
         if (Array.from(element.children).some(child => blocks.has(child.tagName.toUpperCase()))) {

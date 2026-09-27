@@ -1,6 +1,6 @@
 import { Fragment, Slice, type Node } from '@tiptap/pm/model';
-import { NodeSelection, type EditorState, type Selection } from '@tiptap/pm/state';
-import { ensureContainerTail } from './containerEditing';
+import { TextSelection, type EditorState, type Selection } from '@tiptap/pm/state';
+import { normalizeImageSlot } from './imageCaptions';
 
 export function imageSlotPosition(state: EditorState, position: number): number | undefined {
   const at = state.doc.resolve(Math.max(0, Math.min(position, state.doc.content.size)));
@@ -32,19 +32,21 @@ export function imageInsertionTransaction(state: EditorState, images: Node[], se
       const slot = collection.child(index);
       if (index >= slotIndex && next < images.length && slot.firstChild?.type.name !== 'image') {
         const pos = start + 1 + offset, mapped = tr.mapping.map(pos, 1);
-        tr.replaceWith(mapped, tr.mapping.map(pos + slot.nodeSize, -1), slot.copy(Fragment.from(images[next++]).append(slot.content)));
+        tr.replaceWith(mapped, tr.mapping.map(pos + slot.nodeSize, -1), normalizeImageSlot(slot.copy(Fragment.from(images[next++]).append(slot.content))));
         firstImage ??= mapped + 1;
       }
       offset += slot.nodeSize;
     }
     const appendAt = tr.mapping.map(start + collection.nodeSize - 1, -1);
-    while (next < images.length) appended.push(state.schema.nodes.imageSlot.create(null, images[next++]));
+    while (next < images.length) appended.push(normalizeImageSlot(state.schema.nodes.imageSlot.create(null, images[next++])));
     if (appended.length) { tr.insert(appendAt, appended); firstImage ??= appendAt + 1; }
     // Keep the caret/caption selection where it was; targeting a slot must not
     // turn the next paste into replacement of the just-inserted image.
   } else {
     const content = Fragment.from(images);
-    if (position !== undefined && at.parent.canReplace(at.index(), at.index(), content)) tr.insert(raw, content);
+    const blank = at.parent.type.name === 'paragraph' && !at.parent.content.size && at.depth > 0;
+    if (blank && (position !== undefined || selection.empty)) tr.replaceWith(at.before(), at.after(), content);
+    else if (position !== undefined && at.parent.canReplace(at.index(), at.index(), content)) tr.insert(raw, content);
     else tr.setSelection(selection).replaceSelection(new Slice(content, 0, 0));
     tr.mapping.maps[0]?.forEach((_from, _to, from, to) => {
       tr.doc.nodesBetween(from, to, (node, pos) => {
@@ -52,8 +54,15 @@ export function imageInsertionTransaction(state: EditorState, images: Node[], se
         if (node.type.name === 'image') { firstImage = pos; return false; }
       });
     });
-    if (firstImage !== undefined) tr.setSelection(NodeSelection.create(tr.doc, firstImage));
-    ensureContainerTail(tr, raw);
+    if (firstImage !== undefined) {
+      // An image insertion always leaves a writable line below the final image.
+      // Reuse an existing paragraph created by splitting text or paste at an end.
+      let after = firstImage;
+      for (const image of images) after += image.nodeSize;
+      const next = tr.doc.nodeAt(after);
+      if (next?.type.name !== 'paragraph') tr.insert(after, state.schema.nodes.paragraph.create());
+      tr.setSelection(TextSelection.create(tr.doc, after + 1));
+    }
   }
   return { tr, firstImage, inCollection: slotDepth >= 0 };
 }

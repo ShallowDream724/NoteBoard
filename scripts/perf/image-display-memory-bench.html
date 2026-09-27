@@ -1,0 +1,15 @@
+<!doctype html><html><meta charset="utf-8"><title>Fixed image memory workload</title><style>body{margin:20px;font:14px sans-serif;background:#eee}main{display:grid;grid-template-columns:600px 600px;gap:16px}img{width:600px;height:337.5px;display:block}h1{font-size:18px}</style><body><h1>Four distinct 4K images</h1><p id="status">Loading</p><main></main><script type="module">
+import { ImageDisplayPreviewCache } from '/src/features/editor-md/imagePreviewCache.ts';
+const preview=new URLSearchParams(location.search).get('mode')==='preview',cache=new ImageDisplayPreviewCache(),leases=[];
+try {
+  const images=await Promise.all(Array.from({length:4},async(_,i)=>{
+    const original=new URL(`/.tmp/image-memory-fixture/image-${i}.png`,location.href).href;
+    let src=original;
+    if(preview){const lease=cache.acquire(original,1024);leases.push(lease);src=await lease.result;if(src===original)throw new Error('Preview fallback');}
+    const image=new Image();image.decoding='async';image.src=src;image.alt=`Fixture ${i}`;await image.decode();document.querySelector('main').append(image);return image;
+  }));
+  const sizes=images.map(image=>[image.naturalWidth,image.naturalHeight]);
+  document.querySelector('#status').textContent='READY '+JSON.stringify({mode:preview?'preview':'original',sizes,dpr:devicePixelRatio,width:innerWidth,height:innerHeight});
+  addEventListener('pagehide',()=>{leases.forEach(lease=>lease.release());cache.dispose();},{once:true});
+}catch(error){document.querySelector('#status').textContent='FAIL '+String(error);}
+</script></body></html>

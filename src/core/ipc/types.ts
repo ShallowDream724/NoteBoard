@@ -156,6 +156,7 @@ export interface TransferStatusDto {
 
 /** already-open 在读盘前返回；text 携带已读入的完整 payload；其余分支不读正文 */
 export type PreparedDocument =
+  | { type: 'confirmation-required'; key: string; displayName: string; size: number }
   | { type: 'directory'; path: string }
   | {
       type: 'image';
@@ -323,6 +324,7 @@ export interface FileSettings {
   restoreSession: boolean;
   imageDirName: string;
   imageDeletionPolicy?: 'ask' | 'keep' | 'trash';
+  imageCaptionDeletionPolicy?: 'ask' | 'remove' | 'keep';
   largeFileConfirmMb: number;
   // 未保存文件的用户可见暂存目录（绝对路径）
   stagingDirectory: string;

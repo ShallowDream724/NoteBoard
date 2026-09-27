@@ -269,6 +269,8 @@ pub struct FileSettings {
     pub image_dir_name: String,
     #[serde(default = "default_image_deletion_policy")]
     pub image_deletion_policy: String,
+    #[serde(default = "default_image_deletion_policy")]
+    pub image_caption_deletion_policy: String,
     #[serde(default = "default_large_file_mb")]
     pub large_file_confirm_mb: u32,
     // 暂存目录使用绝对路径；旧版设置缺失该字段时自动补为应用数据目录下的 staging。
@@ -289,6 +291,7 @@ impl Default for FileSettings {
             restore_session: true,
             image_dir_name: "img".to_string(),
             image_deletion_policy: default_image_deletion_policy(),
+            image_caption_deletion_policy: default_image_deletion_policy(),
             large_file_confirm_mb: 50,
             staging_directory: default_staging_directory(),
         }

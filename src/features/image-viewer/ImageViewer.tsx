@@ -19,6 +19,7 @@ import {
   Check,
   Sparkles,
   Grid,
+  Pencil,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
@@ -27,6 +28,8 @@ import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../../components/Tooltip';
 import { useImageWheelGesture } from './imageWheelGesture';
 import { formatFileSize } from '../../core/formatFileSize';
+import { on, off } from '../../core/emitter';
+import { sameKey } from '../explorer/pathUtils';
 
 interface ImageViewerProps {
   docKey: string;
@@ -54,6 +57,8 @@ function getAspectRatio(w: number, h: number): string {
 export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewerProps) {
   const name = fileName || filePath.split(/[\\/]/).pop() || filePath;
   const ext = extFromPath(filePath).toUpperCase() || 'IMAGE';
+  const editorOpenEpoch = useRef(0);
+  useEffect(() => { editorOpenEpoch.current++; return () => { editorOpenEpoch.current++; }; }, [docKey, filePath]);
 
   // 将本地路径转换为 asset: / webview 协议 URL
   const [imgSrc, setImgSrc] = useState<string>('');
@@ -65,6 +70,13 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       // 降级为原生路径
       setImgSrc(filePath);
     }
+  }, [filePath]);
+  useEffect(() => {
+    const restored = ({ path }: { path: string }) => {
+      if (sameKey(path, filePath)) { setLoadError(false); setImgSrc(`${convertFileSrc(filePath)}?edited=${Date.now()}`); }
+    };
+    on('image-file-restored', restored);
+    return () => off('image-file-restored', restored);
   }, [filePath]);
 
   // 图像元数据
@@ -450,6 +462,18 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         <div style={{ width: 1, height: 16, background: 'var(--editor-border)', margin: '0 4px' }} />
 
         {/* 复制图片 */}
+        <Tooltip content="编辑图片" side="bottom" sideOffset={6}>
+          <button type="button" aria-label="编辑图片" disabled={!imgSrc || loadError} style={btnStyle}
+            onClick={async () => {
+              const epoch = editorOpenEpoch.current;
+              try {
+                const { editImageFile } = await import('../image-editor/integration');
+                if (epoch !== editorOpenEpoch.current) return;
+                await editImageFile(docKey, filePath, imgSrc, name);
+              } catch { showToast('图片编辑器加载失败', 'error'); }
+            }}><Pencil size={15} /></button>
+        </Tooltip>
+
         <Tooltip content="复制图片到剪贴板" side="bottom" sideOffset={6}>
           <button
             type="button"
@@ -542,7 +566,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           <img
             ref={imgRef}
             data-image-preview-transform=""
-            src={imgSrc}
+            src={imgSrc || undefined}
             alt={name}
             referrerPolicy="no-referrer"
             onLoad={handleImageLoad}

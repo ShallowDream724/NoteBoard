@@ -159,7 +159,7 @@ describe('提示块内容与保存', () => {
       initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
       await act(async () => root.render(<CalloutMenu attrs={attrs} mode="icon" nativeVisible
         onChange={patch => { expect(patch).toEqual({ icon: 'success' }); expect(updateCallout(editor, 0, patch)).toBe(true); }}/>));
-      expect(host.querySelectorAll('[aria-label="预设图标"] button')).toHaveLength(6);
+      expect(host.querySelectorAll('[aria-label="预设图标"] button')).toHaveLength(12);
       await act(async () => (host.querySelector('[aria-label="完成"]') as HTMLButtonElement).click());
       expect(editor.state.doc.firstChild?.attrs).toMatchObject({ ...attrs, icon: 'success' });
       const restored = parseNativeNode(serializeNativeNode(editor.state.doc), documentParser().schema);

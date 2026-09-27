@@ -7,6 +7,8 @@ import { isListItem, listItemRemovalRange } from './listItemActions';
 import { DOCUMENT_SLICE_MIME } from './clipboard/constants';
 import { documentSliceClipboardData } from './clipboard/structured';
 import { isBlockInteractionTarget } from './blockInteractionScope';
+import { imageRemovalTransaction, requestImageRemoval } from './imageRemoval';
+import { imageSelectionSlice } from './imageCaptions';
 
 export function blockRange(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
@@ -38,6 +40,7 @@ export function formatBlock(editor: Editor, pos: number, command: (chain: Chaine
 }
 export function deleteBlock(editor: Editor, pos: number) {
   const range = blockRange(editor, pos); if (!range) return false;
+  if (range.node.type.name === 'image') { void requestImageRemoval(editor.view, pos); return true; }
   const removed = isListItem(range.node) ? listItemRemovalRange(editor.state.doc, pos) : range;
   dispatchDiscreteEdit(editor.view, editor.state.tr.delete(removed.from, removed.to)); editor.view.focus(); return true;
 }
@@ -51,7 +54,9 @@ export function insertAfterBlock(editor: Editor, pos: number) {
 /** Native copy keeps HTML/schema styles alongside plain text. Delete only after successful copy. */
 export function copyBlock(editor: Editor, pos: number, cut = false): boolean {
   const range = blockRange(editor, pos); if (!range) return false;
-  const slice = editor.state.doc.slice(range.from, range.to);
+  const slice = range.node.type.name === 'image'
+    ? imageSelectionSlice(editor.state.apply(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos))))
+    : editor.state.doc.slice(range.from, range.to);
   const serialized = editor.view.serializeForClipboard(slice);
   let copied = false;
   const write = (event: ClipboardEvent) => {
@@ -63,6 +68,10 @@ export function copyBlock(editor: Editor, pos: number, cut = false): boolean {
   };
   document.addEventListener('copy', write, true);
   try { editor.view.focus(); document.execCommand('copy'); } finally { document.removeEventListener('copy', write, true); }
-  if (copied && cut) deleteBlock(editor, pos);
+  if (copied && cut) {
+    const removed = isListItem(range.node) ? listItemRemovalRange(editor.state.doc, pos) : range;
+    const tr = range.node.type.name === 'image' ? imageRemovalTransaction(editor.state, pos, 'remove')! : editor.state.tr.delete(removed.from, removed.to);
+    dispatchDiscreteEdit(editor.view, tr.setMeta('noteboard-image-cut', true));
+  }
   return copied;
 }

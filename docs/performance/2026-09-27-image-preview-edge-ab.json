@@ -1,0 +1,3201 @@
+{
+  "method": {
+    "viewport": [
+      1280,
+      900
+    ],
+    "dpr": 1,
+    "cssImage": [
+      600,
+      337.5
+    ],
+    "settleSeconds": 10,
+    "samples": 7,
+    "intervalSeconds": 0.4,
+    "forceGc": false,
+    "cacheTrim": false,
+    "processScope": "Each independently launched Edge root PID and its recursive child processes"
+  },
+  "fixtures": [
+    {
+      "file": "image-0.png",
+      "width": 3840,
+      "height": 2160,
+      "size": 67581,
+      "sha256": "d44410ad8476270877e06588a6384eb6fb22ecb2fdc954aae6611e94ceac4b14"
+    },
+    {
+      "file": "image-1.png",
+      "width": 3840,
+      "height": 2160,
+      "size": 97057,
+      "sha256": "bd0ede2cd82cf6db04eb5e28a623d086ca78c3b78f497ad6767afbca1c46b3aa"
+    },
+    {
+      "file": "image-2.png",
+      "width": 3840,
+      "height": 2160,
+      "size": 120352,
+      "sha256": "51d6b04e46e87a2bf7f593e9890c89f3ea80cd89c27583ac8abb49f82e35bf5f"
+    },
+    {
+      "file": "image-3.png",
+      "width": 3840,
+      "height": 2160,
+      "size": 124748,
+      "sha256": "8ca8aad75496e8c62e13409925ad77fa2203cf42da569b5e3a424b806077402c"
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "mode": "original",
+      "status": "READY {\"mode\":\"original\",\"sizes\":[[3840,2160],[3840,2160],[3840,2160],[3840,2160]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 42660,
+        "createdAt": 1790506478.9579127,
+        "samples": [
+          {
+            "timestamp": 1790506490.7768128,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57311232,
+                "privateWorkingSet": 46383104,
+                "workingSet": 163680256
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3620864,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15855616,
+                "privateWorkingSet": 10326016,
+                "workingSet": 45932544
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585805824,
+            "privateWorkingSet": 485085184,
+            "workingSet": 939728896
+          },
+          {
+            "timestamp": 1790506491.2154078,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57311232,
+                "privateWorkingSet": 46383104,
+                "workingSet": 163680256
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3620864,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585801728,
+            "privateWorkingSet": 485081088,
+            "workingSet": 939724800
+          },
+          {
+            "timestamp": 1790506491.6554124,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57311232,
+                "privateWorkingSet": 46383104,
+                "workingSet": 163680256
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15810560
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585797632,
+            "privateWorkingSet": 485076992,
+            "workingSet": 939720704
+          },
+          {
+            "timestamp": 1790506492.094994,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57323520,
+                "privateWorkingSet": 46395392,
+                "workingSet": 163692544
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15810560
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585809920,
+            "privateWorkingSet": 485089280,
+            "workingSet": 939732992
+          },
+          {
+            "timestamp": 1790506492.5317717,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57323520,
+                "privateWorkingSet": 46395392,
+                "workingSet": 163692544
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15810560
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585809920,
+            "privateWorkingSet": 485089280,
+            "workingSet": 939732992
+          },
+          {
+            "timestamp": 1790506492.9792752,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57311232,
+                "privateWorkingSet": 46383104,
+                "workingSet": 163680256
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15810560
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585797632,
+            "privateWorkingSet": 485076992,
+            "workingSet": 939720704
+          },
+          {
+            "timestamp": 1790506493.4169378,
+            "processes": [
+              {
+                "pid": 42660,
+                "role": "browser",
+                "privateCommit": 57311232,
+                "privateWorkingSet": 46383104,
+                "workingSet": 163680256
+              },
+              {
+                "pid": 5692,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15810560
+              },
+              {
+                "pid": 52604,
+                "role": "gpu-process",
+                "privateCommit": 420433920,
+                "privateWorkingSet": 377815040,
+                "workingSet": 423870464
+              },
+              {
+                "pid": 40244,
+                "role": "utility",
+                "privateCommit": 15851520,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45928448
+              },
+              {
+                "pid": 44128,
+                "role": "utility",
+                "privateCommit": 10723328,
+                "privateWorkingSet": 5427200,
+                "workingSet": 26218496
+              },
+              {
+                "pid": 46892,
+                "role": "renderer",
+                "privateCommit": 20869120,
+                "privateWorkingSet": 10440704,
+                "workingSet": 39395328
+              },
+              {
+                "pid": 51776,
+                "role": "renderer",
+                "privateCommit": 35090432,
+                "privateWorkingSet": 21180416,
+                "workingSet": 175345664
+              },
+              {
+                "pid": 38060,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 15396,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4890624,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 585797632,
+            "privateWorkingSet": 485076992,
+            "workingSet": 939720704
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2897320,
+        "totalSize": 3936256,
+        "embedderHeapUsedSize": 1620168,
+        "backingStorageSize": 352574
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 31
+      },
+      "medianMiB": {
+        "privateCommit": 558.66,
+        "privateWorkingSet": 462.61,
+        "workingSet": 896.19
+      }
+    },
+    {
+      "round": 1,
+      "mode": "preview",
+      "status": "READY {\"mode\":\"preview\",\"sizes\":[[1024,576],[1024,576],[1024,576],[1024,576]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 50168,
+        "createdAt": 1790506494.2657957,
+        "samples": [
+          {
+            "timestamp": 1790506505.8862095,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15806464
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15978496,
+                "privateWorkingSet": 10440704,
+                "workingSet": 46125056
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304553984,
+            "privateWorkingSet": 203571200,
+            "workingSet": 575234048
+          },
+          {
+            "timestamp": 1790506506.318356,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15806464
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304533504,
+            "privateWorkingSet": 203550720,
+            "workingSet": 575213568
+          },
+          {
+            "timestamp": 1790506506.7520452,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304529408,
+            "privateWorkingSet": 203546624,
+            "workingSet": 575209472
+          },
+          {
+            "timestamp": 1790506507.1854901,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304529408,
+            "privateWorkingSet": 203546624,
+            "workingSet": 575209472
+          },
+          {
+            "timestamp": 1790506507.6184561,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304529408,
+            "privateWorkingSet": 203546624,
+            "workingSet": 575209472
+          },
+          {
+            "timestamp": 1790506508.0501692,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304529408,
+            "privateWorkingSet": 203546624,
+            "workingSet": 575209472
+          },
+          {
+            "timestamp": 1790506508.482244,
+            "processes": [
+              {
+                "pid": 50168,
+                "role": "browser",
+                "privateCommit": 60874752,
+                "privateWorkingSet": 49172480,
+                "workingSet": 166436864
+              },
+              {
+                "pid": 49884,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 52864,
+                "role": "gpu-process",
+                "privateCommit": 132599808,
+                "privateWorkingSet": 91013120,
+                "workingSet": 137056256
+              },
+              {
+                "pid": 51796,
+                "role": "utility",
+                "privateCommit": 15958016,
+                "privateWorkingSet": 10420224,
+                "workingSet": 46104576
+              },
+              {
+                "pid": 4984,
+                "role": "utility",
+                "privateCommit": 10665984,
+                "privateWorkingSet": 5386240,
+                "workingSet": 26157056
+              },
+              {
+                "pid": 48616,
+                "role": "renderer",
+                "privateCommit": 19865600,
+                "privateWorkingSet": 10485760,
+                "workingSet": 39424000
+              },
+              {
+                "pid": 44804,
+                "role": "renderer",
+                "privateCommit": 39014400,
+                "privateWorkingSet": 23552000,
+                "workingSet": 94740480
+              },
+              {
+                "pid": 51196,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5009408,
+                "workingSet": 25034752
+              },
+              {
+                "pid": 40252,
+                "role": "utility",
+                "privateCommit": 10174464,
+                "privateWorkingSet": 4898816,
+                "workingSet": 24453120
+              }
+            ],
+            "privateCommit": 304529408,
+            "privateWorkingSet": 203546624,
+            "workingSet": 575209472
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2921792,
+        "totalSize": 4198400,
+        "embedderHeapUsedSize": 1614024,
+        "backingStorageSize": 352983
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 33
+      },
+      "medianMiB": {
+        "privateCommit": 290.42,
+        "privateWorkingSet": 194.12,
+        "workingSet": 548.56
+      }
+    },
+    {
+      "round": 2,
+      "mode": "original",
+      "status": "READY {\"mode\":\"original\",\"sizes\":[[3840,2160],[3840,2160],[3840,2160],[3840,2160]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 38032,
+        "createdAt": 1790506509.193316,
+        "samples": [
+          {
+            "timestamp": 1790506520.6394227,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5087232,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15806464
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15847424,
+                "privateWorkingSet": 10321920,
+                "workingSet": 45924352
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584216576,
+            "privateWorkingSet": 483659776,
+            "workingSet": 904781824
+          },
+          {
+            "timestamp": 1790506521.0777793,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5087232,
+                "privateWorkingSet": 3608576,
+                "workingSet": 15806464
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584200192,
+            "privateWorkingSet": 483643392,
+            "workingSet": 904765440
+          },
+          {
+            "timestamp": 1790506521.512204,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5083136,
+                "privateWorkingSet": 3604480,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584196096,
+            "privateWorkingSet": 483639296,
+            "workingSet": 904761344
+          },
+          {
+            "timestamp": 1790506521.9499767,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5083136,
+                "privateWorkingSet": 3604480,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584196096,
+            "privateWorkingSet": 483639296,
+            "workingSet": 904761344
+          },
+          {
+            "timestamp": 1790506522.384886,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5083136,
+                "privateWorkingSet": 3604480,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584196096,
+            "privateWorkingSet": 483639296,
+            "workingSet": 904761344
+          },
+          {
+            "timestamp": 1790506522.8194444,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5083136,
+                "privateWorkingSet": 3604480,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584196096,
+            "privateWorkingSet": 483639296,
+            "workingSet": 904761344
+          },
+          {
+            "timestamp": 1790506523.2552087,
+            "processes": [
+              {
+                "pid": 38032,
+                "role": "browser",
+                "privateCommit": 57016320,
+                "privateWorkingSet": 46346240,
+                "workingSet": 163295232
+              },
+              {
+                "pid": 52544,
+                "role": "crashpad-handler",
+                "privateCommit": 5083136,
+                "privateWorkingSet": 3604480,
+                "workingSet": 15802368
+              },
+              {
+                "pid": 44628,
+                "role": "gpu-process",
+                "privateCommit": 418942976,
+                "privateWorkingSet": 376401920,
+                "workingSet": 422494208
+              },
+              {
+                "pid": 37216,
+                "role": "utility",
+                "privateCommit": 15831040,
+                "privateWorkingSet": 10305536,
+                "workingSet": 45907968
+              },
+              {
+                "pid": 52280,
+                "role": "utility",
+                "privateCommit": 10678272,
+                "privateWorkingSet": 5394432,
+                "workingSet": 26181632
+              },
+              {
+                "pid": 52236,
+                "role": "renderer",
+                "privateCommit": 22675456,
+                "privateWorkingSet": 10461184,
+                "workingSet": 42217472
+              },
+              {
+                "pid": 24776,
+                "role": "renderer",
+                "privateCommit": 33546240,
+                "privateWorkingSet": 21241856,
+                "workingSet": 139382784
+              },
+              {
+                "pid": 39668,
+                "role": "utility",
+                "privateCommit": 10268672,
+                "privateWorkingSet": 5001216,
+                "workingSet": 25038848
+              },
+              {
+                "pid": 51204,
+                "role": "utility",
+                "privateCommit": 10153984,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24440832
+              }
+            ],
+            "privateCommit": 584196096,
+            "privateWorkingSet": 483639296,
+            "workingSet": 904761344
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2892496,
+        "totalSize": 4198400,
+        "embedderHeapUsedSize": 1618736,
+        "backingStorageSize": 352574
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 31
+      },
+      "medianMiB": {
+        "privateCommit": 557.13,
+        "privateWorkingSet": 461.23,
+        "workingSet": 862.85
+      }
+    },
+    {
+      "round": 2,
+      "mode": "preview",
+      "status": "READY {\"mode\":\"preview\",\"sizes\":[[1024,576],[1024,576],[1024,576],[1024,576]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 48404,
+        "createdAt": 1790506523.9982274,
+        "samples": [
+          {
+            "timestamp": 1790506535.589059,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60219392,
+                "privateWorkingSet": 48427008,
+                "workingSet": 165711872
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16084992,
+                "privateWorkingSet": 10534912,
+                "workingSet": 46202880
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299831296,
+            "privateWorkingSet": 201814016,
+            "workingSet": 570830848
+          },
+          {
+            "timestamp": 1790506536.02031,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60219392,
+                "privateWorkingSet": 48427008,
+                "workingSet": 165711872
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299806720,
+            "privateWorkingSet": 201789440,
+            "workingSet": 570806272
+          },
+          {
+            "timestamp": 1790506536.4521434,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60215296,
+                "privateWorkingSet": 48422912,
+                "workingSet": 165707776
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299802624,
+            "privateWorkingSet": 201785344,
+            "workingSet": 570802176
+          },
+          {
+            "timestamp": 1790506536.8852112,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60215296,
+                "privateWorkingSet": 48422912,
+                "workingSet": 165707776
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299802624,
+            "privateWorkingSet": 201785344,
+            "workingSet": 570802176
+          },
+          {
+            "timestamp": 1790506537.3186913,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60215296,
+                "privateWorkingSet": 48422912,
+                "workingSet": 165707776
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299802624,
+            "privateWorkingSet": 201785344,
+            "workingSet": 570802176
+          },
+          {
+            "timestamp": 1790506537.7504816,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60215296,
+                "privateWorkingSet": 48422912,
+                "workingSet": 165707776
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299802624,
+            "privateWorkingSet": 201785344,
+            "workingSet": 570802176
+          },
+          {
+            "timestamp": 1790506538.1841588,
+            "processes": [
+              {
+                "pid": 48404,
+                "role": "browser",
+                "privateCommit": 60215296,
+                "privateWorkingSet": 48422912,
+                "workingSet": 165707776
+              },
+              {
+                "pid": 52028,
+                "role": "crashpad-handler",
+                "privateCommit": 5107712,
+                "privateWorkingSet": 3624960,
+                "workingSet": 15826944
+              },
+              {
+                "pid": 34348,
+                "role": "gpu-process",
+                "privateCommit": 131063808,
+                "privateWorkingSet": 89710592,
+                "workingSet": 135712768
+              },
+              {
+                "pid": 52036,
+                "role": "utility",
+                "privateCommit": 16060416,
+                "privateWorkingSet": 10510336,
+                "workingSet": 46178304
+              },
+              {
+                "pid": 24996,
+                "role": "utility",
+                "privateCommit": 10682368,
+                "privateWorkingSet": 5406720,
+                "workingSet": 26402816
+              },
+              {
+                "pid": 31200,
+                "role": "renderer",
+                "privateCommit": 19836928,
+                "privateWorkingSet": 10452992,
+                "workingSet": 39378944
+              },
+              {
+                "pid": 50260,
+                "role": "renderer",
+                "privateCommit": 36409344,
+                "privateWorkingSet": 23756800,
+                "workingSet": 92119040
+              },
+              {
+                "pid": 39092,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25047040
+              },
+              {
+                "pid": 39248,
+                "role": "utility",
+                "privateCommit": 10141696,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24428544
+              }
+            ],
+            "privateCommit": 299802624,
+            "privateWorkingSet": 201785344,
+            "workingSet": 570802176
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2921744,
+        "totalSize": 4198400,
+        "embedderHeapUsedSize": 1617872,
+        "backingStorageSize": 352983
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 33
+      },
+      "medianMiB": {
+        "privateCommit": 285.91,
+        "privateWorkingSet": 192.44,
+        "workingSet": 544.36
+      }
+    },
+    {
+      "round": 3,
+      "mode": "original",
+      "status": "READY {\"mode\":\"original\",\"sizes\":[[3840,2160],[3840,2160],[3840,2160],[3840,2160]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 38048,
+        "createdAt": 1790506538.8890562,
+        "samples": [
+          {
+            "timestamp": 1790506550.3322465,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16048128,
+                "privateWorkingSet": 10444800,
+                "workingSet": 45989888
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579641344,
+            "privateWorkingSet": 481873920,
+            "workingSet": 899985408
+          },
+          {
+            "timestamp": 1790506550.7674487,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          },
+          {
+            "timestamp": 1790506551.2018785,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          },
+          {
+            "timestamp": 1790506551.6374247,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          },
+          {
+            "timestamp": 1790506552.0723019,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          },
+          {
+            "timestamp": 1790506552.5073981,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          },
+          {
+            "timestamp": 1790506552.943764,
+            "processes": [
+              {
+                "pid": 38048,
+                "role": "browser",
+                "privateCommit": 57200640,
+                "privateWorkingSet": 46399488,
+                "workingSet": 163328000
+              },
+              {
+                "pid": 24252,
+                "role": "crashpad-handler",
+                "privateCommit": 5091328,
+                "privateWorkingSet": 3616768,
+                "workingSet": 15814656
+              },
+              {
+                "pid": 41844,
+                "role": "gpu-process",
+                "privateCommit": 416940032,
+                "privateWorkingSet": 374558720,
+                "workingSet": 420585472
+              },
+              {
+                "pid": 41236,
+                "role": "utility",
+                "privateCommit": 16044032,
+                "privateWorkingSet": 10440704,
+                "workingSet": 45985792
+              },
+              {
+                "pid": 52864,
+                "role": "utility",
+                "privateCommit": 10670080,
+                "privateWorkingSet": 5390336,
+                "workingSet": 26161152
+              },
+              {
+                "pid": 51796,
+                "role": "renderer",
+                "privateCommit": 19845120,
+                "privateWorkingSet": 10448896,
+                "workingSet": 39366656
+              },
+              {
+                "pid": 44616,
+                "role": "renderer",
+                "privateCommit": 33402880,
+                "privateWorkingSet": 21135360,
+                "workingSet": 139276288
+              },
+              {
+                "pid": 53208,
+                "role": "utility",
+                "privateCommit": 10285056,
+                "privateWorkingSet": 4997120,
+                "workingSet": 25030656
+              },
+              {
+                "pid": 46892,
+                "role": "utility",
+                "privateCommit": 10158080,
+                "privateWorkingSet": 4882432,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 579637248,
+            "privateWorkingSet": 481869824,
+            "workingSet": 899981312
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2897260,
+        "totalSize": 4198400,
+        "embedderHeapUsedSize": 1619040,
+        "backingStorageSize": 352574
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 31
+      },
+      "medianMiB": {
+        "privateCommit": 552.79,
+        "privateWorkingSet": 459.55,
+        "workingSet": 858.29
+      }
+    },
+    {
+      "round": 3,
+      "mode": "preview",
+      "status": "READY {\"mode\":\"preview\",\"sizes\":[[1024,576],[1024,576],[1024,576],[1024,576]],\"dpr\":1,\"width\":1280,\"height\":900}",
+      "browserVersion": "154.0.4258.37",
+      "group": {
+        "pid": 48884,
+        "createdAt": 1790506553.6792848,
+        "samples": [
+          {
+            "timestamp": 1790506565.2923365,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 59953152,
+                "privateWorkingSet": 49221632,
+                "workingSet": 166428672
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16125952,
+                "privateWorkingSet": 10600448,
+                "workingSet": 46264320
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 305704960,
+            "privateWorkingSet": 204611584,
+            "workingSet": 576212992
+          },
+          {
+            "timestamp": 1790506565.7312548,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 59953152,
+                "privateWorkingSet": 49221632,
+                "workingSet": 166428672
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 305684480,
+            "privateWorkingSet": 204591104,
+            "workingSet": 576192512
+          },
+          {
+            "timestamp": 1790506566.1677632,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 60760064,
+                "privateWorkingSet": 50028544,
+                "workingSet": 167309312
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 306491392,
+            "privateWorkingSet": 205398016,
+            "workingSet": 577073152
+          },
+          {
+            "timestamp": 1790506566.603634,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 60755968,
+                "privateWorkingSet": 50024448,
+                "workingSet": 167305216
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 306487296,
+            "privateWorkingSet": 205393920,
+            "workingSet": 577069056
+          },
+          {
+            "timestamp": 1790506567.0408254,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 60760064,
+                "privateWorkingSet": 50028544,
+                "workingSet": 167309312
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 306491392,
+            "privateWorkingSet": 205398016,
+            "workingSet": 577073152
+          },
+          {
+            "timestamp": 1790506567.473094,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 60760064,
+                "privateWorkingSet": 50028544,
+                "workingSet": 167309312
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 306491392,
+            "privateWorkingSet": 205398016,
+            "workingSet": 577073152
+          },
+          {
+            "timestamp": 1790506567.9078639,
+            "processes": [
+              {
+                "pid": 48884,
+                "role": "browser",
+                "privateCommit": 60755968,
+                "privateWorkingSet": 50024448,
+                "workingSet": 167305216
+              },
+              {
+                "pid": 31520,
+                "role": "crashpad-handler",
+                "privateCommit": 5095424,
+                "privateWorkingSet": 3612672,
+                "workingSet": 15818752
+              },
+              {
+                "pid": 13772,
+                "role": "gpu-process",
+                "privateCommit": 133562368,
+                "privateWorkingSet": 92024832,
+                "workingSet": 138059776
+              },
+              {
+                "pid": 52084,
+                "role": "utility",
+                "privateCommit": 16105472,
+                "privateWorkingSet": 10579968,
+                "workingSet": 46243840
+              },
+              {
+                "pid": 31952,
+                "role": "utility",
+                "privateCommit": 10653696,
+                "privateWorkingSet": 5373952,
+                "workingSet": 26144768
+              },
+              {
+                "pid": 52152,
+                "role": "renderer",
+                "privateCommit": 20893696,
+                "privateWorkingSet": 10457088,
+                "workingSet": 39407616
+              },
+              {
+                "pid": 51096,
+                "role": "renderer",
+                "privateCommit": 38981632,
+                "privateWorkingSet": 23429120,
+                "workingSet": 94601216
+              },
+              {
+                "pid": 50220,
+                "role": "utility",
+                "privateCommit": 10293248,
+                "privateWorkingSet": 5017600,
+                "workingSet": 25055232
+              },
+              {
+                "pid": 37800,
+                "role": "utility",
+                "privateCommit": 10145792,
+                "privateWorkingSet": 4874240,
+                "workingSet": 24432640
+              }
+            ],
+            "privateCommit": 306487296,
+            "privateWorkingSet": 205393920,
+            "workingSet": 577069056
+          }
+        ]
+      },
+      "heap": {
+        "usedSize": 2921168,
+        "totalSize": 4198400,
+        "embedderHeapUsedSize": 1617288,
+        "backingStorageSize": 352983
+      },
+      "dom": {
+        "documents": 4,
+        "nodes": 40,
+        "jsEventListeners": 33
+      },
+      "medianMiB": {
+        "privateCommit": 292.29,
+        "privateWorkingSet": 195.88,
+        "workingSet": 550.34
+      }
+    }
+  ]
+}
