@@ -6,6 +6,8 @@ import { selectBlock } from './blockActions';
 import { styleSelectedCells } from '../document-style/cellTextStyle';
 import { figureCaptionContent } from './figureCaption';
 import { BlockMetadataStep } from './blockMetadataStep';
+import { NodeSelection } from '@tiptap/pm/state';
+import { unwrapCallout } from './alertCommands';
 
 /** Presentation only. Links, annotations and concealment carry meaning. */
 export const TEXT_STYLE_MARKS = ['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'textColor', 'subscript', 'superscript'] as const;
@@ -15,7 +17,7 @@ export const TEXT_STYLE_MARKS = ['bold', 'italic', 'underline', 'strike', 'code'
 const BLOCK_TEXT_FORMATTING: Record<string, boolean> = {
   paragraph: true, heading: true, bulletList: true, orderedList: true,
   taskList: true, listItem: true, taskItem: true, blockquote: true,
-  githubAlert: true, disclosure: true, table: true,
+  githubAlert: false, disclosure: true, table: true,
   codeBlock: false, mathBlock: false, mermaidBlock: false,
   image: false, imageCollection: false, imageSlot: false,
   horizontalRule: false, documentPresentation: false,
@@ -26,6 +28,7 @@ export function supportsBlockTextFormatting(node: Node): boolean {
 
 export function clearSelectionTextFormatting(editor: Editor): boolean {
   const { state } = editor, { selection } = state;
+  if (selection instanceof NodeSelection && selection.node.type.name === 'githubAlert') return unwrapCallout(editor, selection.from);
   const marks = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
   if (selection instanceof CellSelection) {
     const result = styleSelectedCells(editor, marks.map(type => ({ type, attrs: null })), { textColor: null, background: null });
@@ -44,8 +47,9 @@ export function clearSelectionTextFormatting(editor: Editor): boolean {
   return true;
 }
 
-export function clearBlockTextFormatting(editor: Editor, pos: number): boolean {
+export function clearBlockFormatting(editor: Editor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
+  if (node?.type.name === 'githubAlert') return unwrapCallout(editor, pos);
   if (!node || !supportsBlockTextFormatting(node) || !selectBlock(editor, pos, true)) return false;
   return clearSelectionTextFormatting(editor);
 }

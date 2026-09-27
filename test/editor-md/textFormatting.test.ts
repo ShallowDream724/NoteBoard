@@ -3,20 +3,49 @@ import { describe, it, expect } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { CellSelection, TableMap } from '@tiptap/pm/tables';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
-import { clearBlockTextFormatting, clearCaptionTextFormatting, clearSelectionTextFormatting, supportsBlockTextFormatting } from '../../src/features/editor-md/textFormatting';
+import { clearBlockFormatting, clearCaptionTextFormatting, clearSelectionTextFormatting, supportsBlockTextFormatting } from '../../src/features/editor-md/textFormatting';
 import { toggleSelectedCellMark } from '../../src/features/document-style/cellTextStyle';
 import { transactionStart } from '../../src/features/editor-md/transactionStart';
 import { nativeTestEditor } from './nativeTestEditor';
+import { NodeSelection } from '@tiptap/pm/state';
 
 function create(content: string) { return nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(), content })); }
 const table = '<table data-table-align="right"><tr><th><p><b>A</b></p></th><th><p><b>B</b></p></th><th><p><b>C</b></p></th></tr><tr><td><p><b>D</b></p></td><td><p><b>E</b></p></td><td><p><b>F</b></p></td></tr><tr><td><p><b>G</b></p></td><td><p><b>H</b></p></td><td><p><b>I</b></p></td></tr></table>';
 describe('clear text presentation without clearing meaning or structure', () => {
+  it('unwraps a Callout while keeping its body marks, custom title, nested blocks and annotation', () => {
+    const editor = create('<p>before</p><div data-alert="note" data-callout-title="Custom title" data-annotation-id="note-1"><div class="alert-body"><p><b><a href="https://example.com">keep</a></b></p><blockquote><p>nested</p></blockquote><img src="one.png"></div></div><p>after</p>');
+    try {
+      const before = editor.state.doc, pos = before.firstChild!.nodeSize, callout = before.nodeAt(pos)!;
+      expect(clearBlockFormatting(editor, pos)).toBe(true);
+      expect(editor.state.doc.nodeAt(pos)!.textContent).toBe('Custom title');
+      expect(editor.state.doc.nodeAt(pos)!.attrs.annotationId).toBe('note-1');
+      expect(editor.state.doc.child(2).eq(callout.child(0))).toBe(true);
+      expect(editor.state.doc.child(3).eq(callout.child(1))).toBe(true);
+      expect(editor.state.doc.child(4).eq(callout.child(2))).toBe(true);
+      expect(editor.state.doc.lastChild).toBe(before.lastChild);
+      editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    } finally { editor.destroy(); }
+  });
+  it('clears a selected Callout shell from the toolbar, but selected text only loses its text marks', () => {
+    const editor = create('<div data-alert="note"><div class="alert-body"><p><b>inside</b></p></div></div><p>after</p>');
+    try {
+      const before = editor.state.doc;
+      editor.commands.setTextSelection({ from: 2, to: 8 }); clearSelectionTextFormatting(editor);
+      expect(editor.state.doc.firstChild!.type.name).toBe('githubAlert');
+      expect(editor.state.doc.firstChild!.firstChild!.firstChild!.marks).toHaveLength(0);
+      editor.commands.undo();
+      editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 0)));
+      clearSelectionTextFormatting(editor);
+      expect(editor.state.doc.firstChild!.eq(before.firstChild!.firstChild!)).toBe(true);
+      editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    } finally { editor.destroy(); }
+  });
   it('keeps heading level, links, and unrelated blocks, undo stays at the operated block', () => {
     const editor = create('<p>old caret</p><h2><a href="https://example.com"><b><i>title</i></b></a></h2><p><b>tail</b></p>');
     try {
       const pos = editor.state.doc.firstChild!.nodeSize, before = editor.state.doc;
       editor.commands.setTextSelection(1);
-      expect(clearBlockTextFormatting(editor, pos)).toBe(true);
+      expect(clearBlockFormatting(editor, pos)).toBe(true);
       const heading = editor.state.doc.nodeAt(pos)!;
       expect(heading.type.name).toBe('heading'); expect(heading.attrs.level).toBe(2);
       expect(heading.firstChild!.marks.map(mark => mark.type.name)).toEqual(['link']);

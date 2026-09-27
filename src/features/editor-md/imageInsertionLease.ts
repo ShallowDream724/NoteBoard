@@ -9,7 +9,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { getSessionGeneration, isClosing } from '../session/documentSession';
 import { getMdSourceView, getMdTipTapEditor } from './editorInstances';
 import { dispatchDiscreteEdit } from './discreteEdit';
-import { ensureDisclosureTail } from './rich-content/disclosureEditing';
+import { ensureContainerTail } from './containerEditing';
 import { revealInsertedImage } from './imageInsertionScroll';
 
 export interface InsertedImage { src: string; alt: string }
@@ -150,7 +150,7 @@ export function insertViewImages(view: import('@tiptap/pm/view').EditorView, ima
       });
     });
     if (firstImage !== undefined) tr.setSelection(NodeSelection.create(tr.doc, firstImage));
-    ensureDisclosureTail(tr, raw);
+    ensureContainerTail(tr, raw);
   }
   // Pointer-targeted drops/pastes are already in view. Scrolling the previous
   // caret can jump to a different paragraph; image decode must not pull it back.

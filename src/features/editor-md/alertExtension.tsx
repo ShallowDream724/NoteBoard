@@ -11,6 +11,7 @@ import { AnnotationMarker } from './annotations/AnnotationMarker';
 import { annotationMarkerId } from './annotations/marker';
 import './callout.css';
 import CalloutMenu from './CalloutMenu';
+import { continueContainerWriting, handleContainerTailKey, needsContainerTail } from './containerEditing';
 
 export type { AlertKind } from './alertPresentation';
 
@@ -43,7 +44,10 @@ function AlertComponent({ node, editor, getPos, selected, decorations }: NodeVie
         <CalloutMenu attrs={attrs} mode={menu} nativeVisible={nativeVisible} onChange={update}/>
       </Popover.Content></Popover.Portal>}
     </Popover.Root>
-    <NodeViewContent className="alert-body"/>
+    <NodeViewContent className="alert-body" onKeyDown={event => handleContainerTailKey(editor, getPos(), event)}/>
+    {editor.isEditable && needsContainerTail(node) && <button type="button" contentEditable={false} className="nb-callout-tail"
+      aria-label="在提示块末尾继续输入" title="在提示块末尾继续输入" onMouseDown={event => event.preventDefault()}
+      onClick={() => continueContainerWriting(editor, getPos())}/>}
   </NodeViewWrapper>;
 }
 

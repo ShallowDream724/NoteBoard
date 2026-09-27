@@ -3,7 +3,7 @@ import { createTable } from '@tiptap/extension-table';
 import { TextSelection } from '@tiptap/pm/state';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { revealEditorBlock } from './editorViewport';
-import { ensureDisclosureTail } from './rich-content/disclosureEditing';
+import { ensureContainerTail } from './containerEditing';
 
 /** Toolbar and slash insertion share one edit and one viewport owner. TipTap's
  * insertTable command requests caret scrolling, so use its public node factory
@@ -27,7 +27,7 @@ export function insertDocumentTable(editor: Editor, rows: number, cols: number, 
   });
   if (tablePos === undefined) return false;
   tr.setSelection(TextSelection.near(tr.doc.resolve(tablePos + 1)));
-  ensureDisclosureTail(tr, originalPos, false);
+  ensureContainerTail(tr, originalPos, false);
   dispatchDiscreteEdit(view, tr);
   view.focus();
   revealEditorBlock(view, tablePos);

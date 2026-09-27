@@ -16,7 +16,7 @@ import { dispatchDiscreteEdit } from '../discreteEdit';
 import { showToast } from '../../../stores/toastStore';
 import { CLIPBOARD_LIMITS, ClipboardImportError, type ClipboardImportResult } from './normalize';
 import { clipboardHtmlSource, MARKDOWN_MIMES, needsClipboardImageFallback, normalizeExternalHtml, normalizeExternalText, type ExternalTextOptions } from './external';
-import { ensureDisclosureTail } from '../rich-content/disclosureEditing';
+import { ensureContainerTail } from '../containerEditing';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -87,7 +87,7 @@ function synchronousNodes(content: JSONContent[], schema: Schema): PMNode[] {
 }
 export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection): boolean {
   const tr = view.state.tr.setSelection(selection).replaceSelection(imported.slice);
-  ensureDisclosureTail(tr, selection.from);
+  ensureContainerTail(tr, selection.from);
   mergeImportedAnnotationBodies(tr, imported.bodies);
   dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
 }

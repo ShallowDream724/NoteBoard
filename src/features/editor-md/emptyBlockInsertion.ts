@@ -7,7 +7,7 @@ import { isEmptyParagraph } from './blockInteractionScope';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { editorDocumentKey } from './editorDocumentCodec';
 import { captureVisualInsertion, type InsertionLease } from './imageInsertionLease';
-import { ensureDisclosureTail } from './rich-content/disclosureEditing';
+import { ensureContainerTail } from './containerEditing';
 import { revealInsertedImage } from './imageInsertionScroll';
 import { revealEditorBlock } from './editorViewport';
 
@@ -23,7 +23,7 @@ export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSON
   tr.setSelection(nodes[0].isAtom && NodeSelection.isSelectable(nodes[0])
     ? NodeSelection.create(tr.doc, pos)
     : TextSelection.near(tr.doc.resolve(pos + (nodes[0].isTextblock ? nodes[0].nodeSize - 1 : 1))));
-  ensureDisclosureTail(tr, pos + 1);
+  ensureContainerTail(tr, pos + 1);
   const image = nodes[0].type.name === 'image';
   dispatchDiscreteEdit(view, tr); view.focus();
   if (image) revealInsertedImage(view, pos);
