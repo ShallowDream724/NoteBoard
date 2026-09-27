@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { assertImageExportCapacity, exportImageEdit, getImageExportSize, LargeImageExportConfirmationError } from '../../src/features/image-editor/exporter';
 import { createImageEditRecipe, type ImageEditOperation } from '../../src/features/image-editor/model';
 import { renderImageEdit } from '../../src/features/image-editor/renderer';
+import { measureTextLayout } from '../../src/features/image-editor/textMetrics';
 import type { ImageResource } from '../../src/features/image-editor/resources';
 
 function mockContext(canvas = document.createElement('canvas')) {
@@ -32,20 +33,19 @@ const operations: ImageEditOperation[] = [
   { id: 'marker', type: 'marker', center: { x: 30, y: 30 }, size: 20, value: 4, format: 'roman', shape: 'square', appearance: 'ring', style },
   { id: 'spotlight', type: 'spotlight', rect: { x: 10, y: 10, width: 20, height: 20 }, shape: 'ellipse', opacity: .5 },
   { id: 'magnifier', type: 'magnifier', center: { x: 30, y: 30 }, radius: 10, zoom: 2, style },
-  { id: 'eraser', type: 'eraser', points: [{ x: 5, y: 5 }, { x: 15, y: 15 }], width: 10 },
 ];
 
 describe('image renderer', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('renders every vector/effect family and balances all context scopes', () => {
+  it('renders vector/effect families and balances all context scopes', () => {
     const { context, methods, depth } = mockContext();
     renderImageEdit(context, resource(100, 80), { ...createImageEditRecipe(100, 80), operations }, { width: 200, height: 160 });
     expect(depth()).toBe(0);
     expect(methods.scale).toHaveBeenCalledWith(2, 2);
     expect(methods.fill).toHaveBeenCalledWith('evenodd');
     expect(methods.fillText).toHaveBeenCalledWith('IV', 30, 30.4, 15);
-    expect(methods.drawImage).toHaveBeenCalledTimes(3); // Base, magnifier, restored source within eraser.
+    expect(methods.drawImage).toHaveBeenCalledTimes(2); // Base and magnifier.
     expect(methods.setLineDash).toHaveBeenCalledWith([16, 8, 4, 8]);
   });
 
@@ -54,6 +54,17 @@ describe('image renderer', () => {
     methods.drawImage.mockImplementationOnce(() => {}).mockImplementationOnce(() => { throw new Error('decode unavailable'); });
     expect(() => renderImageEdit(context, resource(100, 80), { ...createImageEditRecipe(100, 80), operations: [operations[8]] })).toThrow('decode unavailable');
     expect(depth()).toBe(0);
+  });
+
+  it('renders multiline text using the same font and line height as geometry', () => {
+    const { context, methods } = mockContext();
+    const operation = { id: 'text', type: 'text', position: { x: 7, y: 9 }, text: '图上\n😀', color: '#000', fontSize: 20, bold: true, italic: true, fontFamily: 'Noto Sans CJK SC' } as const;
+    renderImageEdit(context, resource(100, 80), { ...createImageEditRecipe(100, 80), operations: [operation] });
+    const { baseline, lineHeight } = measureTextLayout(operation);
+    expect(context.font).toBe('italic bold 20px Noto Sans CJK SC');
+    expect(context.textBaseline).toBe('alphabetic');
+    expect(methods.fillText).toHaveBeenCalledWith('图上', 7, 9 + baseline);
+    expect(methods.fillText).toHaveBeenCalledWith('😀', 7, 9 + baseline + lineHeight);
   });
 
   it('bounds and releases mosaic scratch canvases on success and failure', () => {

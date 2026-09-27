@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="UTF-8"><title>Image editor interaction regression</title>
+<body><script type="module">
+import { openImageEditor, suspendImageEditor } from '/src/features/image-editor/index';
+import { getImageEditorDraft } from '/src/features/image-editor/sessions';
+const canvas = new OffscreenCanvas(1200, 800), ctx = canvas.getContext('2d');
+ctx.fillStyle = '#f1d2bd'; ctx.fillRect(0, 0, 1200, 800);
+ctx.fillStyle = '#8aabb0'; ctx.fillRect(0, 460, 1200, 340);
+ctx.fillStyle = '#d99156'; ctx.beginPath(); ctx.arc(920, 200, 80, 0, Math.PI * 2); ctx.fill();
+const source = URL.createObjectURL(await canvas.convertToBlob({ type: 'image/png' }));
+canvas.width = canvas.height = 0;
+window.qa = {
+  source, mode: 'success', saved: [],
+  open: (key = 'a') => openImageEditor({ key, src: source, name: '测试图片.png', onSave: async (blob, metadata) => {
+    if (window.qa.mode === 'cancel') return false;
+    if (window.qa.mode === 'error') throw new Error('保存失败测试');
+    window.qa.saved.push({ metadata, bytes: blob.size });
+  }}),
+  suspend: suspendImageEditor, draft: (key = 'a') => getImageEditorDraft(key),
+};
+document.body.style.margin = '0';
+document.body.style.fontFamily = 'Segoe UI, Microsoft YaHei, sans-serif';
+window.qa.open();
+</script></body></html>

@@ -1,6 +1,7 @@
-import { getOutputSize, getSourceTransform, validateImageEditRecipe } from './geometry';
+import { getMagnifierRect, getOperationBounds, getOutputSize, getSourceTransform, validateImageEditRecipe } from './geometry';
 import { formatMarkerValue, type ArrowHead, type ImageEditOperation, type ImageEditRecipe, type Point, type StrokeStyle } from './model';
 import { releaseCanvas, throwIfImageEditAborted, type ImageResource } from './resources';
+import { formatTextCanvasFont, measureTextLayout } from './textMetrics';
 
 export interface RenderImageEditOptions {
   readonly width?: number;
@@ -42,31 +43,66 @@ function drawSource(context: ImageRenderContext, resource: ImageResource): void 
   context.drawImage(resource.image, 0, 0, resource.width, resource.height);
 }
 
-/** A union of circles and segment polygons provides a round stroked clipping area. */
-function eraserClip(context: ImageRenderContext, points: readonly Point[], width: number): void {
-  const radius = Math.max(.1, width / 2);
-  context.beginPath();
-  for (let index = 0; index < points.length; index++) {
-    const p = points[index];
-    context.moveTo(p.x + radius, p.y); context.arc(p.x, p.y, radius, 0, Math.PI * 2);
-    if (index === 0) continue;
-    const previous = points[index - 1], dx = p.x - previous.x, dy = p.y - previous.y, length = Math.hypot(dx, dy);
-    if (!length) continue;
-    const nx = -dy / length * radius, ny = dx / length * radius;
-    context.moveTo(previous.x + nx, previous.y + ny);
-    context.lineTo(previous.x - nx, previous.y - ny);
-    context.lineTo(p.x - nx, p.y - ny);
-    context.lineTo(p.x + nx, p.y + ny);
-    context.closePath();
-  }
-  context.clip();
+function makeScratchCanvas(): HTMLCanvasElement | OffscreenCanvas {
+  return typeof document === 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
 }
 
-function drawMosaic(context: ImageRenderContext, resource: ImageResource, operation: Extract<ImageEditOperation, { type: 'mosaic' }>): void {
-  const { rect } = operation, block = Math.max(1, operation.blockSize);
+function strokeBrush(context: ImageRenderContext, points: readonly Point[], width: number): void {
+  if (!points.length) return;
+  context.lineWidth = Math.max(.1, width); context.lineCap = 'round'; context.lineJoin = 'round';
+  if (points.length === 1) {
+    context.beginPath(); context.arc(points[0].x, points[0].y, Math.max(.1, width / 2), 0, Math.PI * 2); context.fill();
+  } else { path(context, points); context.stroke(); }
+}
+
+/** Restore source pixels with one coverage blend. Clear-and-redraw doubles antialias coverage and leaves a pale fringe. */
+function drawEraser(context: ImageRenderContext, resource: ImageResource, recipe: ImageEditRecipe, operation: Extract<ImageEditOperation, { type: 'eraser' }>): void {
+  if (!operation.points.length) return;
+  const matrix = context.getTransform(), bounds = getOperationBounds(operation);
+  const corners = [{ x: bounds.x, y: bounds.y }, { x: bounds.x + bounds.width, y: bounds.y },
+    { x: bounds.x + bounds.width, y: bounds.y + bounds.height }, { x: bounds.x, y: bounds.y + bounds.height }]
+    .map(point => ({ x: matrix.a * point.x + matrix.c * point.y + matrix.e, y: matrix.b * point.x + matrix.d * point.y + matrix.f }));
+  const x1 = Math.max(0, Math.floor(Math.min(...corners.map(point => point.x)) - 2));
+  const y1 = Math.max(0, Math.floor(Math.min(...corners.map(point => point.y)) - 2));
+  const x2 = Math.min(context.canvas.width, Math.ceil(Math.max(...corners.map(point => point.x)) + 2));
+  const y2 = Math.min(context.canvas.height, Math.ceil(Math.max(...corners.map(point => point.y)) + 2));
+  if (x2 <= x1 || y2 <= y1) return;
+  const originalCanvas = makeScratchCanvas(), maskCanvas = makeScratchCanvas();
+  try {
+    for (let top = y1; top < y2; top += 256) for (let left = x1; left < x2; left += 256) {
+      const width = Math.min(256, x2 - left), height = Math.min(256, y2 - top);
+      originalCanvas.width = maskCanvas.width = width; originalCanvas.height = maskCanvas.height = height;
+      const original = originalCanvas.getContext('2d', { willReadFrequently: true }) as ImageRenderContext | null;
+      const mask = maskCanvas.getContext('2d', { willReadFrequently: true }) as ImageRenderContext | null;
+      if (!original || !mask) throw new Error('无法创建擦除缓冲区');
+      original.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - left, matrix.f - top);
+      drawSource(original, resource);
+      mask.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - left, matrix.f - top);
+      mask.beginPath(); mask.rect(recipe.crop.x, recipe.crop.y, recipe.crop.width, recipe.crop.height); mask.clip();
+      mask.fillStyle = '#fff'; mask.strokeStyle = '#fff';
+      strokeBrush(mask, operation.points, operation.width);
+      const before = context.getImageData(left, top, width, height);
+      const source = original.getImageData(0, 0, width, height).data;
+      const coverage = mask.getImageData(0, 0, width, height).data;
+      const target = before.data;
+      for (let index = 0; index < target.length; index += 4) {
+        const blend = coverage[index + 3] / 255;
+        if (!blend) continue;
+        const oldAlpha = target[index + 3] / 255, sourceAlpha = source[index + 3] / 255;
+        const oldWeight = oldAlpha * (1 - blend), sourceWeight = sourceAlpha * blend, alpha = oldWeight + sourceWeight;
+        for (let channel = 0; channel < 3; channel++) target[index + channel] = alpha ? Math.round((target[index + channel] * oldWeight + source[index + channel] * sourceWeight) / alpha) : 0;
+        target[index + 3] = Math.round(alpha * 255);
+      }
+      context.putImageData(before, left, top);
+    }
+  } finally { releaseCanvas(originalCanvas); releaseCanvas(maskCanvas); }
+}
+
+function drawMosaic(context: ImageRenderContext, resource: ImageResource, rect: { x: number; y: number; width: number; height: number }, blockSize: number): void {
+  const block = Math.max(1, blockSize);
   if (rect.width <= 0 || rect.height <= 0) return;
   const columns = Math.ceil(rect.width / block), rows = Math.ceil(rect.height / block);
-  const canvas = typeof document === 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+  const canvas = makeScratchCanvas();
   try {
     // Tile the sample grid: one effect needs at most 256 KiB of scratch pixels.
     for (let row = 0; row < rows; row += 256) for (let column = 0; column < columns; column += 256) {
@@ -88,7 +124,7 @@ function drawOperation(context: ImageRenderContext, resource: ImageResource, rec
   context.save();
   try {
     if ('style' in operation) applyStyle(context, operation.style);
-    if ('points' in operation && operation.type !== 'eraser') {
+    if ('points' in operation && operation.type !== 'eraser' && operation.type !== 'mosaic-brush') {
       if (!operation.points.length) return;
       if (operation.type === 'highlighter') context.globalAlpha *= .3;
       path(context, operation.points);
@@ -115,9 +151,10 @@ function drawOperation(context: ImageRenderContext, resource: ImageResource, rec
       }
       case 'text': {
         context.fillStyle = operation.color;
-        context.font = `${operation.italic ? 'italic ' : ''}${operation.bold ? 'bold ' : ''}${operation.fontSize}px ${operation.fontFamily ?? 'sans-serif'}`;
-        context.textBaseline = 'top'; context.textAlign = 'left';
-        operation.text.split('\n').forEach((line, index) => context.fillText(line, operation.position.x, operation.position.y + index * operation.fontSize * 1.25));
+        context.font = formatTextCanvasFont(operation);
+        context.textBaseline = 'alphabetic'; context.textAlign = 'left';
+        const { lineHeight, baseline } = measureTextLayout(operation);
+        operation.text.split('\n').forEach((line, index) => context.fillText(line, operation.position.x, operation.position.y + baseline + index * lineHeight));
         break;
       }
       case 'marker': {
@@ -137,7 +174,25 @@ function drawOperation(context: ImageRenderContext, resource: ImageResource, rec
         context.fillText(label, center.x, center.y + size * .02, size * .75);
         break;
       }
-      case 'mosaic': drawMosaic(context, resource, operation); break;
+      case 'mosaic': drawMosaic(context, resource, operation.rect, operation.blockSize); break;
+      case 'mosaic-brush': {
+        if (!operation.points.length) break;
+        context.beginPath();
+        if (operation.points.length === 1) context.arc(operation.points[0].x, operation.points[0].y, Math.max(.1, operation.width / 2), 0, Math.PI * 2);
+        else {
+          const radius = Math.max(.1, operation.width / 2);
+          for (const point of operation.points) { context.moveTo(point.x + radius, point.y); context.arc(point.x, point.y, radius, 0, Math.PI * 2); }
+          for (let index = 1; index < operation.points.length; index++) {
+            const a = operation.points[index - 1], b = operation.points[index], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy);
+            if (!length) continue;
+            const nx = -dy / length * radius, ny = dx / length * radius;
+            context.moveTo(a.x + nx, a.y + ny); context.lineTo(a.x - nx, a.y - ny);
+            context.lineTo(b.x - nx, b.y - ny); context.lineTo(b.x + nx, b.y + ny); context.closePath();
+          }
+        }
+        context.clip(); drawMosaic(context, resource, getOperationBounds(operation), operation.blockSize);
+        break;
+      }
       case 'spotlight': {
         const { rect } = operation;
         context.fillStyle = '#000'; context.globalAlpha = Math.max(0, Math.min(1, operation.opacity));
@@ -148,22 +203,21 @@ function drawOperation(context: ImageRenderContext, resource: ImageResource, rec
         break;
       }
       case 'magnifier': {
-        const { center, radius } = operation, source = operation.source ?? center, zoom = Math.max(1, operation.zoom);
-        context.beginPath(); context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        const rect = getMagnifierRect(operation), center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+        const source = operation.source ?? center, zoom = Math.max(1, operation.zoom);
+        context.beginPath();
+        if (operation.shape === 'rectangle') context.rect(rect.x, rect.y, rect.width, rect.height);
+        else context.ellipse(center.x, center.y, Math.max(.1, rect.width / 2), Math.max(.1, rect.height / 2), 0, 0, Math.PI * 2);
         context.save();
         try {
-          context.clip(); context.clearRect(center.x - radius, center.y - radius, radius * 2, radius * 2);
-          context.drawImage(resource.image, (source.x - radius / zoom) * resource.pixelWidth / resource.width, (source.y - radius / zoom) * resource.pixelHeight / resource.height, radius * 2 / zoom * resource.pixelWidth / resource.width, radius * 2 / zoom * resource.pixelHeight / resource.height, center.x - radius, center.y - radius, radius * 2, radius * 2);
+          context.clip(); context.clearRect(rect.x, rect.y, rect.width, rect.height);
+          context.drawImage(resource.image, (source.x - rect.width / (2 * zoom)) * resource.pixelWidth / resource.width, (source.y - rect.height / (2 * zoom)) * resource.pixelHeight / resource.height, rect.width / zoom * resource.pixelWidth / resource.width, rect.height / zoom * resource.pixelHeight / resource.height, rect.x, rect.y, rect.width, rect.height);
         } finally { context.restore(); }
         context.stroke();
         break;
       }
       case 'eraser': {
-        if (!operation.points.length) break;
-        eraserClip(context, operation.points, operation.width);
-        // Clear first so erasing over transparent source pixels restores alpha too.
-        context.clearRect(recipe.crop.x, recipe.crop.y, recipe.crop.width, recipe.crop.height);
-        drawSource(context, resource);
+        drawEraser(context, resource, recipe, operation);
         break;
       }
     }

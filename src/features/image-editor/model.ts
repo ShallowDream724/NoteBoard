@@ -52,6 +52,12 @@ export interface MosaicOperation extends OperationBase {
   readonly rect: Rect;
   readonly blockSize: number;
 }
+export interface MosaicBrushOperation extends OperationBase {
+  readonly type: 'mosaic-brush';
+  readonly points: readonly Point[];
+  readonly width: number;
+  readonly blockSize: number;
+}
 export interface SpotlightOperation extends OperationBase {
   readonly type: 'spotlight';
   readonly rect: Rect;
@@ -60,9 +66,14 @@ export interface SpotlightOperation extends OperationBase {
 }
 export interface MagnifierOperation extends OperationBase {
   readonly type: 'magnifier';
+  /** Legacy circular geometry; retained so existing drafts remain readable. */
   readonly center: Point;
   readonly source?: Point;
   readonly radius: number;
+  /** When present, this is the authoritative destination geometry. */
+  readonly rect?: Rect;
+  /** Defaults to ellipse for legacy records. */
+  readonly shape?: 'ellipse' | 'rectangle';
   readonly zoom: number;
   readonly style: StrokeStyle;
 }
@@ -71,7 +82,7 @@ export interface EraserOperation extends OperationBase {
   readonly points: readonly Point[];
   readonly width: number;
 }
-export type ImageEditOperation = PathOperation | ShapeOperation | TextOperation | MarkerOperation | MosaicOperation | SpotlightOperation | MagnifierOperation | EraserOperation;
+export type ImageEditOperation = PathOperation | ShapeOperation | TextOperation | MarkerOperation | MosaicOperation | MosaicBrushOperation | SpotlightOperation | MagnifierOperation | EraserOperation;
 export type ImageEditorTool = ImageEditOperation['type'] | 'crop' | 'select' | 'object-eraser';
 
 export interface ImageEditRecipe {

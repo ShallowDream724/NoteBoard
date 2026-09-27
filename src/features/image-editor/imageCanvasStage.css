@@ -1,0 +1,51 @@
+.nb-ie-interactive-surface { position: relative; overflow: visible; touch-action: none; user-select: none; }
+.nb-ie-interactive-surface canvas { display: block; }
+.nb-ie-interactive-surface canvas:focus-visible { outline: 2px solid var(--editor-accent, #3b82f6); outline-offset: 3px; }
+.nb-ie-crop-overlay { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.nb-ie-crop-shade { position: absolute; background: rgb(10 18 32 / 46%); }
+.nb-ie-crop-frame { position: absolute; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 50%); }
+.nb-ie-crop-frame > span { position: absolute; background: rgb(255 255 255 / 76%); box-shadow: 0 0 1px rgb(0 0 0 / 65%); }
+.nb-ie-crop-frame > span:nth-child(1), .nb-ie-crop-frame > span:nth-child(2) { top: 0; bottom: 0; width: 1px; }
+.nb-ie-crop-frame > span:nth-child(1) { left: 33.333%; }
+.nb-ie-crop-frame > span:nth-child(2) { left: 66.666%; }
+.nb-ie-crop-frame > span:nth-child(3), .nb-ie-crop-frame > span:nth-child(4) { left: 0; right: 0; height: 1px; }
+.nb-ie-crop-frame > span:nth-child(3) { top: 33.333%; }
+.nb-ie-crop-frame > span:nth-child(4) { top: 66.666%; }
+.nb-ie-selection-frame { position: absolute; border: 1.5px dashed var(--editor-accent, #3b82f6); pointer-events: none; }
+.nb-ie-dialog .nb-ie-resize-handle {
+  position: absolute;
+  z-index: 2;
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
+  padding: 0;
+  border: 2px solid var(--editor-accent, #3b82f6);
+  border-radius: 2px;
+  background: var(--editor-bg, #fff);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+.nb-ie-dialog .nb-ie-resize-handle:hover:not(:disabled) { background: var(--editor-bg, #fff); }
+.nb-ie-canvas-text {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 1px dashed var(--editor-accent, #3b82f6);
+  border-radius: 0;
+  background: transparent;
+  line-height: 1.25;
+  text-align: left;
+  letter-spacing: normal;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  transform-origin: 0 0;
+  user-select: text;
+  touch-action: auto;
+}
+.nb-ie-canvas-text::placeholder { color: var(--editor-text-muted, #8590a1); opacity: .85; }

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Image editor pixel regression</title><pre id="result">Running…</pre>
+<script type="module">
+import { createImageEditRecipe } from '../../src/features/image-editor/model.ts';
+import { getOutputSize, outputToSource, sourceToOutput } from '../../src/features/image-editor/geometry.ts';
+import { renderImageEdit, renderImageEditAsync } from '../../src/features/image-editor/renderer.ts';
+import { formatTextCanvasFont, measureTextLayout } from '../../src/features/image-editor/textMetrics.ts';
+
+const failures = [];
+const check = (condition, message) => { if (!condition) failures.push(message); };
+const canvas = (width, height) => Object.assign(document.createElement('canvas'), { width, height });
+const pixel = (context, x, y) => [...context.getImageData(x, y, 1, 1).data];
+const source = canvas(32, 24), sourceContext = source.getContext('2d');
+const pixels = sourceContext.createImageData(32, 24);
+for (let y = 0; y < 24; y++) for (let x = 0; x < 32; x++) {
+  const i = (y * 32 + x) * 4;
+  pixels.data.set([x * 7, y * 9, 80, 255], i);
+}
+sourceContext.putImageData(pixels, 0, 0);
+const resource = { image: source, width: 32, height: 24, pixelWidth: 32, pixelHeight: 24 };
+const render = recipe => {
+  const size = getOutputSize(recipe), output = canvas(size.width, size.height), context = output.getContext('2d');
+  renderImageEdit(context, resource, recipe); return context;
+};
+const style = { color: '#000000', width: 1, pattern: 'solid' };
+
+// Crop, clockwise rotation and reflection must still select the correct source pixel.
+const transformed = { ...createImageEditRecipe(32, 24), crop: { x: 4, y: 3, width: 20, height: 16 }, rotation: 1, flipX: true };
+const transformedContext = render(transformed);
+for (const [x, y] of [[3, 5], [8, 10], [13, 15]]) {
+  const sourcePoint = outputToSource({ x: x + .5, y: y + .5 }, transformed);
+  const expected = pixel(sourceContext, Math.floor(sourcePoint.x), Math.floor(sourcePoint.y));
+  const actual = pixel(transformedContext, x, y);
+  check(actual.every((value, index) => Math.abs(value - expected[index]) <= 1), `crop/rotate/flip pixel ${x},${y}: ${actual} vs ${expected}`);
+}
+
+const brush = { id: 'brush', type: 'mosaic-brush', points: [{ x: 5, y: 6 }, { x: 27, y: 6 }], width: 8, blockSize: 7 };
+const brushContext = render({ ...createImageEditRecipe(32, 24), operations: [brush] });
+check(pixel(brushContext, 12, 6).some((value, index) => index < 3 && value !== pixel(sourceContext, 12, 6)[index]), 'brush center was not pixelated');
+check(pixel(brushContext, 12, 18).every((value, index) => value === pixel(sourceContext, 12, 18)[index]), 'brush leaked outside its path');
+
+const magnifier = { id: 'mag', type: 'magnifier', center: { x: 16, y: 12 }, radius: 5,
+  rect: { x: 10, y: 8, width: 12, height: 8 }, shape: 'rectangle', zoom: 2, style };
+const magnified = render({ ...createImageEditRecipe(32, 24), operations: [magnifier] });
+check(pixel(magnified, 20, 12)[0] < pixel(sourceContext, 20, 12)[0], 'rectangular magnifier did not sample enlarged source');
+check(pixel(magnified, 16, 8)[3] === 255, 'rectangular magnifier lost top edge');
+const elliptical = render({ ...createImageEditRecipe(32, 24), operations: [{ ...magnifier, shape: 'ellipse' }] });
+check(pixel(elliptical, 10, 8).every((value, index) => value === pixel(sourceContext, 10, 8)[index]), 'elliptical magnifier touched corner outside mask');
+
+const overlay = { id: 'overlay', type: 'rectangle', rect: { x: 0, y: 0, width: 32, height: 24 }, style, fill: '#000000' };
+const eraser = { id: 'erase', type: 'eraser', points: [{ x: 5, y: 12 }, { x: 27, y: 12 }], width: 7 };
+const opaqueContext = render({ ...createImageEditRecipe(32, 24), operations: [overlay, eraser] });
+check(pixel(opaqueContext, 16, 12).every((value, index) => value === pixel(sourceContext, 16, 12)[index]), 'opaque eraser center did not restore source');
+check(pixel(opaqueContext, 16, 2).slice(0, 3).every(value => value === 0), 'opaque eraser touched outside path');
+for (let y = 7; y <= 17; y++) {
+  const current = pixel(opaqueContext, 16, y), original = pixel(sourceContext, 16, y);
+  check(current.slice(0, 3).every((value, index) => value <= original[index] + 1), `opaque eraser fringe at y=${y}: ${current}`);
+}
+const transformedErased = render({ ...transformed, operations: [overlay, eraser] });
+const transformedPoint = sourceToOutput({ x: 16.5, y: 12.5 }, transformed);
+check(pixel(transformedErased, Math.floor(transformedPoint.x), Math.floor(transformedPoint.y)).every((value, index) => value === pixel(sourceContext, 16, 12)[index]), 'transformed eraser did not restore source');
+
+const transparent = canvas(32, 24), transparentContext = transparent.getContext('2d');
+transparentContext.fillStyle = '#20a040'; transparentContext.fillRect(16, 0, 16, 24);
+const transparentResource = { ...resource, image: transparent };
+const transparentOutput = canvas(32, 24), transparentOutputContext = transparentOutput.getContext('2d');
+renderImageEdit(transparentOutputContext, transparentResource, { ...createImageEditRecipe(32, 24), operations: [overlay, eraser] });
+check(pixel(transparentOutputContext, 8, 12)[3] === 0, 'transparent eraser center did not restore alpha');
+check(pixel(transparentOutputContext, 8, 2)[3] === 255, 'transparent eraser touched outside path');
+for (let y = 7; y <= 17; y++) {
+  const current = pixel(transparentOutputContext, 8, y);
+  check(current.slice(0, 3).every(value => value === 0), `transparent eraser fringe has color at y=${y}: ${current}`);
+}
+
+// The main-thread export path and interactive render must agree byte for byte.
+const combined = { ...transformed, operations: [brush, magnifier, eraser] };
+const sync = render(combined), dimensions = getOutputSize(combined), asyncCanvas = canvas(dimensions.width, dimensions.height);
+await renderImageEditAsync(asyncCanvas.getContext('2d'), resource, combined);
+const first = sync.getImageData(0, 0, dimensions.width, dimensions.height).data;
+const second = asyncCanvas.getContext('2d').getImageData(0, 0, dimensions.width, dimensions.height).data;
+check(first.every((value, index) => value === second[index]), 'preview and main-thread export differ');
+
+const label = { id: 'label', type: 'text', position: { x: 2, y: 2 }, text: '图上输入文字\n😀', color: '#000', fontSize: 32, bold: true, italic: true };
+const layout = measureTextLayout(label);
+const cssLine = document.createElement('div'), baselineMarker = document.createElement('span');
+cssLine.style.font = formatTextCanvasFont(label); cssLine.style.lineHeight = '1.25'; cssLine.style.display = 'inline-block';
+baselineMarker.style.display = 'inline-block'; baselineMarker.style.width = '0'; baselineMarker.style.height = '0'; baselineMarker.style.verticalAlign = 'baseline';
+cssLine.append(document.createTextNode('图上输入文字'), baselineMarker); document.body.append(cssLine);
+const cssBaseline = baselineMarker.getBoundingClientRect().top - cssLine.getBoundingClientRect().top;
+check(layout.width >= cssLine.getBoundingClientRect().width, `CJK text bounds too narrow: ${layout.width} vs ${cssLine.getBoundingClientRect().width}`);
+check(Math.abs(layout.baseline - cssBaseline) <= 2, `Canvas/CSS first-line baseline mismatch: ${layout.baseline} vs ${cssBaseline}`);
+cssLine.remove();
+
+const result = document.getElementById('result');
+result.textContent = failures.length ? `FAIL (${failures.length})\n${failures.join('\n')}` : 'PASS: crop/rotate/flip, brush mask, eraser edges, preview/export parity, CJK width and CSS baseline';
+result.dataset.status = failures.length ? 'fail' : 'pass';
+</script></html>
