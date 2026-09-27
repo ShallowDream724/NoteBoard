@@ -1,30 +1,51 @@
-.nb-shortcuts-panel { display:flex; flex-direction:column; gap:20px; min-width:0; }
+.nb-shortcuts-panel { display:flex; flex-direction:column; gap:24px; min-width:0; }
 .nb-shortcuts-panel h3,.nb-shortcuts-panel h4 { margin:0; }
-.nb-shortcuts-panel p { margin:6px 0; color:var(--editor-text-secondary); line-height:1.6; font-size:.92em; }
-.nb-shortcuts-heading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; }
-.nb-shortcuts-panel button { font:inherit; }
-.nb-shortcuts-panel .nb-btn-secondary,.nb-shortcuts-panel .nb-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:7px; }
-.nb-shortcuts-search { display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid var(--editor-border); border-radius:9px; }
-.nb-shortcuts-search input { min-width:0; width:100%; border:0; outline:0; background:transparent; color:inherit; font:inherit; }
-.nb-shortcut-diagnostics { padding:12px; border:1px solid var(--editor-border); border-radius:9px; background:var(--editor-bg); }
+.nb-shortcuts-panel p { margin:6px 0 0; color:var(--editor-text-secondary); line-height:1.6; font-size:.92em; }
+.nb-shortcuts-heading { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px; }
+.nb-shortcuts-heading>div { flex:1 1 18em; }
+.nb-shortcuts-panel button { font:inherit; cursor:pointer; }
+.nb-shortcuts-panel button:disabled { cursor:default; }
+.nb-shortcuts-panel .nb-btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:7px; font-size:.9em; }
+.nb-shortcuts-toolbar { display:flex; flex-direction:column; gap:10px; }
+.nb-shortcuts-search { display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid var(--editor-border); border-radius:8px; background:var(--editor-surface); color:var(--editor-text-muted); }
+.nb-shortcuts-search:focus-within { border-color:var(--editor-accent); }
+.nb-shortcuts-search input { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--editor-text); font:inherit; }
+.nb-shortcuts-panel .nb-shortcuts-search input:focus-visible { outline:0; }
+.nb-shortcut-diagnostics summary,.nb-shortcut-conventions summary { cursor:pointer; color:var(--editor-text-secondary); font-size:.9em; }
+.nb-shortcut-diagnostics>div { padding:8px 0 0 15px; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.nb-shortcut-diagnostics p { flex:1 1 20em; margin:0; }
 .nb-shortcut-group { min-width:0; }
-.nb-shortcut-group h4 { margin-bottom:8px; font-size:1em; }
-.nb-shortcut-item { padding:10px 0; border-bottom:1px solid var(--editor-border); }
-.nb-shortcut-row { display:grid; grid-template-columns:minmax(120px,1fr) minmax(140px,1.2fr) 28px; gap:12px; align-items:center; }
+.nb-shortcut-group h4 { margin-bottom:7px; font-size:1em; font-weight:600; }
+.nb-shortcut-item { padding:11px 0; border-bottom:1px solid var(--editor-border); }
+.nb-shortcut-group .nb-shortcut-item:last-child { border-bottom:0; }
+.nb-shortcut-row { display:grid; grid-template-columns:minmax(125px,1fr) minmax(140px,1.25fr) 28px; gap:12px; align-items:center; }
 .nb-shortcut-row strong { font-weight:500; }
-.nb-shortcut-row small { display:block; color:var(--editor-text-muted); line-height:1.5; margin-top:4px; }
-.nb-shortcut-binding { display:flex; flex-wrap:wrap; gap:5px; padding:6px; min-width:0; border:1px solid var(--editor-border); border-radius:7px; background:var(--editor-bg); color:inherit; text-align:left; }
-.nb-shortcut-binding kbd { font:inherit; font-size:.88em; overflow-wrap:anywhere; }
-.nb-shortcut-binding kbd+ kbd::before { content:' / '; color:var(--editor-text-muted); }
-.nb-shortcut-icon { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:0; border-radius:7px; color:var(--editor-text-secondary); background:transparent; }
-.nb-shortcut-icon:hover { background:var(--editor-hover-background); }
+.nb-shortcut-row small { display:block; color:var(--editor-text-muted); line-height:1.5; margin-top:3px; font-size:.85em; }
+.nb-shortcut-bindings { display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+.nb-shortcut-binding { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; min-height:30px; min-width:0; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); color:inherit; text-align:left; transition:background-color 120ms ease,border-color 120ms ease; }
+.nb-shortcut-binding kbd,.nb-shortcut-binding span { font:inherit; font-size:.88em; overflow-wrap:anywhere; }
+.nb-shortcut-binding[data-shortcut-recording] { border-color:var(--editor-accent); color:var(--accent-strong); background:var(--editor-selection); }
+.nb-shortcut-icon { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:0; border-radius:6px; color:var(--editor-text-secondary); background:transparent; flex-shrink:0; }
 .nb-shortcut-icon:disabled { opacity:.3; }
-.nb-shortcut-editor { padding:12px; border-radius:9px; border:1px solid var(--editor-border); margin-top:10px; background:var(--editor-bg); }
-.nb-shortcut-draft { display:flex; gap:8px; align-items:center; margin-bottom:7px; }
-.nb-shortcut-draft input { flex:1; min-width:0; padding:7px 9px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); color:inherit; font:inherit; }
-.nb-shortcut-edit-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-.nb-shortcut-edit-actions>span { flex:1; }
-.nb-shortcuts-panel .nb-shortcut-error { color:var(--danger-600,#c2413b); font-size:.9em; }
-.nb-shortcut-test { padding:14px; width:100%; border:1px dashed var(--editor-border); border-radius:8px; background:var(--editor-bg); color:inherit; }
+.nb-shortcut-recording-tools { display:flex; flex-wrap:wrap; gap:7px 12px; align-items:center; padding:9px 0 0; }
+.nb-shortcut-recording-tools>span { font-size:.86em; color:var(--editor-text-muted); }
+.nb-shortcut-recording-tools>span:first-child { flex:1 1 16em; }
+.nb-shortcut-recording-tools input { flex:1 1 14em; min-width:0; padding:7px 9px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); color:inherit; font:inherit; }
+.nb-shortcut-text-button { padding:3px 0; border:0; background:transparent; color:var(--editor-text-secondary); font-size:.88em!important; text-underline-offset:3px; }
+.nb-shortcut-feedback:empty { display:none; }
+.nb-shortcut-feedback p { display:flex; align-items:baseline; gap:4px; font-size:.88em; }
+.nb-shortcut-feedback svg { align-self:center; flex-shrink:0; }
+.nb-shortcuts-panel .nb-shortcut-error { color:var(--danger-600,#c2413b); }
+.nb-shortcuts-panel .nb-shortcut-success { color:var(--editor-text-secondary); }
+.nb-shortcut-test-section { display:grid; grid-template-columns:1fr auto; align-items:center; gap:10px 20px; padding:15px 16px; border:1px solid var(--editor-border); border-radius:9px; background:var(--editor-surface); }
+.nb-shortcut-test-section h4 { display:flex; align-items:center; gap:7px; font-size:1em; font-weight:600; }
+.nb-shortcut-test-section p { font-size:.86em; }
+.nb-shortcut-test { padding:9px 12px; border:1px dashed var(--editor-border-focus,var(--editor-border)); border-radius:7px; background:var(--editor-bg); color:inherit; font-size:.9em!important; }
+.nb-shortcut-test:focus { border-color:var(--editor-accent); border-style:solid; background:var(--editor-selection); }
+.nb-shortcut-test-section .nb-shortcut-test-result { grid-column:1/-1; margin:0; color:var(--editor-text-muted); }
+.nb-shortcuts-panel .nb-shortcut-empty { padding:20px 0; text-align:center; }
 .nb-shortcuts-panel button:focus-visible,.nb-shortcuts-panel input:focus-visible { outline:2px solid var(--editor-accent); outline-offset:2px; }
-@media(max-width:700px) { .nb-shortcut-row { grid-template-columns:minmax(0,1fr) 28px; gap:7px; } .nb-shortcut-row>div { grid-column:1/-1; } }
+@media(hover:hover) { .nb-shortcut-binding:hover,.nb-shortcut-icon:hover { background:var(--toolbar-hover); } .nb-shortcut-text-button:hover { color:var(--editor-text); text-decoration:underline; } }
+.nb-shortcut-binding:active,.nb-shortcut-icon:active { background:var(--toolbar-active); }
+@media(max-width:700px) { .nb-shortcut-row { grid-template-columns:minmax(0,1fr) 28px; gap:7px; } .nb-shortcut-command { grid-column:1/-1; } .nb-shortcut-test-section { grid-template-columns:1fr; } .nb-shortcut-test { justify-self:start; } }
+@media(prefers-reduced-motion:reduce) { .nb-shortcut-binding { transition:none; } }

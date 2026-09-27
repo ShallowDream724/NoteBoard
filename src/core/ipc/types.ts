@@ -266,6 +266,9 @@ export interface TypographySettings {
   monoFontFamily: string;
   // 代码中文等宽/中文字体
   monoFontFamilyZh?: string;
+  /** Missing source means an older, unclassified preference and must be preserved. */
+  monoFontFamilySource?: 'automatic' | 'user' | 'legacy';
+  monoFontFamilyZhSource?: 'automatic' | 'user' | 'legacy';
   contentFontSize: number;
   monoFontSize: number;
   contentLineHeight: number;

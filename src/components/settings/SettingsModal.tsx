@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Palette, Type, Keyboard, Info, FileCode, Folder, FileOutput } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { NoteBoardFileIcon } from '../FileIcon';
 import { NavBtn } from './SettingsControls';
 import { AppearancePanel } from './AppearancePanel';
 import { TypographyPanel } from './TypographyPanel';
@@ -15,13 +16,13 @@ import { useUpdateStore } from '../../stores/updateStore';
 import './settings.css';
 
 const PANELS = [
-  { key: 'appearance', label: '外观主题', icon: Palette, content: AppearancePanel },
-  { key: 'typography', label: '排版与字体', icon: Type, content: TypographyPanel },
-  { key: 'editor', label: '编辑器', icon: FileCode, content: EditorPanel },
-  { key: 'file', label: '文件与保存', icon: Folder, content: FilePanel },
-  { key: 'export', label: '导出', icon: FileOutput, content: ExportPanel },
-  { key: 'shortcuts', label: '快捷键', icon: Keyboard, content: ShortcutsPanel },
-  { key: 'about', label: '关于', icon: Info, content: AboutPanel },
+  { key: 'appearance', label: '外观主题', group: '外观', icon: Palette, content: AppearancePanel },
+  { key: 'typography', label: '排版与字体', group: '外观', icon: Type, content: TypographyPanel },
+  { key: 'editor', label: '编辑器', group: '工作方式', icon: FileCode, content: EditorPanel },
+  { key: 'shortcuts', label: '快捷键', group: '工作方式', icon: Keyboard, content: ShortcutsPanel },
+  { key: 'file', label: '文件与保存', group: '工作方式', icon: Folder, content: FilePanel },
+  { key: 'export', label: '导出', group: '工作方式', icon: FileOutput, content: ExportPanel },
+  { key: 'about', label: '关于', group: '应用', icon: Info, content: AboutPanel },
 ] as const;
 
 /** The single settings entry: this shell owns navigation and dismissal only. */
@@ -42,6 +43,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
       <Dialog.Portal>
         <Dialog.Overlay style={{ position: 'fixed', inset: 0, zIndex: 9990, background: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(4px)' }} />
       <Dialog.Content className="nb-settings" data-shortcuts-suspended aria-describedby={undefined}
+        onEscapeKeyDown={event => { if (event.target instanceof Element && event.target.closest('[data-shortcut-recording]')) event.preventDefault(); }}
         onKeyDown={event => event.stopPropagation()}
         onOpenAutoFocus={() => {
           previousFocus.current = document.activeElement as HTMLElement | null;
@@ -56,7 +58,7 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         >
         <div className="nb-settings-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src="/logo.ico" alt="" width={18} height={18} />
+            <NoteBoardFileIcon size={18} />
             <Dialog.Title asChild><span style={{ fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)' }}>NoteBoard 设置</span></Dialog.Title>
           </div>
           <Tooltip content="关闭设置" shortcut="Esc" side="bottom" sideOffset={4}>
@@ -74,9 +76,12 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
         </div>}
         <div className="nb-settings-body">
           <nav aria-label="设置分类" className="nb-settings-nav">
-            {PANELS.map(({ key, label, icon: Icon }) => (
-              <NavBtn key={key} active={activeTab === key} icon={<Icon size={15} />} label={key === 'about' && hasUpdate ? '关于 · 有更新' : label} onClick={() => setActiveTab(key)} />
-            ))}
+            {[...new Set(PANELS.map(panel => panel.group))].map(group => <div className="nb-settings-nav-group" key={group}>
+              <span className="nb-settings-nav-group-label">{group}</span>
+              {PANELS.filter(panel => panel.group === group).map(({ key, label, icon: Icon }) => (
+                <NavBtn key={key} active={activeTab === key} icon={<Icon size={15} />} label={key === 'about' && hasUpdate ? '关于 · 有更新' : label} onClick={() => setActiveTab(key)} />
+              ))}
+            </div>)}
           </nav>
           <div ref={contentRef} className="nb-settings-content">
             <Panel />

@@ -1,0 +1,11 @@
+.nb-font-pack-settings-card.is-installed { padding: 0 0 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.nb-font-pack-installed-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.nb-font-pack-installed-row > svg { color: var(--accent-strong); flex-shrink: 0; }
+.nb-font-pack-installed-copy { display: flex; flex: 1 1 14em; flex-direction: column; gap: 3px; min-width: 0; }
+.nb-font-pack-installed-copy > :first-child { font-weight: 600; }
+.nb-font-pack-installed-copy > :last-child { color: var(--editor-text-muted); font-size: var(--settings-font-xs, 12px); }
+.nb-font-pack-manage { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--editor-text-muted); cursor: pointer; font: inherit; }
+.nb-font-pack-manage:hover { background: var(--toolbar-hover); color: var(--editor-text); }
+.nb-font-pack-manage:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.nb-font-pack-manage[aria-expanded="true"] svg { transform: rotate(180deg); }
+.nb-font-pack-settings-card.is-installed > .nb-font-pack-settings-heading { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--editor-border); }

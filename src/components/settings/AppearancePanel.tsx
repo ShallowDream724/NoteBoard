@@ -1,6 +1,7 @@
 import { useSettingsStore } from '../../stores/settingsStore';
 import { THEMES } from '../../core/theme/themes';
 import { ThemeCard } from './ThemeCard';
+import { SettingsPanelHeading } from './SettingsControls';
 import './appearance.css';
 
 export function AppearancePanel() {
@@ -8,7 +9,7 @@ export function AppearancePanel() {
   const resolvedTheme = useSettingsStore(s => s.resolvedTheme);
   const setThemeMode = useSettingsStore(s => s.setThemeMode);
   return <section className="appearance-panel">
-    <header><h3>外观主题</h3><p>选择适合你的阅读与书写配色。</p></header>
+    <SettingsPanelHeading title="外观主题" description="选择适合你的阅读与书写配色。"/>
     <div className="theme-grid" role="group" aria-label="外观主题">
       {Object.values(THEMES).map(theme => <ThemeCard key={theme.id} theme={theme}
         title={theme.displayName} description={theme.scheme === 'dark' ? '深蓝夜色' : theme.id === 'hu-po' ? '暖纸与赤陶' : '明亮蓝调'}

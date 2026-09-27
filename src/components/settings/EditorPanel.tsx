@@ -1,187 +1,28 @@
-// Canonical settings panel; SettingsModal owns navigation and dismissal.
-import { FileText, FileCode } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { inputStyle } from './SettingsControls';
+import { inputStyle, SettingRow, SettingsPanelHeading, SettingsSection } from './SettingsControls';
 
 export function EditorPanel() {
-  const { settings, setEditor } = useSettingsStore();
-  return (<div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-    <div>
-      <h3 style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 14 / 13)', fontWeight: 600, marginBottom: 4 }}>编辑器与代码设置</h3>
-      <p style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 12 / 13)', color: 'var(--editor-text-muted)', margin: 0 }}>
-        配置纯文本、SQL、JSON 等代码编辑器的显示效果及 Markdown 增强选项。
-      </p>
-    </div>
-
-    {/* ── 3.1 代码与纯文本展示 ── */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
-        <FileCode size={15} color="var(--accent-strong)" />
-        <span>代码与纯文本展示 (.txt / .sql / .json / .yaml 等)</span>
-      </div>
-
-      {/* 显示空格（显示为点） */}
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
-        <div>
-          <div>显示空格（点）</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>将文本中的空格显示为轻柔圆点标记，制表符显示为箭头</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.showWhitespace ?? false}
-          onChange={(e) => setEditor({ showWhitespace: e.target.checked })}
-        />
-      </label>
-
-      {/* 显示换行符（↵） */}
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
-        <div>
-          <div>显示换行符号 (↵)</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在各行末尾显示 ↵ 换行指示符号</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.showLineEndings ?? false}
-          onChange={(e) => setEditor({ showLineEndings: e.target.checked })}
-        />
-      </label>
-
-      {/* 显示行号 */}
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
-        <div>
-          <div>显示行号</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在左侧边栏展示代码行号及活动行高亮</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.showLineNumbers}
-          onChange={(e) => setEditor({ showLineNumbers: e.target.checked })}
-        />
-      </label>
-
-      {/* 软换行 */}
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
-        <div>
-          <div>软换行 (自动折行)</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>超出编辑器可视宽度时自动折行，避免横向滚动</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.softWrap}
-          onChange={(e) => setEditor({ softWrap: e.target.checked })}
-        />
-      </label>
-
-      {/* 缩进导线 */}
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '4px 0' }}>
-        <div>
-          <div>缩进参考导线</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>在代码层级之间显示垂直虚线导线</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.showIndentGuides}
-          onChange={(e) => setEditor({ showIndentGuides: e.target.checked })}
-        />
-      </label>
-    </div>
-
-    {/* ── 3.2 缩进与编辑参数 ── */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
-        <FileText size={15} color="var(--accent-strong)" />
-        <span>缩进与通用选项</span>
-      </div>
-
-      <div className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', padding: '2px 0' }}>
-        <div>
-          <div>Tab 缩进宽度</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>每个 Tab 对应的空格数量</div>
-        </div>
-        <input
-          type="number"
-          min="1"
-          max="8"
-          value={settings.editor.tabSize}
-          onChange={(e) => setEditor({ tabSize: Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 2)) })}
-          style={{ ...inputStyle, width: '5em', textAlign: 'center' }}
-        />
-      </div>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
-        <div>
-          <div>空格代替 Tab</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>按下 Tab 键时插入对应数量的空格</div>
-        </div>
-        <input
-          type="checkbox"
-          checked={settings.editor.insertSpaces}
-          onChange={(e) => setEditor({ insertSpaces: e.target.checked })}
-        />
-      </label>
-
-      <div className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', padding: '2px 0' }}>
-        <div>
-          <div>Markdown 默认视图模式</div>
-          <div style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 11 / 13)', color: 'var(--editor-text-muted)' }}>新打开 Markdown 文档时的初始模式</div>
-        </div>
-        <select
-          value={settings.editor.defaultViewMode}
-          onChange={(e) => setEditor({ defaultViewMode: e.target.value as 'visual' | 'source' })}
-          style={{ ...inputStyle, width: '10em' }}
-        >
-          <option value="visual">可视化模式</option>
-          <option value="source">源码模式</option>
-        </select>
-      </div>
-    </div>
-
-    {/* ── 3.3 Markdown 渲染增强 ── */}
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '18px 20px', background: 'var(--editor-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--editor-border)' }}>
-      <div style={{ fontWeight: 600, fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', color: 'var(--accent-strong)' }}>
-        Markdown 增强功能
-      </div>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
-        <div><div>纯 Markdown 使用偏好</div><div style={{ fontSize: 11, color: 'var(--editor-text-muted)' }}>默认新建 Markdown，并隐藏 NoteBoard 专属功能入口</div></div>
-        <input type="checkbox" checked={settings.editor.pureMarkdown ?? false} onChange={event => setEditor({ pureMarkdown: event.target.checked })}/>
-      </label>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)' }}>
-        <span>选区工具栏位置</span>
-        <select value={settings.editor.selectionToolbarPosition ?? 'below'}
-          onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })}
-          style={{ ...inputStyle, width: '10em' }}>
-          <option value="below">选区下方</option><option value="above">选区上方</option>
-        </select>
-      </label>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
-        <span>LaTeX 数学公式渲染 (KaTeX)</span>
-        <input
-          type="checkbox"
-          checked={settings.editor.enableMath}
-          onChange={(e) => setEditor({ enableMath: e.target.checked })}
-        />
-      </label>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
-        <span>Mermaid 图表实时渲染</span>
-        <input
-          type="checkbox"
-          checked={settings.editor.enableMermaid}
-          onChange={(e) => setEditor({ enableMermaid: e.target.checked })}
-        />
-      </label>
-
-      <label className="nb-settings-row" style={{ fontSize: 'calc(var(--ui-font-size, 13px) * 13 / 13)', cursor: 'pointer', padding: '2px 0' }}>
-        <span>悬浮块把手 (拖拽与菜单)</span>
-        <input
-          type="checkbox"
-          checked={settings.editor.enableBlockHandle}
-          onChange={(e) => setEditor({ enableBlockHandle: e.target.checked })}
-        />
-      </label>
-    </div>
-  </div>);
+  const { settings: { editor }, setEditor } = useSettingsStore();
+  return <div className="nb-settings-panel">
+    <SettingsPanelHeading title="编辑器" description="调整编辑习惯、Markdown 功能与代码显示。"/>
+    <SettingsSection title="Markdown">
+      <SettingRow label="默认视图" description="新打开 Markdown 文档时使用的模式。"><select value={editor.defaultViewMode} onChange={event => setEditor({ defaultViewMode: event.target.value as 'visual' | 'source' })} style={{ ...inputStyle, width: '10em' }}><option value="visual">可视化模式</option><option value="source">源码模式</option></select></SettingRow>
+      <SettingRow label="纯 Markdown 偏好" description="默认新建 Markdown，并隐藏 NoteBoard 专属功能入口。"><input type="checkbox" checked={editor.pureMarkdown ?? false} onChange={event => setEditor({ pureMarkdown: event.target.checked })}/></SettingRow>
+      <SettingRow label="选区工具栏位置"><select value={editor.selectionToolbarPosition ?? 'below'} onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })} style={{ ...inputStyle, width: '10em' }}><option value="below">选区下方</option><option value="above">选区上方</option></select></SettingRow>
+      <SettingRow label="数学公式渲染"><input type="checkbox" checked={editor.enableMath} onChange={event => setEditor({ enableMath: event.target.checked })}/></SettingRow>
+      <SettingRow label="Mermaid 图表渲染"><input type="checkbox" checked={editor.enableMermaid} onChange={event => setEditor({ enableMermaid: event.target.checked })}/></SettingRow>
+      <SettingRow label="显示块把手" description="拖动段落或打开块菜单。"><input type="checkbox" checked={editor.enableBlockHandle} onChange={event => setEditor({ enableBlockHandle: event.target.checked })}/></SettingRow>
+    </SettingsSection>
+    <SettingsSection title="代码与纯文本显示">
+      <SettingRow label="显示行号" description="显示代码行号与当前行高亮。"><input type="checkbox" checked={editor.showLineNumbers} onChange={event => setEditor({ showLineNumbers: event.target.checked })}/></SettingRow>
+      <SettingRow label="自动折行" description="文本超出编辑区宽度时折行。"><input type="checkbox" checked={editor.softWrap} onChange={event => setEditor({ softWrap: event.target.checked })}/></SettingRow>
+      <SettingRow label="显示空格与制表符" description="空格显示为圆点，制表符显示为箭头。"><input type="checkbox" checked={editor.showWhitespace ?? false} onChange={event => setEditor({ showWhitespace: event.target.checked })}/></SettingRow>
+      <SettingRow label="显示换行符" description="在行末显示 ↵ 标记。"><input type="checkbox" checked={editor.showLineEndings ?? false} onChange={event => setEditor({ showLineEndings: event.target.checked })}/></SettingRow>
+      <SettingRow label="显示缩进导线"><input type="checkbox" checked={editor.showIndentGuides} onChange={event => setEditor({ showIndentGuides: event.target.checked })}/></SettingRow>
+    </SettingsSection>
+    <SettingsSection title="缩进">
+      <SettingRow label="Tab 宽度" description="每个 Tab 对应的空格数量。"><input type="number" min="1" max="8" value={editor.tabSize} onChange={event => setEditor({ tabSize: Math.max(1, Math.min(8, parseInt(event.target.value, 10) || 2)) })} style={{ ...inputStyle, width: '5em', textAlign: 'center' }}/></SettingRow>
+      <SettingRow label="空格代替 Tab"><input type="checkbox" checked={editor.insertSpaces} onChange={event => setEditor({ insertSpaces: event.target.checked })}/></SettingRow>
+    </SettingsSection>
+  </div>;
 }

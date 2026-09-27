@@ -17,6 +17,17 @@ pub fn default_typography() -> model::TypographySettings {
     model::TypographySettings::default()
 }
 
+#[tauri::command]
+pub fn apply_recommended_fonts(app: AppHandle, state: State<'_, Mutex<AppState>>, expected: Option<model::TypographySettings>) -> Result<Settings, String> {
+    let settings = model::apply_recommended_fonts(expected.as_ref())?;
+    {
+        let mut app_state = state.lock().unwrap();
+        app_state.settings_revision = app_state.settings_revision.max(settings.revision);
+    }
+    let _ = app.emit("nb://settings-changed", &settings);
+    Ok(settings)
+}
+
 /// 保存设置（落盘 + 广播）
 #[tauri::command]
 pub fn save_settings(

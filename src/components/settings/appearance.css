@@ -1,6 +1,4 @@
 .appearance-panel { display:flex; flex-direction:column; gap:20px; }
-.appearance-panel h3 { margin:0 0 6px; font-size:calc(var(--ui-font-size,13px) * 15 / 13); font-weight:600; }
-.appearance-panel header p { margin:0; color:var(--editor-text-secondary); font-size:calc(var(--ui-font-size,13px) * 12 / 13); line-height:1.5; }
 .theme-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:16px; }
 .theme-card { min-width:0; padding:0; text-align:left; border:1px solid var(--editor-border); border-radius:12px; background:var(--editor-surface); color:var(--editor-text); font:inherit; cursor:pointer; overflow:hidden; transition:border-color 150ms ease,box-shadow 150ms ease; }
 .theme-card:hover { border-color:var(--editor-border-focus); box-shadow:0 3px 12px #0000000b; }

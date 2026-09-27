@@ -295,6 +295,11 @@ export function defaultTypography(): Promise<Settings['typography']> {
   return invoke<Settings['typography']>('default_typography');
 }
 
+/** An explicit install supplies its starting selection; automatic startup supplies none. */
+export function applyRecommendedFonts(expected?: Settings['typography']): Promise<Settings> {
+  return invoke<Settings>('apply_recommended_fonts', { expected: expected ?? null });
+}
+
 export function saveSettings(settings: Settings): Promise<number> {
   return invoke<number>('save_settings', { settings });
 }

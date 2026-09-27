@@ -83,7 +83,7 @@ export function FontPackPromptModal({
           </button>
           <button autoFocus className="nb-btn-primary" disabled={busy} onClick={handleDownload} type="button">
             <Download size={16} />
-            {downloading ? '正在下载' : '下载并启用（推荐）'}
+            {downloading ? '正在下载' : '下载并使用（推荐）'}
           </button>
         </div>
       </div>

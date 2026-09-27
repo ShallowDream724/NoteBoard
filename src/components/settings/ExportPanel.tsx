@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { usePandocStatus } from '../../features/export/usePandocStatus';
+import { SettingsPanelHeading, SettingsSection } from './SettingsControls';
 
 export function ExportPanel() {
   const path = useSettingsStore(s => s.settings.export?.pandocPath ?? '');
@@ -16,8 +17,8 @@ export function ExportPanel() {
     try { await setExport({ pandocPath: value.trim() }); }
     catch (error) { setError(String(error)); }
   };
-  return <section><h3 style={{ marginTop: 0 }}>Pandoc</h3>
-    <p style={{ color: 'var(--editor-text-secondary)', lineHeight: 1.6 }}>用于导出 Word、HTML 和 LaTeX。PDF 无需安装。</p>
+  return <div className="nb-settings-panel"><SettingsPanelHeading title="导出" description="PDF 可直接导出，Word、HTML 和 LaTeX 使用 Pandoc。"/>
+    <SettingsSection title="Pandoc" description="自动查找已安装的程序，或指定本地路径。">
     <label>Pandoc 路径<input aria-label="Pandoc 路径" value={draft} placeholder="留空时自动查找"
       onChange={e => setDraft(e.target.value)} onBlur={() => { if (draft.trim() !== path) void savePath(draft); }}
       style={{ display: 'block', boxSizing: 'border-box', width: '100%', margin: '10px 0', padding: 9, border: '1px solid var(--editor-border)', borderRadius: 6, background: 'var(--editor-bg)', color: 'inherit' }}/></label>
@@ -43,5 +44,5 @@ export function ExportPanel() {
         : path ? '所选程序无法运行，请检查路径。' : '未找到 Pandoc，请选择程序或安装。')}
     </div>
     {error && <p role="alert" style={{ color: 'var(--error-500)', overflowWrap: 'anywhere', userSelect: 'text' }}>{error}</p>}
-  </section>;
+    </SettingsSection></div>;
 }

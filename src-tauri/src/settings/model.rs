@@ -98,6 +98,15 @@ impl Default for AppearanceSettings {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FontSelectionSource {
+    Automatic,
+    User,
+    #[default]
+    Legacy,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TypographySettings {
@@ -113,6 +122,11 @@ pub struct TypographySettings {
     // 代码中文等宽/中文字体
     #[serde(default = "default_mono_font_zh")]
     pub mono_font_family_zh: String,
+    // Missing provenance in a legacy file is not evidence that a font was a default.
+    #[serde(default)]
+    pub mono_font_family_source: FontSelectionSource,
+    #[serde(default)]
+    pub mono_font_family_zh_source: FontSelectionSource,
     #[serde(default = "default_content_font_size")]
     pub content_font_size: u32,
     #[serde(default = "default_mono_font_size")]
@@ -160,6 +174,8 @@ impl Default for TypographySettings {
             mono_font_family: "JetBrains Mono".to_string(),
             // 默认代码中文字体优先使用可选应用字体包中的 Maple Mono Normal NF CN。
             mono_font_family_zh: "Maple Mono Normal NF CN".to_string(),
+            mono_font_family_source: FontSelectionSource::Automatic,
+            mono_font_family_zh_source: FontSelectionSource::Automatic,
             content_font_size: 16,
             mono_font_size: 14,
             content_line_height: 1.7,
@@ -346,7 +362,7 @@ fn read_from_disk() -> Settings {
     };
 
     // 尝试解析，失败则备份 + 返回默认
-    match serde_json::from_str::<Settings>(&content) {
+    match parse_settings(&content) {
         Ok(s) => s,
         Err(_) => {
             // 损坏文件备份
@@ -359,6 +375,51 @@ fn read_from_disk() -> Settings {
             Settings::default()
         }
     }
+}
+
+fn parse_settings(content: &str) -> Result<Settings, serde_json::Error> {
+    let mut value: serde_json::Value = serde_json::from_str(content)?;
+    if let Some(typography) = value.get_mut("typography").and_then(serde_json::Value::as_object_mut) {
+        // An absent field proves that this slot has never stored a choice. Existing
+        // names, including old defaults and system fallbacks, remain unclassified.
+        for (font, source) in [("monoFontFamily", "monoFontFamilySource"), ("monoFontFamilyZh", "monoFontFamilyZhSource")] {
+            if !typography.contains_key(font) && !typography.contains_key(source) {
+                typography.insert(source.into(), serde_json::json!("automatic"));
+            }
+        }
+    }
+    serde_json::from_value(value)
+}
+
+fn recommended_fonts_patch(current: &TypographySettings, expected: Option<&TypographySettings>) -> serde_json::Value {
+    let mut patch = serde_json::Map::new();
+    let fields = [
+        ("monoFontFamily", "monoFontFamilySource", &current.mono_font_family, &current.mono_font_family_source,
+            expected.map(|t| (&t.mono_font_family, &t.mono_font_family_source)), default_mono_font()),
+        ("monoFontFamilyZh", "monoFontFamilyZhSource", &current.mono_font_family_zh, &current.mono_font_family_zh_source,
+            expected.map(|t| (&t.mono_font_family_zh, &t.mono_font_family_zh_source)), default_mono_font_zh()),
+    ];
+    for (field, source_field, family, source, expected_slot, recommended) in fields {
+        let can_apply = match expected_slot {
+            Some((old_family, old_source)) => family == old_family && source == old_source,
+            None => *source == FontSelectionSource::Automatic,
+        };
+        if can_apply && (family != &recommended || *source != FontSelectionSource::Automatic) {
+            patch.insert(field.into(), serde_json::json!(recommended));
+            patch.insert(source_field.into(), serde_json::json!("automatic"));
+        }
+    }
+    serde_json::Value::Object(patch)
+}
+
+/// Compare the latest durable selection under the settings lock. A newer user
+/// choice made while installation was running always wins over that installation.
+pub fn apply_recommended_fonts(expected: Option<&TypographySettings>) -> Result<Settings, String> {
+    let mut state = SETTINGS.lock().unwrap();
+    let current = state.get_or_insert_with(read_from_disk);
+    let typography = recommended_fonts_patch(&current.typography, expected);
+    if typography.as_object().is_some_and(|fields| fields.is_empty()) { return Ok(current.clone()); }
+    commit_patch(current, &serde_json::json!({ "typography": typography }), persist)
 }
 
 fn persist(settings: &Settings) -> Result<(), String> {
@@ -446,6 +507,49 @@ pub fn save(settings: &mut Settings) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn font_provenance_migration_preserves_unknown_history_and_marks_absent_slots() {
+        let legacy = parse_settings(r#"{"typography":{"monoFontFamily":"Consolas","monoFontFamilyZh":"Microsoft YaHei"}}"#).unwrap();
+        assert_eq!(legacy.typography.mono_font_family_source, FontSelectionSource::Legacy);
+        assert!(recommended_fonts_patch(&legacy.typography, None).as_object().unwrap().is_empty());
+        let partial = parse_settings(r#"{"typography":{"contentFontSize":18}}"#).unwrap();
+        assert_eq!(partial.typography.mono_font_family_source, FontSelectionSource::Automatic);
+        assert_eq!(partial.typography.mono_font_family_zh_source, FontSelectionSource::Automatic);
+        assert_eq!(partial.typography.content_font_size, 18);
+    }
+
+    #[test]
+    fn font_install_applies_recommendations_but_keeps_newer_explicit_choice() {
+        let mut typography = TypographySettings::default();
+        typography.mono_font_family = "Consolas".into();
+        typography.mono_font_family_zh = "Microsoft YaHei".into();
+        typography.mono_font_family_source = FontSelectionSource::Legacy;
+        typography.mono_font_family_zh_source = FontSelectionSource::User;
+        let expected = typography.clone();
+        let requested = recommended_fonts_patch(&typography, Some(&expected));
+        assert_eq!(requested["monoFontFamily"], "JetBrains Mono");
+        assert_eq!(requested["monoFontFamilyZh"], "Maple Mono Normal NF CN");
+        typography.mono_font_family = "Cascadia Code".into();
+        typography.mono_font_family_source = FontSelectionSource::User;
+        let newer = recommended_fonts_patch(&typography, Some(&expected));
+        assert!(newer.get("monoFontFamily").is_none());
+        assert_eq!(newer["monoFontFamilyZh"], "Maple Mono Normal NF CN");
+    }
+
+    #[test]
+    fn automatic_font_upgrade_only_changes_automatic_slots_and_is_idempotent() {
+        let mut settings = Settings::default();
+        settings.typography.mono_font_family = "old default".into();
+        settings.typography.mono_font_family_zh = "custom CJK".into();
+        settings.typography.mono_font_family_zh_source = FontSelectionSource::User;
+        let patch = recommended_fonts_patch(&settings.typography, None);
+        assert_eq!(patch["monoFontFamily"], "JetBrains Mono");
+        assert!(patch.get("monoFontFamilyZh").is_none());
+        let updated = patched(&settings, &serde_json::json!({"typography": patch})).unwrap();
+        assert_eq!(updated.typography.mono_font_family_zh, "custom CJK");
+        assert!(recommended_fonts_patch(&updated.typography, None).as_object().unwrap().is_empty());
+    }
 
     #[test]
     fn shortcuts_merge_by_command_reset_and_validate_conflicts() {

@@ -25,6 +25,7 @@ import {
   stopSystemThemeListener,
 } from '../core/theme/applyTheme';
 import { useFontPackStore } from './fontPackStore';
+import { ensureFaces } from '../app/fontPack';
 import { setShortcutOverrides, type ShortcutOverrides } from '../core/shortcutBindings';
 
 // ── 默认值 ──
@@ -43,6 +44,8 @@ const DEFAULT_SETTINGS: Settings = {
     contentFontFamilyZh: '',
     monoFontFamily: 'JetBrains Mono',
     monoFontFamilyZh: 'Maple Mono Normal NF CN',
+    monoFontFamilySource: 'automatic',
+    monoFontFamilyZhSource: 'automatic',
     contentFontSize: 16,
     monoFontSize: 14,
     contentLineHeight: 1.7,
@@ -114,6 +117,7 @@ interface SettingsStore {
   // ── 排版 ──
   setTypography: (patch: Partial<TypographySettings>) => Promise<void>;
   resetTypography: () => Promise<void>;
+  applyRecommendedFonts: (expected?: TypographySettings) => Promise<void>;
 
   // ── 编辑器 ──
   setEditor: (patch: Partial<EditorSettings>) => Promise<void>;
@@ -239,7 +243,26 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setThemeMode: mode => update({ appearance: { themeMode: mode } }),
     setSystemLightTheme: theme => update({ appearance: { systemLightTheme: theme } }),
     setSystemDarkTheme: theme => update({ appearance: { systemDarkTheme: theme } }),
-    setTypography: typography => update({ typography }),
+    setTypography: typography => update({ typography: {
+      ...typography,
+      ...('monoFontFamily' in typography && !typography.monoFontFamilySource && { monoFontFamilySource: 'user' }),
+      ...('monoFontFamilyZh' in typography && !typography.monoFontFamilyZhSource && { monoFontFamilyZhSource: 'user' }),
+    } }),
+    applyRecommendedFonts: expected => {
+      // Use the native transaction to avoid overwriting another window's newer font choice.
+      if (expected) set({ saveError: null });
+      const saved = tail.then(async () => {
+        try {
+          replica.receive(await ipc.applyRecommendedFonts(expected));
+          publish();
+        } catch (error) {
+          set({ saveError: String(error) });
+          throw error;
+        }
+      });
+      tail = saved.catch(() => {});
+      return saved.then(() => ensureFaces(get().settings.typography));
+    },
     resetTypography: async () => {
       const typography = await ipc.defaultTypography();
       const error = await submit({ typography });

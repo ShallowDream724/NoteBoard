@@ -9,7 +9,7 @@ import {
   onFontPackDownloadProgress,
 } from '../core/ipc/events';
 import { useSettingsStore } from './settingsStore';
-import type { DownloadProgress, FontPackStatus } from '../core/ipc/types';
+import type { DownloadProgress, FontPackStatus, TypographySettings } from '../core/ipc/types';
 
 export type FontPackAction = 'download' | 'import' | 'remove' | '';
 
@@ -25,7 +25,7 @@ interface FontPackStore {
   importArchive: (sourcePath: string) => Promise<FontPackStatus | null>;
   remove: () => Promise<FontPackStatus | null>;
   clearError: () => void;
-  _applyStatus: (status: FontPackStatus) => Promise<FontPackStatus>;
+  _applyStatus: (status: FontPackStatus, expected?: TypographySettings) => Promise<FontPackStatus>;
 }
 
 // React StrictMode 可能在首次挂载阶段重复调用初始化；共享 Promise 保证监听器与 SHA 校验只建立一次。
@@ -69,7 +69,7 @@ export const useFontPackStore = create<FontPackStore>((set, get) => ({
     return initializationPromise;
   },
 
-  _applyStatus: async (status) => {
+  _applyStatus: async (status, expected) => {
     // 🔴 S06：verifying 表示后台校验中——不激活、不设错误，等待校验完成的广播
     if (status.state === 'verifying') {
       set({ status });
@@ -78,14 +78,18 @@ export const useFontPackStore = create<FontPackStore>((set, get) => ({
     // 🔴 R11：本状态到达时递增 epoch；remove/import 的状态变化自然使旧激活失效
     packEpoch += 1;
     const applyEpoch = packEpoch;
+    let settingsError: string | null = null;
+    if (status.state === 'ready') {
+      try { await useSettingsStore.getState().applyRecommendedFonts(expected); }
+      catch (error) { settingsError = `字体包已安装，但字体设置保存失败：${String(error)}`; }
+      if (packEpoch !== applyEpoch) return status;
+    }
     try {
       // 传入当前排版设置：activateFontPack 只主动加载配置引用的族（按需 face）
       const typography = useSettingsStore.getState().settings.typography;
       await activateFontPack(status, typography);
       // 激活期间又有新状态（remove/import/download 的广播到达）→ 本结果丢弃
       if (packEpoch !== applyEpoch) return status;
-      set({ status, error: null });
-      return status;
     } catch (error) {
       if (packEpoch !== applyEpoch) return status;
       // 字体二进制通过哈希但 WebView 无法解析时按无效包处理，设置页保留修复入口。
@@ -93,6 +97,9 @@ export const useFontPackStore = create<FontPackStore>((set, get) => ({
       set({ status: invalidStatus, error: '字体文件无法由当前 WebView 加载，请修复或重新下载字体包。' });
       throw error;
     }
+    set({ status, error: settingsError });
+    if (settingsError && expected) throw new Error(settingsError);
+    return status;
   },
 
   refresh: async () => {
@@ -108,10 +115,11 @@ export const useFontPackStore = create<FontPackStore>((set, get) => ({
 
   download: async () => {
     if (get().action) return null;
+    const expected = structuredClone(useSettingsStore.getState().settings.typography);
     set({ action: 'download', progress: null, error: null });
     try {
       const status = await ipc.downloadFontPack();
-      return await get()._applyStatus(status);
+      return await get()._applyStatus(status, expected);
     } catch (error) {
       if (!get().error) set({ error: translateFontPackError(error) });
       return null;
@@ -122,10 +130,11 @@ export const useFontPackStore = create<FontPackStore>((set, get) => ({
 
   importArchive: async (sourcePath) => {
     if (get().action) return null;
+    const expected = structuredClone(useSettingsStore.getState().settings.typography);
     set({ action: 'import', progress: null, error: null });
     try {
       const status = await ipc.importFontPack(sourcePath);
-      return await get()._applyStatus(status);
+      return await get()._applyStatus(status, expected);
     } catch (error) {
       if (!get().error) set({ error: translateFontPackError(error) });
       return null;

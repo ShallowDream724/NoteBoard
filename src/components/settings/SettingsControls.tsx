@@ -12,29 +12,17 @@ export function NavBtn({ active, icon, label, onClick }: { active: boolean; icon
   );
 }
 
-export function ShortcutItem({ keyCombo, label }: { keyCombo: string; label: string }) {
-  return (
-    <div className="nb-settings-shortcut">
-      <span style={{ color: 'var(--editor-text)' }}>{label}</span>
-      <kbd>
-        {keyCombo}
-      </kbd>
-    </div>
-  );
+export function SettingsPanelHeading({ title, description, actions }: { title: string; description: string; actions?: React.ReactNode }) {
+  return <header className="nb-settings-panel-heading"><div><h3>{title}</h3><p>{description}</p></div>{actions}</header>;
 }
 
-export const formRowStyle: React.CSSProperties = {
-  minWidth: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-};
+export function SettingsSection({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+  return <section className="nb-settings-section"><header><h4>{title}</h4>{description && <p>{description}</p>}</header><div className="nb-settings-section-body">{children}</div></section>;
+}
 
-export const labelStyle: React.CSSProperties = {
-  fontSize: 'calc(var(--ui-font-size, 13px) * 12.5 / 13)',
-  fontWeight: 500,
-  color: 'var(--editor-text)',
-};
+export function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
+  return <label className="nb-settings-row nb-settings-control-row"><span><span className="nb-settings-label">{label}</span>{description && <span className="nb-settings-hint">{description}</span>}</span>{children}</label>;
+}
 
 export const inputStyle: React.CSSProperties = {
   minWidth: 0,

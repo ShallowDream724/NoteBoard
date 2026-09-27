@@ -108,6 +108,7 @@ pub fn run() {
             // settings
             settings::commands::load_settings,
             settings::commands::default_typography,
+            settings::commands::apply_recommended_fonts,
             settings::commands::save_settings,
             settings::commands::patch_settings,
             // staging

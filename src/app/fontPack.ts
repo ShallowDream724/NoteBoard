@@ -87,13 +87,6 @@ export const activateFontPack = async (
 
   // 按当前排版需求主动加载引用族（区分"已登记"与"已可渲染"）
   await ensureFaces(typography ?? null);
-  // 🔴 字体从 fallback 切换到真实字形后，CodeMirror 等自绘光标/测量缓存的组件需要重测；
-  //    等待字体就绪后广播统一度量刷新事件（F 节 5）。
-  if (typeof document !== 'undefined' && document.fonts) {
-    void document.fonts.ready.then(() => {
-      window.dispatchEvent(new CustomEvent('noteboard-fonts-settled'));
-    });
-  }
   return status;
 };
 
@@ -123,6 +116,12 @@ export const ensureFaces = async (
   });
   // 主动 load 需要的 face；单个失败不阻塞其它（CSS 仍会按需重试）
   await Promise.allSettled(needed.map((fontFace) => fontFace.load()));
+  // Also refresh metrics when an explicit install changes settings after registration.
+  if (typeof document !== 'undefined' && document.fonts) {
+    void document.fonts.ready.then(() => {
+      window.dispatchEvent(new CustomEvent('noteboard-fonts-settled'));
+    });
+  }
 };
 
 /** 收集排版配置中引用的包字体族（小写） */
