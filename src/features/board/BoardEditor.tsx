@@ -9,6 +9,7 @@ import { parseScene, serializeScene, createEmptyScene, cleanAppState, isVersionS
 import { mapTheme } from './excalidrawTheme';
 import { BoardPresentationToggle } from './BoardPresentationToggle';
 import { FlowchartQuickConnect } from './FlowchartQuickConnect';
+import { BoardSceneMaterializer, BoardSceneRevisionTracker } from './sceneMaterializer';
 import { Tooltip } from '../../components/Tooltip';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -34,6 +35,7 @@ import {
   recordDocumentChange,
   redoDocumentHistory,
   registerDocumentHistoryAdapter,
+  registerHistoryMaterializeHook,
   synchronizeCurrentDocumentHistoryContent,
   undoDocumentHistory,
 } from '../history/documentHistory';
@@ -160,6 +162,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
   const setBoardPresentationMode = useLayoutStore((s) => s.setBoardPresentationMode);
   const storeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const diskTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gestureEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 串行化原生窗口全屏请求，避免快速连点造成较晚完成的旧请求覆盖最新状态 */
   const fullscreenOperationRef = useRef<Promise<void>>(Promise.resolve());
   /** 保存用户最新期望值，供异步全屏请求和卸载清理判断 */
@@ -174,7 +177,8 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
   const themeMode = useSettingsStore((s) => s.settings.appearance.themeMode);
   const theme = mapTheme(themeMode);
   const initialMountHandledRef = useRef<boolean>(false);
-  const lastCommittedSignatureRef = useRef<string>('');
+  const materializerRef = useRef<BoardSceneMaterializer | null>(null);
+  const revisionTrackerRef = useRef<BoardSceneRevisionTracker | null>(null);
   // 同一次鼠标手势内的连续 onChange 必须合并成一个撤销步骤
   const pointerGestureActiveRef = useRef(false);
   const pointerGestureChangedRef = useRef(false);
@@ -252,6 +256,33 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     setHistoryAvailability(getDocumentHistoryAvailability(key));
   }, []);
 
+  const commitScene = useCallback((scene: ExcalidrawScene, content: string, signature: string, startsNewGroup: boolean) => {
+    const key = docKeyRef.current;
+    // A discarded/closed document can unmount before its debounce runs. Do not
+    // recreate its cleared history or document state during final cleanup.
+    if (!useDocumentStore.getState().getDocument(key)) return;
+    const isHistoryNavigation = historyApplyTargetSignatureRef.current === signature;
+    historyApplyTargetSignatureRef.current = null;
+    if (isHistoryNavigation) synchronizeCurrentDocumentHistoryContent(key, content, 'board');
+    else recordDocumentChange(key, content, { mode: 'board', startsNewGroup });
+    refreshHistoryAvailability(key);
+
+    useDocumentStore.getState().setContent(key, content);
+    const doc = useDocumentStore.getState().getDocument(key);
+    const isDirty = content.trim() !== (doc?.baselineContent?.trim() ?? '');
+    useWindowStore.getState().setTabDirty(key, isDirty);
+    useDocumentStore.getState().setDirty(key, isDirty);
+    setElementCount(getElementCount(scene));
+    const zoom = scene.appState.zoom;
+    setZoomLevel(typeof zoom === 'number' ? zoom : (zoom as { value?: number })?.value ?? 1);
+  }, [refreshHistoryAvailability]);
+
+  const materializeScene = useCallback(() => {
+    if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
+    storeTimerRef.current = null;
+    return materializerRef.current?.materialize() ?? null;
+  }, []);
+
   // 加载 Excalidraw 组件
   useEffect(() => {
     loadExcalidraw()
@@ -299,14 +330,15 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     }
 
     sceneRef.current = parsed;
-    lastCommittedSignatureRef.current = getBoardHistorySignature(parsed);
-    initializeDocumentHistory(docKey, serializeScene(parsed), 'board');
+    materializerRef.current = new BoardSceneMaterializer(parsed, commitScene);
+    revisionTrackerRef.current = new BoardSceneRevisionTracker(parsed);
+    initializeDocumentHistory(docKey, materializerRef.current.capture(), 'board');
     refreshHistoryAvailability(docKey);
     setInitialData(parsed);
     setLiveAppState(parsed.appState);
     setLiveElements(parsed.elements);
     setElementCount(getElementCount(parsed));
-  }, [docKey, theme, refreshHistoryAvailability]);
+  }, [docKey, theme, refreshHistoryAvailability, commitScene]);
 
   // onChange 回调（函数引用全局恒定，内部绝不直接触发同步 setState）
   const handleChange = useCallback(
@@ -336,90 +368,85 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
       if (!initialMountHandledRef.current) {
         initialMountHandledRef.current = true;
         // Excalidraw 可能在恢复场景时规范化运行态；以首次稳定场景对齐首节点，避免第一次点击被误判
-        lastCommittedSignatureRef.current = getBoardHistorySignature(newScene);
-        synchronizeCurrentDocumentHistoryContent(key, serializeScene(newScene), 'board');
+        materializerRef.current = new BoardSceneMaterializer(newScene, commitScene);
+        revisionTrackerRef.current = new BoardSceneRevisionTracker(newScene);
+        synchronizeCurrentDocumentHistoryContent(key, materializerRef.current.capture(), 'board');
         return;
       }
 
-      // 仅比较真正可撤销的画板内容；点击选择、缩放和滚动不会改变该签名
-      const currentSig = getBoardHistorySignature(newScene);
-      const prevSig = lastCommittedSignatureRef.current;
-
-      if (currentSig === prevSig) {
-        return;
-      }
-
-      lastCommittedSignatureRef.current = currentSig;
-      // 🔴 内容版本递增：真正可撤销的画板内容变化推进 revision（选择/缩放不递增）
+      // Keep close protection and capture revisions synchronous. Excalidraw mutates
+      // elements in place, so inspect scalar versions without allocating signatures.
+      if (!revisionTrackerRef.current?.update(newScene)) return;
       bumpDocumentRevision(key);
-      const content = serializeScene(newScene);
-      const isHistoryNavigation = historyApplyTargetSignatureRef.current === currentSig;
-      historyApplyTargetSignatureRef.current = null;
-
-      if (isHistoryNavigation) {
-        // Excalidraw 的历史应用回调可能晚于统一历史锁，按目标签名识别并只同步当前节点
-        synchronizeCurrentDocumentHistoryContent(key, content, 'board');
-      } else {
-        const now = Date.now();
-        const startsNewGroup = pointerGestureActiveRef.current
-          ? !pointerGestureChangedRef.current
-          : now - lastHistoryChangeAtRef.current > BOARD_HISTORY_GROUP_DELAY_MS;
-        recordDocumentChange(key, content, {
-          mode: 'board',
-          startsNewGroup,
-        });
-        refreshHistoryAvailability(key);
-        pointerGestureChangedRef.current = pointerGestureActiveRef.current;
-        lastHistoryChangeAtRef.current = now;
-      }
-
-      // 标记脏态（同步 windowStore 和 documentStore）
-      const tab = useWindowStore.getState().getTab(key);
-      if (tab && !tab.isDirty) {
+      if (!useWindowStore.getState().getTab(key)?.isDirty) {
         useWindowStore.getState().setTabDirty(key, true);
         useDocumentStore.getState().setDirty(key, true);
       }
-
-      // 300ms 防抖更新 Store 内存镜像
+      // JSON, history patches and the mirror share one deferred materialization.
+      const now = Date.now();
+      materializerRef.current?.stage(newScene, pointerGestureActiveRef.current
+        ? !pointerGestureChangedRef.current
+        : now - lastHistoryChangeAtRef.current > BOARD_HISTORY_GROUP_DELAY_MS);
+      pointerGestureChangedRef.current = pointerGestureActiveRef.current;
+      lastHistoryChangeAtRef.current = now;
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       storeTimerRef.current = setTimeout(() => {
-        useDocumentStore.getState().setContent(key, content);
-        const doc = useDocumentStore.getState().getDocument(key);
-        // 如果内容与基线一致，自动解除脏态
-        if (doc && content.trim() === (doc.baselineContent?.trim() ?? '')) {
-          useWindowStore.getState().setTabDirty(key, false);
-          useDocumentStore.getState().setDirty(key, false);
-        }
-        setElementCount(elements.length);
-        const zoom = typeof appState.zoom === 'number' ? appState.zoom : (appState.zoom as { value?: number })?.value ?? 1;
-        setZoomLevel(zoom);
+        storeTimerRef.current = null;
+        // Pausing a held drag must not create intermediate full snapshots.
+        if (!pointerGestureActiveRef.current) materializeScene();
       }, 300);
 
       // 800ms 防抖自动写入磁盘（auto 策略；🔴 S09：统一走每文档写队列与基线/脏态屏障）
       if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
       diskTimerRef.current = setTimeout(async () => {
+        diskTimerRef.current = null;
+        if (pointerGestureActiveRef.current) return;
         try {
-          await queuedAutoSave(key, content);
+          const content = materializeScene();
+          if (content !== null) await queuedAutoSave(key, content);
         } catch (e) {
           console.error('画板自动保存失败:', e);
         }
       }, 800);
     },
-    [refreshHistoryAvailability],
+    [commitScene, materializeScene],
   );
 
   /** 开始画布指针手势；拖动或缩放产生的多帧变化应归并为一个历史分组 */
   const handleBoardPointerDown = useCallback(() => {
+    if (gestureEndTimerRef.current) clearTimeout(gestureEndTimerRef.current);
+    gestureEndTimerRef.current = null;
+    materializeScene();
+    markDocumentHistoryModeBoundary(docKeyRef.current);
     pointerGestureActiveRef.current = true;
     pointerGestureChangedRef.current = false;
-  }, []);
+  }, [materializeScene]);
 
   /** 结束指针手势并封闭当前分组，下一次真实操作必须另起一步 */
   const handleBoardPointerUp = useCallback(() => {
-    pointerGestureActiveRef.current = false;
-    pointerGestureChangedRef.current = false;
-    markDocumentHistoryModeBoundary(docKeyRef.current);
-  }, []);
+    // Excalidraw may publish its final change after onPointerUp in the same
+    // event. Keep that change in the held gesture even after a mid-drag save
+    // and pause, then seal the group after the final callback.
+    if (gestureEndTimerRef.current) clearTimeout(gestureEndTimerRef.current);
+    gestureEndTimerRef.current = setTimeout(() => {
+      gestureEndTimerRef.current = null;
+      materializeScene();
+      pointerGestureActiveRef.current = false;
+      pointerGestureChangedRef.current = false;
+      markDocumentHistoryModeBoundary(docKeyRef.current);
+    }, 0);
+    // A long drag can outlive the disk timer; schedule its final scene on release.
+    if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
+    diskTimerRef.current = setTimeout(() => {
+      diskTimerRef.current = null;
+      const content = materializeScene();
+      if (content !== null) void queuedAutoSave(docKeyRef.current, content).catch(error => console.error('画板自动保存失败:', error));
+    }, 800);
+  }, [materializeScene]);
+
+  useEffect(() => registerHistoryMaterializeHook(key => {
+    if (key === docKey) materializeScene();
+  }), [docKey, materializeScene]);
 
   // 稳定的 API 注入回调
   const handleApi = useCallback((api: BoardApi) => {
@@ -438,6 +465,10 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
         const restored = parseScene(entry.content);
         historyApplyTargetSignatureRef.current = getBoardHistorySignature(restored);
         sceneRef.current = restored;
+        revisionTrackerRef.current?.update(restored);
+        bumpDocumentRevision(docKey);
+        materializerRef.current?.stage(restored, false);
+        materializeScene();
         api.addFiles?.(Object.values(restored.files ?? {}));
         api.updateScene({
           elements: restored.elements,
@@ -447,7 +478,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
         refreshHistoryAvailability(docKey);
       },
     });
-  }, [docKey, initialData, refreshHistoryAvailability]);
+  }, [docKey, initialData, refreshHistoryAvailability, materializeScene]);
 
   // Excalidraw 的按钮状态来自它自己的历史栈；持续改写为文件级历史状态，防止重做按钮回落到旧栈
   useEffect(() => {
@@ -564,7 +595,9 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
         try {
           const scene = sceneRef.current;
           if (!scene) return null;
-          const content = serializeScene(scene);
+          materializerRef.current?.stage(scene, false);
+          materializeScene();
+          const content = materializerRef.current?.capture() ?? serializeScene(scene);
           submitCapturedContent(docKey, { instanceId, revision: getDocumentRevision(docKey), content });
           return { docKey, instanceId, revision: getDocumentRevision(docKey), content };
         } catch {
@@ -602,20 +635,23 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
       disposeCapabilities();
       activeBoardScenes.delete(docKey);
     };
-  }, [docKey]);
+  }, [docKey, materializeScene]);
 
   // 清理计时器
   useEffect(() => {
     return () => {
       // 防抖尚未触发时也要把画板最新快照写回内存，避免切换标签丢失操作
       const latestScene = sceneRef.current;
-      if (latestScene) {
-        useDocumentStore.getState().setContent(docKey, serializeScene(latestScene));
+      if (latestScene && useDocumentStore.getState().getDocument(docKey)) {
+        materializerRef.current?.stage(latestScene, false);
+        materializeScene();
+        useDocumentStore.getState().setContent(docKey, materializerRef.current?.capture() ?? serializeScene(latestScene));
       }
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
+      if (gestureEndTimerRef.current) clearTimeout(gestureEndTimerRef.current);
     };
-  }, [docKey]);
+  }, [docKey, materializeScene]);
 
   const stableInitialData = useMemo(() => {
     if (!initialData) return null;
