@@ -3,7 +3,10 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import { InteractiveImageCollection, InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
-import { ClipboardImport } from '../../src/features/editor-md/clipboard/clipboardImport';
+import { ClipboardImport, DOCUMENT_SLICE_MIME, documentSliceClipboardData, insertImportedSlice } from '../../src/features/editor-md/clipboard/clipboardImport';
+import { Fragment, Slice } from '@tiptap/pm/model';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { selectContextMenuTarget } from '../../src/features/editor-md/contextMenuSelection';
 import { clearNativeFileDropTargets, isNativeFileDropDuplicate, nativeDropToCssPoint, routeNativeFileDrop } from '../../src/core/editor/fileDropTargets';
 import { createImageDropIndicator, imageSlotAtPoint, imageDropTargetAtPoint } from '../../src/features/editor-md/imageDropTarget';
 const mock = vi.hoisted(() => ({ editor: null as Editor | null, active: 'test.nb', paste: vi.fn(), paths: vi.fn(), lease: vi.fn(() => ({ dispose() {} })) }));
@@ -16,7 +19,7 @@ function create(layout = 'grid') {
   mock.editor = new Editor({ extensions: [StarterKit, Image, InteractiveImageCollection, InteractiveImageSlot, ClipboardImport.configure({ docKey: 'test.nb' })], content: {
     type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'caret here' }] }, { type: 'imageCollection', attrs: { layout, columns: 3 }, content: Array.from({ length: 9 }, () => ({ type: 'imageSlot' })) }],
   } });
-  document.body.append(mock.editor.view.dom); mock.editor.commands.setTextSelection(2); return mock.editor;
+  document.body.append(mock.editor.view.dom); mock.editor.setOptions({ editorProps: { handleScrollToSelection: () => true } }); mock.editor.commands.setTextSelection(2); return mock.editor;
 }
 function pointAt(element: Element | null) { hit = element; document.dispatchEvent(new MouseEvent('pointermove', { clientX: 45, clientY: 60, bubbles: true })); }
 function paste(editor: Editor, files = [new File(['png'], 'paste.png', { type: 'image/png' })], text = '') {
@@ -31,9 +34,61 @@ function pasteOn(target: Element, images = true) {
   } });
   target.dispatchEvent(event); return event.defaultPrevented;
 }
+function richPasteOn(target: Element, formats: Record<string, string>) {
+  const event = new Event('paste', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'clipboardData', { value: { types: Object.keys(formats), files: [], items: [], getData: (type: string) => formats[type] ?? '' } });
+  target.dispatchEvent(event); return event.defaultPrevented;
+}
 beforeEach(() => { vi.clearAllMocks(); mock.active = 'test.nb'; hit = null; Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: vi.fn(() => hit) }); });
 afterEach(() => { mock.editor?.destroy(); mock.editor = null; clearNativeFileDropTargets(); document.body.replaceChildren(); vi.restoreAllMocks(); });
 describe('native image drop and current-pointer paste routing', () => {
+  it.each(['grid', 'carousel'])('pastes an internally copied picture into the hovered %s slot from editor or body focus', layout => {
+    const editor = create(layout), image = editor.schema.nodes.image.create({ src: 'morning.png', alt: '01 晨光' });
+    editor.view.dispatch(editor.state.tr.replaceWith(13, 15, editor.schema.nodes.imageSlot.create(null, image)));
+    const source = editor.state.doc.child(1).firstChild!, payload = documentSliceClipboardData(editor.state.doc, new Slice(Fragment.from(image), 0, 0));
+    for (const bodyFocus of [false, true]) {
+      const index = bodyFocus ? 4 : 2, before = editor.state.doc;
+      const slot = editor.view.dom.querySelectorAll('[data-image-slot]')[index]; pointAt(slot.querySelector('button'));
+      expect(richPasteOn(bodyFocus ? document.body : editor.view.dom, { [DOCUMENT_SLICE_MIME]: payload })).toBe(true);
+      expect(editor.state.doc.child(1).child(index).firstChild?.attrs.src).toBe('morning.png');
+      expect(editor.state.doc.child(1).firstChild!.eq(source)).toBe(true);
+      expect(editor.state.doc.childCount).toBe(before.childCount);
+      editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    }
+  });
+  it('routes HTML-only image copy through the same empty-slot rules without requiring bitmap files', () => {
+    const editor = create(), slot = editor.view.dom.querySelectorAll('[data-image-slot]')[3]; pointAt(slot.querySelector('button'));
+    expect(richPasteOn(document.body, { 'text/html': '<img src="https://example.com/one.png" alt="one">' })).toBe(true);
+    expect(editor.state.doc.child(1).child(3).firstChild?.attrs.src).toBe('https://example.com/one.png');
+    expect(mock.paste).not.toHaveBeenCalled();
+  });
+  it('preserves the original image and caption when a picture is pasted at a caption caret', () => {
+    const editor = create(), image = editor.schema.nodes.image.create({ src: 'morning.png' }), p = editor.schema.nodes.paragraph.create(null, editor.schema.text('caption'));
+    editor.view.dispatch(editor.state.tr.replaceWith(13, 15, editor.schema.nodes.imageSlot.create(null, [image, p])));
+    const before = editor.state.doc, source = before.child(1).firstChild!;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(before, 17)));
+    pointAt(editor.view.dom.querySelector('[data-image-slot] p'));
+    insertImportedSlice(editor.view, { slice: new Slice(Fragment.from(image), 0, 0), bodies: [], diagnostics: [] }, editor.state.selection);
+    expect(editor.state.doc.child(1).firstChild!.eq(source)).toBe(true);
+    expect(editor.state.doc.child(1).child(1).firstChild?.attrs.src).toBe('morning.png');
+    expect(editor.state.selection.$from.parent.textContent).toBe('caption');
+    expect(editor.state.doc.childCount).toBe(before.childCount);
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+  });
+  it('does not redirect a different caret to an occupied slot just because the mouse is on its caption', () => {
+    const editor = create(), image = editor.schema.nodes.image.create({ src: 'morning.png' }), p = editor.schema.nodes.paragraph.create(null, editor.schema.text('caption'));
+    editor.view.dispatch(editor.state.tr.replaceWith(13, 15, editor.schema.nodes.imageSlot.create(null, [image, p])));
+    editor.commands.setTextSelection(2); pointAt(editor.view.dom.querySelector('[data-image-slot] p'));
+    paste(editor); expect(mock.paste).toHaveBeenLastCalledWith(editor, expect.any(Array), 'test.nb', undefined);
+  });
+  it('right-click copy targets the clicked picture instead of an unrelated text selection', () => {
+    const editor = create(), image = editor.schema.nodes.image.create({ src: 'morning.png' });
+    editor.view.dispatch(editor.state.tr.replaceWith(13, 15, editor.schema.nodes.imageSlot.create(null, image)));
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+    selectContextMenuTarget(editor.view, editor.view.dom.querySelector('img'), { x: 0, y: 0 });
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect((editor.state.selection as NodeSelection).node.attrs.src).toBe('morning.png');
+  });
   it('shows only an insertion line at a block boundary and confines slot text to the slot', () => {
     const editor = create(), indicator = createImageDropIndicator(editor.view), block = editor.view.dom.querySelector('p')!;
     vi.spyOn(block, 'getBoundingClientRect').mockReturnValue({ top: 20, bottom: 140, left: 10, right: 310, width: 300, height: 120, x: 10, y: 20, toJSON() {} });

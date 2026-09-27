@@ -5,6 +5,7 @@ import { annotationId } from './annotations/model';
 import { normalizeFigureCaption, renderFigureCaption } from './figureCaption';
 import { editFigureCaption, FIGURE_CAPTION_EDIT_EVENT } from './figureCaptionCommands';
 import type { mountFigureCaptionEditor } from './figureCaptionEditor';
+import './captionAddControl.css';
 
 /** One owned caption follows the table's native width and margins. Its marker
  * is positioned by the table itself, including during live column resizing. */
@@ -62,6 +63,7 @@ export class TableAccessories {
     this.label.setAttribute('role', editable ? 'button' : 'text');
     this.label.setAttribute('aria-label', caption ? '编辑表注' : '添加表注');
     if (!caption) this.label.dataset.placeholder = '添加表注'; else delete this.label.dataset.placeholder;
+    this.label.classList.toggle('nb-caption-add', !caption);
     this.input.hidden = !this.editing;
     this.dom.classList.toggle('nb-caption-empty', !caption && !this.editing);
     this.dom.hidden = !id && !caption && !this.editing && !editable;

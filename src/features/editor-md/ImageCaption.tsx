@@ -4,6 +4,7 @@ import { normalizeFigureCaption, renderFigureCaption } from './figureCaption';
 import { editFigureCaption, FIGURE_CAPTION_EDIT_EVENT } from './figureCaptionCommands';
 import type { mountFigureCaptionEditor } from './figureCaptionEditor';
 import './imageCaption.css';
+import './captionAddControl.css';
 
 export function ImageCaption({ editor, getPos, caption, captionContent, src, width, editable }: {
   editor: Editor; getPos: () => number | undefined; caption: unknown; captionContent?: unknown; src: string;
@@ -39,7 +40,7 @@ export function ImageCaption({ editor, getPos, caption, captionContent, src, wid
   return <div className={`nb-image-caption${!text && !editing ? ' nb-caption-empty' : ''}`} data-image-caption={text || editing ? '' : undefined}
     data-caption-host="" contentEditable={false} style={{ width }}
     onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}>
-    {editing ? <div ref={host} className="nb-caption-edit-host"/> : <span ref={label} className="nb-image-caption-text"
+    {editing ? <div ref={host} className="nb-caption-edit-host"/> : <span ref={label} className={`nb-image-caption-text${!text ? ' nb-caption-add' : ''}`}
       role={canEdit ? 'button' : undefined} tabIndex={canEdit ? 0 : undefined} aria-label={canEdit ? text ? '编辑图注' : '添加图注' : undefined}
       data-placeholder={!text ? '添加图注' : undefined}
       onClick={canEdit ? () => { const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); } : undefined}

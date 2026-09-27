@@ -3,11 +3,8 @@
 .nb-table-accessories { caption-side:bottom; padding:0; border:0; min-width:0; box-sizing:border-box; text-align:center; }
 .nb-table-accessories[hidden], .nb-table-accessories > [hidden] { display:none!important; }
 .nb-table-accessories .nb-table-annotation-indicator { top:4px; right:4px; width:18px; height:18px; font-size:12px; }
-.nb-table-caption { box-sizing:border-box; display:block; width:100%; min-width:0; margin:6px 0 0; padding:0 4px; border:0; background:transparent; color:var(--editor-text-secondary); font:inherit; font-size:.85em; line-height:1.6; text-align:center; white-space:pre-wrap; overflow-wrap:anywhere; }
-.nb-table-caption { cursor:text; }
-.nb-table-accessories.nb-caption-empty { position:relative; height:0; line-height:0; }
-.nb-table-accessories.nb-caption-empty > .nb-table-caption { top:100%; margin:0; }
-.ProseMirror .tableWrapper:has(.nb-table-accessories.nb-caption-empty) { padding-bottom:16px; margin-bottom:0; }
+.nb-table-caption:not(.nb-caption-add) { box-sizing:border-box; display:block; width:100%; min-width:0; margin:6px 0 0; padding:0 4px; border:0; background:transparent; color:var(--editor-text-secondary); font:inherit; font-size:.85em; line-height:1.6; text-align:center; white-space:pre-wrap; overflow-wrap:anywhere; cursor:text; }
+.nb-table-accessories.nb-caption-empty { padding-top:6px; }
 .nb-table-caption[role=text] { cursor:default; }
 .nb-table-caption:focus-visible { outline:1px solid var(--editor-accent); border-radius:4px; }
 table.nb-isolated-rows > .nb-table-accessories { display:block; }

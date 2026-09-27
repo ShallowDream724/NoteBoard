@@ -1,8 +1,9 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { highlightCode } from '../../src/features/editor-md/codeHighlighting';
 import { codeTokensToHTML } from '../../src/features/editor-md/codeTokens';
 import { tokenizeCode } from '../../src/features/editor-md/codeHighlightEngine';
 import { CODE_LANGUAGES, normalizeLanguage, searchCodeLanguages } from '../../src/features/editor-md/codeLanguages';
+import { loadCodeLanguage } from '../../src/features/editor-md/codeLanguageLoader';
 
 it('代码高亮保留源码字符，已知语言着色，未知语言不猜测', async () => {
   const source = 'const text = "<b>hello</b>"; // comment';
@@ -48,4 +49,18 @@ it('uses one canonical option per language while retaining aliases for search an
 it('skips unsupported and oversized code without loading a grammar', async () => {
   expect(await tokenizeCode('const x = 1', 'unsupported')).toEqual([]);
   expect(await tokenizeCode('x'.repeat(200_001), 'python')).toEqual([]);
+});
+
+it('propagates parser failures so the worker cannot cache them as ready empty tokens', async () => {
+  const source = 'def greet():\n    return "hello"';
+  const loaded = await loadCodeLanguage('python');
+  const highlight = vi.spyOn(loaded!.lowlight, 'highlight').mockImplementationOnce(() => { throw new Error('Parser failed'); });
+  try {
+    await expect(tokenizeCode(source, 'python')).rejects.toThrow('Parser failed');
+    expect((await tokenizeCode(source, 'python')).some(token => token.className === 'hljs-keyword')).toBe(true);
+  } finally { highlight.mockRestore(); }
+});
+
+it('returns a stable plain-code fallback when the token budget is exceeded', async () => {
+  expect(await tokenizeCode('1 '.repeat(16_385), 'python')).toEqual([]);
 });

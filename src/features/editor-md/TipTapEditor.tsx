@@ -84,6 +84,7 @@ import { takeViewState } from '../session/editorSuspension';
 import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { restoreImageAssetsForContent } from './imageAssetLifecycle';
+import { consumeInitialDocumentFocus } from '../../core/editor/initialDocumentFocus';
 
 // Mode/history synchronization is not an input event. It must never leave a
 // delayed source snapshot that can overwrite a subsequent undo/redo branch.
@@ -140,6 +141,17 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   const pendingSourceSelectionRef = useRef<{ anchor: number; head: number } | null>(null);
   const pendingRestoredStateRef = useRef<RestoredMarkdownViewState | null>(null);
   const focusFrameRef = useRef<number | null>(null);
+  const focusNewDocument = useCallback(() => {
+    if (!consumeInitialDocumentFocus(docKey)) return;
+    if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+    focusFrameRef.current = requestAnimationFrame(() => {
+      focusFrameRef.current = null;
+      const state = useWindowStore.getState();
+      if (state.activeKey !== docKey || state.isWindowClosing) return;
+      const view = viewModeRef.current === 'source' ? sourceViewRef.current : tipTapEditorRef.current?.view;
+      if (view?.dom.isConnected && !view.dom.closest('[inert]')) view.focus();
+    });
+  }, [docKey]);
   // TipTap 原生历史仅用来识别连续输入是否属于同一分组，快捷键由文档级历史接管
   const visualUndoDepthRef = useRef(0);
   // 初始化锁：在初次加载和程序化设置内容期间以同步作用域阻止 onUpdate 误标为脏
@@ -611,8 +623,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       initSourceEditor(historyInitialContent);
       restoreMarkdownViewState();
       isInitializingRef.current = false;
+      focusNewDocument();
     }
-  }, [docKey, settings.editor.defaultViewMode, initSourceEditor]);
+  }, [docKey, settings.editor.defaultViewMode, initSourceEditor, focusNewDocument]);
 
   // ── S08 visual 内核内容填充（初始化或首次从 source 切入 visual 时执行一次）──
   useEffect(() => {
@@ -655,12 +668,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     visualUndoDepthRef.current = prosemirrorUndoDepth(editor.state);
     // 🔴 S12：visual 内核重挂载（回收后）——恢复捕获的选区/滚动视图状态
     restoreMarkdownViewState();
+    focusNewDocument();
     if (pendingSourceSelectionRef.current) {
       const selection = nativeDocument ? mapNativeDocumentSelection(editor.state.doc, content, 'visual', pendingSourceSelectionRef.current, editor) : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
       pendingSourceSelectionRef.current = null;
       scheduleModeSelection('visual', selection);
     }
-  }, [editor, docKey, restoreMarkdownViewState]);
+  }, [editor, docKey, restoreMarkdownViewState, focusNewDocument]);
 
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
   const toggleViewMode = useCallback((targetMode?: 'visual' | 'source') => {

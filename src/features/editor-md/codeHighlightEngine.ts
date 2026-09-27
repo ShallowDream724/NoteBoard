@@ -3,6 +3,7 @@ import type { CodeToken } from './codeTokens';
 import { CODE_HIGHLIGHT_LIMIT } from './codeLanguages';
 
 interface Tree { type: string; value?: string; properties?: { className?: string[] }; children?: Tree[] }
+class TokenBudgetExceeded extends Error {}
 
 /** Runs inside code/export workers (or direct engine tests), without UI state. */
 export async function tokenizeCode(code: string, language: string): Promise<CodeToken[]> {
@@ -17,7 +18,7 @@ export async function tokenizeCode(code: string, language: string): Promise<Code
       if (classes.length && end > offset) {
         const className = classes.join(' ');
         bytes += 48 + className.length * 2;
-        if (tokens.length >= 16_384 || bytes > 2 * 1024 * 1024) throw new Error('Token budget exceeded');
+        if (tokens.length >= 16_384 || bytes > 2 * 1024 * 1024) throw new TokenBudgetExceeded();
         tokens.push({ from: offset, to: end, className });
       }
       offset = end;
@@ -26,6 +27,12 @@ export async function tokenizeCode(code: string, language: string): Promise<Code
       tree.children?.forEach(child => walk(child, next));
     }
   };
-  try { walk(loaded.lowlight.highlight(loaded.grammar, code) as Tree, []); } catch { return []; }
+  try { walk(loaded.lowlight.highlight(loaded.grammar, code) as Tree, []); }
+  catch (error) {
+    // A deterministic size limit is a successful plain-code fallback. Parser
+    // failures must reach the worker's unavailable result, never its ready cache.
+    if (error instanceof TokenBudgetExceeded) return [];
+    throw error;
+  }
   return tokens;
 }

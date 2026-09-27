@@ -60,7 +60,12 @@ export function trackImagePastePointer(view: EditorView): { slot(): ImageDropTar
   const out = (event: PointerEvent) => { if (!event.relatedTarget) leave(); };
   doc.addEventListener('pointermove', move, true); doc.addEventListener('pointerover', move, true);
   doc.addEventListener('pointerout', out, true); doc.addEventListener('pointerleave', leave); win?.addEventListener('blur', leave);
-  return { slot: () => point ? imageSlotAtPoint(view, point) : undefined, destroy() {
+  return { slot: () => {
+    const target = point ? imageSlotAtPoint(view, point) : undefined;
+    // Hover is an explicit insertion target only for an empty slot. Existing
+    // images and caption text must not redirect another caret's paste.
+    return target?.slot?.dataset.empty === 'true' ? target : undefined;
+  }, destroy() {
     doc.removeEventListener('pointermove', move, true); doc.removeEventListener('pointerover', move, true);
     doc.removeEventListener('pointerout', out, true); doc.removeEventListener('pointerleave', leave); win?.removeEventListener('blur', leave);
   } };

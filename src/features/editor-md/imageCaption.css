@@ -1,11 +1,8 @@
 .nb-image-caption { max-width:100%; margin-top:6px; color:var(--editor-text-secondary); font-size:.85em; line-height:1.6; text-align:center; user-select:text; }
-.nb-image-caption-text { display:block; box-sizing:border-box; width:100%; padding:0 4px; margin:0; border:0; background:transparent; color:inherit; font:inherit; text-align:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
-.nb-image-caption-text[role=button] { cursor:text; }
+.nb-image-caption-text:not(.nb-caption-add) { display:block; box-sizing:border-box; width:100%; padding:0 4px; margin:0; border:0; background:transparent; color:inherit; font:inherit; text-align:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
+.nb-image-caption-text[role=button]:not(.nb-caption-add) { cursor:text; }
 .nb-image-caption-text:focus-visible { outline:1px solid var(--editor-accent); outline-offset:2px; }
-.nb-image-caption.nb-caption-empty { position:relative; height:0; margin:0; }
-.nb-caption-empty > [data-placeholder] { position:absolute; top:100%; left:0; width:100%; height:16px; padding:0 4px; margin:0; font:12px/16px var(--ui-font-family,inherit); opacity:0; cursor:text; user-select:none; }
-.nb-caption-empty > [data-placeholder]::before { content:attr(data-placeholder); }
-.nb-image:hover .nb-caption-empty > [data-placeholder], .tableWrapper:hover .nb-caption-empty > [data-placeholder], .nb-caption-empty:hover > [data-placeholder], .nb-caption-empty:focus-within > [data-placeholder] { opacity:1; }
+.nb-image-caption.nb-caption-empty { margin:0; padding-top:6px; }
 .nb-caption-edit-host { min-width:0; }
 .ProseMirror .nb-caption-editor, .nb-caption-editor { box-sizing:border-box; min-width:0; min-height:1.6em; width:100%; padding:0 4px; margin:0; border:0; outline:none; background:transparent; color:inherit; font:inherit; line-height:inherit; text-align:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
 .ProseMirror .nb-caption-editor > p { margin:0!important; padding:0; font:inherit; color:inherit; line-height:inherit; text-align:inherit; }

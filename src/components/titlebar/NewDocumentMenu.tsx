@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { Plus, FileText, Table2, PencilRuler, Network, GitCompare, Layout,
   ChartColumn, Workflow, GitMerge, Braces, Database, FileCode, CodeXml,
@@ -37,9 +37,9 @@ const openActions: Action[] = [
   { label: '打开收藏夹', icon: Star, run: () => useFavoritesStore.getState().openFavoritesModal() },
   { label: '打开暂存区', icon: Archive, run: actions.openStagingArea },
 ];
-function Items({ items }: { items: Action[] }) {
+function Items({ items, onAction }: { items: Action[]; onAction?: (run: Action['run']) => void }) {
   return items.map(({ label, icon: Icon, run }) =>
-    <Menu.Item key={label} className="titlebar-menu-item" onSelect={() => { void run(); }}>
+    <Menu.Item key={label} className="titlebar-menu-item" onSelect={() => { onAction?.(run); void run(); }}>
       <Icon size={14} /><span>{label}</span>
     </Menu.Item>);
 }
@@ -48,6 +48,7 @@ function Items({ items }: { items: Action[] }) {
 export function NewDocumentMenu() {
   const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
   const [open, setOpen] = useState(false);
+  const documentOwnsFocus = useRef(false);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
@@ -66,8 +67,10 @@ export function NewDocumentMenu() {
             onContextMenu={event => { event.preventDefault(); setOpen(true); }}><Plus size={16} /></button>
         </Menu.Trigger>
       </Tooltip>
-      <Menu.Portal><Menu.Content className="titlebar-document-menu" align="start" sideOffset={5} collisionPadding={8}>
-        <Items items={pureMarkdown ? primary.filter(item => item.run !== actions.newNativeDocument) : primary} />
+      <Menu.Portal><Menu.Content className="titlebar-document-menu" align="start" sideOffset={5} collisionPadding={8}
+        onCloseAutoFocus={event => { if (documentOwnsFocus.current) event.preventDefault(); documentOwnsFocus.current = false; }}>
+        <Items items={pureMarkdown ? primary.filter(item => item.run !== actions.newNativeDocument) : primary}
+          onAction={run => { documentOwnsFocus.current = run === actions.newNativeDocument || run === actions.newMarkdown; }} />
         <Menu.Separator className="titlebar-menu-separator" />
         <Menu.Sub>
           <Menu.SubTrigger className="titlebar-menu-item"><FileCode size={14} /><span>更多新建格式</span><ChevronRight size={13} /></Menu.SubTrigger>

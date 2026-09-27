@@ -19,7 +19,6 @@ import {
   X,
   AlertCircle,
   RefreshCw,
-  Pencil,
   Captions,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
@@ -34,9 +33,6 @@ import { Tooltip } from '../../components/Tooltip';
 import { useImageVisibility } from './rich-content/imageVisibility';
 import { runWithDocumentCapability, useNativeFeatureVisibility } from '../document-format/featureGate';
 import { useImageWheelGesture } from '../image-viewer/imageWheelGesture';
-import { requestImageDescription } from './rich-content/imageDescriptionDialog';
-import { dispatchDiscreteEdit } from './discreteEdit';
-import type { Transaction } from '@tiptap/pm/state';
 import { ImageCaption } from './ImageCaption';
 import { editFigureCaption } from './figureCaptionCommands';
 import { normalizeFigureCaption } from './figureCaption';
@@ -257,22 +253,6 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
   const resizeCleanup = useRef<(() => void) | null>(null);
   const previewGesture = useRef<{ x: number; y: number; cancelled: boolean } | null>(null);
   useEffect(() => () => { resizeCleanup.current?.(); }, []);
-  const editDescription = async () => {
-    let pos = getPos(); if (typeof pos !== 'number') return;
-    const originalSrc = node.attrs.src;
-    const map = ({ transaction }: { transaction: Transaction }) => {
-      if (pos === undefined) return;
-      const mapped = transaction.mapping.mapResult(pos, 1); pos = mapped.deletedAcross ? undefined : mapped.pos;
-    };
-    editor.on('transaction', map);
-    try {
-      const value = await requestImageDescription(node.attrs.alt ?? '');
-      if (value === null || editor.isDestroyed || pos === undefined) return;
-      const current = editor.state.doc.nodeAt(pos);
-      if (current?.type.name !== 'image' || current.attrs.src !== originalSrc || current.attrs.alt === value) return;
-      dispatchDiscreteEdit(editor.view, editor.state.tr.setNodeAttribute(pos, 'alt', value));
-    } finally { editor.off('transaction', map); }
-  };
   const updatePresentation = (attrs: { align?: string; width?: string }) => {
     const pos = getPos(); if (typeof pos !== 'number') return;
     runWithDocumentCapability(editor, 'imageLayout', next => {
@@ -582,7 +562,6 @@ export function ImageComponent({ node, extension, editor, getPos, deleteNode, de
             <div style={{ width: 1, height: 14, background: 'var(--editor-border)' }} />
 
             </>}
-            <Tooltip content="编辑图片描述" side="top" sideOffset={4}><button type="button" data-image-description="" aria-label="编辑图片描述" onClick={() => { void editDescription(); }} style={actionBtnStyle}><Pencil size={14}/></button></Tooltip>
             {nativeFeaturesVisible && !inCollection && <Tooltip content={node.attrs.caption ? '编辑图注' : '添加图注'} side="top" sideOffset={4}>
               <button type="button" data-image-caption-edit="" aria-label={node.attrs.caption ? '编辑图注' : '添加图注'}
                 onClick={() => { const pos = getPos(); if (typeof pos === 'number') editFigureCaption(editor, pos); }} style={actionBtnStyle}><Captions size={14}/></button>

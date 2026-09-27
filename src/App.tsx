@@ -60,7 +60,6 @@ const FavoritesManagerModal = lazy(() =>
 const AddFavoriteModal = lazy(() =>
   import('./features/favorites/AddFavoriteModal').then((m) => ({ default: m.AddFavoriteModal })),
 );
-const FirstRunGuide = lazy(() => import('./features/welcome/FirstRunGuide').then(m => ({ default: m.FirstRunGuide })));
 
 /** 一旦 open 变 true 则永久返回 true（弹窗装载后保持挂载，保留关闭动画） */
 function useEverOpened(open: boolean): boolean {
@@ -84,7 +83,6 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   // 🔴 R08：错误壳重试计数（驱动启动 effect 重跑；不整页 reload）
   const [bootRetryAttempt, setBootRetryAttempt] = useState(0);
-  const [introductionDocKey, setIntroductionDocKey] = useState<string | null>(null);
   const { settingsModalVisible, setSettingsModalVisible } = useLayoutStore();
   const activeKey = useWindowStore((s) => s.activeKey);
   const exportKey = useExportStore(s => s.docKey);
@@ -139,11 +137,7 @@ export default function App() {
       }
       perfMark('listeners_subscribed');
       // Only a fresh, empty profile gets an introduction. Updates and explicit file opens keep their context.
-      if (!disposed) {
-        void openFirstRunShowcase(boot.startupMode).then(key => {
-          if (!disposed && key) setIntroductionDocKey(key);
-        });
-      }
+      if (!disposed) void openFirstRunShowcase(boot.startupMode);
       // 🔴 性能诊断：启动链路完成的里程碑，批量上报一次 web spans
       void reportWebSpans('boot');
     };
@@ -400,9 +394,6 @@ export default function App() {
       <TooltipProvider delayDuration={100} skipDelayDuration={300}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
           <div inert={!!exportKey} style={{ display: 'contents' }}><AppShell /></div>
-          {introductionDocKey && <Suspense fallback={null}>
-            <FirstRunGuide active={activeKey === introductionDocKey && !exportKey} onDismiss={() => setIntroductionDocKey(null)} />
-          </Suspense>}
           {exportKey && <Suspense fallback={null}><ExportModal docKey={exportKey} onClose={closeExport}/></Suspense>}
           {/* 🔴 S05：全局弹窗按需装载；首开前不进入首屏闭包 */}
           {settingsEverOpened && (

@@ -563,7 +563,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
             if (!dragSessionRef.current) setIsHoveringHandle(false);
           }}
           style={{
-            top: state.top + 2,
+            top: state.top,
             left: state.left,
           }}
           aria-label={state.empty ? '添加内容' : `拖动${blockLabel}`}

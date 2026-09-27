@@ -40,6 +40,7 @@ import { saveViewState } from '../session/editorSuspension';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { setMathPreviewSessionActive } from './mathPreviewSession';
 import { transactionStart } from './transactionStart';
+import { selectContextMenuTarget } from './contextMenuSelection';
 
 interface VisualKernelProps {
   docKey: string;
@@ -400,17 +401,11 @@ export function VisualKernel({
         e.preventDefault();
         e.stopPropagation();
 
-        const { empty } = editor.state.selection;
-        if (empty) {
-          const pos = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-          if (pos) {
-            editor.commands.setTextSelection(pos.pos);
-          }
-        }
+        selectContextMenuTarget(editor.view, e.target, { x: e.clientX, y: e.clientY });
         setContextMenu({
           x: e.clientX,
           y: e.clientY,
-          hasSelection: !empty,
+          hasSelection: !editor.state.selection.empty,
         });
       }}
     >

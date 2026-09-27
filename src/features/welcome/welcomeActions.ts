@@ -78,6 +78,8 @@ export async function openStagingArea(): Promise<void> {
   }
 }
 
+import { requestInitialDocumentFocus } from '../../core/editor/initialDocumentFocus';
+
 /** 创建未命名文档与 tab */
 function createUntitledDocument(
   type:
@@ -205,6 +207,7 @@ function createUntitledDocument(
   //    首次新建不再等待完整模块加载（缩短 fallback 期；资源与渲染共享）
   const loaderKind = resolveEditorKind(tab);
   if (loaderKind !== 'unsupported') prefetchEditor(loaderKind);
+  if (!seed && (kind === 'markdown' || kind === 'noteboard')) requestInitialDocumentFocus(key);
   useWindowStore.getState().openTab(tab);
   return key;
 }

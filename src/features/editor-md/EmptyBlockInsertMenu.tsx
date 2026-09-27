@@ -1,6 +1,6 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { BarChart3, Braces, GalleryHorizontalEnd, Grid2X2, Image, Link2, List, ListTodo, Minus, PanelTop, PanelTopClose, Quote, Sigma, Type, Workflow } from 'lucide-react';
+import { BarChart3, Braces, GalleryHorizontalEnd, Grid2X2, Image, Link2, List, ListTodo, Minus, PanelTop, PanelTopClose, Quote, Sigma, Table2, Type, Workflow } from 'lucide-react';
 import { OrderedListIcon } from '../../components/OrderedListIcon';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import type { DocumentCapabilityId } from '../document-format/capabilities';
@@ -54,7 +54,7 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
         {native && block('折叠块', <PanelTopClose size={16}/>, { type: 'disclosure', content: [paragraph()] }, 'disclosure')}
         {block('分割线', <Minus size={16}/>, { type: 'horizontalRule' })}
       </div>
-      <div className="nb-empty-block-table" role="group" aria-label="表格尺寸"><span>表格</span>{[2, 3, 4].map(size =>
+      <div className="nb-empty-block-table" role="group" aria-label="表格尺寸"><span><Table2 size={16}/>表格</span>{[2, 3, 4].map(size =>
         <button key={size} type="button" role="menuitem" aria-label={`插入 ${size} × ${size} 表格`} onClick={() => insert(tableContent(size))}>{size} × {size}</button>)}</div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="图片">

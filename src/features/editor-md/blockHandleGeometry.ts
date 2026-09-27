@@ -1,5 +1,6 @@
 import type { EditorView } from '@tiptap/pm/view';
 import type { TopLevelBlockInfo } from './blockReorder';
+import { isEmptyParagraph } from './blockInteractionScope';
 let markerCanvas: CanvasRenderingContext2D | null | undefined;
 function ordinalText(value: number, type: string) {
   if (value > 0 && /alpha|latin/.test(type)) {
@@ -48,7 +49,9 @@ export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, 
   }
   // A tall block can start above the viewport. Keep its control reachable without
   // a browser focus/hover scroll moving the anchor out from under the pointer.
-  const viewportTop = Math.max(0, Math.min((rect.top - bounds.top) / scale, host.clientHeight - height - 4));
+  const blockTop = (rect.top - bounds.top) / scale;
+  const anchorTop = isEmptyParagraph(block.node) ? blockTop + (rect.height / scale - height) / 2 : blockTop + 2;
+  const viewportTop = Math.max(0, Math.min(anchorTop, host.clientHeight - height - 4));
   return { top: viewportTop + host.scrollTop,
     left: Math.max(4, (edge - bounds.left) / scale + host.scrollLeft - width - 8) };
 }

@@ -71,6 +71,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyInFlightRef = useRef(false);
 
   // 查看器变换状态：缩放比例、平移位移 (tx, ty)、旋转角度 (0/90/180/270)、水平/垂直翻转
   const [scale, setScale] = useState<number>(1);
@@ -231,36 +232,42 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
 
   // 复制图片到系统剪贴板（绘制到 Canvas 并通过 Clipboard API 写入）
   const handleCopyImage = async () => {
-    if (!imgRef.current || !naturalSize) return;
+    if (!imgRef.current || !naturalSize || copyInFlightRef.current) return;
+    copyInFlightRef.current = true;
     try {
       const canvas = document.createElement('canvas');
-      canvas.width = naturalSize.width;
-      canvas.height = naturalSize.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('无法创建 2D 上下文');
-      ctx.drawImage(imgRef.current, 0, 0);
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          showToast('复制图片失败', 'error');
-          return;
-        }
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({ [blob.type]: blob }),
-          ]);
-          setCopied(true);
-          showToast('图片已复制到剪贴板', 'success');
-          setTimeout(() => setCopied(false), 2000);
-        } catch {
-          // 若浏览器权限限制，则复制文件路径
-          navigator.clipboard.writeText(filePath);
-          showToast('已复制图片文件完整路径', 'info');
-        }
-      }, 'image/png');
+      let blob: Blob;
+      try {
+        canvas.width = naturalSize.width;
+        canvas.height = naturalSize.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('无法创建 2D 上下文');
+        ctx.drawImage(imgRef.current, 0, 0);
+        blob = await new Promise<Blob>((resolve, reject) => {
+          canvas.toBlob((result) => {
+            if (result) resolve(result);
+            else reject(new Error('无法编码图片'));
+          }, 'image/png');
+        });
+      } finally {
+        // PNG 编码完成后即释放全尺寸像素缓冲，无需等剪贴板操作结束。
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setCopied(true);
+      showToast('图片已复制到剪贴板', 'success');
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      navigator.clipboard.writeText(filePath);
-      showToast('已复制图片文件路径', 'info');
+      // 图片复制失败时保留路径降级，并确认写入成功后再提示。
+      try {
+        await navigator.clipboard.writeText(filePath);
+        showToast('已复制图片文件完整路径', 'info');
+      } catch {
+        showToast('复制图片失败', 'error');
+      }
+    } finally {
+      copyInFlightRef.current = false;
     }
   };
 

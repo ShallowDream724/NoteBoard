@@ -17,6 +17,7 @@ import { showToast } from '../../../stores/toastStore';
 import { CLIPBOARD_LIMITS, ClipboardImportError, type ClipboardImportResult } from './normalize';
 import { clipboardHtmlSource, MARKDOWN_MIMES, needsClipboardImageFallback, normalizeExternalHtml, normalizeExternalText, type ExternalTextOptions } from './external';
 import { ensureContainerTail } from '../containerEditing';
+import { imageOnlySlice, imageInsertionTransaction, imageSlotPosition } from '../imageInsertionTransaction';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -85,7 +86,13 @@ function synchronousNodes(content: JSONContent[], schema: Schema): PMNode[] {
   };
   return content.map(value => make(value, 0));
 }
-export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection): boolean {
+export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection, imagePosition?: number): boolean {
+  const images = imageOnlySlice(imported.slice);
+  if (images && imageSlotPosition(view.state, imagePosition ?? selection.from) !== undefined) {
+    const { tr } = imageInsertionTransaction(view.state, images, selection, imagePosition);
+    mergeImportedAnnotationBodies(tr, imported.bodies);
+    dispatchDiscreteEdit(view, tr); view.focus(); return true;
+  }
   const tr = view.state.tr.setSelection(selection).replaceSelection(imported.slice);
   ensureContainerTail(tr, selection.from);
   mergeImportedAnnotationBodies(tr, imported.bodies);
@@ -113,6 +120,17 @@ function clipboardFiles(data: DataTransfer): File[] {
   const files = Array.from(data.files ?? []).filter(file => file.type.startsWith('image/'));
   if (files.length) return files;
   return Array.from(data.items ?? []).flatMap(item => { const file = item.type.startsWith('image/') ? item.getAsFile() : null; return file ? [file] : []; });
+}
+
+/** Body/button paste has no native editor event. Claim only an image-only rich
+ * payload, keeping the same normalization and insertion as a focused editor. */
+function smallClipboardImages(view: EditorView, data: DataTransfer): ImportedSlice | undefined {
+  const own = data.getData(DOCUMENT_SLICE_MIME), html = data.getData('text/html');
+  const raw = own || html;
+  if (!raw || raw.length > CLIPBOARD_LIMITS.synchronous || data.getData(TABLE_SELECTION_MIME)) return;
+  const normalized = own ? parseStructuredClipboard(raw) : normalizeExternalHtml(new DOMParser().parseFromString(clipboardHtmlSource(raw), 'text/html'), raw, data.getData('text/plain'));
+  const value = imported(synchronousNodes(normalized.content, view.state.schema), normalized.diagnostics, own ? normalized.openStart : undefined, own ? normalized.openEnd : undefined);
+  return imageOnlySlice(value.slice) ? value : undefined;
 }
 
 export function writeDocumentClipboard(view: EditorView, event: ClipboardEvent, cut: boolean): boolean {
@@ -152,7 +170,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
     let attachedView: EditorView | null = null;
     const targets = new Set<{ map(tr: Transaction): void; cancel(): void }>();
     function capture<T>(view: EditorView, insert: (value: T, selection: Selection, position?: number) => boolean, position?: number): InsertionLease<T> | null {
-      if (editor) return captureVisualInsertion(editor, docKey, insert, position);
+      if (editor) return captureVisualInsertion(editor, docKey, insert, position, view.state.selection);
       const selection = position === undefined ? view.state.selection : TextSelection.near(view.state.doc.resolve(position));
       let bookmark = selection.getBookmark(), from = selection.from, to = selection.to, rawPosition = position;
       let lease: InsertionLease<T> | null = null;
@@ -237,7 +255,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
             // remains in code. An explicit plain-text request still wins.
             const files = requestedPlain ? [] : clipboardFiles(data);
             const hoveredSlot = editor && mainEditorCurrent(view) ? pastePointer?.slot() : undefined;
-            let choice = hoveredSlot && files.length && !types.includes(DOCUMENT_SLICE_MIME) && !types.includes(TABLE_SELECTION_MIME) ? 'images' : chooseClipboardFormat(types, plain);
+            let choice = hoveredSlot && files.length && !types.includes(DOCUMENT_SLICE_MIME) && !types.includes(TABLE_SELECTION_MIME) ? 'images' : chooseClipboardFormat(types, requestedPlain || (codeContext && !hoveredSlot));
             if (choice === 'html' && files.length && needsClipboardImageFallback(data.getData('text/html'))) choice = 'images';
             if (choice === 'table' && !stripAnnotations && data.getData(TABLE_SELECTION_MIME).length <= CLIPBOARD_LIMITS.synchronous) return false;
             if (choice === 'images') { if (!files.length) return false; event.preventDefault(); void imageFiles(view, files, hoveredSlot?.position); return true; }
@@ -253,17 +271,18 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
               event.preventDefault(); cancel(); lastTiming = null;
               if (choice === 'text' && plain && raw.length <= CLIPBOARD_LIMITS.synchronous) { insertClipboardPlainText(view, raw); return true; }
               if (raw.length > CLIPBOARD_LIMITS.synchronous) {
-                const lease = capture<ImportedSlice>(view, (value, selection) => {
+                const lease = capture<ImportedSlice>(view, (value, selection, imagePosition) => {
+                  if (imageOnlySlice(value.slice) && imageSlotPosition(view.state, imagePosition ?? selection.from) !== undefined) return insertImportedSlice(view, value, selection, imagePosition);
                   if (choice === 'html' || choice === 'markdown' || choice === 'table' || (choice === 'text' && !plain)) {
                     view.dispatch(view.state.tr.setSelection(selection).setMeta('addToHistory', false));
                     if (insertTableSlice(view, value.slice, value.tableScope, value.bodies)) return true;
                   }
                   if (codeContext) {
                     view.dispatch(view.state.tr.setSelection(selection).setMeta('addToHistory', false));
-                    return insertClipboardPlainText(view, raw);
+                    return insertClipboardPlainText(view, textOptions.plainText ?? raw);
                   }
                   return insertImportedSlice(view, value, selection);
-                });
+                }, hoveredSlot?.position);
                 if (!lease) return true; pending = lease;
                 view.dispatch(view.state.tr.setMeta(pendingKey, view.state.selection.from).setMeta('addToHistory', false));
                 void process(view, raw, choice, lease, started, performance.now() - started, textOptions); return true;
@@ -277,8 +296,9 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
               const nodes = synchronousNodes(normalized.content, view.state.schema), materializationMs = performance.now() - materializeStart;
               const value = imported(nodes, normalized.diagnostics, own?.openStart, own?.openEnd, own?.tableScope), commitStart = performance.now();
               // Table semantics remain owned by the existing table import implementation.
-              if ((choice === 'table' || !own) && insertTableSlice(view, value.slice, value.tableScope, value.bodies)) { /* Already committed atomically. */ }
-              else insertImportedSlice(view, value, view.state.selection);
+              if (codeContext && hoveredSlot && !imageOnlySlice(value.slice)) insertClipboardPlainText(view, data.getData('text/plain') || raw);
+              else if ((choice === 'table' || !own) && insertTableSlice(view, value.slice, value.tableScope, value.bodies)) { /* Already committed atomically. */ }
+              else insertImportedSlice(view, value, view.state.selection, hoveredSlot?.position);
               const commitMs = performance.now() - commitStart;
               lastTiming = { characters: raw.length, responseMs: performance.now() - started, normalizationMs, materializationMs, commitMs, completionMs: performance.now() - started, asynchronous: false };
               if (value.diagnostics.length) showToast(value.diagnostics.join('；'), 'info', 6000);
@@ -315,7 +335,15 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           if (originEditor === view.dom && !target?.closest('button, [contenteditable="false"]')) return;
           if (!originEditor && target?.closest('[contenteditable="true"]')) return;
           const data = event.clipboardData, slot = pastePointer?.slot();
-          if (!data || !slot || data.getData(DOCUMENT_SLICE_MIME) || data.getData(TABLE_SELECTION_MIME)) return;
+          if (!data || !slot || data.getData(TABLE_SELECTION_MIME)) return;
+          try {
+            const images = smallClipboardImages(view, data);
+            if (images) {
+              event.preventDefault(); event.stopPropagation();
+              insertImportedSlice(view, images, view.state.selection, slot.position); return;
+            }
+          } catch { return; }
+          if (data.getData(DOCUMENT_SLICE_MIME)) return;
           const files = clipboardFiles(data); if (!files.length) return;
           event.preventDefault(); event.stopPropagation(); view.focus();
           void imageFiles(view, files, slot.position);

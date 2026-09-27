@@ -19,8 +19,32 @@ function create() {
   const button = (label: string) => editor.view.dom.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
   return { editor, viewport, scrollTo, button };
 }
-afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); document.body.replaceChildren(); vi.restoreAllMocks(); });
+afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('carousel navigation', () => {
+  it('preloads neighbours only while the collection is near the viewport and releases its observer', async () => {
+    let notify: IntersectionObserverCallback = () => {};
+    const unobserve = vi.fn(), disconnect = vi.fn();
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; }
+      observe = vi.fn(); unobserve = unobserve; disconnect = disconnect;
+    });
+    const { editor, viewport, button } = create(); await new Promise(requestAnimationFrame);
+    const collection = viewport.closest('.nb-image-collection')!;
+    const intersection = (isIntersecting: boolean) => notify([{ target: collection, isIntersecting, boundingClientRect: collection.getBoundingClientRect() } as IntersectionObserverEntry], {} as IntersectionObserver);
+    expect(viewport.querySelectorAll('[data-carousel-nearby]')).toHaveLength(0);
+    intersection(true);
+    expect(viewport.querySelectorAll('[data-carousel-nearby]')).toHaveLength(2);
+    button('下一张图片').click();
+    expect(viewport.querySelectorAll('[data-carousel-nearby]')).toHaveLength(3);
+    intersection(false);
+    expect(viewport.querySelectorAll('[data-carousel-nearby]')).toHaveLength(0);
+    button('下一张图片').click();
+    expect(viewport.querySelectorAll('[data-carousel-nearby]')).toHaveLength(0);
+    intersection(true);
+    expect([...viewport.querySelectorAll('[data-carousel-nearby]')].map(node => node.querySelector('p')?.textContent)).toEqual(['Caption 1', 'Caption 2', 'Caption 3']);
+    editor.destroy(); editors.splice(editors.indexOf(editor), 1);
+    expect(unobserve).toHaveBeenCalledWith(collection); expect(disconnect).toHaveBeenCalledOnce();
+  });
   it('retargets repeated next/previous without removing slides or editing the document', async () => {
     const { editor, viewport, scrollTo, button } = create();
     await new Promise(requestAnimationFrame);
