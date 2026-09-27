@@ -39,6 +39,15 @@
   WriteRegStr HKCU "Software\Classes\.yml\OpenWithProgids" "NoteBoard" ""
   WriteRegStr HKCU "Software\Classes\.excalidraw\OpenWithProgids" "NoteBoard" ""
 
+  ; Tauri's update mode leaves existing shortcuts intact. Give NoteBoard-owned
+  ; shortcuts a dedicated icon path and repair desktop links made by Codex's
+  ; LocalCache installer so they launch this installation.
+  !insertmacro NB_REPAIR_SHORTCUT "$DESKTOP\${PRODUCTNAME}.lnk"
+  !insertmacro NB_REPAIR_SHORTCUT "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ${If} $AppStartMenuFolder != ""
+    !insertmacro NB_REPAIR_SHORTCUT "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+  ${EndIf}
+
   ; 刷新 Shell 缓存
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0x1000, i 0, i 0)'
 !macroend
@@ -72,4 +81,58 @@
   WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open" "" "用 NoteBoard 打开"
   WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open" "Icon" "$INSTDIR\NoteBoard.exe,0"
   WriteRegStr HKCU "Software\Classes\SystemFileAssociations\.${EXT}\shell\NoteBoard.Open\command" "" '"$INSTDIR\NoteBoard.exe" "%1"'
+!macroend
+
+!macro NB_REPAIR_SHORTCUT SHORTCUT
+  ${If} ${FileExists} "${SHORTCUT}"
+    !insertmacro ComHlpr_CreateInProcInstance ${CLSID_ShellLink} ${IID_IShellLink} r0 .r6
+    ${If} $6 >= 0
+    ${AndIf} $0 P<> 0
+      ${IUnknown::QueryInterface} $0 '("${IID_IPersistFile}",.r1).r6'
+      ${If} $6 >= 0
+      ${AndIf} $1 P<> 0
+        ${IPersistFile::Load} $1 '("${SHORTCUT}", ${STGM_READWRITE}).r6'
+        ${If} $6 >= 0
+          ; A t output parameter allocates its own NSIS string buffer. Keep
+          ; the returned path in $2; no System::Alloc/System::Free is needed.
+          ${IShellLink::GetPath} $0 '(.r2, ${NSIS_MAX_STRLEN}, 0, ${SLGP_RAWPATH}).r6'
+          ${If} $6 >= 0
+            StrCpy $5 0
+            ${If} $2 == "$INSTDIR\${MAINBINARYNAME}.exe"
+              StrCpy $5 1
+            ${Else}
+              ; Only migrate NoteBoard links that point into a packaged app's
+              ; LocalCache. Do not take over unrelated shortcuts with this name.
+              StrLen $3 "$LOCALAPPDATA\Packages\"
+              StrCpy $4 $2 $3
+              ${If} $4 == "$LOCALAPPDATA\Packages\"
+                StrLen $3 "\LocalCache\Local\NoteBoard\${MAINBINARYNAME}.exe"
+                IntOp $3 0 - $3
+                StrCpy $4 $2 "" $3
+                ${If} $4 == "\LocalCache\Local\NoteBoard\${MAINBINARYNAME}.exe"
+                  ${IShellLink::SetPath} $0 '(w "$INSTDIR\${MAINBINARYNAME}.exe").r6'
+                  ${If} $6 >= 0
+                    StrCpy $5 1
+                  ${EndIf}
+                ${EndIf}
+              ${EndIf}
+            ${EndIf}
+            ${If} $5 = 1
+              ${IShellLink::SetIconLocation} $0 '(w "$INSTDIR\NoteBoard-white-pen.ico",0).r6'
+              ${If} $6 >= 0
+                ${IPersistFile::Save} $1 '("${SHORTCUT}",1).r6'
+                ${If} $6 >= 0
+                  ; Refresh this shortcut's shell view without disturbing
+                  ; Explorer or the machine-wide icon cache.
+                  System::Call 'shell32::SHChangeNotify(i 0x00002000, i 0x00001005, w "${SHORTCUT}", p 0)'
+                ${EndIf}
+              ${EndIf}
+            ${EndIf}
+          ${EndIf}
+        ${EndIf}
+        ${IUnknown::Release} $1 ""
+      ${EndIf}
+      ${IUnknown::Release} $0 ""
+    ${EndIf}
+  ${EndIf}
 !macroend
