@@ -1,5 +1,7 @@
 import type { ImageEditOperation, ImageEditRecipe, ImageEditorTool, Point, Rect, TextOperation } from './model';
-import { constrainCrop, getOperationOutputBounds, getOperationResizeHandles, getOutputSize, hitTestOperation, isOperationMovable, normalizeRect, outputToSource, resizeOperationInOutput, scaleOperationInOutput, translateOperation, type ResizeHandle } from './geometry';
+import { constrainCrop, getOperationOutputBounds, getOutputSize, hitTestOperation, isOperationMovable, normalizeRect, outputToSource, resizeOperationInOutput, scaleOperationInOutput, translateOperation } from './geometry';
+import { getSelectionHandles, isPathAnnotation, isResizeHandle, moveSelectionHandle, type AnnotationHandle } from './selectionHandles';
+import { intersectsEraseSweep } from './eraseGeometry';
 import { createToolOperation, restyleOperation, type ToolStyle } from './toolDefaults';
 
 export interface CanvasInteractionAdapter {
@@ -17,9 +19,10 @@ interface Drag {
   base: ImageEditRecipe;
   start: Point;
   original?: ImageEditOperation;
-  handle?: ResizeHandle;
+  handle?: AnnotationHandle;
   crop?: Rect;
   points?: Point[];
+  eraseFrom?: Point;
   moved: boolean;
 }
 interface Polyline { base: ImageEditRecipe; operation: ImageEditOperation & { type: 'polyline'; points: readonly Point[] }; confirmed: Point[]; hover: Point }
@@ -66,24 +69,35 @@ export class ImageCanvasInteraction {
   }
   getCropBounds(): Rect | null { const op = this.cropOperation(); return op ? getOperationOutputBounds(op, this.fullRecipe()) : null; }
   getSelectionBounds(): Rect | null {
-    const op = this.selectedOperation(); return op && isOperationMovable(op) && !this.text ? getOperationOutputBounds(op, this.getPreview()) : null;
+    const op = this.selectedOperation(); return op && isOperationMovable(op) && !isPathAnnotation(op) && !this.text ? getOperationOutputBounds(op, this.getPreview()) : null;
   }
   getHandles() {
     const op = this.cropOperation() ?? (!this.text ? this.selectedOperation() : undefined);
-    return op ? getOperationResizeHandles(op, this.getRenderRecipe()) : [];
+    return op ? getSelectionHandles(op, this.getRenderRecipe()) : [];
+  }
+  getEraseRadius(): number | null {
+    const tool = this.adapter.tool();
+    return !this.crop && (tool === 'eraser' || tool === 'object-eraser') ? Math.max(1, this.adapter.style().width) / 2 : null;
+  }
+  getObjectEraseTargets(output: Point): readonly ImageEditOperation[] {
+    const radius = this.getEraseRadius();
+    if (radius === null || this.adapter.tool() !== 'object-eraser') return [];
+    const recipe = this.getPreview(), point = outputToSource(output, recipe);
+    return recipe.operations.filter(op => intersectsEraseSweep(op, point, point, radius));
   }
   private hit(output: Point, tolerance: number): ImageEditOperation | undefined {
     const recipe = this.getPreview(), point = outputToSource(output, recipe), selected = this.selectedOperation();
-    if (selected && isOperationMovable(selected) && inside(output, getOperationOutputBounds(selected, recipe))) return selected;
+    if (selected && isOperationMovable(selected) && !isPathAnnotation(selected) && inside(output, getOperationOutputBounds(selected, recipe))) return selected;
     return [...recipe.operations].reverse().find(op => isOperationMovable(op) && hitTestOperation(point, op, tolerance));
   }
   cursor(output: Point, tolerance: number, alt = false): string {
+    if (this.getEraseRadius() !== null) return 'none';
     if (this.drag?.kind === 'move' || this.drag?.kind === 'crop-move') return 'grabbing';
     if (this.crop) return inside(output, this.getCropBounds()!) ? 'move' : 'crosshair';
     if (!alt && !this.polyline && this.adapter.tool() !== 'object-eraser' && this.hit(output, tolerance)) return 'move';
     return this.adapter.tool() === 'select' ? 'default' : 'crosshair';
   }
-  pointerDown(output: Point, settings: { tolerance: number; alt?: boolean; handle?: ResizeHandle }) {
+  pointerDown(output: Point, settings: { tolerance: number; alt?: boolean; handle?: AnnotationHandle }) {
     this.endWheel(); this.endPropertyChange(); this.finishText();
     const base = this.adapter.recipe(), tool = this.adapter.tool();
     if (this.crop) {
@@ -97,7 +111,7 @@ export class ImageCanvasInteraction {
       if (Math.hypot(point.x - previous.x, point.y - previous.y) > settings.tolerance / 2) this.polyline.confirmed.push(point);
       this.polyline.hover = point; this.updatePolyline(); return;
     }
-    const hit = !settings.alt && tool !== 'object-eraser' ? this.hit(output, settings.tolerance) : undefined;
+    const hit = settings.handle ? this.selectedOperation() : !settings.alt && tool !== 'object-eraser' && tool !== 'eraser' ? this.hit(output, settings.tolerance) : undefined;
     if (hit) {
       this.selected = hit.id;
       this.drag = { kind: settings.handle ? 'resize' : 'move', start: output, base, original: hit, handle: settings.handle, moved: false };
@@ -106,8 +120,8 @@ export class ImageCanvasInteraction {
     this.selected = null;
     if (tool === 'select') { this.changed(true); return; }
     if (tool === 'object-eraser') {
-      this.drag = { kind: 'erase', start: output, base, moved: false }; this.preview = base;
-      this.erase(point, settings.tolerance); this.changed(true); return;
+      this.drag = { kind: 'erase', start: output, base, moved: false, eraseFrom: point }; this.preview = base;
+      this.erase(point); this.changed(true); return;
     }
     if (tool === 'text') {
       const style = this.adapter.style();
@@ -119,7 +133,7 @@ export class ImageCanvasInteraction {
       this.adapter.commit(replace(base, op), this.adapter.nextMarker() + 1); this.selected = op.id; this.changed(true); return;
     }
     if (op.type === 'polyline') {
-      this.polyline = { base, operation: { ...op, type: 'polyline' }, confirmed: [point], hover: point }; this.updatePolyline(); return;
+      this.polyline = { base, operation: { ...op, type: 'polyline' }, confirmed: [point], hover: point }; this.updatePolyline(); this.changed(true); return;
     }
     this.drag = { kind: 'draw', start: output, base, original: op, points: 'points' in op ? [...op.points] : undefined, moved: false };
     this.preview = replace(base, op); this.changed(true);
@@ -133,17 +147,17 @@ export class ImageCanvasInteraction {
     if (drag.kind.startsWith('crop')) {
       let rect = drag.crop!;
       if (drag.kind === 'crop-move') rect = { ...rect, x: Math.max(0, Math.min(drag.base.sourceWidth - rect.width, rect.x + point.x - start.x)), y: Math.max(0, Math.min(drag.base.sourceHeight - rect.height, rect.y + point.y - start.y)) };
-      else if (drag.kind === 'crop-resize') {
+      else if (drag.kind === 'crop-resize' && drag.handle && isResizeHandle(drag.handle)) {
         const op = resizeOperationInOutput({ id: 'crop', type: 'rectangle', rect, style: { color: '', width: 1, pattern: 'solid' } }, drag.base, drag.handle!, output);
         if ('rect' in op && op.rect) rect = op.rect;
       } else rect = normalizeRect(start, point);
       const ratio = this.adapter.ratio();
       this.crop = constrainCrop(rect, drag.base.sourceWidth, drag.base.sourceHeight, ratio ? drag.base.rotation % 2 ? 1 / ratio : ratio : undefined);
-    } else if (drag.kind === 'erase') this.erase(point, tolerance);
+    } else if (drag.kind === 'erase') this.erase(point);
     else if (drag.original) {
       let op = drag.original;
       if (drag.kind === 'move') op = translateOperation(op, point.x - start.x, point.y - start.y);
-      else if (drag.kind === 'resize') op = resizeOperationInOutput(op, drag.base, drag.handle!, output);
+      else if (drag.kind === 'resize') op = moveSelectionHandle(op, drag.base, drag.handle!, output, drag.start);
       else if ('points' in op) {
         const points = drag.points!;
         if (op.type === 'line') op = { ...op, points: [start, point] };
@@ -177,8 +191,11 @@ export class ImageCanvasInteraction {
     if (this.drag?.crop) this.crop = this.drag.crop;
     this.drag = null; this.preview = this.text ? replace(this.text.base, this.text.operation) : null; this.changed(true);
   }
-  private erase(point: Point, tolerance: number) {
-    const base = this.getPreview(); this.preview = { ...base, operations: base.operations.filter(op => !hitTestOperation(point, op, tolerance)) };
+  private erase(point: Point) {
+    const base = this.getPreview(), from = this.drag?.eraseFrom ?? point, radius = this.getEraseRadius() ?? 1;
+    const operations = base.operations.filter(op => !intersectsEraseSweep(op, from, point, radius));
+    if (operations.length !== base.operations.length) this.preview = { ...base, operations };
+    if (this.drag) this.drag.eraseFrom = point;
   }
   private updatePolyline() {
     const draft = this.polyline!;

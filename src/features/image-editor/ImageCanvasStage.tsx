@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { getOutputSize, getSourceTransform, type ResizeHandle } from './geometry';
+import { getOutputSize, getSourceTransform } from './geometry';
+import type { AnnotationHandle } from './selectionHandles';
 import type { ImageEditRecipe, Point, Rect } from './model';
 import type { ImageResource } from './resources';
 import { renderImageEdit } from './renderer';
 import type { ImageCanvasInteraction } from './canvasInteraction';
 import { measureTextLayout } from './textMetrics';
+import { ImageEraseCursor, type EraseCursorHandle } from './ImageEraseCursor';
 import './imageCanvasStage.css';
 
 interface Props {
@@ -16,14 +18,6 @@ interface Props {
   onScale?(displayScale: number): void;
 }
 
-const HANDLE_NAMES: Record<ResizeHandle, string> = {
-  nw: '左上', n: '上方', ne: '右上', e: '右侧', se: '右下', s: '下方', sw: '左下', w: '左侧',
-};
-const HANDLE_CURSORS: Record<ResizeHandle, string> = {
-  nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize', e: 'ew-resize',
-  se: 'nwse-resize', s: 'ns-resize', sw: 'nesw-resize', w: 'ew-resize',
-};
-
 function positionedRect(rect: Rect, scale: number): CSSProperties {
   return { left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale };
 }
@@ -33,6 +27,7 @@ function outputPoint(event: { clientX: number; clientY: number }, surface: HTMLE
 }
 
 export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled, onScale }: Props) {
+  const eraseCursor = useRef<EraseCursorHandle>(null);
   const stageRef = useRef<HTMLDivElement>(null), surfaceRef = useRef<HTMLDivElement>(null), canvasRef = useRef<HTMLCanvasElement>(null), textRef = useRef<HTMLTextAreaElement>(null);
   const activePointer = useRef<number | null>(null), keepTextOnBlur = useRef(false), lastScale = useRef<number | null>(null);
   const touches = useRef(new Map<number, Point>()), pinchDistance = useRef<number | null>(null), suppressTouch = useRef(false);
@@ -81,7 +76,7 @@ export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled,
       if (context) renderImageEdit(context, resource, controller.getRenderRecipe());
     });
     return () => cancelAnimationFrame(frame);
-  }, [controller, resource, version, displayWidth, displayHeight]);
+  }, [controller, resource, recipe, version, displayWidth, displayHeight]);
   useEffect(() => {
     const canvas = canvasRef.current;
     return () => { if (canvas) { canvas.width = 0; canvas.height = 0; } };
@@ -159,7 +154,7 @@ export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled,
     if (activePointer.current !== null) return;
     event.preventDefault();
     canvasRef.current?.focus({ preventScroll: true });
-    const handle = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-handle]')?.dataset.handle as ResizeHandle | undefined : undefined;
+    const handle = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-handle]')?.dataset.handle as AnnotationHandle | undefined : undefined;
     controller.pointerDown(location(event), { tolerance, alt: event.altKey, handle });
     activePointer.current = event.pointerId;
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.setPointerCapture(event.pointerId);
@@ -183,6 +178,7 @@ export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled,
       if (suppressTouch.current) return;
     }
     const point = location(event);
+    if (controller.getEraseRadius() !== null) eraseCursor.current?.move(point);
     // Polyline previews keep following the pointer after each click releases capture.
     if (activePointer.current === null || activePointer.current === event.pointerId) controller.pointerMove(point, tolerance);
     event.currentTarget.style.cursor = controller.cursor(point, tolerance, event.altKey);
@@ -215,10 +211,12 @@ export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled,
   } : undefined;
   return <div ref={stageRef} className="nb-ie-stage" onPointerDown={event => { if (!disabled && event.target === event.currentTarget) controller.outside(); }}
     onContextMenu={event => { if (event.target instanceof Element && event.target.closest('textarea')) return; event.preventDefault(); if (disabled) return; if (event.target === event.currentTarget) controller.outside(); else controller.finishPolyline(); }}>
-    <div ref={surfaceRef} className="nb-ie-canvas-wrap nb-ie-interactive-surface" style={{ width: displayWidth, height: displayHeight }}
+    <div ref={surfaceRef} className="nb-ie-canvas-wrap nb-ie-interactive-surface" style={{ width: displayWidth, height: displayHeight, cursor: controller.getEraseRadius() !== null ? 'none' : undefined }}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerCancel}
+      onPointerEnter={event => eraseCursor.current?.move(location(event))} onPointerLeave={() => eraseCursor.current?.hide()}
       onDoubleClick={event => { if (!disabled && !(event.target instanceof Element && event.target.closest('textarea,[data-handle]'))) controller.doubleClick(location(event), tolerance); }}>
       <canvas ref={canvasRef} tabIndex={0} aria-label="图片编辑画布" style={{ width: displayWidth, height: displayHeight }}/>
+      <ImageEraseCursor ref={eraseCursor} controller={controller} disabled={disabled}/>
       {cropBounds && <div className="nb-ie-crop-overlay" aria-hidden="true">
         <div className="nb-ie-crop-shade" style={{ left: 0, top: 0, width: displayWidth, height: Math.max(0, cropBounds.y * scale) }}/>
         <div className="nb-ie-crop-shade" style={{ left: 0, top: cropBounds.y * scale, width: Math.max(0, cropBounds.x * scale), height: cropBounds.height * scale }}/>
@@ -227,9 +225,9 @@ export function ImageCanvasStage({ controller, resource, zoom, onZoom, disabled,
         <div className="nb-ie-crop-frame" style={positionedRect(cropBounds, scale)}><span/><span/><span/><span/></div>
       </div>}
       {!cropBounds && selectionBounds && <div className="nb-ie-selection-frame" style={positionedRect(selectionBounds, scale)} aria-hidden="true"/>}
-      {handles.map(({ handle, x, y }) => <button key={handle} type="button" data-handle={handle} className="nb-ie-resize-handle"
-        aria-label={`缩放标注 ${handle}`} title={`拖动${HANDLE_NAMES[handle]}控制点缩放`}
-        style={{ left: x * scale, top: y * scale, cursor: HANDLE_CURSORS[handle] }} disabled={disabled}
+      {handles.map(({ handle, x, y, label, cursor, kind }) => <button key={handle} type="button" data-handle={handle} data-handle-kind={kind} className="nb-ie-resize-handle"
+        aria-label={kind === 'resize' ? `缩放标注 ${handle}` : label} title={label}
+        style={{ left: x * scale, top: y * scale, cursor }} disabled={disabled}
         onKeyDown={event => {
           const step = (event.shiftKey ? 10 : 1) / Math.max(scale, .001);
           const delta = event.key === 'ArrowLeft' ? { x: -step, y: 0 } : event.key === 'ArrowRight' ? { x: step, y: 0 } : event.key === 'ArrowUp' ? { x: 0, y: -step } : event.key === 'ArrowDown' ? { x: 0, y: step } : null;

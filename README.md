@@ -6,11 +6,11 @@
 
 **Windows 本地笔记与图表编辑器**
 
-[![预发布](https://img.shields.io/badge/1.0.0-预发布-orange)](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1)
-[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1)
+[![正式版](https://img.shields.io/badge/1.0.1-正式版-blue)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1) · [更新说明](docs/releases/1.0.0.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
+[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/latest) · [更新说明](docs/releases/1.0.1.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
 
 </div>
 
@@ -20,11 +20,11 @@ NoteBoard 可以写笔记、整理表格、画流程图，也能打开代码和�
 
 ## 安装与试用
 
-1. 在 [1.0.0 预发布页面](https://github.com/ShallowDream724/NoteBoard/releases/tag/v1.0.0-rc.1) 的 **Assets** 中下载 `NoteBoard_1.0.0_x64-setup.exe`。
+1. 在 [正式版发布页面](https://github.com/ShallowDream724/NoteBoard/releases/latest) 的 **Assets** 中下载 `NoteBoard_1.0.1_x64-setup.exe`。
 2. 运行安装程序。需要 Windows 10 / 11 x64 和 WebView2；缺少 WebView2 时，安装程序会联网下载。
 3. 打开应用，在主页点击 **浏览功能示例**。里面的文字、表格、图片和公式都可以直接编辑。
 
-已有安装可以覆盖更新。这是预发布版，适合试用和反馈；当前限制见[下文](#当前限制)。GitHub 自动附带的 Source code 是源码，不是安装包。
+已有安装可以覆盖更新，也可在设置的“关于”中检查更新；当前限制见[下文](#当前限制)。GitHub 自动附带的 Source code 是源码，不是安装包。
 
 ## 文档与写作
 

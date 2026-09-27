@@ -1,6 +1,6 @@
 [package]
 name = "noteboard"
-version = "1.0.0"
+version = "1.0.1"
 description = "Windows 桌面笔记 + 画板软件"
 authors = ["CrazyFigure"]
 license = "GPL-3.0-only"
@@ -43,10 +43,11 @@ sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
 # 字体资源包使用标准 ZIP 分发；只启用 Deflate 解压，避免引入无关压缩算法。
 zip = { version = "8.4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+png = "0.18"
 
 [target."cfg(windows)".dependencies]
 # Win32_Graphics_Gdi：S06 起系统字体枚举使用 GDI EnumFontFamiliesExW 原生实现（替代 PowerShell 子进程）
-windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
+windows = { version = "0.58", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 webview2-com = "0.38.2"
 windows61 = { package = "windows", version = "0.61.3" }
 

@@ -19,6 +19,7 @@ pub mod favorites;
 pub mod perf;
 pub mod export;
 mod shortcut_probe;
+mod clipboard_image;
 
 use state::AppState;
 use std::sync::Mutex;
@@ -48,6 +49,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             shortcut_probe::probe_shortcuts,
+            clipboard_image::copy_png_image,
             export::create_pdf,
             export::pdf_payload,
             export::pdf_layout_started,

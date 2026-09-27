@@ -227,6 +227,11 @@ export function writeImageEdit(path: string, data: Uint8Array): Promise<WriteRes
   } });
 }
 
+/** Copy PNG pixels to the Windows image clipboard without JSON encoding. */
+export function copyPngImage(data: Uint8Array): Promise<void> {
+  return invoke<void>('copy_png_image', data);
+}
+
 // 保存二进制文件（如粘贴或插入的图片数据）
 export function saveBinaryFile(
   path: string,

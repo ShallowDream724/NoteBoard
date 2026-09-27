@@ -11,6 +11,7 @@ import { ImageToolProperties } from './ImageToolProperties';
 import type { ImageEditorController, ImageEditorOptions } from './types';
 import { ImageCanvasInteraction, type CanvasInteractionAdapter } from './canvasInteraction';
 import { ImageCanvasStage } from './ImageCanvasStage';
+import { applyImageTransform, type ImageTransformAction } from '../image/sharedTransform';
 import './imageEditor.css';
 
 const TOOLS = [
@@ -27,7 +28,7 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [tool, setTool] = useState<ImageEditorTool>('select');
   const [style, setStyle] = useState<ToolStyle>(DEFAULT_TOOL_STYLE);
-  const strokeWidths = useRef<Partial<Record<ImageEditorTool, number>>>({ highlighter: 24, eraser: 20, 'mosaic-brush': 40 });
+  const strokeWidths = useRef<Partial<Record<ImageEditorTool, number>>>({ highlighter: 24, eraser: 20, 'object-eraser': 40, 'mosaic-brush': 40 });
   const [mosaicMode, setMosaicMode] = useState<'brush' | 'rectangle'>('rectangle');
   const [magnifierShape, setMagnifierShape] = useState<'circle' | 'ellipse'>('ellipse');
   const [ratio, setRatio] = useState(0), [zoom, setZoom] = useState(1), [displayScale, setDisplayScale] = useState(1);
@@ -70,6 +71,14 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
   const size = recipe ? getOutputSize(recipe) : { width: 0, height: 0 };
   const selectedOperation = recipe ? canvas.selectedOperation() : undefined;
   const activeTool = canvas.crop ? 'crop' : selectedOperation?.type ?? adapter.current.tool();
+  const interactionHint = selectedOperation?.type === 'line' ? '拖动首尾调整方向与长度 · 中点移动 · 滚轮缩放'
+    : selectedOperation?.type === 'polyline' ? '拖动节点调整 · 拖动线段移动 · 滚轮缩放'
+    : tool === 'object-eraser' ? '圆圈内触及的标注整项删除 · 一次拖动可撤销'
+    : tool === 'eraser' ? '圆圈显示实际擦除范围 · 拖动擦除 · Ctrl+Z 撤销'
+    : tool === 'polyline' ? '点击添加转折点 · 右键、Esc 或画外点击完成'
+    : canvas.crop ? '拖动边框调整 · Enter 应用 · Esc 取消'
+    : tool === 'text' ? '点击图片输入文字 · 再次点击文字可编辑'
+    : '拖动标注移动 · 边框或滚轮缩放 · Alt 按住可重叠绘制';
 
   function choose(value: ImageEditorTool) {
     canvas.finish(); canvas.clearSelection(); setTool(value); setError('');
@@ -85,6 +94,10 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
   function redo() { canvas.prepareHistory(); if (historyRef.current) apply(redoImageEdit(historyRef.current)); if (tool === 'crop') setTool('select'); }
   function endCrop(keep: boolean) { if (keep) canvas.applyCrop(); else canvas.cancelCrop(); setTool('select'); }
   function finishGesture() { canvas.finish(); if (tool === 'crop') setTool('select'); }
+  function transformImage(action: ImageTransformAction) {
+    finishGesture();
+    if (historyRef.current) commit(applyImageTransform(historyRef.current.present.recipe, action));
+  }
   function requestClose() { if (saving.current) return; canvas.finish(); if (busy) { exportAbort.current?.abort(); setBusy(false); return; } if (hasImageEditorDraft(options.key)) setClosing(true); else { discardImageEditorDraft(options.key); close(); } }
   async function save(allowLargeExport = false) {
     finishGesture(); const current = historyRef.current?.present.recipe, image = resource.current; if (!current || !image || busy) return;
@@ -121,7 +134,7 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
       onPointerDownOutside={event => { event.preventDefault(); canvas.outside(); }}
       onEscapeKeyDown={event => { event.preventDefault(); if (busy) return; const cropping = !!canvas.crop; if (canvas.escape()) { if (cropping) setTool('select'); } else if (closing) setClosing(false); else requestClose(); }}>
       <header className="nb-ie-header"><div><Dialog.Title>编辑图片</Dialog.Title><Dialog.Description>{options.name || '图片'}</Dialog.Description></div>
-        <div className="nb-ie-actions"><button title="撤销 Ctrl+Z" aria-label="撤销图片编辑" disabled={!history?.past.length || busy} onClick={undo}><Undo2 size={18}/></button><button title="重做 Ctrl+Shift+Z" aria-label="重做图片编辑" disabled={!history?.future.length || busy} onClick={redo}><Redo2 size={18}/></button><span className="nb-ie-divider"/><button title="顺时针旋转" aria-label="顺时针旋转" disabled={!recipe || busy} onClick={() => { finishGesture(); const r = historyRef.current!.present.recipe; commit({ ...r, rotation: ((r.rotation + 1) % 4) as 0 | 1 | 2 | 3 }); }}><RotateCw size={18}/></button><button title="水平镜像" aria-label="水平镜像" disabled={!recipe || busy} onClick={() => { finishGesture(); const r = historyRef.current!.present.recipe; commit({ ...r, flipX: !r.flipX }); }}><FlipHorizontal2 size={18}/></button><button title="垂直镜像" aria-label="垂直镜像" disabled={!recipe || busy} onClick={() => { finishGesture(); const r = historyRef.current!.present.recipe; commit({ ...r, flipY: !r.flipY }); }}><FlipVertical2 size={18}/></button><span className="nb-ie-divider"/><button aria-label="关闭图片编辑" disabled={writing} title={busy && !writing ? '取消导出' : '关闭'} onClick={requestClose}><X size={20}/></button></div>
+        <div className="nb-ie-actions"><button title="撤销 Ctrl+Z" aria-label="撤销图片编辑" disabled={!history?.past.length || busy} onClick={undo}><Undo2 size={18}/></button><button title="重做 Ctrl+Shift+Z" aria-label="重做图片编辑" disabled={!history?.future.length || busy} onClick={redo}><Redo2 size={18}/></button><span className="nb-ie-divider"/><button title="顺时针旋转" aria-label="顺时针旋转" disabled={!recipe || busy} onClick={() => transformImage('rotate-cw')}><RotateCw size={18}/></button><button title="水平镜像" aria-label="水平镜像" disabled={!recipe || busy} onClick={() => transformImage('flip-horizontal')}><FlipHorizontal2 size={18}/></button><button title="垂直镜像" aria-label="垂直镜像" disabled={!recipe || busy} onClick={() => transformImage('flip-vertical')}><FlipVertical2 size={18}/></button><span className="nb-ie-divider"/><button aria-label="关闭图片编辑" disabled={writing} title={busy && !writing ? '取消导出' : '关闭'} onClick={requestClose}><X size={20}/></button></div>
       </header>
       <div className="nb-ie-body"><nav className="nb-ie-tools" aria-label="图片编辑工具">{TOOLS.map(([value, label, Icon]) => <button key={value} title={label} aria-label={label} aria-pressed={tool === value} disabled={!recipe || busy} onClick={() => choose(value)}><Icon size={19}/><span>{label}</span></button>)}</nav>
         {loading || !recipe || !resource.current ? <div className="nb-ie-stage"><div className="nb-ie-loading">{loading ? '正在打开图片…' : '图片无法打开'}</div></div> : <ImageCanvasStage controller={canvas} resource={resource.current} zoom={zoom} onZoom={factor => setZoom(value => Math.max(.25, Math.min(8, value * factor)))} disabled={busy} onScale={setDisplayScale}/>}
@@ -146,9 +159,9 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
       </div>
       {error && <div role="alert" className="nb-ie-message">{error}</div>}
       {large && <div className="nb-ie-message" role="alert"><span>{large}</span><button onClick={() => void save(true)}>继续导出</button><button onClick={() => setLarge('')}>取消</button></div>}
-      <footer className="nb-ie-footer"><div className="nb-ie-actions"><button aria-label="缩小预览" onClick={() => setZoom(value => Math.max(.25, value / 1.25))}><Minus size={16}/></button><span>{Math.round(displayScale * 100)}%</span><button aria-label="放大预览" onClick={() => setZoom(value => Math.min(8, value * 1.25))}><Plus size={16}/></button><button aria-label="适合窗口" title="适合窗口" onClick={() => setZoom(1)}><Maximize size={16}/></button></div><span className="nb-ie-hint">{tool === 'polyline' ? '点击添加转折点 · 右键、Esc 或画外点击完成' : canvas.crop ? '拖动边框调整 · Enter 应用 · Esc 取消' : tool === 'text' ? '点击图片输入文字 · 再次点击文字可编辑' : '拖动标注移动 · 边框或滚轮缩放 · Alt 按住可重叠绘制'}</span>
+      <footer className="nb-ie-footer"><div className="nb-ie-actions"><button aria-label="缩小预览" onClick={() => setZoom(value => Math.max(.25, value / 1.25))}><Minus size={16}/></button><span>{Math.round(displayScale * 100)}%</span><button aria-label="放大预览" onClick={() => setZoom(value => Math.min(8, value * 1.25))}><Plus size={16}/></button><button aria-label="适合窗口" title="适合窗口" onClick={() => setZoom(1)}><Maximize size={16}/></button></div><span className="nb-ie-hint">{interactionHint}</span>
         <button className="nb-ie-save" disabled={loading || !recipe || busy} onClick={() => void save()}><Save size={16}/>{busy ? '正在保存…' : options.saveLabel || '保存图片'}</button></footer>
-      {closing && <div className="nb-ie-confirm"><div role="alertdialog" aria-label="保留图片编辑"><h3>保留这次编辑？</h3><p>稍后继续会保留编辑进度，原图保持不变。</p><div><button onClick={() => setClosing(false)}>继续编辑</button><button onClick={() => { discardImageEditorDraft(options.key); close(); }}>放弃改动</button><button onClick={close}>稍后继续</button><button className="nb-ie-save" onClick={() => { setClosing(false); void save(); }}>保存</button></div></div></div>}
+      {closing && <div className="nb-ie-confirm"><div role="alertdialog" aria-label="保留图片编辑"><h3>保留这次编辑？</h3><p>稍后继续会保留编辑进度，原图保持不变。</p><div><button onClick={() => setClosing(false)}>继续编辑</button><button className="nb-ie-discard" onClick={() => { discardImageEditorDraft(options.key); close(); }}>放弃改动</button><button onClick={close}>稍后继续</button><button className="nb-ie-save" onClick={() => { setClosing(false); void save(); }}>保存</button></div></div></div>}
     </Dialog.Content></Dialog.Portal>
   </Dialog.Root>;
 }

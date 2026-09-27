@@ -43,6 +43,8 @@
 .nb-ie-hint { flex:1; color:var(--editor-text-muted,#8590a1); font-size:11px; }
 .nb-ie-dialog .nb-ie-save { background:var(--editor-accent,#3b82f6); color:#fff; border-color:transparent; white-space:nowrap; padding:9px 14px; }
 .nb-ie-dialog .nb-ie-save:hover:not(:disabled) { background:var(--accent-strong,#2563eb); }
+.nb-ie-dialog .nb-ie-discard { background:#dc2626; border-color:transparent; color:#fff; }
+.nb-ie-dialog .nb-ie-discard:hover:not(:disabled) { background:#b91c1c; }
 .nb-ie-message { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:9px 16px; background:color-mix(in srgb,#f59e0b 10%,var(--editor-bg,#fff)); color:var(--editor-text,#243044); font-size:12px; }
 .nb-ie-message > span { flex:1; }
 .nb-ie-message button { border-color:var(--editor-border,#dce1e8); }

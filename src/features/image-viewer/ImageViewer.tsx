@@ -13,6 +13,7 @@ import {
   RotateCw,
   RotateCcw,
   FlipHorizontal,
+  FlipVertical,
   ExternalLink,
   FolderOpen,
   Copy,
@@ -30,6 +31,8 @@ import { useImageWheelGesture } from './imageWheelGesture';
 import { formatFileSize } from '../../core/formatFileSize';
 import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
+import { applyImageTransform, imageTransformCss, type ImageTransform } from '../image/sharedTransform';
+import { copyImageSource } from '../image/imageClipboard';
 
 interface ImageViewerProps {
   docKey: string;
@@ -88,15 +91,15 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   // 查看器变换状态：缩放比例、平移位移 (tx, ty)、旋转角度 (0/90/180/270)、水平/垂直翻转
   const [scale, setScale] = useState<number>(1);
   const [translate, setTranslate] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [rotation, setRotation] = useState<number>(0);
-  const [flipH, setFlipH] = useState(false);
+  const [transform, setTransform] = useState<ImageTransform>({ rotation: 0, flipX: false, flipY: false });
   const [bgMode, setBgMode] = useState<BgMode>('grid');
 
   // 🔴 S11：查看器变换状态的 ref 镜像（回收捕获读取最新值，避开闭包过期）
-  const viewStateRef = useRef({ scale: 1, translate: { x: 0, y: 0 }, rotation: 0, flipH: false, bgMode: 'grid' as BgMode });
+  const viewStateRef = useRef({ scale: 1, translate: { x: 0, y: 0 }, transform, bgMode: 'grid' as BgMode });
+  const restoredViewRef = useRef(false);
   useEffect(() => {
-    viewStateRef.current = { scale, translate, rotation, flipH, bgMode };
-  }, [scale, translate, rotation, flipH, bgMode]);
+    viewStateRef.current = { scale, translate, transform, bgMode };
+  }, [scale, translate, transform, bgMode]);
 
   // 🔴 S11：注册图片查看能力（只读 flush + 视图状态捕获；重挂载恢复查看状态）
   useEffect(() => {
@@ -106,13 +109,21 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       translate: { x: number; y: number };
       rotation: number;
       flipH: boolean;
+      flipV?: boolean;
       bgMode: BgMode;
     } | null;
     if (restore?.kind === 'image') {
+      restoredViewRef.current = true;
       setScale(restore.scale);
       setTranslate(restore.translate);
-      setRotation(restore.rotation);
-      setFlipH(restore.flipH);
+      const quarterTurns = (((restore.rotation / 90) % 4 + 4) % 4) as ImageTransform['rotation'];
+      // Earlier snapshots mirrored the source X axis because CSS applied scaleX before rotate.
+      const legacyOddRotation = restore.flipV === undefined && quarterTurns % 2 === 1;
+      setTransform({
+        rotation: quarterTurns,
+        flipX: legacyOddRotation ? false : !!restore.flipH,
+        flipY: legacyOddRotation ? !!restore.flipH : !!restore.flipV,
+      });
       setBgMode(restore.bgMode);
     }
     const instanceId = `img-${docKey}`;
@@ -128,8 +139,9 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         kind: 'image' as const,
         scale: viewStateRef.current.scale,
         translate: viewStateRef.current.translate,
-        rotation: viewStateRef.current.rotation,
-        flipH: viewStateRef.current.flipH,
+        rotation: viewStateRef.current.transform.rotation * 90,
+        flipH: viewStateRef.current.transform.flipX,
+        flipV: viewStateRef.current.transform.flipY,
         bgMode: viewStateRef.current.bgMode,
       }),
     });
@@ -146,7 +158,6 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
   const wheelGesture = useImageWheelGesture(containerRef, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: .05, max: 20 });
 
   // 自适应窗口缩放
@@ -163,7 +174,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
     const availH = Math.max(ch - padding, 100);
 
     // 计算旋转后的宽高
-    const isRotated = rotation % 180 !== 0;
+    const isRotated = transform.rotation % 2 !== 0;
     const curW = isRotated ? naturalSize.height : naturalSize.width;
     const curH = isRotated ? naturalSize.width : naturalSize.height;
 
@@ -173,7 +184,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
 
     setScale(Math.max(Number(fitScale.toFixed(3)), 0.1));
     setTranslate({ x: 0, y: 0 });
-  }, [naturalSize, rotation]);
+  }, [naturalSize, transform.rotation]);
 
   // 当图片首次加载完成时
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -182,7 +193,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
     setLoadError(false);
 
     // 初始自适应窗口
-    if (containerRef.current) {
+    if (containerRef.current && !restoredViewRef.current) {
       const { clientWidth: cw, clientHeight: ch } = containerRef.current;
       const padding = 48;
       const scaleX = (cw - padding) / naturalWidth;
@@ -209,11 +220,12 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   };
 
   // 旋转
-  const rotateCw = () => setRotation((prev) => (prev + 90) % 360);
-  const rotateCcw = () => setRotation((prev) => (prev + 270) % 360);
+  const rotateCw = () => setTransform((prev) => applyImageTransform(prev, 'rotate-cw'));
+  const rotateCcw = () => setTransform((prev) => applyImageTransform(prev, 'rotate-ccw'));
 
   // 水平翻转
-  const toggleFlipH = () => setFlipH((prev) => !prev);
+  const toggleFlipH = () => setTransform((prev) => applyImageTransform(prev, 'flip-horizontal'));
+  const toggleFlipV = () => setTransform((prev) => applyImageTransform(prev, 'flip-vertical'));
 
   // 拖拽平移事件处理
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -242,42 +254,17 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
     setIsDragging(false);
   };
 
-  // 复制图片到系统剪贴板（绘制到 Canvas 并通过 Clipboard API 写入）
+  // 复制源图像；视图里的旋转与镜像不进入剪贴板。
   const handleCopyImage = async () => {
-    if (!imgRef.current || !naturalSize || copyInFlightRef.current) return;
+    if (!imgSrc || !naturalSize || copyInFlightRef.current) return;
     copyInFlightRef.current = true;
     try {
-      const canvas = document.createElement('canvas');
-      let blob: Blob;
-      try {
-        canvas.width = naturalSize.width;
-        canvas.height = naturalSize.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('无法创建 2D 上下文');
-        ctx.drawImage(imgRef.current, 0, 0);
-        blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((result) => {
-            if (result) resolve(result);
-            else reject(new Error('无法编码图片'));
-          }, 'image/png');
-        });
-      } finally {
-        // PNG 编码完成后即释放全尺寸像素缓冲，无需等剪贴板操作结束。
-        canvas.width = 0;
-        canvas.height = 0;
-      }
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      await copyImageSource(imgSrc, naturalSize, filePath);
       setCopied(true);
       showToast('图片已复制到剪贴板', 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // 图片复制失败时保留路径降级，并确认写入成功后再提示。
-      try {
-        await navigator.clipboard.writeText(filePath);
-        showToast('已复制图片文件完整路径', 'info');
-      } catch {
-        showToast('复制图片失败', 'error');
-      }
+      showToast('复制图片失败', 'error');
     } finally {
       copyInFlightRef.current = false;
     }
@@ -429,11 +416,22 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
             onClick={toggleFlipH}
             style={{
               ...btnStyle,
-              background: flipH ? 'var(--toolbar-hover)' : 'transparent',
+              background: transform.flipX ? 'var(--toolbar-hover)' : 'transparent',
             }}
             aria-label="水平翻转"
           >
             <FlipHorizontal size={15} />
+          </button>
+        </Tooltip>
+
+        <Tooltip content="垂直翻转" side="bottom" sideOffset={6}>
+          <button
+            type="button"
+            onClick={toggleFlipV}
+            style={{ ...btnStyle, background: transform.flipY ? 'var(--toolbar-hover)' : 'transparent' }}
+            aria-label="垂直翻转"
+          >
+            <FlipVertical size={15} />
           </button>
         </Tooltip>
 
@@ -564,7 +562,6 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         ) : (
           /* 禁用 Referer 携带，防止外部或远程图片被防盗链拦截 */
           <img
-            ref={imgRef}
             data-image-preview-transform=""
             src={imgSrc || undefined}
             alt={name}
@@ -573,7 +570,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
             onError={() => setLoadError(true)}
             draggable={false}
             style={{
-              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale}) rotate(${rotation}deg) scaleX(${flipH ? -1 : 1})`,
+              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale}) ${imageTransformCss(transform)}`,
               transformOrigin: 'center center',
               transition: isDragging || wheelGesture ? 'none' : 'transform 0.08s ease-out',
               maxWidth: 'none',

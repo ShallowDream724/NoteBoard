@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ImageCanvasInteraction } from '../../src/features/image-editor/canvasInteraction';
-import { getOperationOutputBounds, outputToSource, type ResizeHandle } from '../../src/features/image-editor/geometry';
+import { getOperationOutputBounds, outputToSource, sourceToOutput } from '../../src/features/image-editor/geometry';
+import type { AnnotationHandle } from '../../src/features/image-editor/selectionHandles';
 import { commitImageEdit, createImageEditHistory, createImageEditRecipe, undoImageEdit, type ImageEditHistory, type ImageEditOperation, type ImageEditorTool } from '../../src/features/image-editor/model';
 import { DEFAULT_TOOL_STYLE, type ToolStyle } from '../../src/features/image-editor/toolDefaults';
 
@@ -27,7 +28,7 @@ function harness(recipe = createImageEditRecipe(160, 120)) {
     setTool(value: ImageEditorTool) { tool = value; },
     setStyle(patch: Partial<ToolStyle>) { style = { ...style, ...patch }; },
     setRatio(value: number) { ratio = value; interaction.setRatio(); },
-    down(x: number, y: number, handle?: ResizeHandle) { interaction.pointerDown({ x, y }, { tolerance: 2, handle }); },
+    down(x: number, y: number, handle?: AnnotationHandle) { interaction.pointerDown({ x, y }, { tolerance: 2, handle }); },
     move(x: number, y: number) { interaction.pointerMove({ x, y }, 2); },
     up() { interaction.pointerUp(); },
     dispose() { interaction.dispose(); },
@@ -193,6 +194,67 @@ describe('image canvas interactions', () => {
       expect(cancelled.history.present.recipe.crop).toEqual(original.crop);
       expect(cancelled.history.past).toHaveLength(0);
     } finally { cancelled.dispose(); }
+  });
+
+  it('edits arrow endpoints independently and translates from its midpoint without a box', () => {
+    const arrow: ImageEditOperation = { id: 'arrow', type: 'line', points: [{ x: 20, y: 25 }, { x: 80, y: 60 }], style: stroke, endHead: 'filled' };
+    const board = harness({ ...createImageEditRecipe(160, 120), operations: [arrow] });
+    try {
+      board.interaction.selected = arrow.id;
+      expect(board.interaction.getSelectionBounds()).toBeNull();
+      expect(board.interaction.getHandles().map(h => h.handle)).toEqual(['vertex-0', 'path-move', 'vertex-1']);
+      board.down(80, 60, 'vertex-1'); board.move(100, 35); board.up();
+      expect(board.history.present.recipe.operations[0]).toMatchObject({ points: [{ x: 20, y: 25 }, { x: 100, y: 35 }], style: stroke });
+      const middle = board.interaction.getHandles().find(h => h.handle === 'path-move')!;
+      board.down(middle.x, middle.y, middle.handle); board.move(middle.x + 12, middle.y - 10); board.up();
+      expect(board.history.present.recipe.operations[0]).toMatchObject({ points: [{ x: 32, y: 15 }, { x: 112, y: 25 }], style: stroke });
+      expect(undoImageEdit(board.history).present.recipe.operations[0]).toMatchObject({ points: [{ x: 20, y: 25 }, { x: 100, y: 35 }] });
+      board.down(25, 50); board.up();
+      expect(board.interaction.selected).toBeNull();
+    } finally { board.dispose(); }
+  });
+
+  it('moves only the requested polyline vertex under rotation and mirrors', () => {
+    const path: ImageEditOperation = { id: 'path', type: 'polyline', points: [{ x: 20, y: 20 }, { x: 55, y: 70 }, { x: 110, y: 25 }], style: stroke };
+    const recipe = { ...createImageEditRecipe(160, 120), operations: [path], rotation: 1 as const, flipX: true };
+    const board = harness(recipe);
+    try {
+      board.interaction.selected = path.id;
+      expect(board.interaction.getSelectionBounds()).toBeNull();
+      expect(board.interaction.getHandles().map(h => h.handle)).toEqual(['vertex-0', 'vertex-1', 'vertex-2']);
+      const node = board.interaction.getHandles()[1], destination = sourceToOutput({ x: 70, y: 40 }, recipe);
+      board.down(node.x, node.y, node.handle); board.move(destination.x, destination.y); board.up();
+      expect(board.history.present.recipe.operations[0]).toMatchObject({ points: [{ x: 20, y: 20 }, { x: 70, y: 40 }, { x: 110, y: 25 }], style: stroke });
+      expect(undoImageEdit(board.history).present.recipe.operations[0]).toEqual(path);
+    } finally { board.dispose(); }
+  });
+
+  it('object eraser preview and sweep use the same visible radius and one undo', () => {
+    const line: ImageEditOperation = { id: 'line', type: 'line', points: [{ x: 60, y: 5 }, { x: 60, y: 100 }], style: stroke };
+    const marker: ImageEditOperation = { id: 'marker', type: 'marker', center: { x: 100, y: 60 }, size: 12, value: 1, format: 'decimal', shape: 'circle', appearance: 'filled', style: stroke };
+    const board = harness({ ...createImageEditRecipe(160, 120), operations: [line, marker] });
+    try {
+      board.setTool('object-eraser'); board.setStyle({ width: 20 });
+      expect(board.interaction.getEraseRadius()).toBe(10);
+      expect(board.interaction.getObjectEraseTargets({ x: 90, y: 60 }).map(op => op.id)).toEqual(['marker']);
+      board.down(10, 60); board.move(140, 60); board.up();
+      expect(board.history.present.recipe.operations).toHaveLength(0);
+      expect(board.history.past).toHaveLength(1);
+      expect(undoImageEdit(board.history).present.recipe.operations).toEqual([line, marker]);
+    } finally { board.dispose(); }
+  });
+
+  it('ink eraser creates an erase stroke when pressed over a movable annotation', () => {
+    const rect: ImageEditOperation = { id: 'rect', type: 'rectangle', rect: { x: 30, y: 20, width: 50, height: 40 }, style: stroke };
+    const board = harness({ ...createImageEditRecipe(160, 120), operations: [rect] });
+    try {
+      board.setTool('eraser'); board.setStyle({ width: 16 });
+      expect(board.interaction.getEraseRadius()).toBe(8);
+      expect(board.interaction.cursor({ x: 30, y: 20 }, 2)).toBe('none');
+      board.down(30, 20); board.move(60, 20); board.up();
+      expect(board.history.present.recipe.operations[0]).toEqual(rect);
+      expect(board.history.present.recipe.operations[1]).toMatchObject({ type: 'eraser', width: 16, points: [{ x: 30, y: 20 }, { x: 60, y: 20 }] });
+    } finally { board.dispose(); }
   });
 
   it('restores a crop drag interrupted by pointer cancellation before apply', () => {

@@ -1,5 +1,6 @@
 .nb-ie-interactive-surface { position: relative; overflow: visible; touch-action: none; user-select: none; }
 .nb-ie-interactive-surface canvas { display: block; }
+.nb-ie-erase-overlay { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 4; }
 .nb-ie-interactive-surface canvas:focus-visible { outline: 2px solid var(--editor-accent, #3b82f6); outline-offset: 3px; }
 .nb-ie-crop-overlay { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .nb-ie-crop-shade { position: absolute; background: rgb(10 18 32 / 46%); }
@@ -28,6 +29,9 @@
   touch-action: none;
 }
 .nb-ie-dialog .nb-ie-resize-handle:hover:not(:disabled) { background: var(--editor-bg, #fff); }
+.nb-ie-dialog .nb-ie-resize-handle[data-handle-kind=vertex] { border-radius: 50%; }
+.nb-ie-dialog .nb-ie-resize-handle[data-handle-kind=move] { border-radius: 50%; background: var(--editor-accent, #3b82f6); border-color: #fff; }
+.nb-ie-dialog .nb-ie-resize-handle[data-handle-kind=move]:hover:not(:disabled) { background: var(--editor-accent, #3b82f6); }
 .nb-ie-canvas-text {
   position: absolute;
   z-index: 3;
