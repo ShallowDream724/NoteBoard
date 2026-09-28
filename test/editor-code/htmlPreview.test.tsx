@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { standaloneHtml } from '../../src/features/export/standaloneHtml';
 import { useDocumentStore } from '../../src/stores/documentStore';
+import { undoDocumentHistory } from '../../src/features/history/documentHistory';
 
 const path = 'C:\\notes\\page.html';
 let host: HTMLDivElement;
@@ -25,18 +26,31 @@ it('opens an isolated reading preview and refreshes it from unsaved source edits
   const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
   expect(frame.getAttribute('sandbox')).toBe('');
   expect(frame.srcdoc).toContain('原文');
+  expect(host.querySelector('.cm-editor')).toBeNull();
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
   const view = EditorView.findFromDOM(host.querySelector('.cm-editor')!);
   expect(view).not.toBeNull();
   await act(async () => view!.dispatch({ changes: { from: 0, to: view!.state.doc.length, insert: '<h1>新稿</h1>' } }));
+  await act(async () => view!.dispatch({ selection: { anchor: 4 } }));
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
   expect(host.querySelector<HTMLIFrameElement>('iframe')!.srcdoc).toContain('新稿');
+  expect(host.querySelector('.cm-editor')).toBeNull();
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
+  const restored = EditorView.findFromDOM(host.querySelector('.cm-editor')!);
+  expect(restored?.state.selection.main.anchor).toBe(4);
+  await act(async () => { undoDocumentHistory(path); });
+  expect(restored?.state.doc.toString()).toBe('<h1>原文</h1>');
 });
 
-it('hides the exported page controls that cannot run in an isolated preview', async () => {
-  useDocumentStore.getState().setContent(path, standaloneHtml('<article><h1>正文</h1></article>', '文件名'));
+it('runs only the reviewed export enhancement inside an isolated preview', async () => {
+  useDocumentStore.getState().setContent(path, await standaloneHtml('<article><h1>正文</h1></article>', '文件名'));
   await act(async () => root.render(<CodeEditor docKey={path} />));
-  const source = host.querySelector<HTMLIFrameElement>('iframe')!.srcdoc;
+  const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
+  const source = frame.srcdoc;
+  expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+  expect(source).toContain('Content-Security-Policy');
+  expect(source).toContain('script-src');
+  expect(source).toContain('standaloneEnhancement.runtime.js');
   expect(source).toContain('.export-page-actions{display:none!important}');
   expect(source).toContain('<h1>正文</h1>');
 });

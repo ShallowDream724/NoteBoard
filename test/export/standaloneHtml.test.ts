@@ -5,8 +5,8 @@ import { standaloneEnhancement } from '../../src/features/export/standaloneEnhan
 
 afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren(); });
 
-it('keeps the filename in browser metadata without injecting it into the document', () => {
-  const page = new DOMParser().parseFromString(standaloneHtml('<article><h1>作者标题</h1></article>', '欢迎使用 NoteBoard.nb'), 'text/html');
+it('keeps the filename in browser metadata without injecting it into the document', async () => {
+  const page = new DOMParser().parseFromString(await standaloneHtml('<article><h1>作者标题</h1></article>', '欢迎使用 NoteBoard.nb'), 'text/html');
   expect(page.title).toBe('欢迎使用 NoteBoard.nb');
   expect(page.body.textContent).toContain('作者标题');
   expect(page.body.textContent).not.toContain('欢迎使用 NoteBoard.nb');

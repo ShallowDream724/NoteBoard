@@ -1,6 +1,7 @@
 import type { Fragment, Node, ResolvedPos } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { DISCRETE_EDIT_META } from './discreteEdit';
+import { slashTriggerPosition } from './slashHistory';
 
 function sameAncestors(before: ResolvedPos, after: ResolvedPos): boolean {
   if (before.depth !== after.depth) return false;
@@ -59,8 +60,52 @@ export function changesDocumentStructure(tr: Transaction): boolean {
  * sides of the application's single timeline even if a command omits a marker. */
 export class VisualHistoryGrouping {
   private isolateNext = false;
-  startsNewGroup(tr: Transaction, nativeBoundary: boolean): boolean {
-    if (!tr.docChanged || tr.getMeta('addToHistory') === false || tr.getMeta('noteboard-document-replacement')) return false;
+  private slashFrom: number | null = null;
+  private slashCaret = 0;
+  private commandInProgress = false;
+
+  startsNewGroup(tr: Transaction, nativeBoundary: boolean, slashCommandAction = false): boolean {
+    if (tr.getMeta('noteboard-document-replacement')) {
+      this.slashFrom = null;
+      this.commandInProgress = false;
+      return false;
+    }
+    if (!tr.docChanged || tr.getMeta('addToHistory') === false) return false;
+
+    if (slashCommandAction) {
+      // The trigger and all synchronous edits of its command are one action.
+      // If an action is invoked without an observed trigger, isolate its first edit.
+      const boundary = this.slashFrom === null && !this.commandInProgress;
+      this.commandInProgress = true;
+      this.slashFrom = null;
+      this.isolateNext = true;
+      return boundary;
+    }
+    this.commandInProgress = false;
+    const trigger = slashTriggerPosition(tr);
+    if (trigger !== null) {
+      this.slashFrom = trigger;
+      this.slashCaret = tr.selection.from;
+      this.isolateNext = false;
+      return true;
+    }
+    if (this.slashFrom !== null) {
+      const from = this.slashFrom;
+      const previousCaret = this.slashCaret;
+      const editsQuery = tr.steps.every(step => {
+        let inQuery = true;
+        step.getMap().forEach((oldFrom, oldTo) => { inQuery &&= oldFrom >= from && oldTo <= previousCaret; });
+        return inQuery;
+      });
+      const caret = tr.selection.from;
+      const query = caret > from && caret <= tr.doc.content.size
+        ? tr.doc.textBetween(from, caret) : '';
+      if (editsQuery && tr.selection.empty && /^\/[^\s]*$/.test(query)) {
+        this.slashCaret = caret;
+        return false;
+      }
+      this.slashFrom = null;
+    }
     const isolated = !!tr.getMeta(DISCRETE_EDIT_META) || changesDocumentStructure(tr);
     const boundary = isolated || this.isolateNext || nativeBoundary;
     this.isolateNext = isolated;

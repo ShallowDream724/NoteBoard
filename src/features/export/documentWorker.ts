@@ -48,7 +48,7 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
     if (data.format === 'standalone-html') {
       const { standaloneHtml } = await import('./standaloneHtml');
       const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, assetUrls, 'html', diagrams);
-      self.postMessage({ type: 'result', result: standaloneHtml(result.html, data.title) });
+      self.postMessage({ type: 'result', result: await standaloneHtml(result.html, data.title) });
       return;
     }
     const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup,

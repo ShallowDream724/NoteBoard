@@ -8,8 +8,40 @@ import { describe, expect, it, vi } from 'vitest';
 import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensions';
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { mathContent } from '../../src/features/editor-md/insertContentRecipes';
+import { insertMath } from '../../src/features/editor-md/insertMath';
+import { replaceEmptyParagraph } from '../../src/features/editor-md/emptyBlockInsertion';
 
 describe('公式源码输入', () => {
+  it.each(['toolbar', 'slash', 'empty-paragraph'] as const)('creates a blank inline formula and opens only this creation request: %s', async entry => {
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    const editor = new Editor({ editorProps: { handleScrollToSelection: () => true }, extensions: [StarterKit, MathInline, MathBlock, Markdown],
+      content: entry === 'slash' ? '<p>/math</p>' : '<p></p>' });
+    const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+    try {
+      await act(async () => root.render(<EditorContent editor={editor}/>));
+      await act(async () => {
+        if (entry === 'empty-paragraph') replaceEmptyParagraph(editor, 0, { type: 'paragraph', content: [mathContent('inline')] });
+        else insertMath(editor, 'inline', entry === 'slash' ? { from: 1, to: 6 } : undefined);
+      });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 35)); });
+      const textarea = host.querySelector('textarea')!;
+      expect(textarea?.value).toBe(''); expect(document.activeElement).toBe(textarea);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'abc');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('abc');
+      await act(async () => editor.commands.undo());
+      expect(host.querySelector('textarea')).toBe(textarea); expect(textarea.value).toBe('');
+      await act(async () => editor.commands.undo());
+      expect(host.querySelector('textarea')).toBeNull();
+      await act(async () => editor.commands.redo());
+      expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('');
+      expect(host.querySelector('textarea')).toBeNull();
+      await act(async () => editor.commands.redo());
+      expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('abc');
+    } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
+  });
   it.each([
     { source: '正文 $$ 后文', position: 5, input: 'a', latex: 'a', caret: 1 },
     { source: '正文 $ab$ 后文', position: 6, input: 'x', latex: 'axb', caret: 2 },

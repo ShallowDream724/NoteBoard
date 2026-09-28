@@ -5,6 +5,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { tableAxisRange, tableGrid } from './tableStructure';
+import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 
 interface TableTarget { table: HTMLTableElement; pos: number; node: PMNode }
 interface Gesture extends TableTarget {
@@ -140,7 +141,7 @@ export const TableMarginSelection = Extension.create({
   addProseMirrorPlugins() {
     return [new Plugin({ view(view) {
       const host = view.dom.ownerDocument, scroll = findScrollContainer(view.dom);
-      let gesture: Gesture | null = null, frame = 0;
+      let gesture: Gesture | null = null, dragScroller: DragEdgeScroller | null = null;
       const selectAxis = () => {
         const active = gesture; if (!active) return;
         if (!view.editable || view.state.doc.nodeAt(active.pos) !== active.node || !view.dom.contains(active.table)) { finish(); return; }
@@ -161,29 +162,34 @@ export const TableMarginSelection = Extension.create({
             : CellSelection.colSelection(at(0, from), at(map.height - 1, to - 1));
         if (!selection.eq(view.state.selection)) view.dispatch(view.state.tr.setSelection(selection));
       };
-      const paint = () => {
-        frame = 0;
-        const active = gesture; if (!active) return;
-        const viewport = scroll.getBoundingClientRect(), before = scroll.scrollTop;
-        const top = Math.max(0, viewport.top), bottom = Math.min(innerHeight, viewport.bottom);
-        if (active.axis === 'row' && bottom > top) {
-          const edge = Math.min(32, (bottom - top) / 2);
-          let delta = active.y < top + edge ? -Math.min(18, Math.ceil((top + edge - active.y) / 2))
-            : active.y > bottom - edge ? Math.min(18, Math.ceil((active.y - bottom + edge) / 2)) : 0;
-          // Reveal this table only; holding beyond the last selected row must
-          // not keep scrolling through unrelated paragraphs below it.
-          if (delta < 0) delta = Math.max(delta, Math.min(0, active.table.rows[0].getBoundingClientRect().top - top));
-          if (delta > 0) delta = Math.min(delta, Math.max(0, active.table.rows[active.table.rows.length - 1].getBoundingClientRect().bottom - bottom));
-          if (delta) scroll.scrollTop += delta;
+      const startDragScroll = (active: Gesture) => {
+        const axes: Parameters<typeof createDragEdgeScroller>[0] = [];
+        if (active.axis === 'row') axes.push({
+          element: scroll, direction: 'y', edge: 40, maxSpeed: 880,
+          bounds: () => { const rect = scroll.getBoundingClientRect();
+            return { start: Math.max(0, rect.top), end: Math.min(innerHeight, rect.bottom) }; },
+          // Stop when the table's first or last row reaches the visible edge.
+          limitDelta: delta => { const rect = scroll.getBoundingClientRect();
+            const top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
+            return delta < 0
+              ? Math.max(delta, Math.min(0, active.table.rows[0].getBoundingClientRect().top - top))
+              : Math.min(delta, Math.max(0, active.table.rows[active.table.rows.length - 1].getBoundingClientRect().bottom - bottom)); },
+        });
+        else {
+          const horizontal = active.table.parentElement!;
+          axes.push({ element: horizontal, direction: 'x', edge: 40, maxSpeed: 880,
+            bounds: () => { const outer = scroll.getBoundingClientRect(), inner = horizontal.getBoundingClientRect();
+              return { start: Math.max(0, outer.left, inner.left), end: Math.min(innerWidth, outer.right, inner.right) }; },
+          });
         }
-        selectAxis();
-        if (gesture && scroll.scrollTop !== before) frame = requestAnimationFrame(paint);
+        dragScroller = createDragEdgeScroller(axes, selectAxis);
       };
       const move = (event: PointerEvent) => {
         if (!gesture || event.pointerId !== gesture.pointer) return;
         if (!(event.buttons & 1)) { finish(); return; }
         event.preventDefault(); event.stopPropagation(); gesture.x = event.clientX; gesture.y = event.clientY;
-        if (!frame) frame = requestAnimationFrame(paint);
+        if (!dragScroller) startDragScroll(gesture);
+        dragScroller?.update(gesture.x, gesture.y);
       };
       const up = (event: PointerEvent) => {
         if (!gesture || event.pointerId !== gesture.pointer) return;
@@ -194,7 +200,7 @@ export const TableMarginSelection = Extension.create({
       const escape = (event: KeyboardEvent) => { if (gesture && event.key === 'Escape') { event.preventDefault(); finish(); } };
       function finish() {
         const active = gesture; gesture = null;
-        cancelAnimationFrame(frame); frame = 0;
+        dragScroller?.stop(); dragScroller = null;
         if (active && view.dom.hasPointerCapture?.(active.pointer)) view.dom.releasePointerCapture(active.pointer);
         host.removeEventListener('pointermove', move, true); host.removeEventListener('pointerup', up, true);
         host.removeEventListener('pointercancel', cancel, true); host.removeEventListener('keydown', escape);
@@ -217,7 +223,7 @@ export const TableMarginSelection = Extension.create({
       view.dom.addEventListener('pointerdown', down, true);
       view.dom.addEventListener('lostpointercapture', cancel);
       return {
-        update(next, previous) { if (gesture && (next.state.doc !== previous.doc || !next.editable)) finish(); },
+        update(next) { if (gesture && (next.state.doc.nodeAt(gesture.pos) !== gesture.node || !next.editable || !next.dom.contains(gesture.table))) finish(); },
         destroy() { finish(); view.dom.removeEventListener('pointerdown', down, true); view.dom.removeEventListener('lostpointercapture', cancel); },
       };
     } })];

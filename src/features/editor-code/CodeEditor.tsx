@@ -40,6 +40,8 @@ import { takeViewState } from '../session/editorSuspension';
 import { foldEffect } from '@codemirror/language';
 import { createCodeEditorCapabilities } from './editorCapabilities';
 import { HtmlPreview } from './HtmlPreview';
+import { getEditorCapabilities } from '../../core/editor/editorRegistry';
+import { saveViewState } from '../session/editorSuspension';
 import {
   initializeDocumentHistory,
   recordDocumentChange,
@@ -65,23 +67,19 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const doc = useDocumentStore((s) => s.documents.get(docKey));
   const isHtml = doc?.language === 'html';
   const [htmlMode, setHtmlMode] = useState<'preview' | 'source'>('preview');
-  const [previewHtml, setPreviewHtml] = useState(doc?.content ?? '');
   const setContent = useDocumentStore((s) => s.setContent);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
   const typography = useSettingsStore((s) => s.settings.typography);
 
-  useEffect(() => {
-    if (isHtml) setPreviewHtml(doc?.content ?? '');
-  }, [doc?.content, isHtml]);
-
-  useEffect(() => {
-    if (htmlMode !== 'source') return;
-    const frame = requestAnimationFrame(() => viewRef.current?.requestMeasure());
-    return () => cancelAnimationFrame(frame);
-  }, [htmlMode]);
-
   const showHtmlMode = (mode: 'preview' | 'source') => {
-    if (mode === 'preview') setPreviewHtml(viewRef.current?.state.doc.toString() ?? doc?.content ?? '');
+    if (mode === htmlMode) return;
+    // Store owns the preview snapshot before CodeMirror is released. This also
+    // resolves a pending 500 ms edit debounce without holding another HTML copy.
+    if (mode === 'preview' && viewRef.current) {
+      const state = getEditorCapabilities(docKey)?.captureViewState?.();
+      if (state) saveViewState(docKey, state);
+      setContent(docKey, viewRef.current.state.doc.toString());
+    }
     setHtmlMode(mode);
   };
 
@@ -124,6 +122,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   ]);
 
   useEffect(() => {
+    if (isHtml && htmlMode === 'preview') return;
     const currentDoc = useDocumentStore.getState().getDocument(docKey);
     if (!containerRef.current || !currentDoc) return;
     const container = containerRef.current;
@@ -373,6 +372,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
 
     // 动态异步加载语言语法高亮与 Linter 扩展
     loadLanguageExtension(lang as LanguageId).then((ext) => {
+      if (viewRef.current !== view) return;
       const lintExt = getLinterForLanguage(lang as LanguageId);
       view.dispatch({
         effects: languageCompartment.reconfigure([
@@ -417,7 +417,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       disposeCapabilities();
       viewRef.current = null;
     };
-  }, [docKey, setContent, setTabDirty]);
+  }, [docKey, htmlMode, isHtml, setContent, setTabDirty]);
 
   if (!doc) return null;
 
@@ -429,11 +429,10 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
         {mode === 'preview' ? '预览' : '源码'}
       </button>)}
     </div>}
-    {isHtml && htmlMode === 'preview' && <HtmlPreview html={previewHtml} title={doc.displayName} />}
-    {/* Keep CodeMirror mounted in preview so the save/flush barrier owns one editor instance. */}
-    <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: isHtml && htmlMode === 'preview' ? 'none' : 'flex', justifyContent: 'center' }}
+    {isHtml && htmlMode === 'preview' && <HtmlPreview html={doc.content ?? ''} title={doc.displayName} />}
+    {(!isHtml || htmlMode === 'source') && <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) viewRef.current?.focus(); }}>
       <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />
-    </div>
+    </div>}
   </div>;
 }

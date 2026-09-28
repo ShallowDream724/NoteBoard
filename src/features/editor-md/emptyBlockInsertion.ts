@@ -10,6 +10,8 @@ import { captureVisualInsertion, type InsertionLease } from './imageInsertionLea
 import { ensureContainerTail } from './containerEditing';
 import { revealInsertedImage } from './imageInsertionScroll';
 import { revealEditorBlock } from './editorViewport';
+import { markMermaidCreation } from './mermaidCreation';
+import { requestMathEditing } from './mathEditingRequest';
 
 /** Replace the named empty paragraph, independently of the editor's live selection. */
 export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSONContent | JSONContent[]): boolean {
@@ -20,12 +22,18 @@ export function replaceEmptyParagraph(editor: Editor, pos: number, content: JSON
   const fragment = Fragment.fromArray(nodes), at = state.doc.resolve(pos);
   if (!fragment.size || !at.parent.canReplace(at.index(), at.index() + 1, fragment)) return false;
   const tr = state.tr.replaceWith(pos, pos + previous!.nodeSize, fragment);
+  if (nodes.some(node => node.type.name === 'mermaidBlock')) markMermaidCreation(tr);
   tr.setSelection(nodes[0].isAtom && NodeSelection.isSelectable(nodes[0])
     ? NodeSelection.create(tr.doc, pos)
     : TextSelection.near(tr.doc.resolve(pos + (nodes[0].isTextblock ? nodes[0].nodeSize - 1 : 1))));
   ensureContainerTail(tr, pos + 1);
+  const math = nodes[0].type.name === 'mathBlock' ? nodes[0]
+    : nodes[0].type.name === 'paragraph' && nodes[0].childCount === 1 && nodes[0].firstChild?.type.name === 'mathInline' ? nodes[0].firstChild : null;
+  if (math && !math.attrs.latex) requestMathEditing(tr, pos + (math.isInline ? 1 : 0), 0);
   const image = nodes[0].type.name === 'image';
-  dispatchDiscreteEdit(view, tr); view.focus();
+  if (math) view.focus();
+  dispatchDiscreteEdit(view, tr);
+  if (!math) view.focus();
   if (image) revealInsertedImage(view, pos);
   else revealEditorBlock(view, pos);
   return true;

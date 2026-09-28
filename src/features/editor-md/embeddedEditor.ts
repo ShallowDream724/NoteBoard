@@ -3,12 +3,13 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { closeHistory } from '@tiptap/pm/history';
 
-const key = new PluginKey<number | null>('embedded-source-editor');
+type EmbeddedEditing = { position: number; inlineHost?: HTMLElement };
+const key = new PluginKey<EmbeddedEditing | null>('embedded-source-editor');
 const hosts = new WeakMap<Editor, HTMLDivElement>();
 const leases = new WeakMap<Editor, symbol>();
 
-/** A transient UI widget before the containing text block; never document content. */
-export function openEmbeddedEditor(editor: Editor, position: number): { host: HTMLDivElement; close: () => void } {
+/** One source/history session, hosted inline or in a transient block widget. */
+export function openEmbeddedEditor(editor: Editor, position: number, inlineHost?: HTMLElement): { host: HTMLElement; close: () => void } {
   let host = hosts.get(editor);
   if (!host) {
     host = document.createElement('div');
@@ -17,23 +18,24 @@ export function openEmbeddedEditor(editor: Editor, position: number): { host: HT
     host.dataset.editorControl = 'true';
     hosts.set(editor, host);
     const element = host;
-    editor.registerPlugin(new Plugin<number | null>({
+    editor.registerPlugin(new Plugin<EmbeddedEditing | null>({
       key,
       state: {
         init: () => null,
         apply(tr, value) {
-          const request = tr.getMeta(key) as { position: number | null } | undefined;
-          if (request) return request.position;
+          const request = tr.getMeta(key) as { position: number | null; inlineHost?: HTMLElement } | undefined;
+          if (request) return request.position === null ? null : { position: request.position, inlineHost: request.inlineHost };
           if (value === null) return null;
-          const mapped = tr.mapping.mapResult(value);
+          const mapped = tr.mapping.mapResult(value.position);
           const node = tr.doc.nodeAt(mapped.pos);
-          return node && ['mathInline', 'mathBlock'].includes(node.type.name) ? mapped.pos : null;
+          return node && ['mathInline', 'mathBlock'].includes(node.type.name) ? { ...value, position: mapped.pos } : null;
         },
       },
       props: {
         decorations(state) {
-          const pos = key.getState(state);
-          if (pos == null || pos > state.doc.content.size) return DecorationSet.empty;
+          const active = key.getState(state);
+          if (!active || active.inlineHost || active.position > state.doc.content.size) return DecorationSet.empty;
+          const pos = active.position;
           const resolved = state.doc.resolve(pos);
           const before = resolved.parent.isTextblock && resolved.depth > 0 ? resolved.before() : pos;
           return DecorationSet.create(state.doc, [Decoration.widget(before, element, {
@@ -44,9 +46,9 @@ export function openEmbeddedEditor(editor: Editor, position: number): { host: HT
       view: () => ({ destroy: () => hosts.delete(editor) }),
     }));
   }
-  editor.view.dispatch(closeHistory(editor.state.tr).setMeta(key, { position }).setMeta('addToHistory', false));
+  editor.view.dispatch(closeHistory(editor.state.tr).setMeta(key, { position, inlineHost }).setMeta('addToHistory', false));
   const lease = Symbol(); leases.set(editor, lease);
-  return { host, close: () => {
+  return { host: inlineHost ?? host, close: () => {
     if (leases.get(editor) === lease) closeEmbeddedEditor(editor, host!);
   } };
 }
@@ -58,4 +60,4 @@ export function closeEmbeddedEditor(editor: Editor, host: HTMLElement) {
 }
 
 export function isEmbeddedEditing(editor: Editor) { return key.getState(editor.state) != null; }
-export function embeddedEditingPosition(editor: Editor) { return key.getState(editor.state) ?? null; }
+export function embeddedEditingPosition(editor: Editor) { return key.getState(editor.state)?.position ?? null; }

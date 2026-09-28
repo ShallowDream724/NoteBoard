@@ -62,7 +62,7 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
   let live = true, mounted = false, near = false, visible = false, size: Geometry | undefined;
   let stopSize = () => {};
   const holdEditingHeight = () => {
-    if (editing && size) host.style.minHeight = `${Math.max(Number.parseFloat(host.style.minHeight) || 0, size.height)}px`;
+    if (editing && display && size) host.style.minHeight = `${Math.max(Number.parseFloat(host.style.minHeight) || 0, size.height)}px`;
   };
   const placeholder = () => {
     const text = document.createElement('span'); text.style.color = 'var(--editor-text-muted)';

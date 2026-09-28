@@ -30,9 +30,5 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-image-dialog::backdrop { background:#0f172ac7; }
 .export-image-dialog img { display:block; max-width:88vw; max-height:78vh; width:auto; height:auto; object-fit:contain; }
 .export-image-dialog button { display:block; margin:0 0 10px auto; padding:6px 10px; border:0; border-radius:8px; background:#f1f5f9; color:#334155; font:14px/1.4 system-ui,sans-serif; cursor:pointer; }
-.katex-html{display:none}
-.katex-mathml { position:static!important; clip:auto!important; width:auto!important; height:auto!important; }
-.export-math math { font-family:'Cambria Math','STIX Two Math','Noto Sans Math','Latin Modern Math',serif; }
-.export-math.display math { display:inline math; margin:.5em 0; }
 @media (max-width:600px) { body { padding:10px 10px 20px; } .export-reader { padding:24px 18px; border-radius:12px; } }
 @media print { html,body { background:#fff; } body { max-width:none; margin:0; padding:0; } .export-page-actions,.export-image-dialog { display:none; } .export-reader { border:0; padding:0; border-radius:0; box-shadow:none; } .export-reader #document { overflow:visible; } details::details-content { content-visibility:visible!important; } }

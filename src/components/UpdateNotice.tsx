@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpCircle, X } from 'lucide-react';
+import { ArrowUpCircle, ChevronRight, X } from 'lucide-react';
 import { useUpdateStore } from '../stores/updateStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useLayoutStore } from '../stores/layoutStore';
@@ -42,12 +42,14 @@ export function UpdateNotice({ anchor }: { anchor: RefObject<HTMLElement | null>
   const close = () => { useUpdateStore.getState().dismissNotice(offered); setEditingPreference(''); setError(''); };
   return createPortal(<div ref={panel} className="update-notice" style={{ visibility: 'hidden' }}>
     <button type="button" className="update-notice-close" aria-label="暂时关闭更新提醒" onClick={close}><X size={14} /></button>
-    <div role="status" className="update-notice-message"><ArrowUpCircle size={19} /><div><strong>有新版本可用</strong><p>NoteBoard v{offered}</p></div></div>
-    <button type="button" className="update-notice-action" onClick={() => { close(); useUpdateStore.getState().openModal(); }}>查看更新</button>
-    <label className="update-notice-mute"><input type="checkbox" checked={ignored === offered} onChange={event => {
+    <div role="status" className="update-notice-message"><ArrowUpCircle size={16} aria-hidden="true" /><strong>新版本 v{offered}</strong></div>
+    <div className="update-notice-actions">
+    <button type="button" className="update-notice-action" onClick={() => { close(); useUpdateStore.getState().openModal(); }}>查看更新内容<ChevronRight size={13} aria-hidden="true" /></button>
+    <label className="update-notice-mute"><input className="nb-raw-checkbox" type="checkbox" checked={ignored === offered} onChange={event => {
       setEditingPreference(offered); setError('');
       void setUpdates({ ignoredVersion: event.target.checked ? offered : '' }).catch(error => setError(String(error)));
     }} />此版本不再提醒</label>
+    </div>
     {error && <p role="alert" className="update-notice-error">设置未保存：{error}</p>}
   </div>, document.body);
 }

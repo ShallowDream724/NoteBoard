@@ -4,6 +4,7 @@ import { TooltipProvider } from '../../src/components/Tooltip';
 import { TipTapEditor } from '../../src/features/editor-md/TipTapEditor';
 import { getMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { diagramContent } from '../../src/features/editor-md/insertContentRecipes';
+import { markMermaidCreation } from '../../src/features/editor-md/mermaidCreation';
 import { encodeNativeDocument, type NativeNode } from '../../src/core/nativeDocument';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore } from '../../src/stores/windowStore';
@@ -45,16 +46,17 @@ const qa = {
     editor.chain().focus('end').insertContent({ type: 'codeBlock', attrs: { language: 'text' } }).run();
     this.focusCode();
   },
-  focusCode() {
+  focusCode(atEnd = false) {
     const editor = currentEditor();
     let position = -1;
     editor.state.doc.descendants((node, pos) => { if (node.type.name === 'codeBlock') { position = pos; return false; } });
     if (position < 0) throw new Error('No code block');
-    editor.commands.setTextSelection(position + 1);
+    editor.commands.setTextSelection(position + (atEnd ? editor.state.doc.nodeAt(position)!.nodeSize - 1 : 1));
     editor.view.focus();
   },
   insertMermaid() {
-    currentEditor().chain().focus('end').insertContent(diagramContent('mermaid')).run();
+    currentEditor().chain().focus('end').insertContent(diagramContent('mermaid'))
+      .command(({ tr }) => { markMermaidCreation(tr); return true; }).run();
   },
   state() {
     const editor = currentEditor();
@@ -64,7 +66,7 @@ const qa = {
       if (node.type.name === 'codeBlock') code.push(node.textContent);
       if (node.type.name === 'mermaidBlock') mermaid.push(String(node.attrs.code));
     });
-    return { text: editor.state.doc.firstChild?.textContent ?? '', code, mermaid,
+    return { text: editor.state.doc.firstChild?.textContent ?? '', code, mermaid, doc: editor.state.doc.toJSON(), composing: editor.view.composing,
       sourceOpen: !!source && !host.querySelector('.nb-diagram-container'),
       sourceFocused: !!source && document.activeElement === source };
   },

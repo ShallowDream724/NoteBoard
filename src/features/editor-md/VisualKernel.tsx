@@ -28,6 +28,7 @@ import { EditorBubbleMenu, TableToolbar } from './bubbleMenu';
 import { BlockDragHandle } from './blockDragHandle';
 import { BLOCK_MOVE_META } from './headingFolding';
 import { VisualHistoryGrouping } from './visualHistoryGrouping';
+import { isSlashCommandAction } from './slashHistory';
 import { EditorContextMenu } from './EditorContextMenu';
 import { LinkModal } from './LinkModal';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -134,7 +135,8 @@ export function VisualKernel({
       // 🔴 J2：输入热路径零全文工作——只捕获不可变 ProseMirror 文档根引用（O(1)）
       const nativeUndoDepth = prosemirrorUndoDepth(editor.state);
       const startsNewGroup = historyGrouping.startsNewGroup(transaction,
-        Boolean(transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current);
+        Boolean(transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current,
+        isSlashCommandAction(editor));
 
       // 新历史组开始：立即物化上一组末端（组内合并结束，跨组节点全部保留——
       // 不因延迟序列化把多组丢成一组）

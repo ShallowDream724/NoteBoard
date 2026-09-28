@@ -3,21 +3,27 @@ import { Extension, type Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { observeCodeVisibility } from './codeVisibility';
+import { observeCodeVisibility, type CodeVisibility } from './codeVisibility';
 import { requestCodeHighlight, type CodeToken } from './codeHighlighting';
 import { getCodeStructure, type CodeStructure } from './codeBlockStructure';
 import { visibleCodeLines, WINDOWED_CODE_LINES } from './codeBlockViewport';
 import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 import { Mapping, StepMap } from '@tiptap/pm/transform';
+import { afterCodeComposition } from './codeComposition';
 
 const key = new PluginKey<DecorationSet>('code-token-colors');
 interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: () => number | undefined }
-interface Batch { updates: Map<Update['getPosition'], Update>; frame: number }
+interface Batch { updates: Map<Update['getPosition'], Update>; frame: number; resume?: () => void }
 const batches = new WeakMap<Editor, Batch>();
 const pluginViews = new WeakMap<Editor, object>();
 
 function flushHighlights(editor: Editor, batch: Batch) {
   if (editor.isDestroyed) { batches.delete(editor); return; }
+  batch.frame = 0;
+  if (editor.view.composing) {
+    batch.resume ??= afterCodeComposition(editor, () => { batch.resume = undefined; flushHighlights(editor, batch); });
+    return;
+  }
   const updates: Update[] = [];
   let tokenCount = 0;
   for (const [identity, update] of batch.updates) {
@@ -60,7 +66,7 @@ export const CodeHighlight = Extension.create({
           if (pluginViews.get(editor) !== owner) return;
           pluginViews.delete(editor);
           const batch = batches.get(editor);
-          if (batch) { cancelAnimationFrame(batch.frame); batches.delete(editor); }
+          if (batch) { cancelAnimationFrame(batch.frame); batch.resume?.(); batches.delete(editor); }
         });
       } };
     },
@@ -98,6 +104,8 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
     let cancelled = false, active = false, retries = 0;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController | undefined;
+    let resume: (() => void) | undefined;
+    let latestSample: CodeVisibility;
     let tokens: CodeToken[] | undefined, structure: CodeStructure | null | undefined;
     let range: [number, number] = [0, node.content.size], published = '';
     const publish = (tokens: CodeToken[]) => {
@@ -134,7 +142,12 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
         timer = setTimeout(() => { void request(current); }, delays[Math.min(retries++, delays.length - 1)]);
       }
     };
-    const stop = observeCodeVisibility(editor.view.dom, element.current, sample => {
+    const onVisibility = (sample: CodeVisibility) => {
+      latestSample = sample;
+      if (editor.view.composing) {
+        resume ??= afterCodeComposition(editor, () => { resume = undefined; if (!cancelled) onVisibility(latestSample); });
+        return;
+      }
       if (!sample.visible) {
         active = false; clearTimeout(timer); controller?.abort(); tokens = undefined; published = ''; publish([]); return;
       }
@@ -148,7 +161,8 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
       if (lines && structure) range = [structure.lines[lines[0]].from, structure.lines[lines[1] - 1].to];
       if (!active) { active = true; retries = 0; controller = new AbortController(); void request(controller); }
       else publishVisible();
-    });
-    return () => { cancelled = true; clearTimeout(timer); controller?.abort(); stop(); };
+    };
+    const stop = observeCodeVisibility(editor.view.dom, element.current, onVisibility);
+    return () => { cancelled = true; resume?.(); clearTimeout(timer); controller?.abort(); stop(); };
   }, [editor, node, getPos, element]);
 }

@@ -84,6 +84,35 @@ it('retries a transient failure for an unchanged visible Python node', async () 
   } finally { await mounted.destroy(); }
 });
 
+it('defers code presentation across successive Chinese IME preedit updates', async () => {
+  const mounted = await mount();
+  try {
+    await mounted.tick(); await mounted.flush();
+    const dispatch = vi.spyOn(mounted.editor.view, 'dispatch');
+    await act(async () => mounted.editor.view.dom.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })));
+    expect(mounted.editor.view.composing).toBe(true);
+    const original = mounted.editor.state.doc.firstChild!.textContent;
+    for (const preedit of ['w', 'wo', "wo'", "wo's", "wo'sh", "wo'shi", '我是123']) {
+      await act(async () => {
+        const from = 1 + original.length;
+        mounted.editor.view.dispatch(mounted.editor.state.tr.insertText(preedit, from, mounted.editor.state.doc.firstChild!.nodeSize - 1));
+      });
+      await mounted.tick(); await mounted.flush();
+      expect(mounted.editor.state.doc.firstChild!.textContent).toBe(original + preedit);
+    }
+    const hasPresentation = (tr: { getMeta: (key: string) => unknown }) => !!(tr.getMeta('code-token-colors$') || tr.getMeta('code-block-controls$'));
+    expect(dispatch.mock.calls.filter(([tr]) => hasPresentation(tr))).toHaveLength(0);
+    await act(async () => mounted.editor.view.dom.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '我是123' })));
+    await mounted.tick(30); await mounted.tick(); await mounted.flush();
+    expect(mounted.editor.state.doc.firstChild!.textContent).toBe(original + '我是123');
+    const rendered = mounted.host.querySelector('code')!.cloneNode(true) as HTMLElement;
+    rendered.querySelectorAll('.nb-code-line-gutter').forEach(gutter => gutter.remove());
+    expect(rendered.textContent).toBe(original + '我是123');
+    expect(dispatch.mock.calls.some(([tr]) => tr.getMeta('code-token-colors$'))).toBe(true);
+    expect(dispatch.mock.calls.some(([tr]) => tr.getMeta('code-block-controls$'))).toBe(true);
+  } finally { await mounted.destroy(); }
+});
+
 it('recovers an unchanged visible block after a longer worker outage and stops retries offscreen', async () => {
   fixture.request.mockReset();
   for (let i = 0; i < 4; i++) fixture.request.mockResolvedValueOnce({ status: 'unavailable', tokens: [] });

@@ -30,13 +30,10 @@ import { markHeadingHandleTarget } from './headingHandleMarker';
 import { BlockRangeFeedback } from './BlockRangeFeedback';
 import { Plus } from 'lucide-react';
 import { isEmptyParagraph } from './blockInteractionScope';
+import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
-/** 靠近滚动视口上下边缘时的自动滚动热区。 */
-const AUTO_SCROLL_EDGE = 56;
-/** 单次指针事件允许的最大滚动距离，兼顾长文档速度与落点稳定性。 */
-const AUTO_SCROLL_MAX_STEP = 14;
 /** 落位动画时长需与 globals.css 中的 nb-block-drag-settle 保持一致。 */
 const DROP_SETTLE_DURATION = 320;
 /** 跟随提示与指针、视口边缘的安全间距，以及用于防止提示溢出的保守尺寸。 */
@@ -83,6 +80,13 @@ interface DragFeedbackState {
   indicatorTop: number | null;
   indicatorLeft: number;
   indicatorWidth: number;
+}
+
+function sameDragFeedback(a: DragFeedbackState | null, b: DragFeedbackState): boolean {
+  return !!a && a.clientX === b.clientX && a.clientY === b.clientY
+    && a.valid === b.valid && a.message === b.message
+    && a.indicatorTop === b.indicatorTop && a.indicatorLeft === b.indicatorLeft
+    && a.indicatorWidth === b.indicatorWidth;
 }
 
 interface DragSession {
@@ -140,7 +144,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
   const isHoveringHandleRef = useRef(false);
   const dragSessionRef = useRef<DragSession | null>(null);
   const dropTargetRef = useRef<TopLevelDropTarget | null>(null);
-  const dragFrame = useRef(0);
+  const dragScrollerRef = useRef<DragEdgeScroller | null>(null);
   const dragPoint = useRef({ x: 0, y: 0 });
   const suppressMenuClick = useRef(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -173,7 +177,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
   /** 清理指针捕获、全局光标和源块临时样式；取消与成功落下共用同一出口。 */
   const cleanupDrag = useCallback((updateReactState = true) => {
-    cancelAnimationFrame(dragFrame.current); dragFrame.current = 0;
+    dragScrollerRef.current?.stop(); dragScrollerRef.current = null;
     const session = dragSessionRef.current;
     dragSessionRef.current = null;
     dropTargetRef.current = null;
@@ -344,22 +348,13 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     };
   }, [cleanupDrag]);
 
-  /** 根据最新指针坐标自动滚动、解析合法落点并同步视觉反馈。 */
+  /** 根据最新指针坐标解析合法落点并同步视觉反馈。 */
   const updateDragFeedback = useCallback((clientX: number, clientY: number) => {
     const session = dragSessionRef.current;
     if (!editor || !session?.dragging) return;
 
     const { scrollParent } = session;
     const scrollRect = scrollParent.getBoundingClientRect();
-
-    // 长文档边缘自动滚动；滚动后重新读取布局，保证指示线紧贴真实文档边界。
-    if (clientY < scrollRect.top + AUTO_SCROLL_EDGE) {
-      const ratio = Math.min(1, (scrollRect.top + AUTO_SCROLL_EDGE - clientY) / AUTO_SCROLL_EDGE);
-      scrollParent.scrollTop -= Math.ceil(AUTO_SCROLL_MAX_STEP * ratio);
-    } else if (clientY > scrollRect.bottom - AUTO_SCROLL_EDGE) {
-      const ratio = Math.min(1, (clientY - scrollRect.bottom + AUTO_SCROLL_EDGE) / AUTO_SCROLL_EDGE);
-      scrollParent.scrollTop += Math.ceil(AUTO_SCROLL_MAX_STEP * ratio);
-    }
 
     const isInsideViewport = clientX >= scrollRect.left
       && clientX <= scrollRect.right
@@ -369,7 +364,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     if (!isInsideViewport) {
       dropTargetRef.current = null;
       session.sourceElement.classList.remove('nb-block-drag-source-invalid');
-      setDragFeedback({
+      const feedback: DragFeedbackState = {
         clientX,
         clientY,
         valid: false,
@@ -377,7 +372,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         indicatorTop: null,
         indicatorLeft: 0,
         indicatorWidth: 0,
-      });
+      };
+      setDragFeedback(current => sameDragFeedback(current, feedback) ? current : feedback);
       return;
     }
 
@@ -402,7 +398,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
     const scope = session.sourceElement.closest('.nb-disclosure-body');
     const editorRect = (scope ?? editor.view.dom).getBoundingClientRect();
-    setDragFeedback({
+    const feedback: DragFeedbackState = {
       clientX,
       clientY,
       valid,
@@ -412,7 +408,8 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         : null,
       indicatorLeft: editorRect.left - scrollRect.left + scrollParent.scrollLeft,
       indicatorWidth: editorRect.width,
-    });
+    };
+    setDragFeedback(current => sameDragFeedback(current, feedback) ? current : feedback);
   }, [editor]);
 
   /** 指针按下只建立候选会话；超过阈值后才进入真正拖动。 */
@@ -462,13 +459,18 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       document.body.style.cursor = 'grabbing';
       document.body.style.userSelect = 'none';
       setIsDragging(true);
+      const scrollParent = session.scrollParent;
+      dragScrollerRef.current = createDragEdgeScroller([{
+        element: scrollParent, direction: 'y', edge: 56, maxSpeed: 840,
+        bounds: () => {
+          const rect = scrollParent.getBoundingClientRect();
+          return { start: Math.max(0, rect.top), end: Math.min(window.innerHeight, rect.bottom) };
+        },
+      }], () => updateDragFeedback(dragPoint.current.x, dragPoint.current.y));
     }
 
     dragPoint.current = { x: event.clientX, y: event.clientY };
-    if (!dragFrame.current) dragFrame.current = requestAnimationFrame(() => {
-      dragFrame.current = 0;
-      updateDragFeedback(dragPoint.current.x, dragPoint.current.y);
-    });
+    dragScrollerRef.current?.update(event.clientX, event.clientY);
   }, [updateDragFeedback]);
 
   /** 指针释放时只使用最后一个通过校验的顶层边界，并由事务内核再次校验。 */
@@ -484,7 +486,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       menuHover.change(true);
       return;
     }
-    cancelAnimationFrame(dragFrame.current); dragFrame.current = 0;
+    dragScrollerRef.current?.stop();
     updateDragFeedback(event.clientX, event.clientY);
     const target = dropTargetRef.current;
     suppressMenuClick.current = session.dragging;

@@ -13,11 +13,11 @@ function inputValue(element: HTMLTextAreaElement, value: string, composing = fal
 }
 
 describe('formula source IME ownership', () => {
-  it('keeps native preedit text and focus until composition ends, then commits punctuation once', async () => {
+  it.each([true, false])('keeps native preedit text and focus until composition ends, then commits punctuation once (display=%s)', async display => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const host = document.createElement('div'); document.body.appendChild(host);
     const root = createRoot(host), change = vi.fn(), key = vi.fn(), close = vi.fn();
-    const render = (value: string) => root.render(<FormulaSourceEditor value={value} display onChange={change} onKeyDown={key} onClose={close}/>);
+    const render = (value: string) => root.render(<FormulaSourceEditor value={value} display={display} onChange={change} onKeyDown={key} onClose={close}/>);
     try {
       await act(async () => render('x'));
       const textarea = host.querySelector('textarea')!;
@@ -45,11 +45,11 @@ describe('formula source IME ownership', () => {
     } finally { await act(async () => root.unmount()); host.remove(); }
   });
 
-  it('accepts a final input after compositionend and synchronizes later document undo', async () => {
+  it.each([true, false])('accepts a final input after compositionend and synchronizes later document undo (display=%s)', async display => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const host = document.createElement('div'); document.body.appendChild(host);
     const root = createRoot(host), change = vi.fn();
-    const render = (value: string) => root.render(<FormulaSourceEditor value={value} display onChange={change} onKeyDown={() => {}} onClose={() => {}}/>);
+    const render = (value: string) => root.render(<FormulaSourceEditor value={value} display={display} onChange={change} onKeyDown={() => {}} onClose={() => {}}/>);
     try {
       await act(async () => render('x'));
       const textarea = host.querySelector('textarea')!;

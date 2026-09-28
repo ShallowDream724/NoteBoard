@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   Minimize2,
   Maximize2,
+  ListTree,
+  CornerDownRight,
 } from 'lucide-react';
 import {
   ToolbarButton,
@@ -37,6 +39,7 @@ import { useSearchStore } from '../../stores/searchStore';
 import type { LanguageId } from '../../core/ipc/types';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
 import { HtmlFileActions } from './HtmlFileActions';
+import { getCodeLanguage } from '../../core/codeLanguages';
 
 interface CodeToolbarProps {
   docKey: string;
@@ -47,11 +50,13 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
   const lang = (language ?? 'plaintext') as LanguageId;
   const isJson = lang === 'json';
   const isHtml = lang === 'html';
+  const languageLabel = lang === 'html' ? 'HTML' : lang === 'xml' ? 'XML' : getCodeLanguage(lang)?.label ?? lang.toUpperCase();
   const { canUndo, canRedo } = useDocumentHistory(docKey);
 
   // 下拉菜单开闭状态
   const [jsonDropdownOpen, setJsonDropdownOpen] = useState(false);
   const [textDropdownOpen, setTextDropdownOpen] = useState(false);
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
 
   // 编辑器设置
   const { settings, setEditor } = useSettingsStore();
@@ -90,8 +95,17 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
   };
 
   return (
-    <ResponsiveToolbar onLayoutChange={() => { setJsonDropdownOpen(false); setTextDropdownOpen(false); }}>
+    <ResponsiveToolbar onLayoutChange={() => { setJsonDropdownOpen(false); setTextDropdownOpen(false); setViewDropdownOpen(false); }}>
       {isHtml && <HtmlFileActions docKey={docKey} />}
+      {!isHtml && <ToolbarDropdown collapsePriority={120} isOpen={viewDropdownOpen} onOpenChange={setViewDropdownOpen}
+        trigger={<ToolbarButton icon={<ListTree size={15} />} label={languageLabel} hasDropdown title={`${languageLabel} · 代码查看`} />}>
+        <ToolbarDropdownItem icon={<CornerDownRight size={14} />} label="跳转到行" shortcut="Ctrl+Alt+G"
+          onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.goToLine(); }} />
+        <ToolbarDropdownItem label="折叠 / 展开当前代码段" shortcut="Ctrl+Alt+F"
+          onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.toggleFold(); }} />
+        <ToolbarDropdownItem label="展开全部代码段"
+          onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.unfoldAll(); }} />
+      </ToolbarDropdown>}
       {/* ── 历史操作组 ── */}
       <ToolbarButton
         collapsePriority={90}
@@ -113,7 +127,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
       <ToolbarDivider />
 
       {/* ── JSON 工具组（二级菜单） ── */}
-      {!isHtml && <ToolbarDropdown
+      {isJson && <ToolbarDropdown
         collapsePriority={100}
         isOpen={jsonDropdownOpen}
         onOpenChange={setJsonDropdownOpen}

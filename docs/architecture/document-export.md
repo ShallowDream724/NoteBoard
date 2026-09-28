@@ -6,6 +6,10 @@
 
 标题栏导出按钮仅在当前标签是 Markdown 或 NoteBoard 文档时显示；欢迎页及其他文档类型隐藏该入口，快捷键沿用相同的文档类型守卫。导出弹窗内生成中或尚未满足导出条件时，提交按钮继续显示禁用状态。
 
+打开导出窗口时捕获最新编辑内容，包含未保存输入；之后预览与下载共享这份快照，不自动保存或清除原文档脏态。`test/export/capture.test.ts` 覆盖可视化状态领先于镜像、源码模式仍有隐藏可视化实例，以及权威读取失败不能回退成旧保存内容。
+
+PDF 的通用页面选项保存在 `settings.export.pdf`，只记住纸张、方向、边距、字号、行距、段后距和页码。`usePdfOptions` 在打开时恢复一次默认值，控件提交时仅写该字段，复用原有跨窗口设置事务；远端配置更新留待下次打开生效，避免修改正在看的预览。逐项超宽处理与接受缺失内容的确认属于本次导出，不进入默认值。无报错时页数和文件大小位于页脚左侧，有报错时为诊断让出空间。
+
 信息图导出的 `react-dom/server` 也保持按需加载。Vite 将它的入口及 `react-dom-server*` 实现单独放入 `vendor-react-server`，首屏 `vendor-react` 只承载客户端运行时；不能因为同属 `react-dom` 就合并进首屏。构建来源清单记录具体服务端渲染模块，启动门禁按模块证据阻止其进入静态闭包，即使总字节仍低于预算也拒绝通过。
 
 - `editor-md/documentNodes.ts`、`documentExtensions.ts` 只定义文档结构、Markdown 语法及共享配置，不依赖 React、store、IPC 或 NodeView。编辑器的 `extensions/index.ts` 在同一语法上装配交互视图、历史与快捷键。
@@ -25,9 +29,11 @@ HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts
 
 `node scripts/probe-portable-html-assets.mjs` 将生产图片读取模块打包并注入隔离的隐藏 Tauri WebView2；它用应用原有 CSP 和 asset protocol 从含中文、空格的暂存及已保存图片路径读取字节，再核对完整 data URL。该探针不会启动主应用页面或用户会话。
 
-HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格、提示块、整块颜色、图片集合和公式对齐。独立 HTML 用 Vite 的 `?inline` 展开完整依赖；禁止手工删除 `@import` 后维护另一份样式清单。`document.css` 仅在 PDF/打印路径附加 KaTeX 字体及换行规则；独立 HTML 使用原生 MathML，优先选用系统数学字体（Cambria Math、STIX Two Math 等），无需联网加载字体。
+HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格、提示块、整块颜色、图片集合和公式对齐。独立 HTML 用 Vite 的 `?inline` 展开完整依赖；禁止手工删除 `@import` 后维护另一份样式清单。`document.css` 在 PDF/打印路径附加 KaTeX 字体及换行规则；独立 HTML 使用同一 KaTeX 排版标记、样式与换行规则，生成时只在有公式的文档中读取现有 WOFF2 字体资源并内嵌。导出文件通过 `file://` 离线打开时不依赖系统 MathML 字体或网络。
 
-`standalonePage.css` 只负责浏览器阅读页的留白、轻量操作区和窄屏适配；文件名仅保留在浏览器标题中，不注入正文页眉。打印时移除页面操作区。`standaloneEnhancement.ts` 只绑定导出文件中的原生控件：打印、保存副本、箭头/圆点轮播及图片预览；保存副本从当前 DOM 生成 HTML Blob，清理运行时控件后下载，适用于离线 `file://` 页面。不连接桌面 API、不加载框架。脚本禁用时所有图片仍可读，打印时恢复全部轮播图片；图片预览关闭后释放其图片引用。
+`standalonePage.css` 只负责浏览器阅读页的留白、轻量操作区和窄屏适配；文件名仅保留在浏览器标题中，不注入正文页眉。打印时移除页面操作区。`standaloneEnhancement.runtime.js` 只绑定导出文件中的原生控件：打印、保存副本、箭头/圆点轮播及图片预览；保存副本从当前 DOM 生成 HTML Blob，清理运行时控件后下载，适用于离线 `file://` 页面。不连接桌面 API、不加载框架。脚本禁用时所有图片仍可读，打印时恢复全部轮播图片；图片预览关闭后释放其图片引用。应用内 HTML 预览仅对严格匹配生成页头部的文档启用隔离 iframe 脚本权限，首位 CSP 仅允许加载同源的应用增强脚本静态资源，原文脚本被阻止；普通 HTML 保持禁脚本。预览时释放 CodeMirror，切回源码再按保存的选区和滚动位置恢复，以免大型内嵌资源同时驻留在 iframe 与隐藏编辑器。
+
+`scripts/check-html-export.mjs` 在带应用同款 `script-src 'self'` 的页面中用真实浏览器核验隔离预览的轮播、作者脚本拦截、源码切换与公式几何，并打开实际 `file://` 副本验证字体与控件；内存采样分别记录源码、模拟旧版 iframe 与 CodeMirror 同驻、当前预览，不能把单独的预览和源码堆大小直接解释为整应用工作集。
 
 ### 图表进入 HTML 与 PDF
 
@@ -90,7 +96,7 @@ WebView2 `PrintToPdf` 负责完整分页。仅修改页码样式/位置且正文
 
 统一解析显式路径、PATH，以及 Windows LocalAppData/Program Files 下的 Pandoc 安装目录。“设置 → 导出”可指定路径；缺失时引导官方下载，不自动安装。先由 `begin_pandoc` 建立归属当前窗口的会话，再启动可取消的转换 Worker 和 `pandoc_export`。每窗口最多一个会话、全局最多四个；关闭对话框或宿主窗口会终止并回收子进程。转换时并发写 stdin 并持续读取输出，每路最多留存 1 MiB，避免管道等待与警告无限累积。程序检测限时 10 秒，转换限时 30 分钟。结果先写同目录临时文件，成功且未取消才原子替换目的文件；失败或取消保留原文件并清理临时结果。
 
-DOCX 的最终分页由 Word/WPS 决定；PDF 逐项分页设置不强行映射为 DOCX 页面位置。HTML 使用 MathML；LaTeX 保留公式源码，后续编译需要本机 TeX 环境。外部格式不保证 PDF 的全部配色与排版。Mermaid/PlantUML/Infographic 在 HTML/PDF 中输出图形；当前 Pandoc 的 Word/LaTeX 目标继续以代码块保留图表源码。
+DOCX 的最终分页由 Word/WPS 决定；PDF 逐项分页设置不强行映射为 DOCX 页面位置。独立 HTML 使用 KaTeX 排版并保留其语义 MathML；LaTeX 保留公式源码，后续编译需要本机 TeX 环境。外部格式不保证 PDF 的全部配色与排版。Mermaid/PlantUML/Infographic 在 HTML/PDF 中输出图形；当前 Pandoc 的 Word/LaTeX 目标继续以代码块保留图表源码。
 
 Word/LaTeX 要求 Pandoc 3.0 或更新版本。Rust 读取当前可执行程序的 API 版本，拒绝旧 Table AST，再为该次任务创建内嵌 `pandoc-targets.lua` 的临时副本；临时资源随任务释放。目标 writer 调用 Pandoc 自身 writer，不重新实现图片关系、公式、列表、表格或脚注序列化。
 

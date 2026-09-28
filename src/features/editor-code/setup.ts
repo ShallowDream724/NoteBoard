@@ -9,7 +9,7 @@ import {
   historyKeymap,
   indentWithTab,
 } from '@codemirror/commands';
-import { search, highlightSelectionMatches } from '@codemirror/search';
+import { search, highlightSelectionMatches, gotoLine } from '@codemirror/search';
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -201,6 +201,7 @@ export const HISTORY_MIN_DEPTH = 200;
 
 export function createBaseExtensions(options?: BaseExtensionsOptions): Extension[] {
   return [
+    EditorState.phrases.of({ 'Go to line': '跳转到行', go: '跳转' }),
     // 编辑历史：缩短合并窗口并扩大容量，减少单次回退过多，同时保留更长的前后变化链
     history({
       minDepth: HISTORY_MIN_DEPTH,
@@ -252,6 +253,7 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
     typographyCompartment.of([]),
     // 键映射
     keymap.of([
+      { key: 'Mod-Alt-g', run: gotoLine },
       ...defaultKeymap,
       ...historyKeymap,
       ...foldKeymap,

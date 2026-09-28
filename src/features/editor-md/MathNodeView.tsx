@@ -8,6 +8,7 @@ import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
 import { consumeMathEditingRequest } from './mathEditingRequest';
 import { mountMathPreview, type MathPreviewController } from './mathPreview';
+import { positionInlineMathPreview } from './positionInlineMathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
 import '../../core/math/alignment.css';
 
@@ -23,6 +24,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const seenSelection = useRef(false);
   const alignment = block && ['left', 'center', 'right'].includes(node.attrs.textAlign) ? node.attrs.textAlign : 'center';
   const viewportRef = useRef<HTMLSpanElement>(null);
+  const inlineInputRef = useRef<HTMLSpanElement>(null);
   const previewRef = useRef<MathPreviewController | null>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -37,10 +39,10 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     if (!editing) { setInputHost(null); return; }
     const pos = getPos();
     if (typeof pos !== 'number') return;
-    const { host, close } = openEmbeddedEditor(editor, pos);
+    const { host, close } = openEmbeddedEditor(editor, pos, display ? undefined : inlineInputRef.current ?? undefined);
     setInputHost(host);
     return close;
-  }, [editing, editor]);
+  }, [editing, editor, display]);
   useEffect(() => {
     const host = viewportRef.current;
     if (!host) return;
@@ -56,6 +58,11 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   }, [enabled, latex, delimiter, block, display, editor]);
   // Focus changes are priority changes, not a new formula or DOM lifetime.
   useEffect(() => { previewRef.current?.setEditing(editing); });
+  useLayoutEffect(() => {
+    const preview = viewportRef.current;
+    if (!editing || display || !preview) return;
+    return positionInlineMathPreview(preview);
+  }, [editing, display]);
   // New empty blocks have a node selection; opening this transient editor adds
   // no document or history step.
   useEffect(() => {
@@ -116,22 +123,23 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   return (
     <NodeViewWrapper
       as={block ? 'div' : 'span'}
-      className={'math-node' + (display ? ' math-node-display' : '')}
+      className={'math-node' + (display ? ' math-node-display' : '') + (editing ? ' math-node-editing' : '')}
       data-math-delimiter={delimiter}
       data-math-align={block ? alignment : undefined}
       contentEditable={false}
       style={{
         display: display ? 'block' : 'inline-block', width: block ? '100%' : undefined, boxSizing: 'border-box', maxWidth: '100%', verticalAlign: 'baseline',
-        padding: display ? '8px 10px' : '0 2px', borderRadius: 'var(--radius-sm)', textAlign: block ? alignment : undefined,
+        padding: display ? (editing ? '0 10px 8px' : '8px 10px') : '0 2px', borderRadius: 'var(--radius-sm)', textAlign: block ? alignment : undefined,
         color: node.attrs.textColor || undefined,
         background: node.attrs.background || undefined,
         boxShadow: selected && !editing ? '0 0 0 2px var(--editor-selection-background)' : undefined,
       }}
       onClick={() => { if (!editing) setInitialSelection(undefined); setEditing(true); }}
     >
-      {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display} initialSelection={initialSelection}
+      {editing && !display && <span ref={inlineInputRef} className="embedded-source-editor embedded-source-inline" data-editor-control="true"/>}
+      {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display} delimiter={delimiter} initialSelection={initialSelection}
         onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
-      <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
+      <span ref={viewportRef} className="math-node-preview" title={editing ? undefined : '点击编辑公式'}
         style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere', whiteSpace: enabled ? undefined : 'pre-wrap', fontFamily: enabled ? undefined : 'var(--mono-font-family)' }}/>
     </NodeViewWrapper>
   );

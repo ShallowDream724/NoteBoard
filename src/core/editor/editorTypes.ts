@@ -80,6 +80,13 @@ export interface CodeOpsCapabilities {
   formatXml(scope?: 'all' | 'selection'): void;
 }
 
+/** Lightweight viewing commands, implemented by the mounted code editor. */
+export interface CodeViewCapabilities {
+  goToLine(): void;
+  toggleFold(): void;
+  unfoldAll(): void;
+}
+
 /**
  * 编辑器实例能力：每个挂载中的编辑器注册一份，实例卸载后随之失效。
  * 注册表按键（docKey）查询；实例以 instanceId 代际区分，
@@ -116,6 +123,7 @@ export interface EditorCapabilities {
   readonly search?: SearchCapabilities;
   /** 代码操作能力组（code 编辑器与 Markdown 源码模式提供） */
   readonly codeOps?: CodeOpsCapabilities;
+  readonly codeView?: CodeViewCapabilities;
 }
 
 /**

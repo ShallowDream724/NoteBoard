@@ -37,6 +37,30 @@ pub enum LanguageId {
     /// NoteBoard 自研信息图声明式源码（YAML/JSON），与 mermaid / plantuml 同为可独立成文件的图表脚本
     Infographic,
     Plaintext,
+    Javascript,
+    Typescript,
+    Python,
+    Java,
+    C,
+    Cpp,
+    Csharp,
+    Go,
+    Rust,
+    Php,
+    Ruby,
+    Swift,
+    Kotlin,
+    Dart,
+    Lua,
+    R,
+    Matlab,
+    Toml,
+    Ini,
+    Latex,
+    Bash,
+    Powershell,
+    Dockerfile,
+    Css,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -375,25 +399,48 @@ pub fn kind_by_ext(ext: &str) -> (DocumentKind, LanguageId) {
 }
 
 pub fn ext_from_path(path: &str) -> String {
-    std::path::Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase()
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    name.rsplit_once('.').map(|(_, ext)| ext.to_lowercase()).unwrap_or_default()
 }
 
 pub fn kind_from_path(path: &str) -> (DocumentKind, LanguageId) {
+    use std::{collections::HashMap, sync::OnceLock};
+    static FILENAMES: OnceLock<HashMap<String, LanguageId>> = OnceLock::new();
+    let filenames = FILENAMES.get_or_init(|| serde_json::from_str(include_str!("../../src/core/languageByFilename.json")).expect("valid shared language filenames"));
     let ext = ext_from_path(path);
-    if ext.is_empty() {
-        return (DocumentKind::Code, LanguageId::Plaintext);
-    }
-    kind_by_ext(&ext)
+    let (kind, language) = kind_by_ext(&ext);
+    let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_lowercase();
+    (kind, filenames.get(&name).copied().unwrap_or(language))
 }
 
 pub fn save_policy_of(kind: DocumentKind) -> SavePolicy {
     match kind {
         DocumentKind::Markdown | DocumentKind::Noteboard | DocumentKind::Board | DocumentKind::Mindmap | DocumentKind::Drawio | DocumentKind::Bitable => SavePolicy::Auto,
         DocumentKind::Code | DocumentKind::Image | DocumentKind::Unsupported => SavePolicy::Manual,
+    }
+}
+
+#[cfg(test)]
+mod code_language_mapping_tests {
+    use super::*;
+
+    #[test]
+    fn shared_file_language_metadata_round_trips_in_native_classifier() {
+        let extensions: std::collections::HashMap<String, LanguageId> = serde_json::from_str(include_str!("../../src/core/languageByExt.json")).unwrap();
+        for (ext, language) in extensions {
+            assert_eq!(kind_from_path(&format!("C:\\code\\sample.{}", ext.to_uppercase())).1, language, "{ext}");
+        }
+        let filenames: std::collections::HashMap<String, LanguageId> = serde_json::from_str(include_str!("../../src/core/languageByFilename.json")).unwrap();
+        for (filename, language) in filenames {
+            assert_eq!(kind_from_path(&format!("/code/{}", filename.to_uppercase())).1, language, "{filename}");
+        }
+        assert_eq!(kind_from_path("main.py"), (DocumentKind::Code, LanguageId::Python));
+        assert_eq!(kind_from_path("main.c"), (DocumentKind::Code, LanguageId::C));
+        assert_eq!(kind_from_path("script.m").1, LanguageId::Matlab);
+        assert_eq!(kind_from_path("report.html").1, LanguageId::Html);
+        assert_eq!(kind_from_path("notes.nb").0, DocumentKind::Noteboard);
+        assert_eq!(kind_from_path("vector.svg").0, DocumentKind::Image);
+        assert_eq!(kind_from_path("unknown.xyz").1, LanguageId::Plaintext);
     }
 }
 

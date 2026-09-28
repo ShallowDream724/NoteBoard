@@ -8,7 +8,7 @@ import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } fr
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import { ReactRenderer } from '@tiptap/react';
-import type { SuggestionProps } from '@tiptap/suggestion';
+import { exitSuggestion, type SuggestionProps } from '@tiptap/suggestion';
 import type { Editor, Range } from '@tiptap/core';
 import {
   Heading,
@@ -45,7 +45,10 @@ import {
 } from 'lucide-react';
 import { insertLocalImageWithDialog } from './imagePaste';
 import { insertDocumentTable } from './insertDocumentTable';
-import { runDiscreteEdit } from './discreteEdit';
+import { runSlashCommandAction } from './slashHistory';
+import { markMermaidCreation } from './mermaidCreation';
+import { DEFAULT_MERMAID_CODE } from './insertContentRecipes';
+import { insertMath } from './insertMath';
 import { useWindowStore } from '../../stores/windowStore';
 import { emit } from '../../core/emitter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
@@ -320,7 +323,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     aliases: ['gongshi', 'gs', 'math', 'latex', 'inline', 'katex'],
     keywords: '公式 数学公式 math latex inline katex gongshi',
     action: (editor, range) => {
-      runDiscreteEdit(editor, chain => chain.focus().deleteRange(range).insertContent({ type: 'mathInline', attrs: { latex: 'E=mc^2' } }));
+      insertMath(editor, 'inline', range);
     },
   },
   {
@@ -334,7 +337,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     aliases: ['kuaijigongshi', 'kjgs', 'math', 'latex', 'block', 'katex'],
     keywords: '块级公式 数学公式 math latex block katex',
     action: (editor, range) => {
-      runDiscreteEdit(editor, chain => chain.focus().deleteRange(range).insertContent({ type: 'mathBlock', attrs: { latex: '' } }));
+      insertMath(editor, 'block', range);
     },
   },
   {
@@ -348,7 +351,9 @@ const MATH_LEAFS: LeafCommandItem[] = [
     aliases: ['tubiao', 'tb', 'mermaid', 'diagram', 'chart', 'flowchart', 'tu'],
     keywords: '图表 流程图 mermaid diagram chart flowchart tubiao',
     action: (editor, range) => {
-      editor.chain().focus().deleteRange(range).insertContent({ type: 'mermaidBlock', attrs: { code: 'graph TD\n  A[开始] --> B[处理]\n  B --> C[完成]' } }).run();
+      editor.chain().focus().deleteRange(range)
+        .command(({ tr }) => { markMermaidCreation(tr); return true; })
+        .insertContent({ type: 'mermaidBlock', attrs: { code: DEFAULT_MERMAID_CODE } }).run();
     },
   },
   {
@@ -683,6 +688,7 @@ const ROOT_MENU_ENTRIES: MenuEntry[] = [
   { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'datetime')! },
   { type: 'leaf', item: PARAGRAPH_LEAF },
   { type: 'leaf', item: DIVIDER_LEAF },
+  { type: 'leaf', item: CLEAR_FORMAT_LEAF },
 ];
 
 /** 全局打平搜索逻辑 */
@@ -805,7 +811,10 @@ function SlashMenu({
   // 执行具体叶子项
   const executeLeaf = useCallback(
     (leaf: LeafCommandItem) => {
-      leaf.action(editor, range);
+      // End the suggestion session before changing the document. The action
+      // remains one synchronous scope even when it dispatches multiple edits.
+      exitSuggestion(editor.view);
+      runSlashCommandAction(editor, () => leaf.action(editor, range));
     },
     [editor, range],
   );
@@ -1297,6 +1306,22 @@ function SlashMenu({
 /** 斜杠命令 suggestion 配置 */
 export const slashSuggestion = {
   char: '/',
+  // History restoration can legitimately put /query back into the document.
+  // That text is a snapshot, not a fresh invitation to reopen the menu.
+  shouldShow: (() => {
+    const dismissedByHistory = new WeakSet<Editor>();
+    return ({ editor, transaction }: { editor: Editor; transaction: import('@tiptap/pm/state').Transaction }) => {
+      if (transaction.getMeta('noteboard-document-replacement') === 'history') {
+        dismissedByHistory.add(editor);
+        return false;
+      }
+      if (dismissedByHistory.has(editor)) {
+        if (!transaction.docChanged) return false;
+        dismissedByHistory.delete(editor);
+      }
+      return true;
+    };
+  })(),
   items: ({ query }: { query: string }) => {
     return searchLeafCommands(query).map((i) => ({ label: i.label, id: i.id }));
   },
@@ -1375,12 +1400,9 @@ export const slashSuggestion = {
           updatePosition(props);
         }
       },
-      onKeyDown: (props: { event: KeyboardEvent }) => {
+      onKeyDown: (props: { editor: Editor; event: KeyboardEvent }) => {
         if (props.event.key === 'Escape') {
-          if (popup) {
-            popup.remove();
-            popup = null;
-          }
+          exitSuggestion(props.editor.view);
           return true;
         }
         return false;

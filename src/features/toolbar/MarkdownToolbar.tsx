@@ -81,8 +81,9 @@ import { insertCallout } from '../editor-md/alertCommands';
 import { clearSelectionTextFormatting } from '../editor-md/textFormatting';
 import { CellSelection } from '@tiptap/pm/tables';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
-import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent, mathContent } from '../editor-md/insertContentRecipes';
-import { runDiscreteEdit } from '../editor-md/discreteEdit';
+import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent } from '../editor-md/insertContentRecipes';
+import { insertMath } from '../editor-md/insertMath';
+import { markMermaidCreation } from '../editor-md/mermaidCreation';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -226,15 +227,15 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const handleInsertMath = (type: 'inline' | 'block') => {
     setInsertDropdownOpen(false);
     if (isSourceMode) {
-      const mathSnippet = type === 'inline' ? '$E=mc^2$' : '\n$$\n\\sum_{i=1}^n i = \\frac{n(n+1)}{2}\n$$\n';
+      const mathSnippet = type === 'inline' ? '$$' : '\n$$\n\n$$\n';
       executeSourceAction((view) => {
         const { from } = view.state.selection.main;
-        view.dispatch({ changes: { from, to: from, insert: mathSnippet } });
+        view.dispatch({ changes: { from, to: from, insert: mathSnippet }, selection: { anchor: from + (type === 'inline' ? 1 : 4) } });
       });
       return;
     }
     if (!editor) return;
-    runDiscreteEdit(editor, chain => chain.focus().insertContent(mathContent(type)));
+    insertMath(editor, type);
   };
 
   const handleInsertMermaid = () => {
@@ -248,7 +249,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().insertContent(diagramContent('mermaid')).run();
+    editor.chain().focus().command(({ tr }) => { markMermaidCreation(tr); return true; }).insertContent(diagramContent('mermaid')).run();
   };
 
   // 插入 Infographic 现代化信息图

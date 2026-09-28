@@ -5,6 +5,7 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import './tableSelectionHandles.css';
 import { moveTableAxis, safeTableBoundary, tableAxisRange } from './tableStructure';
 import type { Node as PMNode } from '@tiptap/pm/model';
+import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 
 type Axis = 'row' | 'column';
 interface Handle { button: HTMLButtonElement; axis: Axis; index: number }
@@ -24,7 +25,7 @@ export const TableSelectionHandles = Extension.create({
     let visible = false;
     let gesture: { axis: Axis; index: number; pos: number; node: PMNode; table: HTMLTableElement; pointer: number; button: HTMLButtonElement;
       x: number; y: number; startX: number; startY: number; started: boolean; boundary: number } | null = null;
-    let dragFrame = 0, suppressClick = false;
+    let dragScroller: DragEdgeScroller | null = null, suppressClick = false;
     const guide = host.createElement('div'); guide.className = 'nb-table-move-guide'; guide.hidden = true; overlay.append(guide);
     const handles: Handle[] = [];
     const cancelHide = () => { clearTimeout(hideTimer); hideTimer = undefined; };
@@ -41,7 +42,7 @@ export const TableSelectionHandles = Extension.create({
     }
     function finishGesture(commit: boolean) {
       const active = gesture; gesture = null;
-      cancelAnimationFrame(dragFrame); dragFrame = 0; guide.hidden = true;
+      dragScroller?.stop(); dragScroller = null; guide.hidden = true;
       if (!active) return;
       suppressClick = active.started;
       if (active.button.hasPointerCapture(active.pointer)) active.button.releasePointerCapture(active.pointer);
@@ -50,18 +51,9 @@ export const TableSelectionHandles = Extension.create({
       if (active.started) hide();
     }
     function paintGesture() {
-      dragFrame = 0;
       const active = gesture; if (!active?.started) return;
       if (view.state.doc.nodeAt(active.pos) !== active.node) { finishGesture(false); return; }
-      const viewport = scroll.getBoundingClientRect(), before = scroll.scrollTop;
-      const horizontal = active.table.parentElement!, beforeX = horizontal.scrollLeft;
-      const horizontalRect = horizontal.getBoundingClientRect();
-      if (active.axis === 'column') {
-        if (active.x < Math.max(viewport.left, horizontalRect.left) + 32) horizontal.scrollLeft -= 16;
-        if (active.x > Math.min(viewport.right, horizontalRect.right) - 32) horizontal.scrollLeft += 16;
-      }
-      if (active.y < viewport.top + 32) scroll.scrollTop -= 16;
-      if (active.y > viewport.bottom - 32) scroll.scrollTop += 16;
+      const viewport = scroll.getBoundingClientRect();
       const items = active.axis === 'row' ? active.table.rows : active.table.querySelector(':scope > colgroup')?.children;
       if (!items?.length) return;
       const point = active.axis === 'row' ? active.y : active.x;
@@ -82,7 +74,21 @@ export const TableSelectionHandles = Extension.create({
           ? 'left:' + Math.max(viewport.left, tableRect.left) + 'px;top:' + (last ? rect.bottom : rect.top) + 'px;width:' + Math.min(tableRect.width, viewport.width) + 'px;height:3px'
           : 'top:' + Math.max(viewport.top, tableRect.top) + 'px;left:' + (last ? rect.right : rect.left) + 'px;height:' + Math.min(tableRect.bottom - Math.max(viewport.top, tableRect.top), viewport.height) + 'px;width:3px';
       }
-      if (before !== scroll.scrollTop || beforeX !== horizontal.scrollLeft) dragFrame = requestAnimationFrame(paintGesture);
+    }
+    function startDragScroll(active: NonNullable<typeof gesture>) {
+      const axes: Parameters<typeof createDragEdgeScroller>[0] = [{
+        element: scroll, direction: 'y', edge: 40, maxSpeed: 880,
+        bounds: () => { const rect = scroll.getBoundingClientRect();
+          return { start: Math.max(0, rect.top), end: Math.min(window.innerHeight, rect.bottom) }; },
+      }];
+      if (active.axis === 'column') {
+        const horizontal = active.table.parentElement!;
+        axes.push({ element: horizontal, direction: 'x', edge: 40, maxSpeed: 880,
+          bounds: () => { const outer = scroll.getBoundingClientRect(), inner = horizontal.getBoundingClientRect();
+            return { start: Math.max(0, outer.left, inner.left), end: Math.min(window.innerWidth, outer.right, inner.right) }; },
+        });
+      }
+      dragScroller = createDragEdgeScroller(axes, paintGesture);
     }
     const select = (axis: Axis, index: number) => {
       if (!table || !view.dom.contains(table)) return;
@@ -113,10 +119,16 @@ export const TableSelectionHandles = Extension.create({
           if (!gesture || event.pointerId !== gesture.pointer) return;
           gesture.x = event.clientX; gesture.y = event.clientY;
           if (!gesture.started && Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY) < 4) return;
-          gesture.started = true; view.dom.classList.add('nb-table-reordering');
-          if (!dragFrame) dragFrame = requestAnimationFrame(paintGesture);
+          if (!gesture.started) {
+            gesture.started = true; view.dom.classList.add('nb-table-reordering');
+            startDragScroll(gesture);
+          }
+          dragScroller?.update(gesture.x, gesture.y);
         });
-        button.addEventListener('pointerup', event => { if (gesture?.pointer === event.pointerId) { if (gesture.started) paintGesture(); finishGesture(true); } });
+        button.addEventListener('pointerup', event => { if (gesture?.pointer === event.pointerId) {
+          gesture.x = event.clientX; gesture.y = event.clientY;
+          if (gesture.started) paintGesture(); finishGesture(true);
+        } });
         button.addEventListener('pointercancel', () => finishGesture(false));
         button.addEventListener('lostpointercapture', () => { if (gesture) finishGesture(false); });
         button.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); if (!suppressClick) select(item.axis, item.index); suppressClick = false; });

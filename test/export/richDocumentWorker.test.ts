@@ -9,6 +9,7 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   });
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
   vi.stubGlobal('self', scope);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array([0, 1, 2]))));
   for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
   await import('../../src/features/export/documentWorker');
   await scope.onmessage!({ data: { type: 'convert', format: 'standalone-html', title: 'Rich export', directory: 'C:/Notes', markdown: {
@@ -46,6 +47,7 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   expect(message.result).toContain('data-export-edge="left top"');
   expect(message.result).toContain('data-export-edge="left bottom"');
   expect(message.result).toMatch(/<math[^>]+display="block"/);
+  expect(message.result).toContain('data:font/woff2;base64,');
   expect(message.result).toContain('data-math-align="left"');
   expect(message.result).not.toContain('@import');
   expect(postMessage).toHaveBeenCalledWith({ type: 'assets', paths: ['C:\\Notes\\img\\a #1.png', 'C:\\Notes\\中文 b.png'] });

@@ -3,7 +3,8 @@
 // core 层只持有 editorTypes 声明的接口，不接触 EditorView。
 
 import type { EditorView } from '@codemirror/view';
-import { foldState } from '@codemirror/language';
+import { foldState, toggleFold, unfoldAll } from '@codemirror/language';
+import { gotoLine } from '@codemirror/search';
 import type {
   CodeOpsCapabilities,
   EditorCapabilities,
@@ -109,5 +110,10 @@ export function createCodeEditorCapabilities(
     }),
     search,
     codeOps,
+    codeView: {
+      goToLine: () => { gotoLine(view); },
+      toggleFold: () => { toggleFold(view); view.focus(); },
+      unfoldAll: () => { unfoldAll(view); view.focus(); },
+    },
   };
 }

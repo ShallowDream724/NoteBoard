@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { documentParser } from '../../src/features/editor-md/documentExtensions';
 import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 import { pandocSource } from '../../src/features/export/pandocDocument';
@@ -98,10 +98,14 @@ describe('rich document export conservation', () => {
     expect(root.querySelector('details')?.hasAttribute('open')).toBe(false);
     expect(root.querySelectorAll('[data-nb-conceal]')).toHaveLength(2);
     expect(root.querySelectorAll('img')).toHaveLength(3);
-    const html = standaloneHtml(result.html, '<report>');
+    const fetchFont = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([0, 1, 2])));
+    const html = await standaloneHtml(result.html, '<report>');
+    fetchFont.mockRestore();
     expect(html).toContain('<title>&lt;report&gt;</title>');
     expect(html).toContain("addEventListener('beforeprint'");
-    expect(html).toContain('.katex-html{display:none}');
+    expect(html).not.toContain('.katex-html{display:none}');
+    expect(html).toContain('data:font/woff2;base64,');
+    expect(html).not.toContain('url(fonts/');
     expect(html).not.toContain('@import');
     expect(localFileUrl('C:\\Notes\\图片 #1.png')).toBe('file:///C:/Notes/%E5%9B%BE%E7%89%87%20%231.png');
   });

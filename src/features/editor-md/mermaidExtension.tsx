@@ -17,7 +17,8 @@ import { useNativeSourceInput } from './useNativeSourceInput';
 import { MermaidNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
-import { DEFAULT_MERMAID_CODE } from './insertContentRecipes';
+import { MERMAID_CREATION_META, markMermaidCreation } from './mermaidCreation';
+import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 import { observe } from './viewportActivation';
 import { scheduleTask, cancelTask } from './viewportWorkScheduler';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
@@ -28,8 +29,30 @@ import { AnnotationMarker } from './annotations/AnnotationMarker';
 interface SourceRequest { position: number; token: object }
 const sourceRequestKey = new PluginKey<SourceRequest | null>('mermaid-source-request');
 const consumedSourceRequests = new WeakSet<object>();
+interface SourceSession { position: number; initialCode: string }
+const sourceSessionKey = new PluginKey<SourceSession | null>('mermaid-source-session');
 
-/** A newly inserted template opens its source without persisting UI state in the node. */
+function mermaidSourceSessionPlugin() {
+  return new Plugin<SourceSession | null>({
+    key: sourceSessionKey,
+    state: {
+      init: () => null,
+      apply(tr, previous) {
+        const requested = tr.getMeta(sourceSessionKey) as SourceSession | null | undefined;
+        if (requested !== undefined) return requested;
+        if (!previous || !tr.docChanged) return previous;
+        if (tr.getMeta('noteboard-document-replacement')) return null;
+        const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
+        const position = move && previous.position >= move.from && previous.position < move.to
+          ? move.inserted + previous.position - move.from
+          : tr.mapping.mapResult(previous.position, 1).pos;
+        return tr.doc.nodeAt(position)?.type.name === 'mermaidBlock' ? { ...previous, position } : null;
+      },
+    },
+  });
+}
+
+/** Only an explicit creation opens source; relocation of the same template does not. */
 function mermaidSourceRequestPlugin() {
   return new Plugin<SourceRequest | null>({
     key: sourceRequestKey,
@@ -46,14 +69,14 @@ function mermaidSourceRequestPlugin() {
     appendTransaction(transactions, _oldState, newState) {
       let position: number | null = null;
       transactions.forEach((tr, transactionIndex) => {
-        if (!tr.docChanged || tr.getMeta('noteboard-document-replacement')) return;
+        if (!tr.docChanged || !tr.getMeta(MERMAID_CREATION_META) || tr.getMeta(BLOCK_MOVE_META)) return;
         tr.steps.forEach((step, stepIndex) => {
           const before = tr.docs[stepIndex], after = tr.docs[stepIndex + 1] ?? tr.doc;
           step.getMap().forEach((from, to, changedFrom, changedTo) => {
             if (position != null || changedFrom === changedTo) return;
             after.nodesBetween(changedFrom, changedTo, (candidate, candidatePos) => {
               if (position != null) return false;
-              if (candidate.type.name !== 'mermaidBlock' || candidate.attrs.code !== DEFAULT_MERMAID_CODE) return true;
+              if (candidate.type.name !== 'mermaidBlock') return true;
               if (from !== to && before.nodeAt(from)?.type.name === 'mermaidBlock') return false;
               let mapped = tr.mapping.slice(stepIndex + 1).map(candidatePos);
               for (let index = transactionIndex + 1; index < transactions.length; index++) mapped = transactions[index].mapping.map(mapped);
@@ -139,8 +162,9 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const initialCodeRef = useRef('');
+  const session = sourceSessionKey.getState(editor.state);
+  const [editing, setEditing] = useState(() => !!session && session.position === getPos());
+  const initialCodeRef = useRef(session && session.position === getPos() ? session.initialCode : '');
   const [inViewport, setInViewport] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -152,13 +176,18 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
 
   const beginEditing = useCallback(() => {
     initialCodeRef.current = code;
+    const position = getPos();
+    if (position !== undefined) editor.view.dispatch(editor.state.tr.setMeta(sourceSessionKey, { position, initialCode: code } satisfies SourceSession).setMeta('addToHistory', false));
     setEditing(true);
-  }, [code]);
-  const finishEditing = useCallback(() => setEditing(false), []);
+  }, [code, editor, getPos]);
+  const finishEditing = useCallback(() => {
+    editor.view.dispatch(editor.state.tr.setMeta(sourceSessionKey, null).setMeta('addToHistory', false));
+    setEditing(false);
+  }, [editor]);
   const cancelEditing = useCallback(() => {
     if (code !== initialCodeRef.current) updateAttributes({ code: initialCodeRef.current });
-    setEditing(false);
-  }, [code, updateAttributes]);
+    finishEditing();
+  }, [code, updateAttributes, finishEditing]);
   useLayoutEffect(() => {
     const request = sourceRequestKey.getState(editor.state);
     if (!request || request.position !== getPos() || consumedSourceRequests.has(request.token)) return;
@@ -329,7 +358,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               if ((e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())) {
                 e.preventDefault(); e.stopPropagation();
                 if (code === initialCodeRef.current && e.key.toLowerCase() === 'z' && !e.shiftKey) {
-                  setEditing(false);
+                  finishEditing();
                   editor.view.focus();
                   return;
                 }
@@ -583,7 +612,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
 /** Mermaid 块节点 */
 export const MermaidBlock = MermaidNode.extend({
   addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; },
-  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), mermaidSourceRequestPlugin()]; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), mermaidSourceRequestPlugin(), mermaidSourceSessionPlugin()]; },
   addNodeView() {
     return ReactNodeViewRenderer(MermaidComponent);
   },
@@ -591,7 +620,8 @@ export const MermaidBlock = MermaidNode.extend({
     return {
       insertMermaid:
         (code: string) =>
-        ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => {
+        ({ commands, tr }: { commands: { insertContent: (content: unknown) => boolean }; tr: import('@tiptap/pm/state').Transaction }) => {
+          markMermaidCreation(tr);
           return commands.insertContent({
             type: 'mermaidBlock',
             attrs: { code },

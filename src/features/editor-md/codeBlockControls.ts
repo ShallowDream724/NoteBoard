@@ -3,11 +3,12 @@ import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, TextSelection, NodeSelection, type Selection } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
-import { observeCodeVisibility } from './codeVisibility';
+import { observeCodeVisibility, type CodeVisibility } from './codeVisibility';
 import { getCodeStructure, type CodeStructure, type CodeFold } from './codeBlockStructure';
 import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 import { INITIAL_CODE_GUTTERS, WINDOWED_CODE_LINES, visibleCodeLines } from './codeBlockViewport';
 import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
+import { afterCodeComposition } from './codeComposition';
 
 type Owner = () => number | undefined;
 interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean; visibleFrom: number; visibleTo: number }
@@ -16,16 +17,26 @@ type BlockUpdate = { owner: Owner; node?: Node; language?: string; active?: bool
 type Update = BlockUpdate | { updates: BlockUpdate[] } | { toggle: Owner; from: number };
 const key = new PluginKey<State>('code-block-controls');
 const batches = new WeakMap<Editor, Map<Owner, BlockUpdate>>();
+const deferred = new WeakMap<Editor, () => void>();
+
+function flushControls(editor: Editor) {
+  if (editor.isDestroyed || !key.getState(editor.state)) { batches.delete(editor); return; }
+  if (editor.view.composing) {
+    if (!deferred.has(editor)) deferred.set(editor, afterCodeComposition(editor, () => {
+      deferred.delete(editor);
+      flushControls(editor);
+    }));
+    return;
+  }
+  const pending = batches.get(editor); batches.delete(editor);
+  if (pending?.size) editor.view.dispatch(editor.state.tr.setMeta(key, { updates: [...pending.values()] } satisfies Update).setMeta('addToHistory', false));
+}
 
 function publishControls(editor: Editor, update: BlockUpdate) {
   let batch = batches.get(editor);
   if (!batch) {
     batch = new Map(); batches.set(editor, batch);
-    queueMicrotask(() => {
-      const pending = batches.get(editor); batches.delete(editor);
-      if (!pending || editor.isDestroyed || !key.getState(editor.state)) return;
-      editor.view.dispatch(editor.state.tr.setMeta(key, { updates: [...pending.values()] } satisfies Update).setMeta('addToHistory', false));
-    });
+    queueMicrotask(() => flushControls(editor));
   }
   batch.set(update.owner, update);
 }
@@ -106,13 +117,25 @@ function blockDecorations(block: Block): Decoration[] {
 
 export function createCodeBlockControlsPlugin(): Plugin<State> {
   const rememberedFolds = new WeakMap<Node, Set<number>>();
+  let view: EditorView | undefined;
   return new Plugin<State>({
     key,
+    view: current => { view = current; return { destroy: () => { if (view === current) view = undefined; } }; },
     state: {
       init: () => ({ blocks: new Map(), decorations: DecorationSet.empty }),
       apply(tr, previous) {
         const update = tr.getMeta(key) as Update | undefined;
         if (!tr.docChanged && !tr.selectionSet && !update) return previous;
+        if (view?.composing && tr.docChanged && !update) {
+          // Keep the already rendered presentation stable while the browser owns
+          // the preedit DOM. The NodeView publishes final metadata on completion.
+          const blocks = new Map<Owner, Block>();
+          for (const [owner, block] of previous.blocks) {
+            const position = tr.mapping.map(block.position, 1);
+            if (tr.doc.nodeAt(position)?.type === block.node.type) blocks.set(owner, { ...block, position });
+          }
+          return { blocks, decorations: previous.decorations.map(tr.mapping, tr.doc) };
+        }
         const blocks = new Map<Owner, Block>();
         let changed = false;
         const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
@@ -180,7 +203,14 @@ export function useCodeBlockControls(editor: Editor, node: Node, getPos: Owner, 
   useEffect(() => {
     if (!element.current) return;
     let structure: CodeStructure | null | undefined;
-    return observeCodeVisibility(editor.view.dom, element.current, ({ visible, viewport }) => {
+    let resume: (() => void) | undefined;
+    let latestSample: CodeVisibility;
+    const onVisibility = ({ visible, viewport }: CodeVisibility) => {
+      latestSample = { visible, viewport };
+      if (editor.view.composing) {
+        resume ??= afterCodeComposition(editor, () => { resume = undefined; onVisibility(latestSample); });
+        return;
+      }
       if (editor.isDestroyed || !key.getState(editor.state)) return;
       const active = visible && expanded, existing = key.getState(editor.state)?.blocks.get(getPos);
       if (active && structure === undefined) structure = existing?.structure ?? getCodeStructure(node.textContent, language);
@@ -193,7 +223,9 @@ export function useCodeBlockControls(editor: Editor, node: Node, getPos: Owner, 
       if (structure && element.current) {
         element.current.style.setProperty('--nb-code-line-digits', String(Math.min(5, Math.max(2, String(structure.lines.length).length))));
       }
-    });
+    };
+    const stop = observeCodeVisibility(editor.view.dom, element.current, onVisibility);
+    return () => { resume?.(); stop(); };
   }, [editor, node, getPos, language, element, expanded]);
   useEffect(() => () => {
     queueMicrotask(() => {

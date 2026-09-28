@@ -4,6 +4,7 @@
 
 import kindByExtJson from './docKind.json' with { type: 'json' };
 import languageByExtJson from './languageByExt.json' with { type: 'json' };
+import languageByFilenameJson from './languageByFilename.json' with { type: 'json' };
 import type { DocumentKind, LanguageId, SavePolicy } from './ipc/types';
 
 /** 扩展名 → kind 的映射表（小写键） */
@@ -11,6 +12,7 @@ export const KIND_BY_EXT: Record<string, DocumentKind> = kindByExtJson as Record
 
 /** 扩展名 → LanguageId */
 export const LANGUAGE_BY_EXT: Record<string, LanguageId> = languageByExtJson as Record<string, LanguageId>;
+export const LANGUAGE_BY_FILENAME: Record<string, LanguageId> = languageByFilenameJson as Record<string, LanguageId>;
 
 /** 从路径提取扩展名（小写，无点） */
 export function extFromPath(path: string): string {
@@ -29,8 +31,9 @@ export function kindFromPath(path: string): DocumentKind {
 
 /** 从路径推断 LanguageId */
 export function languageFromPath(path: string): LanguageId {
+  const filename = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1).toLowerCase();
   const ext = extFromPath(path);
-  return LANGUAGE_BY_EXT[ext] ?? 'plaintext';
+  return LANGUAGE_BY_FILENAME[filename] ?? LANGUAGE_BY_EXT[ext] ?? 'plaintext';
 }
 
 /** 从 kind 推导保存策略 */

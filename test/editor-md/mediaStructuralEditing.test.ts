@@ -3,7 +3,7 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { buildDocumentExtensions } from '@/features/editor-md/documentExtensions';
-import { MediaEditing } from '@/features/editor-md/mediaEditing';
+import { MediaEditing, handleMediaKey } from '@/features/editor-md/mediaEditing';
 import { createAnnotationBodyView } from '@/features/editor-md/annotations/bodyView';
 import { AnnotationBehavior } from '@/features/editor-md/annotations/extension';
 import { ClipboardImport, DOCUMENT_SLICE_MIME, importClipboardSnapshot, writeDocumentClipboard } from '@/features/editor-md/clipboard/clipboardImport';
@@ -69,6 +69,43 @@ describe.each([false, true])('media structure in %s (true = annotation draft)', 
     key(view, 'ArrowDown'); expect(view.state.selection.from).toBe(5);
     key(view, 'ArrowUp'); expect(view.state.selection).toBeInstanceOf(NodeSelection);
     key(view, 'ArrowUp'); expect(view.state.selection.from).toBe(2);
+  });
+  it('visits every adjoining atomic block in document order and returns to text', () => {
+    const stops: JSONContent[] = [
+      { type: 'mermaidBlock', attrs: { code: 'graph TD\n  A --> B' } },
+      { type: 'infographicBlock', attrs: { code: 'type: metric-cards' } },
+      { type: 'plantumlBlock', attrs: { code: '@startuml\nA -> B\n@enduml' } },
+      { type: 'mathBlock', attrs: { latex: 'x' } },
+      { type: 'nativeError', attrs: { raw: 'unrecognized preserved content' } },
+      { type: 'horizontalRule' },
+      image(),
+      collection('grid', [image(), paragraph('caption')]),
+    ];
+    const view = create([paragraph('a'), ...stops, paragraph('b')]);
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    for (const stop of stops) {
+      key(view, 'ArrowDown');
+      expect(view.state.selection).toBeInstanceOf(NodeSelection);
+      expect((view.state.selection as NodeSelection).node.type.name).toBe(stop.type);
+    }
+    key(view, 'ArrowDown');
+    expect(view.state.selection.$from.parent.textContent).toBe('b');
+    key(view, 'ArrowUp');
+    for (const stop of [...stops].reverse()) {
+      expect((view.state.selection as NodeSelection).node.type.name).toBe(stop.type);
+      key(view, 'ArrowUp');
+    }
+    expect(view.state.selection.$from.parent.textContent).toBe('a');
+  });
+  it.each([
+    { type: 'githubAlert', content: [paragraph('inside')] },
+    { type: 'codeBlock', content: [{ type: 'text', text: 'code' }] },
+    { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [paragraph('cell')] }] }] },
+  ])('leaves $type entry to its own key handler', block => {
+    const view = create([paragraph('a'), block, paragraph('b')]);
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)));
+    expect(handleMediaKey(view, new KeyboardEvent('keydown', { key: 'ArrowDown' }))).toBe(false);
+    expect(view.state.selection).toBeInstanceOf(TextSelection);
   });
   it.each(['grid', 'carousel'])('treats the %s collection as one visible vertical selection', layout => {
     const view = create([paragraph('a'), collection(layout, [image(), paragraph('caption')]), paragraph('b')], draft);

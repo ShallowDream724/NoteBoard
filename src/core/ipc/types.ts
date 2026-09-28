@@ -2,9 +2,11 @@
 // 与 src-tauri/src/dto.rs 手工同步
 // 序列化约定：结构体字段 camelCase，枚举变体 kebab-case
 
+import { CODE_LANGUAGES, type CodeLanguage } from '../codeLanguages';
+
 export type DocumentKind = 'markdown' | 'noteboard' | 'code' | 'board' | 'image' | 'mindmap' | 'drawio' | 'bitable' | 'unsupported';
 // infographic：NoteBoard 自研信息图声明式源码（YAML/JSON），与 md 内嵌 ```infographic 块同源
-export type LanguageId = 'markdown' | 'sql' | 'json' | 'yaml' | 'xml' | 'html' | 'mermaid' | 'plantuml' | 'infographic' | 'plaintext';
+export type LanguageId = CodeLanguage['value'] | 'html' | 'mermaid' | 'plantuml' | 'infographic';
 export type SavePolicy = 'auto' | 'manual';
 export type ViewMode = 'visual' | 'source';
 export type Encoding = 'utf8' | 'utf8-bom' | 'gbk';
@@ -19,7 +21,7 @@ export type ContentWidth = 'narrow' | 'standard' | 'wide' | 'full' | (string & {
 export const ALL_DOCUMENT_KINDS: DocumentKind[] = ['markdown', 'noteboard', 'code', 'board', 'image', 'mindmap', 'drawio', 'bitable', 'unsupported'];
 export const ALL_ENCODINGS: Encoding[] = ['utf8', 'utf8-bom', 'gbk'];
 export const ALL_EOLS: Eol[] = ['crlf', 'lf'];
-export const ALL_LANGUAGE_IDS: LanguageId[] = ['markdown', 'sql', 'json', 'yaml', 'xml', 'html', 'mermaid', 'plantuml', 'infographic', 'plaintext'];
+export const ALL_LANGUAGE_IDS: LanguageId[] = [...CODE_LANGUAGES.map(language => language.value), 'html', 'mermaid', 'plantuml', 'infographic'];
 export const ALL_THEME_IDS: ThemeId[] = ['chen-guang', 'hu-po', 'mo-ye'];
 
 // ── 文档载荷 ──

@@ -47,6 +47,54 @@ try {
   for (let step = 0; step < 3; step++) await page.keyboard.press('Control+y');
   await check({ text: 'Before text', code: ['AAA'] }, 'code redo chain');
 
+  // Chromium composition uses the real contenteditable DOM, including async
+  // highlighting and gutter updates. It does not emulate a vendor IME itself.
+  await mount([{ type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'print(1)\n' }] }]);
+  await page.evaluate(() => window.containerHistoryQA.focusCode(true));
+  const cdp = await page.context().newCDPSession(page);
+  const compose = async (preedit, committed) => {
+    for (const text of preedit) {
+      await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+      await page.waitForTimeout(45);
+      assert((await state()).composing, 'presentation updates must preserve composition');
+    }
+    await cdp.send('Input.insertText', { text: committed });
+    await page.waitForFunction(() => !window.containerHistoryQA.state().composing);
+    await page.waitForTimeout(100);
+  };
+  await compose(['w', 'wo', "wo's", "wo'shi"], '我是123');
+  await check({ code: ['print(1)\n我是123'] }, 'code first Chinese composition');
+  await page.waitForTimeout(550);
+  await compose(['z', 'zhong'], '中文');
+  await check({ code: ['print(1)\n我是123中文'] }, 'code repeated composition');
+  await page.keyboard.press('Control+z');
+  await check({ code: ['print(1)\n我是123'] }, 'Chinese composition undo');
+  await page.keyboard.press('Control+y');
+  await check({ code: ['print(1)\n我是123中文'] }, 'Chinese composition redo');
+  await cdp.detach();
+
+  await mount(initial);
+  await typePrecedingText();
+  await page.keyboard.type(' /h1');
+  await page.getByRole('button', { name: /^一级标题 \(H1\)/ }).click();
+  const heading = (await state()).doc;
+  assert.equal(heading.content[0].type, 'heading');
+  await page.keyboard.press('Control+z');
+  assert.equal((await state()).doc.content[0].type, 'paragraph');
+  assert(!(await page.getByText('搜索 · h1', { exact: true }).count()), 'undo must close command menu');
+  await page.keyboard.press('Control+y');
+  assert.deepEqual((await state()).doc, heading, 'redo restores complete slash command');
+  await page.evaluate(() => window.containerHistoryQA.focusFirstParagraphEnd());
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Shift+End');
+  const beforeCut = (await state()).doc;
+  await page.keyboard.press('Control+x');
+  assert.notDeepEqual((await state()).doc, beforeCut, 'Ctrl+X still cuts selected text');
+  await page.keyboard.press('Control+z');
+  assert.deepEqual((await state()).doc, beforeCut, 'cut undo');
+  await page.keyboard.press('Control+y');
+  assert.notDeepEqual((await state()).doc, beforeCut, 'cut redo');
+
   await mount(initial);
   await typePrecedingText();
   await page.evaluate(() => window.containerHistoryQA.insertMermaid());
@@ -80,7 +128,7 @@ try {
   await check({ mermaid: [original], text: 'Before' }, 'existing Mermaid undo preceding text');
 
   assert.deepEqual(errors, [], 'browser errors');
-  console.log(JSON.stringify({ passed: true, scenarios: ['code physical typing/undo/redo', 'new Mermaid source/edit/creation/preceding history', 'existing Mermaid source/edit/preceding history'] }));
+  console.log(JSON.stringify({ passed: true, scenarios: ['code physical typing/undo/redo', 'code Chromium IME composition', 'slash command undo/redo and cut', 'new Mermaid source/edit/creation/preceding history', 'existing Mermaid source/edit/preceding history'] }));
 } finally {
   await browser.close();
   await new Promise(resolve => server.httpServer.close(resolve));

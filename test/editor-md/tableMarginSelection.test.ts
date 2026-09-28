@@ -257,9 +257,8 @@ describe('table margin row selection', () => {
     rowBounds.forEach((spy, index) => spy.mockImplementation(() => rect(250, 100 + index * 40 - scrollTop, 200, 40)));
     pointer(wrapper, 'pointerdown', 150, 155);
     pointer(document, 'pointermove', 150, 590);
-    await new Promise(resolve => setTimeout(resolve, 70));
-    expect(scrollTop).toBe(20);
-    expect(increments.every(delta => delta > 0 && delta <= 18)).toBe(true);
+    await vi.waitFor(() => expect(scrollTop).toBeCloseTo(20, 3), { timeout: 1000 });
+    expect(increments.every(delta => delta > 0 && delta <= 880 * .032)).toBe(true);
     expect(selected(editor)).toEqual([1, 13]);
     pointer(document, 'pointerup', 150, 590);
     const count = increments.length;
