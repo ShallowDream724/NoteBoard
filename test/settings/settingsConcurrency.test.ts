@@ -66,3 +66,28 @@ it('a failed ignored-version preference rolls back without losing concurrent set
   expect(replica.view().updates?.ignoredVersion ?? '').toBe('');
   expect(replica.view().file.showHiddenFiles).toBe(true);
 });
+
+it('image tool patches preserve remote tools and different fields on the same tool', () => {
+  const initial = base(), replica = new SettingsReplica(initial);
+  const id = replica.enqueue({ imageEditor: { tools: { pen: { width: 9 }, marker: { markerSize: 48 } } } });
+  replica.receive({ ...initial, revision: 2, imageEditor: {
+    tools: { pen: { color: '#123456' }, line: { pattern: 'dash' } }, mosaicMode: 'brush',
+  } });
+  expect(replica.view().imageEditor).toEqual({
+    tools: { pen: { color: '#123456', width: 9 }, line: { pattern: 'dash' }, marker: { markerSize: 48 } },
+    mosaicMode: 'brush',
+  });
+  replica.settle(id);
+  expect(replica.view().imageEditor?.tools?.pen).toEqual({ color: '#123456' });
+});
+
+it('a failed image preference write rolls back its fields while preserving newer local and remote fields', () => {
+  const initial = base(), replica = new SettingsReplica(initial);
+  const failed = replica.enqueue({ imageEditor: { tools: { pen: { width: 9 } } } });
+  replica.enqueue({ imageEditor: { tools: { pen: { color: '#123456' } }, magnifierMode: 'ellipse' } });
+  replica.receive({ ...initial, revision: 3, imageEditor: { tools: { line: { pattern: 'dash' } } } });
+  replica.settle(failed);
+  expect(replica.view().imageEditor).toEqual({
+    tools: { line: { pattern: 'dash' }, pen: { color: '#123456' } }, magnifierMode: 'ellipse',
+  });
+});

@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Mutex};
+use super::image_editor::{self, ImageEditorPreferences};
 
 // One process-wide authority serializes every read/modify/write transaction.
 // Client revisions never allocate revisions and cannot replace this snapshot.
@@ -44,6 +45,8 @@ pub struct Settings {
     pub updates: UpdateSettings,
     #[serde(default)]
     pub shortcuts: ShortcutSettings,
+    #[serde(default)]
+    pub image_editor: ImageEditorPreferences,
 }
 
 impl Default for Settings {
@@ -59,6 +62,7 @@ impl Default for Settings {
             export: ExportSettings::default(),
             updates: UpdateSettings::default(),
             shortcuts: ShortcutSettings::default(),
+            image_editor: ImageEditorPreferences::default(),
         }
     }
 }
@@ -391,7 +395,9 @@ fn parse_settings(content: &str) -> Result<Settings, serde_json::Error> {
             }
         }
     }
-    serde_json::from_value(value)
+    let settings: Settings = serde_json::from_value(value)?;
+    settings.image_editor.validate().map_err(<serde_json::Error as serde::de::Error>::custom)?;
+    Ok(settings)
 }
 
 fn recommended_fonts_patch(current: &TypographySettings, expected: Option<&TypographySettings>) -> serde_json::Value {
@@ -455,9 +461,10 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
     let sections = patch.as_object().ok_or("设置修改必须是对象")?;
     let mut value = serde_json::to_value(current).map_err(|e| e.to_string())?;
     for (section, fields) in sections {
-        if !["appearance", "typography", "editor", "file", "layout", "export", "updates", "shortcuts"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
+        if !["appearance", "typography", "editor", "file", "layout", "export", "updates", "shortcuts", "imageEditor"].contains(&section.as_str()) { return Err(format!("未知设置分组: {section}")); }
         let fields = fields.as_object().ok_or("设置分组修改必须是对象")?;
         let target = value[section].as_object_mut().ok_or("设置分组无效")?;
+        if section == "imageEditor" { image_editor::merge_patch(target, fields)?; continue; }
         for (field, field_value) in fields {
             if !target.contains_key(field) { return Err(format!("未知设置字段: {section}.{field}")); }
             if section == "shortcuts" && field == "overrides" {
@@ -477,6 +484,7 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
         }
     }
     let mut updated: Settings = serde_json::from_value(value).map_err(|e| format!("设置值无效: {e}"))?;
+    updated.image_editor.validate()?;
     crate::shortcut_probe::validate_overrides(&updated.shortcuts.overrides)?;
     updated.revision = next_revision(current)?;
     Ok(updated)
@@ -498,6 +506,7 @@ pub fn patch(patch: serde_json::Value) -> Result<Settings, String> {
 /// clients use patch() so unrelated edits from another window are retained.
 pub fn save(settings: &mut Settings) -> Result<u64, String> {
     crate::shortcut_probe::validate_overrides(&settings.shortcuts.overrides)?;
+    settings.image_editor.validate()?;
     let mut state = SETTINGS.lock().unwrap();
     let current = state.get_or_insert_with(read_from_disk);
     if settings.revision != current.revision { return Err("设置已在其他窗口更新，请重新载入后保存".into()); }
@@ -597,5 +606,55 @@ mod tests {
         assert!(patched(&Settings::default(), &serde_json::json!({"revision":9})).is_err());
         assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"unknown":true}})).is_err());
         assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"tabSize":"oops"}})).is_err());
+    }
+
+    #[test]
+    fn image_preferences_load_legacy_settings_and_merge_fields_in_commit_order() {
+        let mut current = parse_settings(r#"{"revision":7,"editor":{"softWrap":false}}"#).unwrap();
+        assert!(current.image_editor.tools.is_empty());
+        let first = commit_patch(&mut current, &serde_json::json!({"imageEditor":{"tools":{"pen":{"color":"#A1b2C3","width":8}}}}), |_| Ok(())).unwrap();
+        assert_eq!(first.revision, 8);
+        let second = commit_patch(&mut current, &serde_json::json!({"imageEditor":{"tools":{"pen":{"width":12},"marker":{"markerSize":44}},"mosaicMode":"brush"}}), |_| Ok(())).unwrap();
+        assert_eq!(second.revision, 9);
+        assert!(!second.editor.soft_wrap);
+        let image = serde_json::to_value(&second.image_editor).unwrap();
+        assert_eq!(image["tools"]["pen"]["color"], "#A1b2C3");
+        assert_eq!(image["tools"]["pen"]["width"], 12.0);
+        assert_eq!(image["tools"]["marker"]["markerSize"], 44.0);
+        assert_eq!(image["mosaicMode"], "brush");
+    }
+
+    #[test]
+    fn image_preferences_reject_unknown_content_and_invalid_style_values() {
+        for patch in [
+            serde_json::json!({"imageEditor":{"tools":{"crop":{"width":5}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"text":{"text":"private"}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"marker":{"nextMarker":7}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"pen":{"color":"red"}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"pen":{"width":0}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"spotlight":{"opacity":1.1}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"magnifier":{"zoom":20.1}}}}),
+            serde_json::json!({"imageEditor":{"tools":{"line":{"pattern":"dotted"}}}}),
+            serde_json::json!({"imageEditor":{"magnifierMode":"rectangle"}}),
+            serde_json::json!({"imageEditor":{"recipe":{"image":"content"}}}),
+        ] {
+            assert!(patched(&Settings::default(), &patch).is_err(), "accepted {patch}");
+        }
+    }
+
+    #[test]
+    fn failed_image_preference_write_preserves_revision_and_previous_tool_fields() {
+        let mut current = Settings::default();
+        let first = commit_patch(&mut current, &serde_json::json!({"imageEditor":{"tools":{"pen":{"color":"#ef4444"}}}}), |_| Ok(())).unwrap();
+        assert_eq!(first.revision, 1);
+        let failed = commit_patch(&mut current, &serde_json::json!({"imageEditor":{"tools":{"pen":{"width":18}}}}), |_| Err("disk full".into()));
+        assert!(failed.is_err());
+        assert_eq!(current.revision, 1);
+        let next = commit_patch(&mut current, &serde_json::json!({"imageEditor":{"tools":{"marker":{"markerSize":42}}}}), |_| Ok(())).unwrap();
+        let image = serde_json::to_value(&next.image_editor).unwrap();
+        assert_eq!(next.revision, 2);
+        assert_eq!(image["tools"]["pen"]["color"], "#ef4444");
+        assert!(image["tools"]["pen"].get("width").is_none());
+        assert_eq!(image["tools"]["marker"]["markerSize"], 42.0);
     }
 }

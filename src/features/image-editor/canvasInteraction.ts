@@ -228,7 +228,10 @@ export class ImageCanvasInteraction {
     if (this.finishPolyline()) return;
     const op = this.hit(output, tolerance); if (op?.type === 'text') this.beginText(op);
   }
-  outside() { this.finishPolyline(); this.finishText(); this.endWheel(); }
+  outside() {
+    this.pointerUp(); this.finishPolyline(); this.finishText(); this.endPropertyChange(); this.endWheel();
+    this.clearSelection();
+  }
   private commitPreview() {
     const preview = this.preview; this.preview = null;
     if (preview && preview !== this.adapter.recipe()) this.adapter.commit(preview);

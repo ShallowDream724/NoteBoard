@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowUpRight, Circle, Crop, Eraser, FlipHorizontal2, FlipVertical2, Focus, Hash, Highlighter, LayoutGrid, Maximize, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCw, Save, Square, Trash2, Type, Undo2, Waypoints, X, ZoomIn } from 'lucide-react';
+import { ArrowUpRight, Circle, Crop, Eraser, FlipHorizontal2, FlipVertical2, Focus, Highlighter, LayoutGrid, Maximize, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCw, Save, Square, Trash2, Type, Undo2, Waypoints, X, ZoomIn } from 'lucide-react';
 import { commitImageEdit, createImageEditRecipe, redoImageEdit, undoImageEdit, type ImageEditHistory, type ImageEditRecipe, type ImageEditorTool } from './model';
 import { getMagnifierRect, getOutputSize } from './geometry';
 import { exportImageEdit, getImageExportSize, LargeImageExportConfirmationError, type ImageExportMimeType } from './exporter';
@@ -12,25 +12,35 @@ import type { ImageEditorController, ImageEditorOptions } from './types';
 import { ImageCanvasInteraction, type CanvasInteractionAdapter } from './canvasInteraction';
 import { ImageCanvasStage } from './ImageCanvasStage';
 import { applyImageTransform, type ImageTransformAction } from '../image/sharedTransform';
+import { ImagePreferenceSession } from './preferences';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { showToast } from '../../stores/toastStore';
 import './imageEditor.css';
 
+function MarkerToolIcon({ size = 19 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9 L12 7.5 V16 M10 16 H14"/></svg>;
+}
 const TOOLS = [
   ['select', '选择', MousePointer2], ['crop', '裁剪', Crop], ['pen', '铅笔', Pencil], ['highlighter', '荧光笔', Highlighter],
   ['line', '箭头', ArrowUpRight], ['polyline', '折线', Waypoints], ['rectangle', '矩形', Square], ['ellipse', '椭圆', Circle],
-  ['text', '文字', Type], ['marker', '序号', Hash], ['mosaic', '马赛克', LayoutGrid], ['spotlight', '聚光灯', Focus],
+  ['text', '文字', Type], ['marker', '序号', MarkerToolIcon], ['mosaic', '马赛克', LayoutGrid], ['spotlight', '聚光灯', Focus],
   ['magnifier', '放大镜', ZoomIn], ['eraser', '笔迹擦除', Eraser], ['object-eraser', '对象擦除', Trash2],
 ] as const;
 const isTyping = (target: EventTarget | null) => target instanceof HTMLElement && (!!target.closest('input,textarea,select,[contenteditable=true]'));
 
 export function ImageEditDialog({ options, register, close }: { options: ImageEditorOptions; register(controller: ImageEditorController): void; close(): void }) {
+  const [preferences] = useState(() => new ImagePreferenceSession(
+    () => useSettingsStore.getState().settings.imageEditor ?? {},
+    patch => useSettingsStore.getState().setImageEditor(patch),
+    error => showToast(`未能记住图片工具设置：${String(error)}`, 'error'),
+  ));
   const [history, setHistory] = useState<ImageEditHistory | null>(null);
   const historyRef = useRef<ImageEditHistory | null>(null), resource = useRef<ImageResource | null>(null);
   const [loading, setLoading] = useState(true), [error, setError] = useState('');
   const [tool, setTool] = useState<ImageEditorTool>('select');
   const [style, setStyle] = useState<ToolStyle>(DEFAULT_TOOL_STYLE);
-  const strokeWidths = useRef<Partial<Record<ImageEditorTool, number>>>({ highlighter: 24, eraser: 20, 'object-eraser': 40, 'mosaic-brush': 40 });
-  const [mosaicMode, setMosaicMode] = useState<'brush' | 'rectangle'>('rectangle');
-  const [magnifierShape, setMagnifierShape] = useState<'circle' | 'ellipse'>('ellipse');
+  const [mosaicMode, setMosaicMode] = useState<'brush' | 'rectangle'>(() => preferences.modes().mosaicMode);
+  const [magnifierShape, setMagnifierShape] = useState<'circle' | 'ellipse'>(() => preferences.modes().magnifierMode);
   const [ratio, setRatio] = useState(0), [zoom, setZoom] = useState(1), [displayScale, setDisplayScale] = useState(1);
   const [mime, setMime] = useState<ImageExportMimeType>('image/png'), [quality, setQuality] = useState(92), [scale, setScale] = useState(100);
   const [busy, setBusy] = useState(false), [closing, setClosing] = useState(false), [large, setLarge] = useState('');
@@ -39,7 +49,18 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
   const [, refreshControls] = useState(0);
   const empty = useRef(createImageEditRecipe(1, 1));
   const apply = (value: ImageEditHistory) => { historyRef.current = value; updateImageEditorDraft(options.key, value); setHistory(value); };
-  const commit = (value: ImageEditRecipe, nextMarker?: number) => { if (historyRef.current) apply(commitImageEdit(historyRef.current, value, nextMarker)); };
+  const commit = (value: ImageEditRecipe, nextMarker?: number) => {
+    const history = historyRef.current;
+    if (!history) return;
+    const id = interaction.current?.selected;
+    const before = id ? history.present.recipe.operations.find(op => op.id === id) : undefined;
+    const after = id ? value.operations.find(op => op.id === id) : undefined;
+    if (before && after && before !== after) {
+      const changed = preferences.rememberOperation(before, after);
+      if (after.type === adapter.current.tool() && Object.keys(changed).length) setStyle(current => ({ ...current, ...changed }));
+    }
+    apply(commitImageEdit(history, value, nextMarker)); preferences.flush();
+  };
   const adapter = useRef<CanvasInteractionAdapter>(null!);
   adapter.current = {
     recipe: () => historyRef.current?.present.recipe ?? empty.current,
@@ -55,6 +76,7 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
     commit: (value, marker) => adapter.current.commit(value, marker), controlsChanged: () => adapter.current.controlsChanged(),
   });
   const canvas = interaction.current;
+  useEffect(() => () => preferences.end(), [preferences]);
   useEffect(() => {
     const abort = new AbortController(); alive.current = true;
     register({ suspend() { canvas.finish(); exportAbort.current?.abort(); abort.abort(); } });
@@ -82,12 +104,16 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
 
   function choose(value: ImageEditorTool) {
     canvas.finish(); canvas.clearSelection(); setTool(value); setError('');
-    setStyle(previous => ({ ...previous, width: strokeWidths.current[value === 'mosaic' && mosaicMode === 'brush' ? 'mosaic-brush' : value] ?? 4 }));
+    preferences.end();
+    const modes = preferences.modes();
+    setMosaicMode(modes.mosaicMode); setMagnifierShape(modes.magnifierMode);
+    setStyle(preferences.style(value === 'mosaic' && modes.mosaicMode === 'brush' ? 'mosaic-brush' : value));
     if (value === 'crop') canvas.beginCrop();
   }
   function changeStyle(patch: Partial<ToolStyle>) {
-    if (patch.width !== undefined) strokeWidths.current[activeTool] = patch.width;
-    setStyle(value => ({ ...value, ...patch })); canvas.changeStyle(patch);
+    preferences.remember(activeTool, patch);
+    if (activeTool === adapter.current.tool()) setStyle(value => ({ ...value, ...patch }));
+    canvas.changeStyle(patch); preferences.flush();
   }
   function removeSelected() { canvas.removeSelected(); }
   function undo() { canvas.prepareHistory(); if (historyRef.current) apply(undoImageEdit(historyRef.current)); if (tool === 'crop') setTool('select'); }
@@ -139,10 +165,10 @@ export function ImageEditDialog({ options, register, close }: { options: ImageEd
       <div className="nb-ie-body"><nav className="nb-ie-tools" aria-label="图片编辑工具">{TOOLS.map(([value, label, Icon]) => <button key={value} title={label} aria-label={label} aria-pressed={tool === value} disabled={!recipe || busy} onClick={() => choose(value)}><Icon size={19}/><span>{label}</span></button>)}</nav>
         {loading || !recipe || !resource.current ? <div className="nb-ie-stage"><div className="nb-ie-loading">{loading ? '正在打开图片…' : '图片无法打开'}</div></div> : <ImageCanvasStage controller={canvas} resource={resource.current} zoom={zoom} onZoom={factor => setZoom(value => Math.max(.25, Math.min(8, value * factor)))} disabled={busy} onScale={setDisplayScale}/>}
         <aside className="nb-ie-properties"><ImageToolProperties tool={activeTool} style={style} selected={selectedOperation} onChange={changeStyle} disabled={busy || !recipe} ratio={ratio} onRatio={setRatio}
-          onBeginChange={() => canvas.beginPropertyChange()} onEndChange={() => canvas.endPropertyChange()}
+          onBeginChange={() => { preferences.begin(); canvas.beginPropertyChange(); }} onEndChange={() => { canvas.endPropertyChange(); preferences.end(); }}
           onResetCrop={() => canvas.resetCrop()} onApplyCrop={() => endCrop(true)} onCancelCrop={() => endCrop(false)} cropSize={canvas.getCropBounds() ?? undefined}
-          mosaicMode={mosaicMode} onMosaicMode={mode => { canvas.finish(); canvas.clearSelection(); setMosaicMode(mode); setTool('mosaic'); setStyle(value => ({ ...value, width: strokeWidths.current[mode === 'brush' ? 'mosaic-brush' : 'mosaic'] ?? 40 })); }}
-          magnifierShape={magnifierShape} onMagnifierShape={shape => { setMagnifierShape(shape); canvas.changeSelected(op => {
+          mosaicMode={mosaicMode} onMosaicMode={mode => { canvas.finish(); canvas.clearSelection(); preferences.end(); preferences.rememberModes({ mosaicMode: mode }); setMosaicMode(mode); setTool('mosaic'); setStyle(preferences.style(mode === 'brush' ? 'mosaic-brush' : 'mosaic')); }}
+          magnifierShape={magnifierShape} onMagnifierShape={shape => { preferences.rememberModes({ magnifierMode: shape }); setMagnifierShape(shape); canvas.changeSelected(op => {
             if (op.type !== 'magnifier') return op;
             const old = getMagnifierRect(op), width = old.width, height = shape === 'circle' ? width : Math.abs(old.height - width) < 1 ? width * .7 : old.height;
             return { ...op, rect: { x: op.center.x - width / 2, y: op.center.y - height / 2, width, height }, radius: Math.max(width, height) / 2 };

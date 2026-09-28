@@ -55,7 +55,7 @@ describe('image canvas interactions', () => {
       else expect(board.interaction.finishPolyline()).toBe(true);
       expect(board.history.past).toHaveLength(1);
       expect(board.history.present.recipe.operations).toMatchObject([{ type: 'polyline', points: [{ x: 10, y: 10 }, { x: 25, y: 10 }] }]);
-      expect(board.interaction.selected).toBe(board.history.present.recipe.operations[0].id);
+      expect(board.interaction.selected).toBe(finish === 'outside' ? null : board.history.present.recipe.operations[0].id);
     } finally { board.dispose(); }
   });
 
@@ -63,6 +63,22 @@ describe('image canvas interactions', () => {
     const board = harness();
     try { board.setTool('polyline'); board.down(10, 10); board.move(30, 30); board.interaction.outside(); expect(board.history.past).toHaveLength(0); expect(board.history.present.recipe.operations).toHaveLength(0); }
     finally { board.dispose(); }
+  });
+
+  it.each(['line', 'rectangle', 'ellipse', 'marker'] as const)('confirms %s on outside click and keeps it available for later selection', tool => {
+    const board = harness();
+    try {
+      board.setTool(tool); board.down(30, 30);
+      if (tool !== 'marker') { board.move(80, 60); board.up(); }
+      const saved = board.history.present.recipe.operations[0], count = board.history.past.length;
+      board.interaction.outside();
+      expect(board.interaction.selected).toBeNull();
+      expect(board.interaction.getHandles()).toHaveLength(0);
+      expect(board.history.present.recipe.operations[0]).toEqual(saved);
+      expect(board.history.past).toHaveLength(count);
+      board.setTool('select'); board.down(tool === 'ellipse' ? 55 : 30, 30); board.up();
+      expect(board.interaction.selected).toBe(saved.id);
+    } finally { board.dispose(); }
   });
 
   it('selects a new marker immediately and moves it without a separate select click', () => {

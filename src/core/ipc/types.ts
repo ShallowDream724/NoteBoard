@@ -242,12 +242,43 @@ export interface Settings {
   export?: ExportSettings;
   updates?: UpdateSettings;
   shortcuts?: { overrides: Record<string, string[] | null> };
+  imageEditor?: ImageEditorPreferences;
 }
 
 /** Only changed leaf fields; revision/schema ownership stays in Rust. */
 export type SettingsPatch = {
   [Section in 'appearance' | 'typography' | 'editor' | 'file' | 'layout' | 'export' | 'updates' | 'shortcuts']?: Partial<NonNullable<Settings[Section]>>;
-};
+} & { imageEditor?: ImageEditorPreferences };
+
+export type ImagePreferenceTool = 'pen' | 'highlighter' | 'line' | 'polyline' | 'rectangle' | 'ellipse'
+  | 'text' | 'marker' | 'mosaic' | 'mosaic-brush' | 'spotlight' | 'magnifier' | 'eraser' | 'object-eraser';
+
+/** Style defaults only: content, positions, marker sequence and edit recipes are document state. */
+export interface ImageToolPreferences {
+  color?: string;
+  width?: number;
+  pattern?: 'solid' | 'dash' | 'dashdot';
+  startHead?: 'none' | 'open' | 'filled';
+  endHead?: 'none' | 'open' | 'filled';
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  markerSize?: number;
+  markerFormat?: 'decimal' | 'roman' | 'alpha';
+  markerShape?: 'circle' | 'square';
+  markerAppearance?: 'filled' | 'outlined' | 'ring';
+  blockSize?: number;
+  opacity?: number;
+  zoom?: number;
+  radius?: number;
+  spotlightShape?: 'rectangle' | 'ellipse';
+}
+
+export interface ImageEditorPreferences {
+  tools?: Partial<Record<ImagePreferenceTool, ImageToolPreferences>>;
+  mosaicMode?: 'brush' | 'rectangle';
+  magnifierMode?: 'circle' | 'ellipse';
+}
 
 export interface ExportSettings { pandocPath: string }
 export interface UpdateSettings { ignoredVersion: string }

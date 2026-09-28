@@ -14,6 +14,7 @@ import type {
   LayoutSettings,
   ExportSettings,
   UpdateSettings,
+  ImageEditorPreferences,
 } from '../core/ipc/types';
 import * as ipc from '../core/ipc/commands';
 import { onSettingsChanged } from '../core/ipc/events';
@@ -130,6 +131,7 @@ interface SettingsStore {
   setLayout: (patch: Partial<LayoutSettings>) => Promise<void>;
   setExport: (patch: Partial<ExportSettings>) => Promise<void>;
   setUpdates: (patch: Partial<UpdateSettings>) => Promise<void>;
+  setImageEditor: (patch: ImageEditorPreferences) => Promise<void>;
   setShortcuts: (overrides: ShortcutOverrides) => Promise<void>;
 
   // ── 内部：从广播更新 ──
@@ -149,6 +151,16 @@ function applyPatch(settings: Settings, patch: SettingsPatch): Settings {
     ...(patch.export && { export: { pandocPath: '', ...settings.export, ...patch.export } }),
     ...(patch.updates && { updates: { ignoredVersion: '', ...settings.updates, ...patch.updates } }),
     ...(patch.shortcuts && { shortcuts: { overrides: { ...settings.shortcuts?.overrides, ...patch.shortcuts.overrides } } }),
+    ...(patch.imageEditor && { imageEditor: {
+      ...settings.imageEditor,
+      ...patch.imageEditor,
+      ...(patch.imageEditor.tools && { tools: Object.fromEntries([
+        ...Object.entries(settings.imageEditor?.tools ?? {}),
+        ...Object.entries(patch.imageEditor.tools).map(([tool, fields]) => [
+          tool, { ...settings.imageEditor?.tools?.[tool as keyof NonNullable<ImageEditorPreferences['tools']>], ...fields },
+        ]),
+      ]) as NonNullable<ImageEditorPreferences['tools']> }),
+    } }),
   };
 }
 
@@ -274,6 +286,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setLayout: layout => update({ layout }),
     setExport: async patch => { const error = await submit({ export: patch }); if (error) throw new Error(error); },
     setUpdates: async patch => { const error = await submit({ updates: patch }); if (error) throw new Error(error); },
+    setImageEditor: async patch => { const error = await submit({ imageEditor: patch }); if (error) throw new Error(error); },
     _applyRemoteUpdate: remote => { replica.receive(remote); publish(); },
   };
 });

@@ -82,6 +82,7 @@
   white-space: nowrap;
 }
 .nb-ie-option-icon, .nb-ie-option-icon svg { display: block; width: 28px; height: 22px; }
+.nb-ie-option-icon:has(.nb-ie-arrow-preview), .nb-ie-option-icon svg.nb-ie-arrow-preview { width:32px; height:24px; }
 .nb-ie-properties .nb-ie-marker-preview {
   display: flex;
   align-items: center;

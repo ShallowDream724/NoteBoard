@@ -15,7 +15,7 @@ interface Props {
 }
 const TITLES: Record<ImageEditorTool, string> = { select: '选择标注', crop: '裁剪', pen: '铅笔', highlighter: '荧光笔', line: '箭头', polyline: '折线', rectangle: '矩形', ellipse: '椭圆', text: '文字', marker: '序号', mosaic: '马赛克', 'mosaic-brush': '马赛克', spotlight: '聚光灯', magnifier: '放大镜', eraser: '笔迹擦除', 'object-eraser': '对象擦除' };
 const COLORS = [
-  ['#ef4444', '红色'], ['#facc15', '黄色'], ['#3b82f6', '蓝色'], ['#22c55e', '绿色'],
+  ['#ef4444', '红色'], ['#f97316', '橘色'], ['#facc15', '黄色'], ['#22c55e', '绿色'], ['#3b82f6', '蓝色'],
   ['#111827', '黑色'], ['#ffffff', '白色'], ['#a855f7', '紫色'], ['#ec4899', '粉色'],
 ] as const;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -78,8 +78,12 @@ function ShapeIcon({ shape }: { shape: 'circle' | 'ellipse' | 'square' | 'rectan
 function PatternIcon({ pattern }: { pattern: LinePattern }) {
   return <svg viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true"><path d="M2 12 H30" strokeDasharray={pattern === 'dash' ? '7 5' : pattern === 'dashdot' ? '9 4 1 4' : undefined}/></svg>;
 }
-function ArrowIcon({ head }: { head: ArrowHead }) {
-  return <svg viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12 H25"/>{head !== 'none' && <path d="M23 5 L30 12 L23 19" fill={head === 'filled' ? 'currentColor' : 'none'}/>}</svg>;
+function ArrowIcon({ head, start = false }: { head: ArrowHead; start?: boolean }) {
+  return <svg className="nb-ie-arrow-preview" viewBox="0 0 32 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><g transform={start ? 'translate(32 0) scale(-1 1)' : undefined}>
+    {head === 'none' && <path d="M4 12H28"/>}
+    {head === 'open' && <path d="M4 12H27M20.5 5.5 27 12l-6.5 6.5"/>}
+    {head === 'filled' && <path d="M4 10.8h16V6.3c0-.9.7-1.2 1.4-.6l6.5 5.3c.7.6.7 1.4 0 2l-6.5 5.3c-.7.6-1.4.3-1.4-.6v-4.5H4a1.2 1.2 0 0 1 0-2.4Z" fill="currentColor" stroke="none"/>}
+  </g></svg>;
 }
 function AppearanceIcon({ shape, appearance }: { shape: MarkerShape; appearance: MarkerAppearance }) {
   const form = shape === 'circle' ? <circle cx="16" cy="12" r="9"/> : <rect x="7" y="3" width="18" height="18"/>;
@@ -105,7 +109,7 @@ export function ImageToolProperties({ tool, style, selected, disabled, onChange,
   const colored = ['pen', 'highlighter', 'line', 'polyline', 'rectangle', 'ellipse', 'text', 'marker', 'magnifier'].includes(tool);
   const strokeControl = tool === 'marker' && value.markerAppearance === 'filled' ? undefined : STROKE_CONTROLS[tool];
   const patternOptions = (['solid', 'dash', 'dashdot'] as const).map((pattern, index) => [pattern, ['实线', '虚线', '点划线'][index], <PatternIcon pattern={pattern}/>] as const);
-  const arrowOptions = (['none', 'open', 'filled'] as const).map((head, index) => [head, ['无', '空心', '实心'][index], <ArrowIcon head={head}/>] as const);
+  const arrowOptions = (start: boolean) => (['none', 'open', 'filled'] as const).map((head, index) => [head, ['无', '空心', '实心'][index], <ArrowIcon head={head} start={start}/>] as const);
   const activeMosaicMode = selected?.type === 'mosaic-brush' || tool === 'mosaic-brush' ? 'brush' : selected?.type === 'mosaic' ? 'rectangle' : mosaicMode;
   const activeMagnifierShape = selected?.type === 'magnifier'
     ? selected.rect && Math.abs(selected.rect.width - selected.rect.height) > 1 ? 'ellipse' : 'circle'
@@ -115,12 +119,12 @@ export function ImageToolProperties({ tool, style, selected, disabled, onChange,
   return <fieldset disabled={disabled} className="nb-ie-property-fields"><legend>{TITLES[tool]}</legend>
     {colored && <div className="nb-ie-color-control"><div className="nb-ie-control-heading">颜色</div><div className="nb-ie-swatches" role="group" aria-label="标注颜色">
       {COLORS.map(([color, name]) => <button key={color} type="button" className="nb-ie-swatch" aria-label={name} title={name} aria-pressed={value.color.toLowerCase() === color} style={{ backgroundColor: color }} onClick={() => onChange({ color })}/>)}
-      <label className="nb-ie-custom-color" title="自定义颜色"><input type="color" aria-label="自定义颜色" value={value.color} onChange={event => onChange({ color: event.target.value })}/><span aria-hidden="true">＋</span></label>
+      <label className="nb-ie-custom-color" title="自定义颜色"><input type="color" aria-label="自定义颜色" value={value.color} onFocus={onBeginChange} onBlur={onEndChange} onChange={event => onChange({ color: event.target.value })}/><span aria-hidden="true">＋</span></label>
     </div></div>}
     {tool === 'marker' && number('markerSize', '大小', 1, 2000, 8, 128)}
     {strokeControl && number('width', strokeControl.label, 1, strokeControl.max, 1, strokeControl.sliderMax)}
     {['pen', 'line', 'polyline', 'rectangle', 'ellipse', 'magnifier'].includes(tool) && <OptionGroup label="线型" value={value.pattern} options={patternOptions} onChange={pattern => onChange({ pattern })}/>}
-    {(tool === 'line' || tool === 'polyline') && <><OptionGroup label="起点箭头" value={value.startHead} options={arrowOptions} onChange={startHead => onChange({ startHead })}/><OptionGroup label="终点箭头" value={value.endHead} options={arrowOptions} onChange={endHead => onChange({ endHead })}/></>}
+    {(tool === 'line' || tool === 'polyline') && <><OptionGroup label="起点箭头" value={value.startHead} options={arrowOptions(true)} onChange={startHead => onChange({ startHead })}/><OptionGroup label="终点箭头" value={value.endHead} options={arrowOptions(false)} onChange={endHead => onChange({ endHead })}/></>}
     {tool === 'text' && <><label className="nb-ie-stack">文字内容<textarea aria-label="文字内容" rows={4} value={value.text} placeholder="点击画布输入文字" onChange={event => onChange({ text: event.target.value })}/></label>{number('fontSize', '字号', 1, 2000, 8, 96)}<div className="nb-ie-toggle-row"><button type="button" aria-label="文字加粗" title="加粗" aria-pressed={value.bold} onClick={() => onChange({ bold: !value.bold })}><b>B</b></button><button type="button" aria-label="文字倾斜" title="倾斜" aria-pressed={value.italic} onClick={() => onChange({ italic: !value.italic })}><i>I</i></button></div></>}
     {tool === 'marker' && <><label>{selected?.type === 'marker' ? '当前序号' : '下一序号'}<input aria-label={selected?.type === 'marker' ? '当前序号' : '下一序号'} type="number" min={1} max={999999} value={shownMarkerValue} onChange={event => setShownMarkerValue(clamp(Number(event.target.value) || 1, 1, 999999))}/></label>{selected?.type === 'marker' && nextMarkerValue !== undefined && <label>下一序号<input aria-label="下一序号" type="number" min={1} max={999999} value={nextMarkerValue} onChange={event => (onNextMarkerValue ?? onMarkerValue)(clamp(Number(event.target.value) || 1, 1, 999999))}/></label>}<label>编号<select aria-label="编号格式" value={value.markerFormat} onChange={event => onChange({ markerFormat: event.target.value as ToolStyle['markerFormat'] })}><option value="decimal">1, 2, 3</option><option value="roman">I, II, III</option><option value="alpha">A, B, C</option></select></label><OptionGroup label="形状" value={value.markerShape} options={[[ 'circle', '圆形', <ShapeIcon shape="circle"/> ], [ 'square', '方形', <ShapeIcon shape="square"/> ]]} onChange={markerShape => onChange({ markerShape })}/><OptionGroup label="样式" value={value.markerAppearance} options={(['filled', 'outlined', 'ring'] as const).map((appearance, index) => [appearance, ['实心', '空心', '双圈'][index], <AppearanceIcon shape={value.markerShape} appearance={appearance}/>] as const)} onChange={markerAppearance => onChange({ markerAppearance })}/><div className="nb-ie-marker-preview"><span>效果</span><span className={`nb-ie-marker-sample nb-ie-marker-${value.markerShape} nb-ie-marker-${value.markerAppearance}`} style={{ color: value.color }}><span>{formatMarkerValue(shownMarkerValue, value.markerFormat)}</span></span></div></>}
     {(tool === 'mosaic' || tool === 'mosaic-brush') && <><OptionGroup label="绘制方式" value={activeMosaicMode} options={[[ 'brush', '画笔', <MosaicIcon mode="brush"/> ], [ 'rectangle', '矩形', <MosaicIcon mode="rectangle"/> ]]} onChange={mode => onMosaicMode?.(mode)}/>{activeMosaicMode === 'brush' && number('width', '画笔粗细', 1, 2000, 1, 96)}{number('blockSize', '颗粒大小', 2, 500, 2, 32)}</>}

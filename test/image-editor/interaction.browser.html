@@ -3,6 +3,14 @@
 <body><script type="module">
 import { openImageEditor, suspendImageEditor } from '/src/features/image-editor/index';
 import { getImageEditorDraft } from '/src/features/image-editor/sessions';
+import { useSettingsStore } from '/src/stores/settingsStore';
+const preferenceWrites = [];
+useSettingsStore.setState({ setImageEditor: async patch => {
+  preferenceWrites.push(structuredClone(patch));
+  const settings = useSettingsStore.getState().settings, current = settings.imageEditor ?? {}, tools = { ...current.tools };
+  for (const [tool, value] of Object.entries(patch.tools ?? {})) tools[tool] = { ...tools[tool], ...value };
+  useSettingsStore.setState({ settings: { ...settings, imageEditor: { ...current, ...patch, tools } } });
+}});
 const canvas = new OffscreenCanvas(1200, 800), ctx = canvas.getContext('2d');
 ctx.fillStyle = '#f1d2bd'; ctx.fillRect(0, 0, 1200, 800);
 ctx.fillStyle = '#8aabb0'; ctx.fillRect(0, 460, 1200, 340);
@@ -10,12 +18,15 @@ ctx.fillStyle = '#d99156'; ctx.beginPath(); ctx.arc(920, 200, 80, 0, Math.PI * 2
 const source = URL.createObjectURL(await canvas.convertToBlob({ type: 'image/png' }));
 canvas.width = canvas.height = 0;
 window.qa = {
-  source, mode: 'success', saved: [],
-  open: (key = 'a') => openImageEditor({ key, src: source, name: '测试图片.png', onSave: async (blob, metadata) => {
+  source, mode: 'success', saved: [], preferenceWrites,
+  preferences: () => useSettingsStore.getState().settings.imageEditor,
+  open: (key = 'a', retainPreferences = false) => {
+    if (!retainPreferences) { const settings = useSettingsStore.getState().settings; useSettingsStore.setState({ settings: { ...settings, imageEditor: {} } }); }
+    return openImageEditor({ key, src: source, name: '测试图片.png', onSave: async (blob, metadata) => {
     if (window.qa.mode === 'cancel') return false;
     if (window.qa.mode === 'error') throw new Error('保存失败测试');
     window.qa.saved.push({ metadata, bytes: blob.size });
-  }}),
+  }}); },
   suspend: suspendImageEditor, draft: (key = 'a') => getImageEditorDraft(key),
 };
 document.body.style.margin = '0';
