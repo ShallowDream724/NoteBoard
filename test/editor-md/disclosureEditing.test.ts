@@ -31,15 +31,15 @@ function key(editor: Editor, key: string, options: KeyboardEventInit = {}) {
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); });
 
 describe('disclosure editing boundaries', () => {
-  it.each(['', 'Keep this title'])('removes an empty disclosure shell and retains title %j through undo and redo', title => {
+  it.each(['', 'Remove this title'])('deletes the entire empty disclosure including title %j through undo and redo', title => {
     const editor = create([p('before'), { ...fold(p()), attrs: { title } }, p('after')]);
     editor.commands.setTextSelection(position(editor, '') + 1);
     const before = editor.state.doc, cursor = editor.state.selection;
     expect(key(editor, 'Backspace').defaultPrevented).toBe(true);
-    expect(editor.getJSON().content?.map(node => node.type)).toEqual(['paragraph', 'paragraph', 'paragraph']);
-    expect(editor.state.doc.child(1).textContent).toBe(title);
-    expect(editor.state.selection.$from.parent.textContent).toBe(title);
-    expect(editor.state.selection.$from.parentOffset).toBe(title.length);
+    expect(editor.getJSON().content?.map(node => node.type)).toEqual(['paragraph', 'paragraph']);
+    expect(editor.state.doc.textContent).toBe('beforeafter');
+    expect(editor.state.selection.$from.parent.textContent).toBe('before');
+    expect(editor.state.selection.$from.parentOffset).toBe(6);
     const after = editor.state.doc;
     editor.commands.insertContent('next');
     editor.commands.undo(); expect(editor.state.doc.eq(after)).toBe(true);
@@ -103,13 +103,15 @@ describe('disclosure editing boundaries', () => {
     editor.commands.undo(); expect(editor.state.doc.toJSON()).toEqual(before.toJSON());
     editor.commands.redo(); expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
   });
-  it('retains separate container and paragraph annotations when removing the shell', () => {
+  it('removes the title and container metadata together and restores them on undo', () => {
     const editor = create([{ ...fold({ ...p(), attrs: { annotationId: 'body-note' } }), attrs: { title: 'title', annotationId: 'fold-note' } }, p('outside')]);
     editor.commands.setTextSelection(2);
+    const before = editor.state.doc;
     key(editor, 'Backspace');
-    expect(editor.state.doc.firstChild?.textContent).toBe('title');
-    expect(editor.state.doc.firstChild?.attrs.annotationId).toBe('fold-note');
-    expect(editor.state.doc.child(1).attrs.annotationId).toBe('body-note');
+    expect(editor.state.doc.childCount).toBe(1);
+    expect(editor.state.doc.firstChild?.textContent).toBe('outside');
+    expect(editor.state.doc.firstChild?.attrs.annotationId).toBeNull();
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
   });
   it('commits a newly cleared title before removing its shell so each action can be undone', () => {
     const editor = create([{ ...fold(p()), attrs: { title: 'previous title' } }, p('outside')]);

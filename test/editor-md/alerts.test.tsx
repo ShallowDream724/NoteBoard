@@ -11,7 +11,7 @@ import { canWrapBlockInCallout, completeAlert, insertCallout, updateCallout, wra
 import { transactionAddedCapability } from '../../src/features/document-format/capabilityGuard';
 import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 import { pandocSource } from '../../src/features/export/pandocDocument';
-import { CALLOUT_DEFAULTS, CALLOUT_EXTRA_ICONS, calloutStyle, isCalloutIcon } from '../../src/features/editor-md/calloutPresentation';
+import { CALLOUT_DEFAULTS, CALLOUT_EXTRA_ICONS, calloutStyle, calloutTitle, isCalloutIcon } from '../../src/features/editor-md/calloutPresentation';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { acceptCompletion, currentCompletions, startCompletion } from '@codemirror/autocomplete';
@@ -19,6 +19,7 @@ import { sourceTypingAssist } from '../../src/features/editor-md/sourceTypingAss
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import CalloutMenu from '../../src/features/editor-md/CalloutMenu';
+import { EmptyBlockInsertMenu } from '../../src/features/editor-md/EmptyBlockInsertMenu';
 
 describe('提示块内容与保存', () => {
   for (const kind of ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) {
@@ -88,20 +89,44 @@ describe('提示块内容与保存', () => {
     expect(calloutStyle({ backgroundColor: '#101010' })).toMatchObject({ '--callout-text': '#f8fafc' });
     expect(calloutStyle({ backgroundColor: '#101010', textColor: '#dc2626' })).toMatchObject({ '--callout-text': '#dc2626' });
   });
-  it('原生插入无标题，包裹保留原段落，属性更新单次撤销', () => {
+  it('原生插入默认显示标题，包裹保留原段落，属性更新单次撤销', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p><strong>原正文</strong></p>' });
     try {
       initializeEditorDocument(editor, '#!noteboard 1\n@block {"type":"paragraph"}\n', 'noteboard');
       expect(wrapBlockInCallout(editor, 0)).toBe(true);
-      expect(editor.state.doc.firstChild?.attrs.title).toBe('');
+      expect(editor.state.doc.firstChild?.attrs.title).toBeNull();
+      expect(calloutTitle(editor.state.doc.firstChild!.attrs)).toBe('Note');
       expect(editor.state.doc.firstChild?.firstChild?.firstChild?.marks[0]?.type.name).toBe('bold');
       expect(updateCallout(editor, 0, { title: '观察', icon: '🌱', textColor: '#15803d', borderColor: '#bbf7d0', backgroundColor: '#f0fdf4' })).toBe(true);
       expect(editor.state.doc.firstChild?.attrs.icon).toBe('🌱');
-      editor.commands.undo(); expect(editor.state.doc.firstChild?.attrs).toMatchObject({ title: '', icon: null, textColor: null });
+      editor.commands.undo(); expect(editor.state.doc.firstChild?.attrs).toMatchObject({ title: null, icon: null, textColor: null });
       editor.commands.undo(); expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
       editor.commands.setContent('<p></p>'); expect(insertCallout(editor)).toBe(true);
-      expect(editor.state.doc.firstChild?.attrs.title).toBe('');
+      expect(calloutTitle(editor.state.doc.firstChild!.attrs)).toBe('Note');
+      expect(updateCallout(editor, 0, { title: '' })).toBe(true);
+      const restored = parseNativeNode(serializeNativeNode(editor.state.doc), editor.schema);
+      expect(calloutTitle(restored.firstChild!.attrs)).toBe('');
     } finally { editor.destroy(); }
+  });
+  it('加号菜单保持文字在首位及原提示块入口，并插入带标题的提示块', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = document.createElement('div'); document.body.append(host); const root = createRoot(host);
+    const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p></p>', editorProps: { handleScrollToSelection: () => true } });
+    const close = vi.fn();
+    try {
+      initializeEditorDocument(editor, '#!noteboard 1\n@block {"type":"paragraph"}\n', 'noteboard');
+      await act(async () => root.render(<EmptyBlockInsertMenu editor={editor} pos={0} close={close}/>));
+      const groups = Array.from(host.querySelectorAll('.nb-empty-block-menu > [role="group"]'));
+      expect(groups.map(group => group.getAttribute('aria-label'))).toEqual(['文字与列表', '内容块', '图片', '公式与图表']);
+      const callout = Array.from(groups[1].querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === '提示块')!;
+      expect(callout.querySelector('.lucide-panel-top')).not.toBeNull();
+      await act(async () => callout.click());
+      expect(close).toHaveBeenCalledOnce();
+      expect(editor.state.doc.firstChild?.type.name).toBe('githubAlert');
+      expect(calloutTitle(editor.state.doc.firstChild!.attrs)).toBe('Note');
+      expect(editor.commands.undo()).toBe(true);
+      expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    } finally { await act(async () => root.unmount()); host.remove(); editor.destroy(); vi.unstubAllGlobals(); }
   });
   it('表格、分隔线和媒体不能转换为提示块，也不触发格式切换', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>正文</p>' });

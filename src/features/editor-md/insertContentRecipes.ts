@@ -1,6 +1,10 @@
 import type { JSONContent } from '@tiptap/core';
+import { CALLOUT_DEFAULTS } from './calloutPresentation';
 
 /** Shared initial content for the toolbar and contextual insertion entry points. */
+export function calloutContent(): JSONContent {
+  return { type: 'githubAlert', attrs: { ...CALLOUT_DEFAULTS }, content: [{ type: 'paragraph' }] };
+}
 export function mathContent(type: 'inline' | 'block'): JSONContent {
   return { type: type === 'inline' ? 'mathInline' : 'mathBlock', attrs: { latex: '' } };
 }

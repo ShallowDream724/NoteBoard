@@ -1,5 +1,6 @@
 import type { MathRendering } from './mathRendering';
 import { checkMathMarkup, checkMathSource } from './mathLimits';
+import { mathSourceErrorHint } from './mathDiagnostics';
 
 let loading: Promise<typeof import('katex')> | undefined;
 let chemistry: Promise<unknown> | undefined;
@@ -20,7 +21,9 @@ export async function renderMathMarkup(latex: string, displayMode: boolean): Pro
     // Reject oversized markup here, before a Worker posts it or export parses it.
     return checkMathMarkup(html) ?? { html };
   } catch (error) {
-    const message = error instanceof Error ? error.message.replace(/^KaTeX parse error: /, '') : '公式暂时无法排版';
+    const detail = error instanceof Error ? error.message.replace(/^KaTeX parse error: /, '') : '公式暂时无法排版';
+    const hint = mathSourceErrorHint(latex, detail);
+    const message = hint ? `${hint}\n${detail}` : detail;
     return { html: '', error: message.length > 512 ? message.slice(0, 512) + '…' : message };
   }
 }

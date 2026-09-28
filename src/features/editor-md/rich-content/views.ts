@@ -11,7 +11,7 @@ import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } fr
 import { continueContainerWriting, handleContainerTailKey, needsContainerTail } from '../containerEditing';
 import { observeImageViewport } from './imageVisibility';
 import { COLLECTION_STEP_EVENT } from './collectionNavigation';
-import { DisclosureEditing, unwrapEmptyDisclosure } from './disclosureEditing';
+import { DisclosureEditing, deleteEmptyDisclosure } from './disclosureEditing';
 import './richContent.css';
 import './carousel.css';
 import '../captionAddControl.css';
@@ -177,7 +177,7 @@ class DisclosureView implements NodeView {
       if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Backspace' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !this.title.value) {
         const pos = this.getPos();
-        if (pos !== undefined && unwrapEmptyDisclosure(this.editor, pos, '')) { event.preventDefault(); event.stopPropagation(); this.editor.view.focus(); }
+        if (pos !== undefined && deleteEmptyDisclosure(this.editor, pos, '')) { event.preventDefault(); event.stopPropagation(); this.editor.view.focus(); }
       } else if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); }
       else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); }
     };

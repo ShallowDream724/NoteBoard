@@ -52,11 +52,13 @@
 .math-node-editing:not(.math-node-display) { position: relative; z-index: 2; }
 .math-node-editing:not(.math-node-display) > .math-node-preview {
   position: fixed;
+  visibility: var(--math-preview-visibility, hidden);
   top: var(--math-preview-top, calc(100% + 5px));
   bottom: var(--math-preview-bottom, auto);
   left: var(--math-preview-left, 0);
   box-sizing: border-box;
   width: max-content;
+  min-width: 0;
   max-width: var(--math-preview-width, 80vw);
   max-height: min(18rem, var(--math-preview-height, 40vh));
   padding: 7px 11px;
@@ -66,6 +68,8 @@
   color: var(--editor-text);
   box-shadow: var(--shadow-md);
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
   text-align: left;
   line-height: 1.4;
 }

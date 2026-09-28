@@ -1,0 +1,4 @@
+/* Both layers are mounted under body. Editing commands must win visual and
+ * pointer hit testing over the table's adjacent selection/reordering rails. */
+.nb-table-select-overlay { z-index:900; }
+.nb-editor-selection-toolbar { z-index:1000; }

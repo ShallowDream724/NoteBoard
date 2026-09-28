@@ -5,7 +5,8 @@ import { dispatchDiscreteEdit } from './discreteEdit';
 import { closeHistory } from '@tiptap/pm/history';
 import type { AlertKind } from './alertPresentation';
 import { runWithDocumentCapability } from '../document-format/featureGate';
-import { calloutAttributes, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle, normalizeAlertInput, type CalloutAttributes } from './calloutPresentation';
+import { CALLOUT_DEFAULTS, calloutAttributes, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle, normalizeAlertInput, type CalloutAttributes } from './calloutPresentation';
+import { calloutContent } from './insertContentRecipes';
 
 /** Replace only the marker's quote and enter its body, preserving the surrounding document. */
 export function completeAlert(editor: Editor, kind: AlertKind): boolean {
@@ -22,11 +23,9 @@ export function completeAlert(editor: Editor, kind: AlertKind): boolean {
   return true;
 }
 
-/** A generic callout uses the existing node, with an explicitly hidden title. */
+/** A generic callout starts with the preset title; hiding it remains an explicit edit. */
 export function insertCallout(editor: Editor): boolean {
-  return runWithDocumentCapability(editor, 'callout', next => next.chain().focus().insertContent({
-    type: 'githubAlert', attrs: { title: '' }, content: [{ type: 'paragraph' }],
-  }).run());
+  return runWithDocumentCapability(editor, 'callout', next => next.chain().focus().insertContent(calloutContent()).run());
 }
 
 const calloutTextBlocks = new Set(['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'taskList']);
@@ -62,7 +61,7 @@ export function wrapBlockInCallout(editor: Editor, pos: number): boolean {
     if (!canWrapBlockInCallout(next, pos)) return false;
     const { state, view } = next, block = state.doc.nodeAt(pos), type = state.schema.nodes.githubAlert;
     if (!block?.isBlock || !type || ['githubAlert', 'documentPresentation', 'annotationStore'].includes(block.type.name)) return false;
-    const $pos = state.doc.resolve(pos), wrapped = type.create({ title: '' }, block);
+    const $pos = state.doc.resolve(pos), wrapped = type.create(CALLOUT_DEFAULTS, block);
     if (!$pos.parent.canReplaceWith($pos.index(), $pos.index() + 1, type)) return false;
     const tr = closeHistory(state.tr).replaceWith(pos, pos + block.nodeSize, wrapped);
     view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 1))).scrollIntoView());

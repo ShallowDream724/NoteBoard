@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react';
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const outDir = '.tmp/math-inline-editing-dist';
 if (!process.argv.includes('--skip-build')) await build({ configFile: false, plugins: [react()], worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/mathInlineEditing.html' } }, logLevel: 'error' });
-const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 4187 }, logLevel: 'error' });
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const results = [];
 try {
@@ -184,17 +184,60 @@ try {
   results.push({ long });
   await page.keyboard.press('Escape');
 
+  // Short, medium and wrapped sources share the same below-source placement.
+  // Bounds are the paragraph's line, not the larger scrolling viewport/gutter.
+  for (const width of [1000, 420]) {
+    await page.setViewportSize({ width, height: 740 });
+    for (const count of [2, 24, 80, 160]) {
+      await mount([inline(`a^2+b^2=c^2${String.raw`\text{`}${'啊'.repeat(count)}}`, '行内公式：若 ', '，三条边组成一个直角三角形。'), paragraph('下方正文允许被预览暂时遮挡。')]);
+      await page.locator('.math-node .katex-html').waitFor(); await open(); await frame();
+      const placement = await source.evaluate(element => {
+        const p = element.closest('p').getBoundingClientRect(), source = element.closest('.formula-source-inline').getBoundingClientRect();
+        const preview = element.closest('.math-node').querySelector('.math-node-preview'), box = preview.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, width: box.width, lineLeft: p.left, lineRight: p.right,
+          sourceBottom: source.bottom, sourceCenter: (source.left + source.right) / 2, scrollable: preview.scrollWidth > preview.clientWidth };
+      });
+      assert(placement.left >= placement.lineLeft - 1 && placement.right <= placement.lineRight + 1, JSON.stringify({ width, count, placement }));
+      assert(Math.abs(placement.top - placement.sourceBottom - 6) < 1, JSON.stringify(placement));
+      if (count === 160) assert(placement.scrollable, 'Long preview retains complete content in a local horizontal scroller');
+      if (width === 1000 && count === 24) await page.screenshot({ path: '.tmp/math-preview-below-source.png' });
+      results.push({ width, count, placement });
+    }
+  }
+  await page.setViewportSize({ width: 1000, height: 740 });
+  const headingFormula = inline(String.raw`\textbf{why}\\ \mathrm{L}`, '标题中的 ', ' 继续');
+  headingFormula.type = 'heading'; headingFormula.attrs = { level: 2 };
+  await mount([headingFormula, paragraph('下方正文')]);
+  // Large-table layout containment must not offset the fixed preview twice.
+  await page.locator('.ProseMirror').evaluate(element => { element.style.contain = 'layout'; element.style.transform = 'scale(.9)'; element.style.transformOrigin = 'top left'; });
+  await open(); await page.locator('.math-node-preview .katex-html').waitFor(); await frame();
+  const multiline = await source.evaluate(element => {
+    const source = element.closest('.formula-source-inline').getBoundingClientRect(), line = element.closest('h2').getBoundingClientRect();
+    const preview = element.closest('.math-node').querySelector('.math-node-preview').getBoundingClientRect();
+    return { sourceBottom: source.bottom, previewTop: preview.top, previewHeight: preview.height,
+      left: preview.left, right: preview.right, lineLeft: line.left, lineRight: line.right };
+  });
+  assert(multiline.left >= multiline.lineLeft - 1 && multiline.right <= multiline.lineRight + 1 && Math.abs(multiline.previewTop - multiline.sourceBottom - 6) < 1, JSON.stringify(multiline));
+  assert(multiline.previewHeight > 45, 'Explicit inline formula rows remain visible in the preview');
+  await source.fill(String.raw`\textbf{why}\mathbf{L｝`);
+  await page.locator('.math-node-preview [role=status]').filter({ hasText: '全角' }).waitFor();
+  assert.deepEqual((await state()).formulas, [String.raw`\textbf{why}\mathbf{L｝`]);
+  await source.fill(String.raw`\textbf{why}\mathbf{L}`);
+  await page.locator('.math-node-preview .katex-html').waitFor();
+  assert.equal(await page.locator('.math-node-preview [role=status]').count(), 0);
+  assert.deepEqual((await state()).formulas, [String.raw`\textbf{why}\mathbf{L}`]);
+  results.push({ multiline, fullwidthBraceHintAndRecovery: true });
   await mount([...Array.from({ length: 24 }, (_, i) => paragraph(`Leading line ${i}`)), inline('x^2+y^2'), ...Array.from({ length: 5 }, (_, i) => paragraph(`Trailing line ${i}`))]);
   await open();
   await page.locator('[data-editor-scroll]').evaluate(element => {
-    element.scrollTop += element.querySelector('.math-node').getBoundingClientRect().bottom - element.getBoundingClientRect().bottom + 12;
+    element.scrollTop += element.querySelector('.math-node').getBoundingClientRect().bottom - element.getBoundingClientRect().bottom + 75;
   }); await frame(); await frame();
   const edge = await page.locator('.math-node').evaluate(element => {
     const source = element.getBoundingClientRect(), preview = element.querySelector('.math-node-preview').getBoundingClientRect(), viewport = element.closest('[data-editor-scroll]').getBoundingClientRect();
     return { sourceTop: source.top, sourceBottom: source.bottom, previewTop: preview.top, previewBottom: preview.bottom, viewportTop: viewport.top, viewportBottom: viewport.bottom };
   });
   assert(edge.previewTop >= edge.viewportTop && edge.previewBottom <= edge.viewportBottom, JSON.stringify(edge));
-  assert(edge.previewBottom < edge.sourceTop, `Preview should flip above near the bottom: ${JSON.stringify(edge)}`);
+  assert(edge.previewTop > edge.sourceBottom, `Preview must stay below source near the bottom: ${JSON.stringify(edge)}`);
   results.push({ edge });
   await page.screenshot({ path: '.tmp/math-inline-edge.png' });
   await page.setViewportSize({ width: 420, height: 740 }); await frame(); await frame();

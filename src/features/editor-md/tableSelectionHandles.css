@@ -1,4 +1,6 @@
-.nb-table-select-overlay { position:fixed; inset:0; z-index:1001; pointer-events:none; }
+@import './editorOverlayLayers.css';
+
+.nb-table-select-overlay { position:fixed; inset:0; pointer-events:none; }
 .nb-table-select-overlay[hidden] { display:none; }
 .nb-table-select-handle { position:fixed; pointer-events:auto; border:0; padding:0; border-radius:4px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; }
 .nb-table-select-handle::before { content:''; position:absolute; border-radius:3px; background:var(--editor-border,#dfe3e9); transition:background 100ms ease; }

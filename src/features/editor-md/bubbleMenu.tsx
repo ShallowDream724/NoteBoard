@@ -3,6 +3,8 @@
 // 详见 docs/09-开发路线图.md 8.8, 8.9
 
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import './editorOverlayLayers.css';
 import { TextSelection, type Transaction } from '@tiptap/pm/state';
 import { isEmbeddedEditing } from './embeddedEditor';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -247,7 +249,7 @@ export function EditorBubbleMenu({
       appendTo={editor.view.dom.ownerDocument.body}
       shouldShow={shouldShow}
       options={bubbleMenuOptions}
-      style={{ zIndex: 1000 }}
+      className="nb-editor-selection-toolbar"
     >
       {enabled && editor.state.selection instanceof TextSelection && !editor.state.selection.empty && <div
         ref={bubbleRoot} role="toolbar" aria-label="文字工具栏" data-caption-toolbar={inlineOnly || undefined}
@@ -559,9 +561,10 @@ export function TableToolbar({ editor }: { editor: Editor }) {
   const canMerge = nativeFeaturesVisible && isCellSelection(editor.state.selection) && editor.can().mergeCells();
   const canSplit = editor.can().splitCell();
 
-  return (
+  return createPortal(
     <div
       ref={toolbar}
+      className="nb-editor-selection-toolbar"
       role="toolbar" aria-label="表格工具栏"
       style={{
         position: 'fixed',
@@ -578,7 +581,6 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         borderRadius: 8,
         boxShadow: '0 6px 20px -2px rgba(0, 0, 0, 0.14), 0 2px 6px -1px rgba(0, 0, 0, 0.08)',
         backdropFilter: 'blur(8px)',
-        zIndex: 1000,
         gap: 2,
         userSelect: 'none',
         transition: 'opacity 120ms ease',
@@ -621,6 +623,6 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         onClick={() => deleteTableSelection(editor)}
         danger
       />
-    </div>
+    </div>, editor.view.dom.ownerDocument.body
   );
 }
