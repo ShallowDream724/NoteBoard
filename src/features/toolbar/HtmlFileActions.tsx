@@ -26,7 +26,7 @@ export function HtmlFileActions({ docKey }: { docKey: string }) {
     showToast('已复制 HTML 源码', 'success');
   };
   return <>
-    <ToolbarButton icon={<ExternalLink size={15} />} label="默认应用打开" compactLabel
+    <ToolbarButton icon={<ExternalLink size={15} />} label="浏览器打开" compactLabel
       title="用系统默认应用打开已保存的 HTML（通常为浏览器）" disabled={busy || !isFile}
       onClick={() => run(() => openWithDefaultApp(docKey))} />
     <ToolbarButton icon={<Save size={15} />} title="保存 HTML 源码" shortcut="Ctrl+S"
@@ -35,7 +35,8 @@ export function HtmlFileActions({ docKey }: { docKey: string }) {
       onClick={() => run(copySource)} />
     <ToolbarButton icon={<SaveAll size={15} />} title="HTML 另存为" shortcut="Ctrl+Shift+S" disabled={busy}
       onClick={() => run(async () => (await import('../editor-code/orchestration/saveDocument')).saveAs(docKey, ''))} />
-    <ToolbarButton icon={<FolderOpen size={15} />} title="在资源管理器中显示" disabled={busy || !isFile}
+    <ToolbarButton icon={<FolderOpen size={15} />} label="打开所在文件夹" compactLabel
+      title="在资源管理器中显示" disabled={busy || !isFile}
       onClick={() => run(() => revealInExplorer(docKey))} />
     <ToolbarDivider />
   </>;

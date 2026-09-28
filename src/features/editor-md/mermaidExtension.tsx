@@ -11,16 +11,65 @@
 // 6. Skeleton 占位
 // 7. 主题切换时重渲染
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, type KeyboardEvent } from 'react';
 import { dispatchEditorShortcut } from './dispatchEditorShortcut';
+import { useNativeSourceInput } from './useNativeSourceInput';
 import { MermaidNode } from './documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
+import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
+import { DEFAULT_MERMAID_CODE } from './insertContentRecipes';
 import { observe } from './viewportActivation';
 import { scheduleTask, cancelTask } from './viewportWorkScheduler';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SvgDiagramViewport } from '../diagram-preview/SvgDiagramViewport';
 import { AnnotationMarker } from './annotations/AnnotationMarker';
+
+interface SourceRequest { position: number; token: object }
+const sourceRequestKey = new PluginKey<SourceRequest | null>('mermaid-source-request');
+const consumedSourceRequests = new WeakSet<object>();
+
+/** A newly inserted template opens its source without persisting UI state in the node. */
+function mermaidSourceRequestPlugin() {
+  return new Plugin<SourceRequest | null>({
+    key: sourceRequestKey,
+    state: {
+      init: () => null,
+      apply(tr, previous) {
+        const requested = tr.getMeta(sourceRequestKey) as SourceRequest | undefined;
+        if (requested) return requested;
+        if (!previous || consumedSourceRequests.has(previous.token)) return null;
+        const position = tr.mapping.map(previous.position);
+        return tr.doc.nodeAt(position)?.type.name === 'mermaidBlock' ? { ...previous, position } : null;
+      },
+    },
+    appendTransaction(transactions, _oldState, newState) {
+      let position: number | null = null;
+      transactions.forEach((tr, transactionIndex) => {
+        if (!tr.docChanged || tr.getMeta('noteboard-document-replacement')) return;
+        tr.steps.forEach((step, stepIndex) => {
+          const before = tr.docs[stepIndex], after = tr.docs[stepIndex + 1] ?? tr.doc;
+          step.getMap().forEach((from, to, changedFrom, changedTo) => {
+            if (position != null || changedFrom === changedTo) return;
+            after.nodesBetween(changedFrom, changedTo, (candidate, candidatePos) => {
+              if (position != null) return false;
+              if (candidate.type.name !== 'mermaidBlock' || candidate.attrs.code !== DEFAULT_MERMAID_CODE) return true;
+              if (from !== to && before.nodeAt(from)?.type.name === 'mermaidBlock') return false;
+              let mapped = tr.mapping.slice(stepIndex + 1).map(candidatePos);
+              for (let index = transactionIndex + 1; index < transactions.length; index++) mapped = transactions[index].mapping.map(mapped);
+              if (newState.doc.nodeAt(mapped)?.type.name === 'mermaidBlock') position = mapped;
+              return false;
+            });
+          });
+        });
+      });
+      if (position == null) return null;
+      return newState.tr.setSelection(NodeSelection.create(newState.doc, position))
+        .setMeta(sourceRequestKey, { position, token: {} } satisfies SourceRequest)
+        .setMeta('addToHistory', false);
+    },
+  });
+}
 
 /** 🔴 S14：任务身份 = editor 实例（文档）+ 节点位置——不同节点互不覆盖 */
 const editorTaskIds = new WeakMap<object, number>();
@@ -50,6 +99,38 @@ import { buildExportFileName, type ChartImageSource } from '../export/chartExpor
 
 // ── React NodeView ──
 
+function MermaidSourceField({ value, onChange, onKeyDown, autoFocus = true, readOnly = false, inline = false }: {
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  autoFocus?: boolean;
+  readOnly?: boolean;
+  inline?: boolean;
+}) {
+  const { input, composing, inputProps } = useNativeSourceInput({ value, onChange });
+  useEffect(() => {
+    if (!autoFocus) return;
+    // TipTap's insertion focus runs in the next frame; focus after it.
+    const frame = requestAnimationFrame(() => input.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, input]);
+  return <textarea
+    {...inputProps}
+    aria-label="Mermaid 图表源码"
+    data-shortcuts-suspended
+    readOnly={readOnly}
+    placeholder="输入 Mermaid 语法，例如:&#10;graph TD&#10;    A[开始] --> B[结束]"
+    onKeyDown={event => { if (!composing.current && !event.nativeEvent.isComposing && event.keyCode !== 229) onKeyDown(event); }}
+    style={{
+      width: '100%', minHeight: 140, padding: '10px 14px',
+      fontFamily: 'var(--mono-font-family, monospace)', fontSize: 'var(--mono-font-size, 13px)',
+      border: 0, background: inline ? 'var(--editor-surface)' : 'transparent', color: 'var(--editor-text, #1e293b)',
+      resize: 'vertical', outline: 'none', lineHeight: 1.5,
+      display: inline ? 'block' : undefined, boxSizing: 'border-box',
+    }}
+  />;
+}
+
 function MermaidComponent({ node, updateAttributes, selected, editor, getPos, decorations }: NodeViewProps) {
   const active = useEditorActive();
   const enabled = useSettingsStore(state => state.settings.editor.enableMermaid);
@@ -59,7 +140,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editValue, setEditValue] = useState('');
+  const initialCodeRef = useRef('');
   const [inViewport, setInViewport] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -68,6 +149,22 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
   const renderTokenRef = useRef<number>(0);
 
   const code = node.attrs.code || '';
+
+  const beginEditing = useCallback(() => {
+    initialCodeRef.current = code;
+    setEditing(true);
+  }, [code]);
+  const finishEditing = useCallback(() => setEditing(false), []);
+  const cancelEditing = useCallback(() => {
+    if (code !== initialCodeRef.current) updateAttributes({ code: initialCodeRef.current });
+    setEditing(false);
+  }, [code, updateAttributes]);
+  useLayoutEffect(() => {
+    const request = sourceRequestKey.getState(editor.state);
+    if (!request || request.position !== getPos() || consumedSourceRequests.has(request.token)) return;
+    consumedSourceRequests.add(request.token);
+    beginEditing();
+  });
 
   const doRender = useCallback(async (currentCode: string, signal: AbortSignal) => {
     if (signal.aborted) return;
@@ -118,17 +215,17 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
   // 只在视口内时渲染
   useEffect(() => {
     if (!enabled) { setSvg(null); setError(null); setLoading(false); renderedSignatureRef.current = null; return; }
-    if (!active || !inViewport) return;
+    if (!active || !inViewport || editing) return;
     const controller = new AbortController();
     const identity = `mermaid:${editorTaskId(editor)}:${getPos()}`;
     scheduleTask(identity, () => doRender(code, controller.signal));
     // 切走时取消尚未执行的展示任务；正文/保存链不受影响。
     return () => { cancelTask(identity); controller.abort(); renderTokenRef.current++; };
-  }, [enabled, active, inViewport, code, doRender, editor, getPos]);
+  }, [enabled, active, inViewport, editing, code, doRender, editor, getPos]);
 
   // 主题切换时重渲染
   useEffect(() => {
-    if (!enabled || !active || !inViewport || !code) return;
+    if (!enabled || !active || !inViewport || editing || !code) return;
     const controller = new AbortController();
     const identity = `mermaid:${editorTaskId(editor)}:${getPos()}`;
     const observer = new MutationObserver(() => {
@@ -136,30 +233,29 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => { observer.disconnect(); cancelTask(identity); controller.abort(); renderTokenRef.current++; };
-  }, [enabled, active, inViewport, code, doRender, editor, getPos]);
+  }, [enabled, active, inViewport, editing, code, doRender, editor, getPos]);
 
   // 导出来源：渲染出 SVG 后复制/导出才可用
   const exportSource: ChartImageSource | null = svg ? { kind: 'svg', svg } : null;
   const exportFileName = buildExportFileName('', 'mermaid');
 
-  if (!enabled && !editing) return <NodeViewWrapper as="div" contentEditable={false} style={{ margin: '12px 0' }}>
+  if (!enabled && !editing) return <NodeViewWrapper as="div" data-editor-control="true" contentEditable={false} style={{ margin: '12px 0' }}>
     <div ref={containerRef} style={{ border: '1px solid var(--editor-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', fontSize: 12, color: 'var(--editor-text-muted)' }}><span>Mermaid</span><AnnotationMarker decorations={decorations}/></div>
-      <textarea aria-label="Mermaid 图表源码" value={code} readOnly={!editor.isEditable}
-        onChange={event => updateAttributes({ code: event.target.value })}
+      <MermaidSourceField value={code} onChange={value => updateAttributes({ code: value })} autoFocus={false} inline readOnly={!editor.isEditable}
         onKeyDown={event => {
           if ((event.ctrlKey || event.metaKey) && ['z', 'y'].includes(event.key.toLowerCase())) {
             event.preventDefault(); event.stopPropagation();
             dispatchEditorShortcut(editor.view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
           }
         }}
-        style={{ display: 'block', width: '100%', boxSizing: 'border-box', minHeight: 140, padding: '10px 14px', border: 0, resize: 'vertical', background: 'var(--editor-surface)', color: 'var(--editor-text)', fontFamily: 'var(--mono-font-family)', fontSize: 'var(--mono-font-size)', lineHeight: 1.5 }} />
+      />
     </div>
   </NodeViewWrapper>;
 
   if (editing) {
     return (
-      <NodeViewWrapper as="div" style={{ display: 'block', margin: '12px 0' }}>
+      <NodeViewWrapper as="div" data-editor-control="true" contentEditable={false} style={{ display: 'block', margin: '12px 0' }}>
         <div
           style={{
             border: '1px solid var(--editor-accent, #3b82f6)',
@@ -187,10 +283,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               <AnnotationMarker decorations={decorations}/>
               <button
                 type="button"
-                onClick={() => {
-                  updateAttributes({ code: editValue });
-                  setEditing(false);
-                }}
+                onClick={finishEditing}
                 style={{
                   padding: '3px 10px',
                   borderRadius: 4,
@@ -206,7 +299,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               </button>
               <button
                 type="button"
-                onClick={() => setEditing(false)}
+                onClick={cancelEditing}
                 style={{
                   padding: '3px 8px',
                   borderRadius: 4,
@@ -221,33 +314,27 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               </button>
             </div>
           </div>
-          <textarea
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            placeholder="输入 Mermaid 语法，例如:&#10;graph TD&#10;    A[开始] --> B[结束]"
+          <MermaidSourceField
+            value={code}
+            onChange={value => updateAttributes({ code: value })}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.preventDefault();
-                setEditing(false);
+                cancelEditing();
               }
               if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                 e.preventDefault();
-                updateAttributes({ code: editValue });
-                setEditing(false);
+                finishEditing();
               }
-            }}
-            style={{
-              width: '100%',
-              minHeight: 140,
-              padding: '10px 14px',
-              fontFamily: 'var(--mono-font-family, monospace)',
-              fontSize: 'var(--mono-font-size, 13px)',
-              border: 'none',
-              background: 'transparent',
-              color: 'var(--editor-text, #1e293b)',
-              resize: 'vertical',
-              outline: 'none',
-              lineHeight: 1.5,
+              if ((e.ctrlKey || e.metaKey) && ['z', 'y'].includes(e.key.toLowerCase())) {
+                e.preventDefault(); e.stopPropagation();
+                if (code === initialCodeRef.current && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                  setEditing(false);
+                  editor.view.focus();
+                  return;
+                }
+                dispatchEditorShortcut(editor.view, e.shiftKey || e.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
+              }
             }}
           />
         </div>
@@ -297,10 +384,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               <button
                 type="button"
                 className="nb-diagram-action-btn"
-                onClick={() => {
-                  setEditValue(code);
-                  setEditing(true);
-                }}
+                onClick={beginEditing}
                 aria-label="编辑图表源码"
               >
                 <Edit2 size={12} />
@@ -336,10 +420,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
 
         {/* 内容展示区 */}
         <div
-          onDoubleClick={() => {
-            setEditValue(code);
-            setEditing(true);
-          }}
+          onDoubleClick={beginEditing}
           style={{
             padding: '16px',
             display: 'flex',
@@ -483,7 +564,11 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               justifyContent: 'center',
               padding: 40,
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              // The viewport fills this area; its empty space is still backdrop.
+              if (!(e.target instanceof Element) || !e.target.closest('svg')) setFullscreen(false);
+            }}
           >
             {svg && <SvgDiagramViewport key={zoomReset} svg={svg} zoom={zoom} onZoom={setZoom} fullscreen/>}
           </div>
@@ -498,6 +583,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
 /** Mermaid 块节点 */
 export const MermaidBlock = MermaidNode.extend({
   addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; },
+  addProseMirrorPlugins() { return [...(this.parent?.() ?? []), mermaidSourceRequestPlugin()]; },
   addNodeView() {
     return ReactNodeViewRenderer(MermaidComponent);
   },

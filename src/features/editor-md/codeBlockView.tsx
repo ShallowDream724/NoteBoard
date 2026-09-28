@@ -16,6 +16,7 @@ import { createCodeBlockControlsPlugin, useCodeBlockControls } from './codeBlock
 import './codeBlockView.css';
 import { NodeSelection } from '@tiptap/pm/state';
 import { useCodeViewState } from './codeViewState';
+import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 
 function CodeBlockComponent({ node, updateAttributes, editor, getPos, decorations }: NodeViewProps) {
   const contentRef = useRef<HTMLPreElement>(null);
@@ -177,7 +178,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
           }}
         >
           <button type="button" className="nb-code-block-language" aria-label="选择代码语言" aria-expanded={showDropdown} onClick={() => setShowDropdown(!showDropdown)}>
-          <span style={{ fontWeight: 500, color: 'var(--editor-text)' }}>
+          <span style={{ fontWeight: 600, color: 'var(--editor-accent, #3b82f6)' }}>
             {getCodeLanguage(language)?.label ?? language}
           </span>
           <ChevronDown size={12} />
@@ -379,6 +380,12 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
         ref={contentRef}
         hidden={collapsed}
         className="nb-code-block-content"
+        onKeyDownCapture={event => {
+          if (event.nativeEvent.isComposing || event.keyCode === 229 || event.altKey) return;
+          if (!(event.ctrlKey || event.metaKey) || !['z', 'y'].includes(event.key.toLowerCase())) return;
+          event.preventDefault(); event.stopPropagation();
+          dispatchEditorShortcut(editor.view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
+        }}
         style={{
           margin: 0,
           padding: '12px 16px 12px calc(38px + var(--nb-code-line-digits, 2) * .85ch)',

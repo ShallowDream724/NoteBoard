@@ -1,14 +1,22 @@
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+afterEach(() => { vi.unstubAllGlobals(); });
+
+let workerCase = 0;
+// Re-run the entry in a fresh scope while keeping its grammar dependencies
+// together. Resetting only Vite modules leaves external ProseMirror registries
+// alive and incorrectly registers every custom Step a second time.
+async function startWorker() {
+  await import(/* @vite-ignore */ `../../src/features/export/documentWorker.ts?case=${workerCase++}`);
+}
 
 it('preserves completed task checks in the production worker DOM', async () => {
   const postMessage = vi.fn();
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
   vi.stubGlobal('self', scope);
   for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
-  await import('../../src/features/export/documentWorker');
+  await startWorker();
   await scope.onmessage!({ data: { type: 'convert', markdown: '- [x] 已完成\n- [ ] 待完成', title: 'Tasks', directory: '', format: 'html' } });
   const message = postMessage.mock.calls.at(-1)?.[0];
   expect(message?.type, JSON.stringify(message)).toBe('result');
@@ -25,7 +33,7 @@ it('converts Markdown in the real worker entry without browser window events or 
   const nestedWorker = vi.fn(() => { throw new Error('unexpected nested worker'); });
   vi.stubGlobal('self', scope); vi.stubGlobal('Worker', nestedWorker);
   for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
-  await import('../../src/features/export/documentWorker');
+  await startWorker();
   expect(typeof window.addEventListener).toBe('undefined');
   await scope.onmessage!({ data: { type: 'convert', markdown: '# Export\n\n```js\nconst value = 42;\n```\n\n$x^2$', title: 'test', directory: '', format: 'html' } });
   const message = postMessage.mock.calls.at(-1)?.[0];
@@ -46,7 +54,7 @@ it.each(['md', 'pandoc', 'standalone-html', 'html'])('decodes NB source inside t
     { type: 'paragraph', content: [{ type: 'text', text: 'NativeWorkerBody' }] },
     { type: 'nativeError', attrs: { raw: '@broken source fragment', message: 'Malformed record' } },
   ] });
-  await import('../../src/features/export/documentWorker');
+  await startWorker();
   await scope.onmessage!({ data: { type: 'convert', inputFormat: 'noteboard', markdown: source, title: 'Native', directory: '', format } });
   const message = postMessage.mock.calls.at(-1)?.[0];
   expect(message?.type, JSON.stringify(message)).toBe('result');
@@ -61,7 +69,7 @@ it('keeps NB-looking Markdown prose as Markdown when its input format is explici
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
   vi.stubGlobal('self', scope);
   for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
-  await import('../../src/features/export/documentWorker');
+  await startWorker();
   await scope.onmessage!({ data: { type: 'convert', inputFormat: 'markdown', markdown: '#!noteboard 1\n\nOrdinary prose', title: 'Example', directory: '', format: 'md' } });
   expect(postMessage.mock.calls.at(-1)?.[0]).toMatchObject({ type: 'result', result: expect.stringContaining('#!noteboard 1') });
 });
@@ -71,7 +79,7 @@ it('waits for one real-browser diagram batch before serializing its final print 
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
   vi.stubGlobal('self', scope);
   for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
-  await import('../../src/features/export/documentWorker');
+  await startWorker();
   const converting = scope.onmessage!({ data: { type: 'convert', markdown: '```mermaid\ngraph LR\nA-->B\n```', title: 'Diagram', directory: '', format: 'html' } });
   await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'diagrams', requests: [{ kind: 'mermaid', code: 'graph LR\nA-->B' }] }));
   expect(postMessage.mock.calls.some(call => call[0].type === 'result')).toBe(false);

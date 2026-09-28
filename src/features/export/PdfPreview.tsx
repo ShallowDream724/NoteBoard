@@ -56,8 +56,8 @@ function Page({ pdf, index, width, locations, selected, onSelect, issues }: {
 }
 const EMPTY_LOCATIONS: ItemLocation[] = [];
 
-export function PdfPreview({ bytes, receipt, onPages, onSettled, selected, navigation, onSelect, issues }: {
-  bytes?: Uint8Array; receipt?: PdfReceipt; onPages: (pages: number) => void; onSettled?: (receipt: PdfReceipt, error?: string) => void; selected?: string; navigation?: { id: string; serial: number }; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
+export function PdfPreview({ bytes, receipt, onSettled, selected, navigation, onSelect, issues }: {
+  bytes?: Uint8Array; receipt?: PdfReceipt; onSettled?: (receipt: PdfReceipt, error?: string) => void; selected?: string; navigation?: { id: string; serial: number }; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
 }) {
   const [loaded, setLoaded] = useState<{ pdf: PDFDocumentProxy; width: number; height: number; key: string; receipt?: PdfReceipt; task: PDFDocumentLoadingTask } | null>(null);
   const tasks = useRef(new Set<PDFDocumentLoadingTask>());
@@ -76,7 +76,7 @@ export function PdfPreview({ bytes, receipt, onPages, onSettled, selected, navig
       if (!disposed) {
         published = true;
         const previous = displayed.current; displayed.current = task;
-        setLoaded({ pdf, width: viewport.width, height: viewport.height, key: documentKey, receipt, task }); onPages(pdf.numPages); setError('');
+        setLoaded({ pdf, width: viewport.width, height: viewport.height, key: documentKey, receipt, task }); setError('');
         // Release the old native reader before allowing the next revision to
         // prune its file. Retained canvases alone do not establish ownership.
         if (previous && tasks.current.delete(previous)) await previous.destroy();
@@ -85,7 +85,7 @@ export function PdfPreview({ bytes, receipt, onPages, onSettled, selected, navig
     }).catch(fail);
     // Keep the previous page geometry and canvas until the new PDF is ready.
     return () => { disposed = true; if (!published && tasks.current.delete(task)) { range?.abort(); void task.destroy(); } };
-  }, [bytes, receipt, documentKey, onPages, onSettled]);
+  }, [bytes, receipt, documentKey, onSettled]);
   useEffect(() => { const live = tasks.current; return () => { live.forEach(task => { void task.destroy(); }); live.clear(); }; }, []);
   useEffect(() => {
     const root = scroll.current!;

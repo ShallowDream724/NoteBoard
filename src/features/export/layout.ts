@@ -101,7 +101,7 @@ export function createLayoutSession(root: HTMLElement) {
   };
   return { async update(options: PdfOptions): Promise<LayoutReport> {
     const numberBandChanged = previous && previous.marginMm < 8 && previous.pageNumbers !== options.pageNumbers;
-    const global = !previous || numberBandChanged || ['paper', 'landscape', 'marginMm', 'fontPt', 'lineHeight'].some(key => options[key as keyof PdfOptions] !== previous![key as keyof PdfOptions]);
+    const global = !previous || numberBandChanged || ['paper', 'landscape', 'marginMm', 'horizontalMarginMm', 'fontPt', 'lineHeight', 'paragraphSpacingEm'].some(key => options[key as keyof PdfOptions] !== previous![key as keyof PdfOptions]);
     const changed = new Set<string>();
     if (global) { itemIndex.forEach((_elements, id) => changed.add(id)); adjustable.clear(); issues.clear(); }
     else for (const id of new Set([...Object.keys(previous!.items), ...Object.keys(options.items)])) if (previous!.items[id] !== options.items[id]) changed.add(id);
@@ -116,7 +116,7 @@ export function createLayoutSession(root: HTMLElement) {
     const tableIds = new Set([...changed].filter(id => groups.has(id) || elements(id).some(element => element.tagName === 'TABLE')));
     tableIds.forEach(reset); changed.forEach(id => { if (!tableIds.has(id)) reset(id); });
     const [paperWidth, paperHeight] = paperSize(options);
-    const width = (paperWidth - options.marginMm * 2) * 96 / 25.4;
+    const width = (paperWidth - options.horizontalMarginMm * 2) * 96 / 25.4;
     const numberBand = options.pageNumbers ? Math.max(0, 8 - options.marginMm) : 0;
     const pageHeight = (paperHeight - options.marginMm * 2 - numberBand) * 96 / 25.4;
     const issue = (id: string, message: string, blocking = true) => { if (id) adjustable.add(id); issues.set(id, [...(issues.get(id) ?? []), { id, message, blocking }]); };

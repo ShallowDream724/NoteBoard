@@ -74,6 +74,16 @@ describe('table selection handles', () => {
     expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
   });
 
+  it('tracks the pointer immediately across the gap between a cell and its rail', async () => {
+    const { table, cells, hover } = create(false, true);
+    const [row, column] = await hover(cells[0], 220, 120);
+    expect([row.style.left, column.style.top]).toEqual(['178px', '78px']);
+    table.parentElement!.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 380, clientY: 180 }));
+    await new Promise(requestAnimationFrame);
+    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
+    expect(row.parentElement?.hidden).toBe(false);
+  });
+
   it('keeps the right and bottom rails usable when the scroll viewport clips the table', async () => {
     const { cells, hover } = create();
     vi.mocked(document.documentElement.getBoundingClientRect).mockReturnValue(rect(200, 100, 130, 90));

@@ -19,9 +19,22 @@ import { richContentGrammar } from './rich-content/schema';
 import { annotationSchemaExtensions } from './annotations/schema';
 import { NativeError } from './nativeError';
 import { BlockAppearance } from '../document-style/blockAppearanceSchema';
+import { inlineCodeComposition, inlineCodeInputRule, mapInlineCodeComposition } from './inlineCodeInput';
+import { Plugin } from '@tiptap/pm/state';
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
-const MarkdownCode = Code.extend({ excludes: '', addKeyboardShortcuts() { return {}; } });
+const MarkdownCode = Code.extend({
+  excludes: '',
+  addKeyboardShortcuts() { return {}; },
+  addInputRules() { return [inlineCodeInputRule(this.editor, this.type)]; },
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [new Plugin({
+      state: { init: () => null, apply(tr) { mapInlineCodeComposition(editor, tr); return null; } },
+      props: { handleDOMEvents: inlineCodeComposition(editor) },
+    })];
+  },
+});
 const MarkdownBlockquote = Blockquote.extend({ addKeyboardShortcuts() { return {}; } });
 const PresentedMarkdown = Markdown.extend({ onBeforeCreate(event) {
   const content = this.editor.options.content, contentType = this.editor.options.contentType;

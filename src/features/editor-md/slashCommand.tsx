@@ -4,7 +4,7 @@
 // 兼顾全局模糊搜索直达能力（如直接输入 /h2, /ts, /todo, /bg 快速匹配执行）
 // 详见 docs/09-开发路线图.md 8.7
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
 import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import { ReactRenderer } from '@tiptap/react';
@@ -39,6 +39,9 @@ import {
   ChevronRight,
   Boxes,
   BarChart3,
+  GalleryHorizontalEnd,
+  Grid2X2,
+  PanelTopClose,
 } from 'lucide-react';
 import { insertLocalImageWithDialog } from './imagePaste';
 import { insertDocumentTable } from './insertDocumentTable';
@@ -46,6 +49,7 @@ import { runDiscreteEdit } from './discreteEdit';
 import { useWindowStore } from '../../stores/windowStore';
 import { emit } from '../../core/emitter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
+import { IMAGE_TEMPLATES, insertDisclosure, insertImageCollection } from './rich-content/commands';
 
 /** 叶子具体执行命令项 */
 export interface LeafCommandItem {
@@ -195,7 +199,7 @@ const LIST_LEAFS: LeafCommandItem[] = [
 const ALERT_LEAFS: LeafCommandItem[] = [
   {
     id: 'alertNote',
-    label: 'Note 提示块',
+    label: 'Note',
     description: '用于补充说明或背景信息',
     groupId: 'alerts',
     groupLabel: '提示块',
@@ -209,7 +213,7 @@ const ALERT_LEAFS: LeafCommandItem[] = [
   },
   {
     id: 'alertTip',
-    label: 'Tip 技巧建议',
+    label: 'Tip',
     description: '提供操作技巧与最佳实践',
     groupId: 'alerts',
     groupLabel: '提示块',
@@ -223,7 +227,7 @@ const ALERT_LEAFS: LeafCommandItem[] = [
   },
   {
     id: 'alertImportant',
-    label: 'Important 重要提示',
+    label: 'Important',
     description: '用户不应忽视的核心要点',
     groupId: 'alerts',
     groupLabel: '提示块',
@@ -237,7 +241,7 @@ const ALERT_LEAFS: LeafCommandItem[] = [
   },
   {
     id: 'alertWarning',
-    label: 'Warning 警告块',
+    label: 'Warning',
     description: '需要特别警惕的注意事项',
     groupId: 'alerts',
     groupLabel: '提示块',
@@ -251,7 +255,7 @@ const ALERT_LEAFS: LeafCommandItem[] = [
   },
   {
     id: 'alertCaution',
-    label: 'Caution 危险提示',
+    label: 'Caution',
     description: '高风险操作或破坏性后果警示',
     groupId: 'alerts',
     groupLabel: '提示块',
@@ -487,6 +491,32 @@ const IMAGE_URL_LEAF: LeafCommandItem = {
   },
 };
 
+const IMAGE_COLLECTION_LEAFS: LeafCommandItem[] = IMAGE_TEMPLATES.map(({ template, label }) => ({
+  id: `imageCollection-${template}`,
+  label,
+  description: template === 'carousel' ? '逐张展示图片' : '并排展示多张图片',
+  groupId: 'images',
+  groupLabel: '图片',
+  shortcutHint: template === 'carousel' ? '/carousel' : `/grid${template}`,
+  icon: template === 'carousel' ? <GalleryHorizontalEnd size={17} /> : <Grid2X2 size={17} />,
+  aliases: template === 'carousel' ? ['carousel', 'lunbo', 'lb'] : [`grid${template}`, `gongge${template}`, 'grid'],
+  keywords: `图片 相册 拼图 宫格 轮播 gallery image ${label}`,
+  action: (editor, range) => {
+    editor.chain().focus().deleteRange(range).run();
+    insertImageCollection(editor, template);
+  },
+}));
+
+const DISCLOSURE_LEAF: LeafCommandItem = {
+  id: 'disclosure', label: '折叠块', description: '可展开的内容区域', shortcutHint: '/fold',
+  icon: <PanelTopClose size={17} />, aliases: ['fold', 'collapse', 'disclosure', 'zhedie'],
+  keywords: '折叠 展开 内容 disclosure fold',
+  action: (editor, range) => {
+    editor.chain().focus().deleteRange(range).run();
+    insertDisclosure(editor);
+  },
+};
+
 const LINK_LEAF: LeafCommandItem = {
   id: 'link',
   label: '插入超链接',
@@ -559,7 +589,7 @@ const ROOT_GROUPS: GroupCommandItem[] = [
   },
   {
     id: 'alerts',
-    label: 'GitHub 提示块',
+    label: 'Callouts 提示块',
     description: 'Note, Tip, Important, Warning, Caution',
     shortcutHint: '/note, /tip',
     icon: <Boxes size={17} color="#3b82f6" />,
@@ -585,6 +615,15 @@ const ROOT_GROUPS: GroupCommandItem[] = [
     children: MATH_LEAFS,
   },
   {
+    id: 'images',
+    label: '图片与相册',
+    description: '本地图片、网络图片、拼图与轮播',
+    shortcutHint: '/img, /grid',
+    icon: <ImageIcon size={17} />,
+    isGroup: true,
+    children: [IMAGE_LOCAL_LEAF, IMAGE_URL_LEAF, ...IMAGE_COLLECTION_LEAFS],
+  },
+  {
     id: 'infographics',
     label: '信息图模板',
     description: '指标看板、时间线、步骤流程、对比表与漏斗',
@@ -604,41 +643,46 @@ const ROOT_GROUPS: GroupCommandItem[] = [
   },
 ];
 
-/** 全量叶子命令扁平池（优先级：标题 > 列表 > 代码块 > 提示块 > 引用块 > 表格 > 公式 > 信息图 > 图片 > 超链接 > 日期时间 > 正文 > 分割线 > 清除格式） */
+/** Search reaches every command, including entries tucked into flyouts. */
 const ALL_LEAFS: LeafCommandItem[] = [
-  ...HEADING_LEAFS,
-  ...LIST_LEAFS,
-  CODE_BLOCK_LEAF,
   ...ALERT_LEAFS,
-  BLOCKQUOTE_LEAF,
   ...TABLE_LEAFS,
   ...MATH_LEAFS,
-  ...INFOGRAPHIC_LEAFS,
   IMAGE_LOCAL_LEAF,
   IMAGE_URL_LEAF,
+  ...IMAGE_COLLECTION_LEAFS,
   LINK_LEAF,
   ...DATETIME_LEAFS,
+  LIST_LEAFS[0],
+  CODE_BLOCK_LEAF,
+  DISCLOSURE_LEAF,
+  BLOCKQUOTE_LEAF,
+  ...HEADING_LEAFS,
+  ...LIST_LEAFS.slice(1),
+  ...INFOGRAPHIC_LEAFS,
   PARAGRAPH_LEAF,
   DIVIDER_LEAF,
   CLEAR_FORMAT_LEAF,
 ];
 
-/** 默认根级菜单项（严格遵循优先级：标题 > 列表 > 代码块 > GitHub提示 > 引用块 > 表格 > 公式与图表 > 本地图片 > 网络图片 > 超链接 > 日期时间 > 正文 > 分割线 > 清除格式） */
+/** Common insertions appear first; less frequent formatting follows. */
 const ROOT_MENU_ENTRIES: MenuEntry[] = [
-  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'headings')! },
-  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'lists')! },
-  { type: 'leaf', item: CODE_BLOCK_LEAF },
   { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'alerts')! },
-  { type: 'leaf', item: BLOCKQUOTE_LEAF },
   { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'tables')! },
   { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'math')! },
-  { type: 'leaf', item: IMAGE_LOCAL_LEAF },
-  { type: 'leaf', item: IMAGE_URL_LEAF },
+  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'images')! },
   { type: 'leaf', item: LINK_LEAF },
+  { type: 'leaf', item: DATETIME_LEAFS[0] },
+  { type: 'leaf', item: LIST_LEAFS[0] },
+  { type: 'leaf', item: CODE_BLOCK_LEAF },
+  { type: 'leaf', item: DISCLOSURE_LEAF },
+  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'infographics')! },
+  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'headings')! },
+  { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'lists')! },
+  { type: 'leaf', item: BLOCKQUOTE_LEAF },
   { type: 'group', item: ROOT_GROUPS.find((g) => g.id === 'datetime')! },
   { type: 'leaf', item: PARAGRAPH_LEAF },
   { type: 'leaf', item: DIVIDER_LEAF },
-  { type: 'leaf', item: CLEAR_FORMAT_LEAF },
 ];
 
 /** 全局打平搜索逻辑 */
@@ -709,9 +753,8 @@ function SlashMenu({
   // 获取当前悬展的分组对象
   const activeGroup = ROOT_GROUPS.find((g) => g.id === hoveredGroupId);
 
-  // 重算二级子菜单的垂直位置与最大高度：让子菜单顶部对齐到当前选中/悬展的一级项，
-  // 同时根据选中项之下到视口底部（避开状态栏）的剩余空间限制 maxHeight，
-  // 避免选中项靠下时子菜单被裁剪或挤出底部。水平方向顺便判断是否需要向左翻转。
+  // Align with the selected row where space allows, then keep the entire
+  // scrollable flyout inside the usable viewport.
   useEffect(() => {
     if (!activeGroup || !containerRef.current) return;
     const activeEl = itemRefs.current[selectedIndex];
@@ -724,18 +767,11 @@ function SlashMenu({
     const spaceRight = window.innerWidth - containerRect.right;
     setFlipSubmenuLeft(spaceRight < 290 + 12);
 
-    // 垂直：让子菜单顶部与选中项顶部对齐，最小不低于容器顶部
-    const offsetTop = Math.max(0, Math.round(itemRect.top - containerRect.top));
-
-    // 下方的可用空间 = 视口底部 - 状态栏 - 边距 - 选中项在视口中的 top
-    const viewportHeight = window.innerHeight;
-    const statusBarHeight = 36;
-    const bottomPadding = 8;
-    const spaceBelow = viewportHeight - statusBarHeight - bottomPadding - itemRect.top;
-    // 至少保留 180px 高度防止只剩一截窄条；上限仍维持原 370
-    const maxHeight = Math.max(180, Math.min(370, Math.floor(spaceBelow)));
-
-    setSubmenuLayout({ top: offsetTop, maxHeight });
+    const usableTop = 40;
+    const usableBottom = window.innerHeight - 36 - 8;
+    const maxHeight = Math.max(100, Math.min(370, usableBottom - usableTop));
+    const viewportTop = Math.max(usableTop, Math.min(itemRect.top, usableBottom - maxHeight));
+    setSubmenuLayout({ top: Math.round(viewportTop - containerRect.top), maxHeight });
   }, [activeGroup, selectedIndex]);
 
   // query 变化时重置
@@ -907,8 +943,8 @@ function SlashMenu({
             justifyContent: 'space-between',
           }}
         >
-          <span>{isSearching ? `搜索命令: "${query}"` : '插入块或命令'}</span>
-          <span style={{ fontSize: 10, opacity: 0.8 }}>↑↓ 移动 · → 伸展子项</span>
+          <span>{isSearching ? `搜索 · ${query}` : '插入内容'}</span>
+          <span style={{ fontSize: 10, opacity: 0.8 }}>输入筛选 · ↑↓ 选择 · → 展开</span>
         </div>
 
         <div
@@ -925,13 +961,18 @@ function SlashMenu({
             const { item } = entry;
 
             return (
+              <Fragment key={item.id}>
+              {!isSearching && (index === 0 || index === 7) && (
+                <div aria-hidden="true" style={{ padding: '8px 10px 3px', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--editor-text-secondary, #64748b)', borderTop: index === 7 ? '1px solid var(--editor-border, rgba(0,0,0,0.08))' : undefined }}>
+                  {index === 0 ? '常用' : '更多'}
+                </div>
+              )}
               <button
-                key={item.id}
                 ref={(el) => {
                   itemRefs.current[index] = el;
                 }}
                 type="button"
-                aria-label={item.shortcutHint ? `快捷触发词：${item.shortcutHint}` : undefined}
+                aria-label={item.shortcutHint ? `${item.label}，快捷触发词 ${item.shortcutHint}` : item.label}
                 onMouseEnter={() => {
                   setSelectedIndex(index);
                   if (isGroup) {
@@ -1081,6 +1122,7 @@ function SlashMenu({
                   />
                 )}
               </button>
+              </Fragment>
             );
           })}
         </div>
@@ -1146,7 +1188,7 @@ function SlashMenu({
                     subItemRefs.current[subIdx] = el;
                   }}
                   type="button"
-                  aria-label={subLeaf.shortcutHint ? `快捷触发词：${subLeaf.shortcutHint}` : undefined}
+                  aria-label={subLeaf.shortcutHint ? `${subLeaf.label}，快捷触发词 ${subLeaf.shortcutHint}` : subLeaf.label}
                   onMouseEnter={() => {
                     setIsFocusInSubmenu(true);
                     setSubSelectedIndex(subIdx);
@@ -1269,7 +1311,7 @@ export const slashSuggestion = {
       if (!rect) return;
 
       const menuWidth = 300;
-      const submenuWidth = 270;
+      const submenuWidth = 290;
       const totalWidth = menuWidth + 6 + submenuWidth; // ~576px
       const menuHeight = 370;
       const statusbarHeight = 36;

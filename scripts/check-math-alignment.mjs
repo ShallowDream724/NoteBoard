@@ -1,6 +1,7 @@
 /* global window, document, requestAnimationFrame, getComputedStyle, innerWidth, MouseEvent */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
 import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -12,6 +13,7 @@ await build({ configFile: false, plugins: [react()], worker: { format: 'es' }, b
 const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const results = [];
+let standaloneMathFonts = [];
 try {
   const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
   const errors = [];
@@ -61,6 +63,12 @@ try {
         assert.notEqual(style.background, 'rgba(0, 0, 0, 0)', `${mode}: callout background missing`);
       }
       if (mode === 'standalone' && align === 'left') {
+        const devtools = await output.context().newCDPSession(output);
+        await devtools.send('DOM.enable'); await devtools.send('CSS.enable');
+        const { root } = await devtools.send('DOM.getDocument');
+        const { nodeId } = await devtools.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.export-math math mi' });
+        standaloneMathFonts = (await devtools.send('CSS.getPlatformFontsForNode', { nodeId })).fonts.map(font => font.familyName);
+        await devtools.detach();
         await output.emulateMedia({ media: 'screen' });
         const carousel = output.locator('.export-image-carousel');
         assert(await carousel.getByRole('button', { name: '上一张', exact: true }).isDisabled());
@@ -70,7 +78,10 @@ try {
         assert(await output.getByRole('dialog', { name: '图片预览' }).isVisible());
         await output.keyboard.press('Escape');
         assert.equal(await output.locator('dialog[open]').count(), 0);
-        assert((await output.locator('link[rel=icon]').getAttribute('href')).startsWith('data:image/svg+xml,'));
+        assert.equal(await output.locator('.export-page-title,.export-page-icon').count(), 0);
+        const [savedCopy] = await Promise.all([output.waitForEvent('download'), output.getByRole('button', { name: '保存副本' }).click()]);
+        assert(savedCopy.suggestedFilename().endsWith('.html'));
+        assert((await readFile(await savedCopy.path(), 'utf8')).includes('Callout body'));
         await output.setViewportSize({ width: 390, height: 844 });
         assert(await output.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         await output.screenshot({ path: '.tmp/html-export-mobile.png', fullPage: true });
@@ -78,7 +89,7 @@ try {
         await output.screenshot({ path: '.tmp/html-export-desktop.png', fullPage: true });
         await output.emulateMedia({ media: 'print' });
         assert.equal(await carousel.locator('.export-image-slot:visible').count(), 2);
-        assert.equal(await output.locator('.export-page-bar:visible').count(), 0);
+        assert.equal(await output.locator('.export-page-actions:visible').count(), 0);
       }
     }
     await output.close();
@@ -172,5 +183,5 @@ try {
   }
   assert.equal((await page.evaluate(() => window.mathAlignmentQA.sharedState())).text, 'Before  After');
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ passed: true, checks: results.length, results }, null, 2));
+  console.log(JSON.stringify({ passed: true, checks: results.length, standaloneMathFonts, results }, null, 2));
 } finally { await browser.close(); await new Promise(resolve => server.httpServer.close(resolve)); }

@@ -16,6 +16,8 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import { getBaseline } from '@/features/editor-md/serialize';
 import { discardPendingVisualSnapshot } from '@/features/editor-md/visualSnapshot';
+import { Schema } from '@tiptap/pm/model';
+import { EditorState } from '@tiptap/pm/state';
 
 // 序列化调用记录（热路径断言：输入期间零全文工作）
 const serializeCalls: string[] = [];
@@ -56,6 +58,16 @@ vi.mock('@/features/editor-md/serialize', async (original) => ({
 }));
 
 const key = 'C:/t/j2-hotpath.md';
+const schema = new Schema({ nodes: { doc: { content: 'paragraph+' }, paragraph: { content: 'text*' }, text: {} } });
+function typeInKernel(depth: number, text: string) {
+  const previous = kernel.editor.text;
+  const doc = schema.node('doc', null, [schema.node('paragraph', null, previous ? [schema.text(previous)] : [])]);
+  const transaction = EditorState.create({ schema, doc }).tr.insertText(text, 1, 1 + previous.length);
+  Object.assign(transaction.doc, { __text: text });
+  kernel.editor.text = text;
+  kernel.editor.state.depth = depth;
+  kernel.options.onUpdate({ editor: kernel.editor, transaction });
+}
 
 beforeEach(() => {
   clearAllDocumentHistories();
@@ -95,20 +107,7 @@ it('输入热路径零全文工作：同组多次输入只序列化组末，跨�
       />,
     ));
 
-    const type = (depth: number, text: string) => {
-      kernel.editor.text = text;
-      kernel.editor.state.depth = depth;
-      kernel.options.onUpdate({
-        editor: kernel.editor,
-        transaction: {
-          docChanged: true,
-          getMeta: () => undefined,
-          mapping: { maps: [] },
-          before: { content: { findDiffStart: () => 1 } },
-          doc: { content: {}, __text: text },
-        },
-      });
-    };
+    const type = typeInKernel;
 
     await act(async () => {
       // 组1：同组连续 3 次输入（depth 不变 = 同一原生历史组）
@@ -165,20 +164,7 @@ it('防抖物化：500ms 静默后组末自动进历史与镜像（连续输入�
         />,
       ));
 
-      const type = (depth: number, text: string) => {
-        kernel.editor.text = text;
-        kernel.editor.state.depth = depth;
-        kernel.options.onUpdate({
-          editor: kernel.editor,
-          transaction: {
-            docChanged: true,
-            getMeta: () => undefined,
-            mapping: { maps: [] },
-            before: { content: { findDiffStart: () => 1 } },
-            doc: { content: {}, __text: text },
-          },
-        });
-      };
+      const type = typeInKernel;
 
       // 同组连续输入（每次重置防抖——不无限顺延由组边界/导航物化兜底）
       await act(async () => {

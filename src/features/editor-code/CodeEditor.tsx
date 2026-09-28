@@ -3,7 +3,7 @@ import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // 裸 CM6（new EditorView / EditorState.create），挂载到 DOM
 // 详见 docs/09-开发路线图.md 4.1
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   EditorView,
   keymap,
@@ -39,6 +39,7 @@ import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
 import { takeViewState } from '../session/editorSuspension';
 import { foldEffect } from '@codemirror/language';
 import { createCodeEditorCapabilities } from './editorCapabilities';
+import { HtmlPreview } from './HtmlPreview';
 import {
   initializeDocumentHistory,
   recordDocumentChange,
@@ -62,9 +63,27 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const doc = useDocumentStore((s) => s.documents.get(docKey));
+  const isHtml = doc?.language === 'html';
+  const [htmlMode, setHtmlMode] = useState<'preview' | 'source'>('preview');
+  const [previewHtml, setPreviewHtml] = useState(doc?.content ?? '');
   const setContent = useDocumentStore((s) => s.setContent);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
   const typography = useSettingsStore((s) => s.settings.typography);
+
+  useEffect(() => {
+    if (isHtml) setPreviewHtml(doc?.content ?? '');
+  }, [doc?.content, isHtml]);
+
+  useEffect(() => {
+    if (htmlMode !== 'source') return;
+    const frame = requestAnimationFrame(() => viewRef.current?.requestMeasure());
+    return () => cancelAnimationFrame(frame);
+  }, [htmlMode]);
+
+  const showHtmlMode = (mode: 'preview' | 'source') => {
+    if (mode === 'preview') setPreviewHtml(viewRef.current?.state.doc.toString() ?? doc?.content ?? '');
+    setHtmlMode(mode);
+  };
 
   // 监听排版字体与字号变化并热重配 CM6，并刷新字符度量
   useEffect(() => {
@@ -402,33 +421,19 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
 
   if (!doc) return null;
 
-  return (
-    // 外层 Flex 容器负责居中与背景色，避免内部 .cm-content 居中导致坐标偏移
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-        background: 'var(--editor-bg)',
-        display: 'flex',
-        justifyContent: 'center',
-      }}
-      onClick={(e) => {
-        // 点击外层空白区域时自动聚焦编辑器
-        if (e.target === e.currentTarget && viewRef.current) {
-          viewRef.current.focus();
-        }
-      }}
-    >
-      {/* 代码/纯文本编辑器内部容器（宽度受 --mono-max-width 约束） */}
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          maxWidth: 'var(--mono-max-width, 100%)',
-          height: '100%',
-        }}
-      />
+  return <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--editor-bg)' }}>
+    {isHtml && <div role="group" aria-label="HTML 视图" style={{ display: 'flex', gap: 2, flex: 'none', padding: '7px 12px', borderBottom: '1px solid var(--editor-border, #e2e8f0)' }}>
+      {(['preview', 'source'] as const).map(mode => <button key={mode} type="button" aria-pressed={htmlMode === mode}
+        onClick={() => showHtmlMode(mode)}
+        style={{ border: 0, borderRadius: 6, padding: '5px 13px', font: '12px var(--ui-font-family, sans-serif)', cursor: 'pointer', background: htmlMode === mode ? 'var(--toolbar-hover, #e8edf5)' : 'transparent', color: 'var(--editor-text, #334155)' }}>
+        {mode === 'preview' ? '预览' : '源码'}
+      </button>)}
+    </div>}
+    {isHtml && htmlMode === 'preview' && <HtmlPreview html={previewHtml} title={doc.displayName} />}
+    {/* Keep CodeMirror mounted in preview so the save/flush barrier owns one editor instance. */}
+    <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: isHtml && htmlMode === 'preview' ? 'none' : 'flex', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) viewRef.current?.focus(); }}>
+      <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />
     </div>
-  );
+  </div>;
 }

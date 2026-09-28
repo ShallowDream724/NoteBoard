@@ -5,9 +5,12 @@
 .export-image-slot img { display: block; width:100%; max-width: 100%; height: auto; margin: 0 auto; }
 .export-image-slot > p { color: var(--editor-text-secondary, #526174); font-size: .9em; text-align: center; margin: .45em 0; }
 .export-image-slot[data-empty] { min-height: 4em; }
-.export-disclosure { border: 1px solid var(--editor-border, #d8dee7); border-radius: 5px; padding: .65em .9em; margin: .8em 0; }
-.export-disclosure > summary { font-weight: 600; cursor: pointer; break-after: avoid; }
-.export-disclosure > div { margin-top: .6em; }
+.export-disclosure { border: 1px solid var(--editor-border, #d8dee7); border-radius: 8px; margin: .8em 0; overflow: clip; }
+.export-disclosure > summary { padding: .65em .9em; background: #f8f9fb; font-weight: 600; cursor: pointer; break-after: avoid; }
+.export-disclosure[open] > summary { border-bottom: 1px solid #e5e9ef; }
+.export-disclosure > div { padding: .7em 1em; background: #fdfdfe; }
+.export-disclosure > div > :first-child { margin-top: 0; }
+.export-disclosure > div > :last-child { margin-bottom: 0; }
 [data-export-mode="html"] [data-nb-conceal] { filter: blur(4px); transition: filter .12s; }
 [data-export-mode="html"] [data-nb-conceal]:is(:hover,:focus,:focus-within) { filter: none; }
 .export-annotations { margin-top: 2em; padding-top: .8em; border-top: 1px solid var(--editor-border, #d8dee7); }

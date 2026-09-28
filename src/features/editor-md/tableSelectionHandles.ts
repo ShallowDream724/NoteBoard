@@ -190,7 +190,18 @@ export const TableSelectionHandles = Extension.create({
             || paintedColumnSide !== (event.clientY <= (bounds.top + bounds.bottom) / 2 ? 'top' : 'bottom'));
         cell = nextCell; table = next; pointerX = event.clientX; pointerY = event.clientY; visible = true;
         if (changed) schedule();
-      } else deferHide();
+      } else {
+        // Crossing from a cell into its adjacent rail must keep tracking the
+        // pointer. The old cell remains the geometry anchor until another cell
+        // is entered; a distant pointer still starts the ordinary hide delay.
+        const bounds = paintedBounds;
+        if (visible && bounds && event.clientX >= bounds.left - 24 && event.clientX <= bounds.right + 24
+          && event.clientY >= bounds.top - 24 && event.clientY <= bounds.bottom + 12) {
+          cancelHide();
+          pointerX = event.clientX; pointerY = event.clientY;
+          schedule();
+        } else deferHide();
+      }
     };
     const leaveWindow = (event: PointerEvent) => { if (!event.relatedTarget) deferHide(); };
     const focusIn = () => { cancelHide(); };

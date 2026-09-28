@@ -51,6 +51,21 @@ const qa = {
       { type: 'text', text: 'Before ' }, { type: 'mathInline', attrs: { latex: '' } }, { type: 'text', text: ' After' },
     ] }] });
   },
+  async prepareSharedScroll(fresh = false) {
+    await import('../../src/styles/globals.css');
+    host.style.display = 'none';
+    document.querySelector<HTMLElement>('[data-math-shared-history]')!.style.cssText = 'height:700px;width:900px';
+    getMdTipTapEditor('untitled:browser-math-history')!.commands.setContent({ type: 'doc', content: [
+      ...Array.from({ length: 8 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `Before ${i}` }] })),
+      ...(fresh ? [] : [{ type: 'mathBlock', attrs: { latex: 'a' } }]),
+      ...Array.from({ length: 80 }, (_, i) => ({ type: 'paragraph', content: [{ type: 'text', text: `After ${i}` }] })),
+    ] });
+    if (fresh) {
+      const editor = getMdTipTapEditor('untitled:browser-math-history')!;
+      const pos = Array.from({ length: 8 }, (_, i) => editor.state.doc.child(i).nodeSize).reduce((a, b) => a + b, 0);
+      runDiscreteEdit(editor, chain => chain.focus().insertContentAt(pos, { type: 'mathBlock', attrs: { latex: '' } }).setNodeSelection(pos));
+    }
+  },
   sharedState() {
     const editor = getMdTipTapEditor('untitled:browser-math-history')!;
     const formulas: string[] = [];

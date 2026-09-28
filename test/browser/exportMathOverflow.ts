@@ -32,7 +32,7 @@ const qa = {
     }));
   },
   async render({ source = loss, fontPt = DEFAULT_PDF.fontPt, marginMm = DEFAULT_PDF.marginMm, mode = 'auto' }: { source?: string; fontPt?: number; marginMm?: number; mode?: 'auto' | 'fit' } = {}) {
-    const options: PdfOptions = { ...DEFAULT_PDF, fontPt, marginMm, items: {} };
+    const options: PdfOptions = { ...DEFAULT_PDF, fontPt, marginMm, horizontalMarginMm: marginMm, items: {} };
     const [paperWidth] = paperSize(options);
     document.documentElement.style.cssText = `--export-font:${fontPt}pt;--export-line:1.4;--export-width:${paperWidth - marginMm * 2}mm`;
     const article = document.createElement('article'); article.dataset.exportMode = 'print';

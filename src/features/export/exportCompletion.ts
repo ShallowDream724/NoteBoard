@@ -1,7 +1,6 @@
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { refreshExplorerAfterWrite } from '../explorer/refreshAfterWrite';
-import { probeDocument, openWithDefaultApp } from '../../core/ipc/commands';
-import { languageFromPath } from '../../core/docKind';
+import { probeDocument } from '../../core/ipc/commands';
 import { formatFileSize } from '../../core/formatFileSize';
 import { showToast } from '../../stores/toastStore';
 
@@ -20,18 +19,11 @@ export async function presentExportedFile(path: string, warnings?: string): Prom
 
   // Refresh only an existing containing workspace, independently of opening the saved file.
   void refreshExplorerAfterWrite(path).catch(error => console.warn('刷新导出目录失败:', error));
-  const opensExternally = languageFromPath(path) === 'html';
   try {
-    if (opensExternally) {
-      await openWithDefaultApp(path);
-      return;
-    }
     const outcome = await openDocument(path, { exportNotice: { warnings }, explorer: 'preserve' });
     if (outcome !== 'failed') return;
   } catch (error) {
     console.error('显示导出文件失败:', error);
   }
-  showToast(opensExternally
-    ? '文件已导出，可在保存位置打开。暂时无法启动默认应用。'
-    : '文件已导出，可在保存位置打开。暂时无法在标签页中显示。', 'warning');
+  showToast('文件已导出，可在保存位置打开。暂时无法在标签页中显示。', 'warning');
 }

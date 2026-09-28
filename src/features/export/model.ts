@@ -1,13 +1,13 @@
 export type ItemMode = 'auto' | 'fit' | 'wrap' | 'columns';
 export interface PdfOptions {
-  paper: 'A4' | 'Letter'; landscape: boolean; marginMm: number;
-  fontPt: number; lineHeight: number; pageNumbers: boolean;
+  paper: 'A4' | 'Letter'; landscape: boolean; marginMm: number; horizontalMarginMm: number;
+  fontPt: number; lineHeight: number; paragraphSpacingEm: number; pageNumbers: boolean;
   pageNumberPosition: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
   pageNumberStyle: 'number' | 'total' | 'dashes';
   items: Record<string, ItemMode>;
 }
 export const DEFAULT_PDF: PdfOptions = {
-  paper: 'A4', landscape: false, marginMm: 12, fontPt: 10.5, lineHeight: 1.4,
+  paper: 'A4', landscape: false, marginMm: 12, horizontalMarginMm: 12, fontPt: 10.5, lineHeight: 1.4, paragraphSpacingEm: 0.65,
   pageNumbers: true, pageNumberPosition: 'bottom-center', pageNumberStyle: 'number', items: {},
 };
 export interface ExportItem { id: string; kind: 'formula' | 'table' | 'diagram'; label: string }

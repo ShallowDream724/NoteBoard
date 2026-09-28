@@ -10,7 +10,7 @@ export function reconcileDocumentHistory(editor: Editor, target: Node): void {
   const start = current.content.findDiffStart(target.content);
   if (start === null) return;
   const before = current.nodeAt(start), after = target.nodeAt(start);
-  if (before && after && before.type === after.type
+  if (before && after && !before.isText && before.type === after.type
     && before.content.eq(after.content)
     && before.marks.length === after.marks.length
     && before.marks.every((mark, index) => mark.eq(after.marks[index]))) {

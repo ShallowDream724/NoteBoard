@@ -71,10 +71,13 @@ export const MarkdownTypingKeys = Extension.create({
         const { state, view } = this.editor;
         const { $from, empty } = state.selection;
         if (view.composing || !empty || $from.parent.type.name !== 'paragraph'
-          || $from.parentOffset !== $from.parent.content.size || $from.parent.textContent !== '···') return false;
-        if (!this.editor.can().setCodeBlock()) return false;
+          || $from.parentOffset !== $from.parent.content.size) return false;
+        const fence = /^···([^\s`·]+)?$/u.exec($from.parent.textContent);
+        if (!fence) return false;
+        const language = fence[1] ?? null;
+        if (!this.editor.can().setCodeBlock({ language })) return false;
         const tr = closeHistory(state.tr).delete($from.start(), $from.end())
-          .setBlockType($from.before(), $from.before() + 1, state.schema.nodes.codeBlock).setStoredMarks(null);
+          .setBlockType($from.before(), $from.before() + 1, state.schema.nodes.codeBlock, { language }).setStoredMarks(null);
         view.dispatch(tr.scrollIntoView());
         return true;
       },

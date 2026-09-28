@@ -17,7 +17,7 @@ pub fn print(window: &WebviewWindow, path: &Path, options: &PdfOptions, done: im
             if options.landscape { std::mem::swap(&mut width, &mut height); }
             settings.SetPageWidth(width / 25.4)?; settings.SetPageHeight(height / 25.4)?;
             settings.SetScaleFactor(1.0)?;
-            let margin = options.margin_mm / 25.4;
+            let margin = options.horizontal_margin_mm / 25.4;
             let (top, bottom) = options.vertical_margins_mm();
             settings.SetMarginTop(top / 25.4)?; settings.SetMarginBottom(bottom / 25.4)?;
             settings.SetMarginLeft(margin)?; settings.SetMarginRight(margin)?;

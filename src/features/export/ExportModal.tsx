@@ -10,8 +10,10 @@ import { ExportDiagnostics, ExportSidebarFeedback } from './ExportDiagnostics';
 import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { presentExportedFile } from './exportCompletion';
-import { DEFAULT_NATIVE_EXTENSION, NATIVE_DOCUMENT_EXTENSIONS } from '../../core/nativeDocument';
+import { DEFAULT_NATIVE_EXTENSION } from '../../core/nativeDocument';
 import { richExportDiagnostics } from './richProjection';
+import { formatFileSize } from '../../core/formatFileSize';
+import { DraftNumberField } from './DraftNumberField';
 import './export.css';
 
 export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () => void }) {
@@ -20,9 +22,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const [captureStartedAt, setCaptureStartedAt] = useState(() => performance.now());
   const [options, setOptions] = useState(DEFAULT_PDF);
   const [format, setFormat] = useState('pdf');
-  const [nativeExtension, setNativeExtension] = useState(DEFAULT_NATIVE_EXTENSION);
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
-  const [pages, setPages] = useState(0);
   const [acceptedReceipt, setAcceptedReceipt] = useState<string>();
   const [item, setItem] = useState('');
   const [navigation, setNavigation] = useState<{ id: string; serial: number }>();
@@ -86,9 +86,9 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
     savingRef.current = true;
     setSaving(true); setError('');
     try {
-      const extension = format === 'noteboard' ? nativeExtension : format === 'html5' ? 'html' : format === 'latex' ? 'tex' : format;
+      const extension = format === 'noteboard' ? DEFAULT_NATIVE_EXTENSION : format === 'html5' ? 'html' : format === 'latex' ? 'tex' : format;
       const destination = await save({ defaultPath: document.title.replace(/\.[^.]+$/, '') + '.' + extension,
-        filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
+        filters: [{ name: format === 'noteboard' ? 'NoteBoard 文档' : format.toUpperCase(), extensions: [extension] }] });
       signal.throwIfAborted();
       if (!destination) return;
       let warnings = '';
@@ -118,29 +118,38 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
       if (!signal.aborted) setSaving(false);
     }
   };
-  const number = (key: 'marginMm' | 'fontPt' | 'lineHeight', label: string, min: number, max: number, step: number) => <label className="export-field">{label}
-    <input type="number" min={min} max={max} step={step} value={options[key]} onChange={e => { const value = Number(e.target.value); if (Number.isFinite(value)) setOptions(o => ({ ...o, [key]: Math.min(max, Math.max(min, value)) })); }}/></label>;
+  const number = (key: 'marginMm' | 'horizontalMarginMm' | 'fontPt' | 'lineHeight' | 'paragraphSpacingEm', label: string, min: number, max: number, step: number) =>
+    <DraftNumberField label={label} value={options[key]} min={min} max={max} step={step}
+      onCommit={value => setOptions(current => ({ ...current, [key]: value }))}/>;
   return <div className="export-backdrop"><div ref={dialog} tabIndex={-1} data-shortcuts-suspended role="dialog" aria-modal="true" aria-label="导出文档" className="export-dialog">
     <header><div><FileOutput size={18}/><strong>导出</strong><span className="export-title">{document?.title}</span></div>
       <button className="export-icon" aria-label="关闭导出" onClick={onClose}><X size={18}/></button></header>
-    <div className="export-body"><aside>
-      <label className="export-field">格式<select value={format} onChange={e => { if (e.target.value === 'pdf') setCaptureStartedAt(performance.now()); setFormat(e.target.value); }}><option value="pdf">PDF</option><option value="md">Markdown (.md)</option><option value="noteboard">NoteBoard 文档</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
-      {format === 'noteboard' && <label className="export-field">文件后缀<select value={nativeExtension} onChange={e => setNativeExtension(e.target.value)}>{NATIVE_DOCUMENT_EXTENSIONS.map(ext => <option key={ext} value={ext}>.{ext}</option>)}</select></label>}
+    <div className="export-body"><aside aria-label="导出设置">
+      <section className="export-settings-section"><h4>导出文件</h4>
+      <label className="export-field">文件格式<select value={format} onChange={e => { if (e.target.value === 'pdf') setCaptureStartedAt(performance.now()); setFormat(e.target.value); }}><option value="pdf">PDF</option><option value="md">Markdown (.md)</option><option value="noteboard">{document?.inputFormat === 'noteboard' ? 'NoteBoard 副本 (.nb)' : 'NoteBoard 文档 (.nb)'}</option><option value="docx">Word (.docx)</option><option value="html5">HTML</option><option value="latex">LaTeX</option></select></label>
+      </section>
       {format === 'pdf' ? <>
+        <section className="export-settings-section"><h4>页面</h4>
         <div className="export-two"><label className="export-field">纸张<select value={options.paper} onChange={e => setOptions(o => ({ ...o, paper: e.target.value as 'A4' | 'Letter' }))}><option>A4</option><option>Letter</option></select></label>
           <label className="export-field">方向<select value={String(options.landscape)} onChange={e => setOptions(o => ({ ...o, landscape: e.target.value === 'true' }))}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
-        {number('marginMm', '页边距 (mm)', 0, 40, 1)}
-        <div className="export-two">{number('fontPt', '正文字号 (pt)', 8, 24, .5)}{number('lineHeight', '行距', 1, 2.5, .1)}</div>
+        <div className="export-two">{number('marginMm', '上下边距 (mm)', 0, 40, 1)}{number('horizontalMarginMm', '左右边距 (mm)', 0, 40, 1)}</div>
+        </section>
+        <section className="export-settings-section"><h4>正文</h4>
+        {number('fontPt', '正文字号 (pt)', 8, 24, .5)}
+        <div className="export-two">{number('lineHeight', '段内行距 (倍)', 1, 2.5, .1)}{number('paragraphSpacingEm', '段后距 (em)', 0, 2, .05)}</div>
+        </section>
+        <section className="export-settings-section"><h4>页码</h4>
         <label className="export-check export-page-numbers"><input type="checkbox" checked={options.pageNumbers} onChange={e => setOptions(o => ({ ...o, pageNumbers: e.target.checked }))}/>页码</label>
         {options.pageNumbers && <div className="export-two">
-          <label className="export-field">位置<select value={options.pageNumberPosition} onChange={e => setOptions(o => ({ ...o, pageNumberPosition: e.target.value as typeof o.pageNumberPosition }))}>
+          <label className="export-field">页码位置<select value={options.pageNumberPosition} onChange={e => setOptions(o => ({ ...o, pageNumberPosition: e.target.value as typeof o.pageNumberPosition }))}>
             <option value="bottom-center">底部居中</option><option value="bottom-left">左下角</option><option value="bottom-right">右下角</option>
             <option value="top-center">顶部居中</option><option value="top-left">左上角</option><option value="top-right">右上角</option>
           </select></label>
-          <label className="export-field">样式<select value={options.pageNumberStyle} onChange={e => setOptions(o => ({ ...o, pageNumberStyle: e.target.value as typeof o.pageNumberStyle }))}>
-            <option value="number">1</option><option value="total">1 / 10</option><option value="dashes">- 1 -</option>
+          <label className="export-field">页码格式<select value={options.pageNumberStyle} onChange={e => setOptions(o => ({ ...o, pageNumberStyle: e.target.value as typeof o.pageNumberStyle }))}>
+            <option value="number">仅页码（1）</option><option value="total">页码 / 总页数（1 / 10）</option><option value="dashes">横线页码（- 1 -）</option>
           </select></label>
         </div>}
+        </section>
         {!!pdf.receipt?.adjustable.length && <section className="export-sidebar-section export-item-settings"><h4>超宽内容</h4>
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
           <div className="export-item-list" aria-label="需要调整的内容">{visibleItems.map(value => <button key={value.id} title={value.label} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
@@ -148,15 +157,16 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
             <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
           </select></label>}
         </section>}
-      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。本地图片随文件保存，可直接分享；网络图片保留链接。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
+      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? document?.inputFormat === 'noteboard' ? '另存一个可继续编辑的 .nb 副本；当前打开的文件不会切换到副本。' : '将当前 Markdown 转为可在 NoteBoard 继续编辑的 .nb 文档。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。本地图片随文件保存，可直接分享；网络图片保留链接。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
       <ExportSidebarFeedback issues={format === 'pdf' ? pdf.receipt?.issues : undefined} items={itemIndex} notes={richDiagnostics} accepted={accepted} onNavigate={navigateToItem} onAccept={value => setAcceptedReceipt(value ? receiptKey : undefined)}/>
     </aside><main>{format === 'pdf' ? <>
-      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
+      {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
         : pdf.error || (!document && error) ? <div className="export-empty">暂时无法生成预览</div>
         : <ExportProgress progress={pdf.progress ?? { phase: document ? 'starting' : 'preparing', startedAt: captureStartedAt }}/>}
       {pdf.receipt && pdf.busy && <div className="export-updating"><ExportProgress compact progress={pdf.progress ?? { phase: 'starting', startedAt: captureStartedAt }}/></div>}
     </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'md' ? 'Markdown 文档' : format === 'noteboard' ? 'NoteBoard 文档' : format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p></div>}</main></div>
-    <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : format === 'pdf' && pages ? `${pages} 页` : '')} details={diagnostics}/>
+    <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : '')} details={diagnostics}/>
+      {format === 'pdf' && pdf.receipt && <span className="export-pdf-meta" aria-label="已生成 PDF 信息">{pdf.receipt.pages} 页 · {formatFileSize(pdf.receipt.size)}{pdf.busy ? ' · 正在更新' : ''}</span>}
       <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || (blocked && !accepted)))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>
   </div></div>;
 }

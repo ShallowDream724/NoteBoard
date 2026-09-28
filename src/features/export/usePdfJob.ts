@@ -77,7 +77,7 @@ export function usePdfJob(document: ExportDocument | null, options: PdfOptions, 
     const schedule = (options: PdfOptions) => {
       setBusy(true); setError(''); clearTimeout(timer);
       if (!running && pendingRevision === null) setProgress({ id, revision: revision + 1, phase: 'queued', startedAt: firstRun ? initialStartedAt : performance.now() });
-      timer = setTimeout(() => { timer = undefined; queued = options; void drain(); }, created ? 250 : 0);
+      timer = setTimeout(() => { timer = undefined; queued = options; void drain(); }, created ? 700 : 0);
     };
     request.current = schedule; schedule(latest.current);
     return () => {

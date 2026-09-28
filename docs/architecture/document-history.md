@@ -24,8 +24,9 @@ The transaction remains excluded from local history and carries the existing
 document-replacement origin for synchronization listeners. Selection restoration
 scrolls once; focusing the editor must not schedule a second scroll.
 
-A single-node attribute restoration uses `NodeAttributesStep`, with an empty
-position map and the existing child-content identity. Caption metadata shares
+A non-text node's attribute restoration uses `NodeAttributesStep`, with an empty
+position map and the existing child-content identity. Text replacements always
+use text steps, even though text nodes have equal empty child fragments. Caption metadata shares
 the same attribute-update primitive. This avoids rebuilding table row caches,
 code views or embedded controls merely to undo an attribute. A `data-editor-control`
 host declares an owned input: history preserves its caret while it remains
@@ -33,6 +34,17 @@ connected, and returns to a legal document selection when its owner is removed.
 Formula source and captions dispatch history shortcuts through the containing
 editor, rather than maintaining another document timeline. Creating an empty
 formula and entering/leaving its source explicitly close the input group.
+Formula and diagram textareas share `useNativeSourceInput`: the browser owns IME
+preedit, committed values enter the document once, and history maps the caret
+through the changed source without replacing or refocusing the input.
+Mermaid source writes each input to its node attribute, so source typing joins
+the document timeline and Ctrl+Z can continue through diagram creation and
+earlier content. A newly inserted default template opens its source through a
+transient editor request; an existing diagram stays in preview until opened.
+The source keeps its caret while the node survives an undo. Once its opening
+value is restored, one more Ctrl+Z exits source mode; subsequent Ctrl+Z moves
+through diagram creation and earlier document content. Code-block key events on
+the React NodeView shell route undo and redo to that same document timeline.
 
 Reading state is separate from content: heading folds and code-line folds live
 in plugin state; whole-code wrapping/folding and disclosure expansion live in
@@ -47,3 +59,5 @@ Additional integration cases cover text → empty code/disclosure/table → inne
 typing and the reverse redo sequence, formula source → empty formula → creation
 → preceding text, and caption undo without losing its focused editor. A long
 code typing case verifies that classification does not enumerate document nodes.
+Keyboard integration also covers code content, a newly inserted Mermaid
+template, and editing an existing Mermaid diagram across earlier history.

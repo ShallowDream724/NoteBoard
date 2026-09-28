@@ -15,7 +15,9 @@ async function render() {
     const applyTypography = (options: PdfOptions) => {
       document.documentElement.style.setProperty('--export-font', `${options.fontPt}pt`);
       document.documentElement.style.setProperty('--export-line', String(options.lineHeight));
-      document.documentElement.style.setProperty('--export-width', `${paperSize(options)[0] - options.marginMm * 2}mm`);
+      document.documentElement.style.setProperty('--export-paragraph-spacing', `${options.paragraphSpacingEm}em`);
+      document.documentElement.style.setProperty('--export-paragraph-before', '0em');
+      document.documentElement.style.setProperty('--export-width', `${paperSize(options)[0] - options.horizontalMarginMm * 2}mm`);
     };
     // Establish final metrics before fonts/layout are resolved for the first time.
     applyTypography(options);

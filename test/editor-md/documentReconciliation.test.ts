@@ -13,6 +13,7 @@ const examples: JSONContent[][] = [
   [{ type: 'bulletList', content: [{ type: 'listItem', content: [p('aaa')] }, { type: 'listItem', content: [p('nested')] }] }],
   [{ type: 'mathBlock', attrs: { latex: 'x^2', textAlign: 'right' } }, p('tail')],
   [{ type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { background: '#eff6ff' }, content: [p('cell')] }] }] }],
+  [p('abca')], [p('aXYa')], [p('中文标点，替换。')],
 ];
 
 it('reconciles content, marks, block attributes and nesting with exact target structure', () => {

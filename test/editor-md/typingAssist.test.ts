@@ -63,7 +63,7 @@ describe('Markdown interactive conveniences', () => {
       document.body.dispatchEvent(fallback); expect(fallback.defaultPrevented).toBe(true);
     } finally { dispose(); editor.destroy(); host.remove(); }
   });
-  for (const [text, expected] of [['···', 'codeBlock'], ['text···', 'paragraph'], ['...', 'paragraph'], ['···text···', 'paragraph']]) {
+  for (const [text, expected, language] of [['···', 'codeBlock', null], ['···python', 'codeBlock', 'python'], ['···c++', 'codeBlock', 'c++'], ['text···', 'paragraph', null], ['...', 'paragraph', null], ['···text···', 'paragraph', null]] as [string, string, string | null][]) {
     it(`only independent middle-dot fence converts: ${text}`, () => {
       const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: `<p>${text}</p>` });
       try {
@@ -71,6 +71,7 @@ describe('Markdown interactive conveniences', () => {
         editor.commands.setTextSelection(text.length + 1);
         editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
         expect(editor.state.doc.firstChild?.type.name).toBe(expected);
+        if (expected === 'codeBlock') expect(editor.state.doc.firstChild?.attrs.language).toBe(language);
         if (text === '···') {
           editor.commands.undo();
           expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');

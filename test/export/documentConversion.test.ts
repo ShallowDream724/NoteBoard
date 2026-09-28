@@ -1,12 +1,18 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { readFile } from '@tauri-apps/plugin-fs';
 import { prepareDocument, prepareHtmlExport } from '../../src/features/export/documentConversion';
 import { renderExportDiagrams } from '../../src/features/export/renderDiagrams';
 
-vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: vi.fn((path: string) => `host-specific:${path}`) }));
-vi.mock('@tauri-apps/plugin-fs', () => ({ readFile: vi.fn() }));
+const assetUrl = (path: string) => `http://asset.localhost/${encodeURIComponent(path)}`;
+vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: vi.fn((path: string) => `http://asset.localhost/${encodeURIComponent(path)}`) }));
 vi.mock('../../src/features/export/renderDiagrams', () => ({ renderExportDiagrams: vi.fn() }));
+
+const fetchAsset = vi.fn<typeof fetch>();
+beforeEach(() => vi.stubGlobal('fetch', fetchAsset));
+
+function assetResponse(bytes: Uint8Array): Response {
+  return { ok: true, status: 200, arrayBuffer: vi.fn(async () => Uint8Array.from(bytes).buffer) } as unknown as Response;
+}
 
 class ConversionWorker {
   static current: ConversionWorker;
@@ -19,7 +25,7 @@ class ConversionWorker {
   emit(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.mocked(convertFileSrc).mockReset().mockImplementation(path => `host-specific:${path}`); vi.mocked(readFile).mockReset(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); fetchAsset.mockReset(); vi.mocked(convertFileSrc).mockReset().mockImplementation(assetUrl); });
 
 it('maps only asset paths on the host and returns the worker HTML without parsing it', async () => {
   vi.stubGlobal('Worker', ConversionWorker);
@@ -27,7 +33,7 @@ it('maps only asset paths on the host and returns the worker HTML without parsin
   const result = prepareDocument('source', 'title', 'C:/docs');
   const worker = ConversionWorker.current;
   worker.emit({ type: 'assets', paths: ['C:/docs/a.png', 'C:/docs/b.png'] });
-  expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'asset-urls', urls: ['host-specific:C:/docs/a.png', 'host-specific:C:/docs/b.png'] });
+  expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'asset-urls', urls: [assetUrl('C:/docs/a.png'), assetUrl('C:/docs/b.png')] });
   expect(worker.terminate).not.toHaveBeenCalled();
   const html = '<article><p>noteboard-export-asset:0</p></article>';
   worker.emit({ type: 'result', result: { html, markdown: 'source', items: [] } });
@@ -59,41 +65,44 @@ it('host URL mapping failure rejects and releases the worker', async () => {
   expect(worker.terminate).toHaveBeenCalledTimes(1);
 });
 
-it('embeds local image originals for HTML even when desktop URLs are unavailable', async () => {
+it('embeds local image originals for HTML through asset URLs, reading duplicates once', async () => {
   vi.stubGlobal('Worker', ConversionWorker);
-  vi.mocked(convertFileSrc).mockImplementationOnce(() => { throw new Error('desktop URLs unavailable'); });
-  vi.mocked(readFile).mockResolvedValue(new Uint8Array([1, 2, 3]));
+  fetchAsset.mockResolvedValue(assetResponse(new Uint8Array([1, 2, 3])));
   const result = prepareHtmlExport('source', 'title', 'C:/docs');
   const worker = ConversionWorker.current;
   worker.emit({ type: 'assets', paths: ['C:/docs/a.png', 'C:/docs/a.png'] });
   await vi.waitFor(() => expect(worker.postMessage).toHaveBeenLastCalledWith({ type: 'asset-urls', urls: ['data:image/png;base64,AQID', 'data:image/png;base64,AQID'] }));
-  expect(readFile).toHaveBeenCalledOnce();
-  expect(convertFileSrc).not.toHaveBeenCalled();
+  expect(fetchAsset).toHaveBeenCalledExactlyOnceWith(assetUrl('C:/docs/a.png'), {
+    signal: expect.any(AbortSignal), credentials: 'omit', referrerPolicy: 'no-referrer',
+  });
+  expect(convertFileSrc).toHaveBeenCalledExactlyOnceWith('C:/docs/a.png');
   worker.emit({ type: 'result', result: '<html><img src="data:image/png;base64,AQID"></html>' });
   expect(await result).toContain('data:image/png;base64,AQID');
 });
 
 it('cancels HTML asset reads without posting a late result or reading the next image', async () => {
   vi.stubGlobal('Worker', ConversionWorker);
-  let finish!: (bytes: Uint8Array) => void;
-  vi.mocked(readFile).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  let finish!: (bytes: ArrayBuffer) => void;
+  const response = assetResponse(new Uint8Array());
+  response.arrayBuffer = vi.fn(() => new Promise<ArrayBuffer>(resolve => { finish = resolve; }));
+  fetchAsset.mockResolvedValue(response);
   const controller = new AbortController();
   const result = prepareHtmlExport('source', 'title', '', controller.signal);
   const worker = ConversionWorker.current;
   worker.emit({ type: 'assets', paths: ['C:/a.png', 'C:/b.png'] });
-  await vi.waitFor(() => expect(readFile).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(response.arrayBuffer).toHaveBeenCalledOnce());
   controller.abort();
   await expect(result).rejects.toMatchObject({ name: 'AbortError' });
-  finish(new Uint8Array([1, 2, 3]));
+  finish(new Uint8Array([1, 2, 3]).buffer);
   await new Promise(resolve => setTimeout(resolve, 0));
-  expect(readFile).toHaveBeenCalledOnce();
+  expect(fetchAsset).toHaveBeenCalledOnce();
   expect(worker.postMessage.mock.calls.some(call => call[0].type === 'asset-urls')).toBe(false);
   expect(worker.terminate).toHaveBeenCalledOnce();
 });
 
 it('fails HTML export with a readable image path when the original cannot be read', async () => {
   vi.stubGlobal('Worker', ConversionWorker);
-  vi.mocked(readFile).mockRejectedValue(new Error('file missing'));
+  fetchAsset.mockRejectedValue(new Error('file missing'));
   const result = prepareHtmlExport('source', 'title', '');
   const worker = ConversionWorker.current;
   worker.emit({ type: 'assets', paths: ['C:/中文 图片.png'] });

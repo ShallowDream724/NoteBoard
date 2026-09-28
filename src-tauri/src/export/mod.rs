@@ -13,13 +13,37 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder, We
 #[serde(rename_all = "camelCase")]
 pub struct PdfPayload { pub html: String, pub options: PdfOptions, pub title: String, pub font_css: String }
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", from = "RawPdfOptions")]
 pub struct PdfOptions {
-    pub paper: String, pub landscape: bool, pub margin_mm: f64, pub font_pt: f64,
-    pub line_height: f64, pub page_numbers: bool,
-    #[serde(default = "default_position")] pub page_number_position: String,
-    #[serde(default = "default_number_style")] pub page_number_style: String,
+    pub paper: String, pub landscape: bool, pub margin_mm: f64,
+    pub horizontal_margin_mm: f64,
+    pub font_pt: f64, pub line_height: f64,
+    pub paragraph_spacing_em: f64,
+    pub page_numbers: bool,
+    pub page_number_position: String, pub page_number_style: String,
     pub items: HashMap<String, String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawPdfOptions {
+    paper: String, landscape: bool, margin_mm: f64,
+    #[serde(default)] horizontal_margin_mm: Option<f64>,
+    font_pt: f64, line_height: f64,
+    #[serde(default = "default_paragraph_spacing")] paragraph_spacing_em: f64,
+    page_numbers: bool,
+    #[serde(default = "default_position")] page_number_position: String,
+    #[serde(default = "default_number_style")] page_number_style: String,
+    items: HashMap<String, String>,
+}
+impl From<RawPdfOptions> for PdfOptions {
+    fn from(raw: RawPdfOptions) -> Self {
+        Self { paper: raw.paper, landscape: raw.landscape, margin_mm: raw.margin_mm,
+            horizontal_margin_mm: raw.horizontal_margin_mm.unwrap_or(raw.margin_mm),
+            font_pt: raw.font_pt, line_height: raw.line_height,
+            paragraph_spacing_em: raw.paragraph_spacing_em, page_numbers: raw.page_numbers,
+            page_number_position: raw.page_number_position, page_number_style: raw.page_number_style,
+            items: raw.items }
+    }
 }
 impl PdfOptions {
     fn vertical_margins_mm(&self) -> (f64, f64) {
@@ -30,6 +54,7 @@ impl PdfOptions {
 }
 fn default_position() -> String { "bottom-center".into() }
 fn default_number_style() -> String { "number".into() }
+fn default_paragraph_spacing() -> f64 { 0.65 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LayoutIssue { pub id: String, pub message: String, pub blocking: bool }
 #[derive(Serialize)]
@@ -92,9 +117,10 @@ pub fn release_owner(app: &AppHandle, owner: &str) {
     for id in ids { remove(app, &id); }
 }
 fn validate(o: &PdfOptions) -> Result<(), String> {
-    if ![o.margin_mm, o.font_pt, o.line_height].iter().all(|v| v.is_finite())
-        || !(0.0..=40.0).contains(&o.margin_mm) || !(8.0..=24.0).contains(&o.font_pt)
-        || !(1.0..=2.5).contains(&o.line_height)
+    if ![o.margin_mm, o.horizontal_margin_mm, o.font_pt, o.line_height, o.paragraph_spacing_em].iter().all(|v| v.is_finite())
+        || !(0.0..=40.0).contains(&o.margin_mm) || !(0.0..=40.0).contains(&o.horizontal_margin_mm)
+        || !(8.0..=24.0).contains(&o.font_pt)
+        || !(1.0..=2.5).contains(&o.line_height) || !(0.0..=2.0).contains(&o.paragraph_spacing_em)
         || !["A4", "Letter"].contains(&o.paper.as_str())
         || !["top-left", "top-center", "top-right", "bottom-left", "bottom-center", "bottom-right"].contains(&o.page_number_position.as_str())
         || !["number", "total", "dashes"].contains(&o.page_number_style.as_str()) {
@@ -109,7 +135,9 @@ async fn wait(rx: mpsc::Receiver<Result<PdfReceipt, String>>) -> Result<PdfRecei
 
 fn same_body_layout(a: &PdfOptions, b: &PdfOptions) -> bool {
     a.paper == b.paper && a.landscape == b.landscape && a.margin_mm == b.margin_mm
-        && a.font_pt == b.font_pt && a.line_height == b.line_height && a.items == b.items
+        && a.horizontal_margin_mm == b.horizontal_margin_mm
+        && a.font_pt == b.font_pt && a.line_height == b.line_height
+        && a.paragraph_spacing_em == b.paragraph_spacing_em && a.items == b.items
         && a.vertical_margins_mm() == b.vertical_margins_mm()
 }
 
@@ -233,4 +261,56 @@ pub fn save_pdf(app: AppHandle, window: WebviewWindow, id: String, revision: Opt
 #[tauri::command]
 pub fn release_pdf(app: AppHandle, window: WebviewWindow, id: String) -> Result<(), String> {
     if job(&app, &id, window.label()).is_ok() { remove(&app, &id); } Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PdfOptions, same_body_layout, validate};
+
+    fn options() -> PdfOptions {
+        serde_json::from_value(serde_json::json!({
+            "paper": "A4", "landscape": false, "marginMm": 12.0,
+            "horizontalMarginMm": 12.0, "fontPt": 10.5, "lineHeight": 1.4,
+            "paragraphSpacingEm": 0.65, "pageNumbers": true,
+            "pageNumberPosition": "bottom-center", "pageNumberStyle": "number", "items": {}
+        })).unwrap()
+    }
+
+    #[test]
+    fn legacy_uniform_margin_payload_keeps_both_axes_and_paragraph_default() {
+        let mut legacy = serde_json::to_value(options()).unwrap();
+        legacy.as_object_mut().unwrap().remove("horizontalMarginMm");
+        legacy.as_object_mut().unwrap().remove("paragraphSpacingEm");
+        legacy["marginMm"] = 17.0.into();
+        let restored: PdfOptions = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.horizontal_margin_mm, 17.0);
+        assert_eq!(restored.vertical_margins_mm(), (17.0, 17.0));
+        assert_eq!(restored.paragraph_spacing_em, 0.65);
+        assert!(validate(&restored).is_ok());
+        let payload = serde_json::to_value(restored.clone()).unwrap();
+        assert_eq!(payload["horizontalMarginMm"], 17.0);
+        assert_eq!(payload["paragraphSpacingEm"], 0.65);
+    }
+
+    #[test]
+    fn margin_axis_and_paragraph_changes_invalidate_body_cache() {
+        let base = options();
+        let mut horizontal = base.clone(); horizontal.horizontal_margin_mm = 20.0;
+        let mut vertical = base.clone(); vertical.margin_mm = 20.0;
+        let mut paragraph = base.clone(); paragraph.paragraph_spacing_em = 1.0;
+        assert!(!same_body_layout(&base, &horizontal));
+        assert!(!same_body_layout(&base, &vertical));
+        assert!(!same_body_layout(&base, &paragraph));
+        let mut page_style = base.clone(); page_style.page_number_style = "total".into();
+        assert!(same_body_layout(&base, &page_style));
+    }
+
+    #[test]
+    fn horizontal_margin_uses_same_range_as_vertical() {
+        let mut value = options();
+        value.horizontal_margin_mm = 41.0;
+        assert!(validate(&value).is_err());
+        value.horizontal_margin_mm = f64::NAN;
+        assert!(validate(&value).is_err());
+    }
 }

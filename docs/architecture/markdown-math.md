@@ -30,7 +30,7 @@
 
 1. `mathSyntax.ts`：纯边界识别与序列化。
 2. `documentNodes.ts` 定义共享 Markdown/ProseMirror 节点；`katexExtensions.tsx` 只附加输入行为与编辑视图，导出不加载这些交互组件。
-3. `MathNodeView.tsx`：焦点与输入；不持有独立的正文草稿副本。`FormulaSourceEditor` 将原生输入法组合与文档提交隔离，组合结束和后续同值 input 只提交一次；外部撤销等值更新在非组合状态同步到输入框。`mathPreview.ts` 独立拥有空预览宿主的 DOM，滚动中不重渲染 React NodeView、不产生文档事务。
+3. `MathNodeView.tsx`：焦点与输入；不持有独立的正文草稿副本。`FormulaSourceEditor` 通过与图表源码共用的 `useNativeSourceInput` 隔离原生输入法组合与文档提交，组合结束和后续同值 input 只提交一次；外部撤销等值更新在非组合状态同步到输入框并映射光标。`mathPreview.ts` 独立拥有空预览宿主的 DOM，滚动中不重渲染 React NodeView、不产生文档事务。
 4. `mathRendering.ts`：共享 Worker 请求、相同公式去重及缓存；最多 512 项且按 UTF-16 估算不超过 4 MiB，不含引擎对象开销。同优先级短批次最多 16 式、8 Ki 源码字符、约 8 ms，每式结果直接回传，批次边界重排优先级，避免每个公式一次计时器及请求往返。取消立即隔离消费者；已发送工作仍受单式两秒无进展截止约束，未执行尾部返回调度器。`mathEngine.ts` 在 Worker 中按需加载 KaTeX/mhchem。详见 [worker 调度](../performance/math-worker-scheduling.md)。
 5. `embeddedEditor.ts`：在公式所在段落前创建临时 ProseMirror widget，通过 React portal 放置源码输入；不插入正文节点。事务只映射活动公式位置，属性更新不会关闭输入。`FormulaSourceEditor` 负责自适应高度和手动纵向调整。行内预览仍保留在原段落。
 6. `mathPreviewSession.ts`：每个编辑器拥有一个独立会话。至多 512 式、64 Ki 源码字符的文档主动预排；普通 Atlas 完成后不会因离屏反复拆装。较大文档只预备邻近上下两屏。按约 64 Ki DOM 节点、1024 项的驻留预算逐出较早离开的预览，邻近及正在编辑的内容豁免，因此这是工作集预算而不是整个可视区域的硬节点上限。后台预排按实际节点数停止，不能仅按公式个数放大 DOM。可视化内核显式传入活动/可见状态；隐藏时取消准备工作，保留既有 DOM，恢复时继续。进入/退出公式源码编辑只更新优先级，不重建相同预览。

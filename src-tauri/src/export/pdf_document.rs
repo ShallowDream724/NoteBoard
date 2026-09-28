@@ -73,9 +73,10 @@ pub fn prepare(input: &Path, output: &Path, options: &PdfOptions, cancelled: &At
             doc.get_dictionary_mut(id).map_err(|e| e.to_string())?.set("Resources", resources);
             let text = match options.page_number_style.as_str() { "total" => format!("{number} / {count}"), "dashes" => format!("- {number} -"), _ => number.to_string() };
             let text_width: f32 = text.chars().map(|c| if c.is_ascii_digit() { 5.004 } else { 2.502 }).sum();
-            let margin = (options.margin_mm as f32 * 72.0 / 25.4).max(12.0);
-            let x = if options.page_number_position.ends_with("left") { margin } else if options.page_number_position.ends_with("right") { width - margin - text_width } else { (width - text_width) / 2.0 };
-            let y = if options.page_number_position.starts_with("top") { height - (margin / 2.0).max(12.0) } else { (margin / 2.0 - 3.0).max(6.0) };
+            let horizontal_margin = (options.horizontal_margin_mm as f32 * 72.0 / 25.4).max(12.0);
+            let vertical_margin = (options.margin_mm as f32 * 72.0 / 25.4).max(12.0);
+            let x = if options.page_number_position.ends_with("left") { horizontal_margin } else if options.page_number_position.ends_with("right") { width - horizontal_margin - text_width } else { (width - text_width) / 2.0 };
+            let y = if options.page_number_position.starts_with("top") { height - (vertical_margin / 2.0).max(12.0) } else { (vertical_margin / 2.0 - 3.0).max(6.0) };
             let contents = Content { operations: vec![
                 Operation::new("Q", vec![]), Operation::new("q", vec![]), Operation::new("BT", vec![]),
                 Operation::new("Tf", vec![Object::Name(b"NBPageNumber".to_vec()), 9.into()]),
