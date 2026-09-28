@@ -110,7 +110,7 @@ describe('公式源码输入', () => {
       } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
     });
   }
-  it('即时进入文档、保留换行、忽略输入法确认键并把撤销交给宿主', async () => {
+  it('即时进入文档、保留换行、忽略输入法确认键并接入文档撤销', async () => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const undo = vi.fn(() => true);
     const history = Extension.create({ name: 'testDocumentHistory', priority: 1000,

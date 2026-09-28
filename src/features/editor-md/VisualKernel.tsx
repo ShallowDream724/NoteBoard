@@ -27,7 +27,7 @@ import { AnnotationLayer } from './annotations/AnnotationLayer';
 import { EditorBubbleMenu, TableToolbar } from './bubbleMenu';
 import { BlockDragHandle } from './blockDragHandle';
 import { BLOCK_MOVE_META } from './headingFolding';
-import { DISCRETE_EDIT_META } from './discreteEdit';
+import { VisualHistoryGrouping } from './visualHistoryGrouping';
 import { EditorContextMenu } from './EditorContextMenu';
 import { LinkModal } from './LinkModal';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -98,6 +98,7 @@ export function VisualKernel({
     onOpenLinkModal: makeLinkModalOpener(docKey),
   }), ClipboardImport.configure({ docKey })], [docKey]);
   const initializeContent = useMemo(() => makeInitialContentLoader(docKey), [docKey]);
+  const historyGrouping = useMemo(() => new VisualHistoryGrouping(), [docKey]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   useEffect(() => { if (!active || !visible) setContextMenu(null); }, [active, visible]);
@@ -132,7 +133,8 @@ export function VisualKernel({
 
       // 🔴 J2：输入热路径零全文工作——只捕获不可变 ProseMirror 文档根引用（O(1)）
       const nativeUndoDepth = prosemirrorUndoDepth(editor.state);
-      const startsNewGroup = Boolean(transaction.getMeta(DISCRETE_EDIT_META) || transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current;
+      const startsNewGroup = historyGrouping.startsNewGroup(transaction,
+        Boolean(transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current);
 
       // 新历史组开始：立即物化上一组末端（组内合并结束，跨组节点全部保留——
       // 不因延迟序列化把多组丢成一组）
@@ -154,7 +156,7 @@ export function VisualKernel({
         revision: getDocumentRevision(docKey),
         manager: getMarkdownManager(editor),
         schema: editor.schema,
-        // 组边界由原生 undoDepth 判定（与防抖物化无关——防抖后同组继续输入仍属同组）
+        // 输入节奏来自原生历史，结构动作由共同策略隔离；与防抖物化无关。
         isNewGroup: startsNewGroup,
         // 组起点选区：本组首事务的 before 位置（TipTap 事务不公开初始选区，
         // 文档首差异位置就是本次修改在旧文档中的稳定落点）

@@ -2,7 +2,7 @@ import { Editor, Node, type JSONContent } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Code from '@tiptap/extension-code';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
-import { closeHistory, redo, undo } from '@tiptap/pm/history';
+import { closeHistory } from '@tiptap/pm/history';
 import type { EditorView } from '@tiptap/pm/view';
 import { createRoot } from 'react-dom/client';
 import { EditorBubbleMenu } from './bubbleMenu';
@@ -13,6 +13,7 @@ import { setFigureCaptionContent } from './figureCaptionCommands';
 import { initializeEditorDocument, serializeNativeNode } from './editorDocumentCodec';
 import './imageCaption.css';
 import { TooltipProvider } from '../../components/Tooltip';
+import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 
 const active = new WeakMap<EditorView, () => void>();
 let nextHistoryGroup = -1;
@@ -24,6 +25,7 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
   view: EditorView; getPos: () => number | undefined; label: string; close: () => void;
 }) {
   const { view, getPos } = options;
+  host.dataset.editorControl = 'true';
   view.dispatch(closeHistory(view.state.tr).setMeta('addToHistory', false));
   const position = getPos(), original = typeof position === 'number' ? view.state.doc.nodeAt(position) : null;
   const element = document.createElement('div'), menuHost = document.createElement('div');
@@ -44,7 +46,7 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
       if (event.isComposing) return false;
       if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
         event.preventDefault(); event.stopPropagation();
-        (event.shiftKey || event.key.toLowerCase() === 'y' ? redo : undo)(view.state, view.dispatch);
+        dispatchEditorShortcut(view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
         historyGroup = nextHistoryGroup--; lastEdit = 0;
         sync(); return true;
       }

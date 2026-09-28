@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { insertLocalImageWithDialog } from './imagePaste';
 import { insertDocumentTable } from './insertDocumentTable';
+import { runDiscreteEdit } from './discreteEdit';
 import { useWindowStore } from '../../stores/windowStore';
 import { emit } from '../../core/emitter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
@@ -315,7 +316,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     aliases: ['gongshi', 'gs', 'math', 'latex', 'inline', 'katex'],
     keywords: '公式 数学公式 math latex inline katex gongshi',
     action: (editor, range) => {
-      editor.chain().focus().deleteRange(range).insertContent({ type: 'mathInline', attrs: { latex: 'E=mc^2' } }).run();
+      runDiscreteEdit(editor, chain => chain.focus().deleteRange(range).insertContent({ type: 'mathInline', attrs: { latex: 'E=mc^2' } }));
     },
   },
   {
@@ -329,7 +330,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     aliases: ['kuaijigongshi', 'kjgs', 'math', 'latex', 'block', 'katex'],
     keywords: '块级公式 数学公式 math latex block katex',
     action: (editor, range) => {
-      editor.chain().focus().deleteRange(range).insertContent({ type: 'mathBlock', attrs: { latex: '' } }).run();
+      runDiscreteEdit(editor, chain => chain.focus().deleteRange(range).insertContent({ type: 'mathBlock', attrs: { latex: '' } }));
     },
   },
   {

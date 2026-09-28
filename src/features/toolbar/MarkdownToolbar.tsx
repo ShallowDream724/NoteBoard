@@ -82,6 +82,7 @@ import { clearSelectionTextFormatting } from '../editor-md/textFormatting';
 import { CellSelection } from '@tiptap/pm/tables';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent, mathContent } from '../editor-md/insertContentRecipes';
+import { runDiscreteEdit } from '../editor-md/discreteEdit';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -233,7 +234,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
     if (!editor) return;
-    editor.chain().focus().insertContent(mathContent(type)).run();
+    runDiscreteEdit(editor, chain => chain.focus().insertContent(mathContent(type)));
   };
 
   const handleInsertMermaid = () => {

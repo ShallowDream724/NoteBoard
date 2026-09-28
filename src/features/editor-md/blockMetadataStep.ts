@@ -1,7 +1,8 @@
-import { Fragment, Slice, type Node, type Schema } from '@tiptap/pm/model';
+import type { Node, Schema } from '@tiptap/pm/model';
 import { Step, StepResult, type Mappable } from '@tiptap/pm/transform';
 import { annotationId } from './annotations/model';
 import { validateFigureCaption, validateFigureCaptionContent } from './figureCaption';
+import { applyNodeAttributes } from './nodeAttributesStep';
 
 type MetadataAttribute = 'annotationId' | 'caption' | 'captionContent';
 function valid(attr: string, value: unknown): boolean {
@@ -17,8 +18,7 @@ export class BlockMetadataStep extends Step {
   apply(doc: Node) {
     const block = doc.nodeAt(this.pos);
     if (!block?.isBlock || !Object.hasOwn(block.attrs, this.attr) || !valid(this.attr, this.value)) return StepResult.fail('Invalid block metadata');
-    const updated = block.type.create({ ...block.attrs, [this.attr]: this.value }, block.content, block.marks);
-    return StepResult.fromReplace(doc, this.pos, this.pos + block.nodeSize, new Slice(Fragment.from(updated), 0, 0));
+    return applyNodeAttributes(doc, this.pos, { [this.attr]: this.value });
   }
   invert(doc: Node) { return new BlockMetadataStep(this.pos, this.attr, doc.nodeAt(this.pos)!.attrs[this.attr]); }
   map(mapping: Mappable) {

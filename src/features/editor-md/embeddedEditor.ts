@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { closeHistory } from '@tiptap/pm/history';
 
 const key = new PluginKey<number | null>('embedded-source-editor');
 const hosts = new WeakMap<Editor, HTMLDivElement>();
@@ -43,7 +44,7 @@ export function openEmbeddedEditor(editor: Editor, position: number): { host: HT
       view: () => ({ destroy: () => hosts.delete(editor) }),
     }));
   }
-  editor.view.dispatch(editor.state.tr.setMeta(key, { position }).setMeta('addToHistory', false));
+  editor.view.dispatch(closeHistory(editor.state.tr).setMeta(key, { position }).setMeta('addToHistory', false));
   const lease = Symbol(); leases.set(editor, lease);
   return { host, close: () => {
     if (leases.get(editor) === lease) closeEmbeddedEditor(editor, host!);
@@ -52,7 +53,7 @@ export function openEmbeddedEditor(editor: Editor, position: number): { host: HT
 
 export function closeEmbeddedEditor(editor: Editor, host: HTMLElement) {
   if (!editor.isDestroyed && hosts.get(editor) === host) {
-    editor.view.dispatch(editor.state.tr.setMeta(key, { position: null }).setMeta('addToHistory', false));
+    editor.view.dispatch(closeHistory(editor.state.tr).setMeta(key, { position: null }).setMeta('addToHistory', false));
   }
 }
 

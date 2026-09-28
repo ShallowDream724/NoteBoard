@@ -10,6 +10,12 @@ import exportCss from '../../src/features/export/document.css?inline';
 import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
 import { CodeHighlight } from '../../src/features/editor-md/codeHighlightExtension';
 import { TooltipProvider } from '../../src/components/Tooltip';
+import { TipTapEditor } from '../../src/features/editor-md/TipTapEditor';
+import { useDocumentStore } from '../../src/stores/documentStore';
+import { useWindowStore } from '../../src/stores/windowStore';
+import { getMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
+import { encodeNativeDocument } from '../../src/core/nativeDocument';
+import { runDiscreteEdit } from '../../src/features/editor-md/discreteEdit';
 
 const host = document.getElementById('root')!;
 host.style.cssText = 'width:800px;padding:20px;margin:20px;font-size:18px';
@@ -25,6 +31,32 @@ initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboa
 createRoot(host).render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>);
 let historySnapshot = '';
 const qa = {
+  mountSharedHistory() {
+    const key = 'untitled:browser-math-history';
+    useDocumentStore.getState().upsertFromPayload({ key, displayName: 'math-history.nb', dirPath: '', kind: 'noteboard', language: 'markdown',
+      content: encodeNativeDocument({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Before' }] }] }),
+      encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false });
+    useWindowStore.getState().openTab({ key, displayName: 'math-history.nb', path: null, kind: 'noteboard', language: 'markdown',
+      isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
+    const container = document.createElement('div');
+    container.dataset.mathSharedHistory = '';
+    document.body.appendChild(container);
+    createRoot(container).render(<TooltipProvider><TipTapEditor docKey={key}/></TooltipProvider>);
+  },
+  insertSharedBlock() {
+    runDiscreteEdit(getMdTipTapEditor('untitled:browser-math-history')!, chain => chain.focus('end').insertContent({ type: 'mathBlock', attrs: { latex: '' } }));
+  },
+  prepareSharedInline() {
+    getMdTipTapEditor('untitled:browser-math-history')!.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+      { type: 'text', text: 'Before ' }, { type: 'mathInline', attrs: { latex: '' } }, { type: 'text', text: ' After' },
+    ] }] });
+  },
+  sharedState() {
+    const editor = getMdTipTapEditor('untitled:browser-math-history')!;
+    const formulas: string[] = [];
+    editor.state.doc.descendants(node => { if (node.type.name === 'mathBlock' || node.type.name === 'mathInline') formulas.push(node.attrs.latex); });
+    return { formulas, text: editor.state.doc.textContent };
+  },
   align(value: 'left' | 'center' | 'right') {
     editor.commands.setNodeSelection(0);
     setParagraphPresentation(editor, { textAlign: value });
@@ -62,6 +94,16 @@ const qa = {
     editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Before $$ after' }] }] });
     editor.commands.setTextSelection(9);
     editor.view.focus();
+  },
+  prepareSourceUndo(block: boolean) {
+    editor.commands.setContent({ type: 'doc', content: block
+      ? [{ type: 'paragraph', content: [{ type: 'text', text: 'Before' }] }, { type: 'mathBlock', attrs: { latex: '' } }, { type: 'paragraph', content: [{ type: 'text', text: 'After' }] }]
+      : [{ type: 'paragraph', content: [{ type: 'text', text: 'Before ' }, { type: 'mathInline', attrs: { latex: '' } }, { type: 'text', text: ' After' }] }] });
+  },
+  sourceUndoState() {
+    const formulas: { type: string; latex: string }[] = [];
+    editor.state.doc.descendants(node => { if (node.type.name === 'mathInline' || node.type.name === 'mathBlock') formulas.push({ type: node.type.name, latex: node.attrs.latex }); });
+    return { formulas, text: editor.state.doc.textContent };
   },
   text: () => editor.state.doc.textContent,
   async export() {

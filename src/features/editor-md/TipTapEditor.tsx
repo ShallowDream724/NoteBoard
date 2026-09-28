@@ -15,6 +15,7 @@ import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
 import { mapNativeDocumentSelection } from './nativeSourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
+import { focusedEditorControl } from './editorControlFocus';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
@@ -527,6 +528,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
         const editor = tipTapEditorRef.current;
         if (!editor || editor.isDestroyed) throw new Error('编辑器尚未就绪');
+        const activeControl = focusedEditorControl(editor.view);
         const previousVisualDocument = editor.state.doc;
         if (hasMarkdownContentChanged(editor, entry.content)) {
           // Shared history applies only the changed slice; unaffected views keep
@@ -536,6 +538,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         const content = serializeEditorDocument(editor);
         synchronizeCurrentDocumentHistoryContent(docKey, content, 'visual');
         publish(content);
+        // A surviving embedded control owns its caret. Removing its node tears
+        // down that control, then the document resumes at a legal selection.
+        if (activeControl?.isConnected && editor.view.dom.contains(activeControl)) return;
         const preferredSelection = navigation.selectionMode === 'visual'
           ? navigation.selection
           : undefined;
@@ -545,12 +550,9 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         const fallbackPosition = visualChangePosition ?? Math.min(navigation.changeOffset, maxPosition);
         const anchor = Math.max(1, Math.min(preferredSelection?.anchor ?? fallbackPosition, maxPosition));
         const head = Math.max(1, Math.min(preferredSelection?.head ?? anchor, maxPosition));
-        editor
-          .chain()
-          .setTextSelection({ from: anchor, to: head })
-          .scrollIntoView()
-          .focus(undefined, { scrollIntoView: false })
-          .run();
+        const selection = TextSelection.between(editor.state.doc.resolve(anchor), editor.state.doc.resolve(head));
+        editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+        editor.view.focus();
       },
     });
   }, [docKey, initSourceEditor]);

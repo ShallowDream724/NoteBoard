@@ -46,3 +46,23 @@ it('shares incremental restoration with Markdown history and keeps unchanged cod
     expect(serializeMarkdown(editor)).toBe(baseline);
   } finally { editor.destroy(); }
 });
+
+it.each([
+  { node: { type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'print(1)' }] }, attr: 'language', value: 'javascript' },
+  { node: { type: 'disclosure', attrs: { title: 'Before' }, content: [p('body')] }, attr: 'title', value: 'After' },
+  { node: examples[8][0], attr: 'caption', value: 'Details' },
+])('restores $node.type metadata without replacing its contents or moving its caret', ({ node, attr, value }) => {
+  const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [node, p('tail')] } });
+  try {
+    const original = editor.state.doc.firstChild!;
+    const selection = editor.state.selection;
+    const json = editor.getJSON(); json.content![0].attrs = { ...json.content![0].attrs, [attr]: value };
+    let remapped = false;
+    editor.on('transaction', ({ transaction }) => transaction.mapping.maps.forEach(map => map.forEach(() => { remapped = true; })));
+    reconcileDocumentHistory(editor, editor.schema.nodeFromJSON(json));
+    expect(editor.state.doc.firstChild!.attrs[attr]).toBe(value);
+    expect(editor.state.doc.firstChild!.content).toBe(original.content);
+    expect(editor.state.selection.eq(selection)).toBe(true);
+    expect(remapped).toBe(false);
+  } finally { editor.destroy(); }
+});

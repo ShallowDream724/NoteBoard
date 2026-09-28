@@ -8,6 +8,7 @@ import { isDisplayMath, mathClosingDelimiter, mathInInputRange, type MathMatch }
 import { MathInlineNode, MathBlockNode, mathSource as source } from './documentNodes';
 import { handleMathKey } from './mathNavigation';
 import { mathEditingRequestPlugin, requestMathEditing } from './mathEditingRequest';
+import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
 export { clearKatexCache } from './mathRendering';
 
 const compositions = new WeakMap<Editor, { start: number; pending: boolean }>();
@@ -118,9 +119,10 @@ export const MathInline = MathInlineNode.extend({
     })];
   },
   addCommands() {
-    return { insertMathInline: (latex: string) => ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => (
-      commands.insertContent({ type: this.name, attrs: { latex } })
-    ) } as never;
+    return { insertMathInline: (latex: string) => ({ commands, tr }: { commands: { insertContent: (content: unknown) => boolean }; tr: import('@tiptap/pm/state').Transaction }) => {
+      discreteTransaction(tr);
+      return commands.insertContent({ type: this.name, attrs: { latex } });
+    } } as never;
   },
 });
 
@@ -144,14 +146,15 @@ export const MathBlock = MathBlockNode.extend({
         const pos = $from.before();
         const tr = state.tr.replaceWith(pos, $from.after(), this.type.create({ latex: '', delimiter }));
         tr.setSelection(NodeSelection.create(tr.doc, pos));
-        view.dispatch(tr.scrollIntoView());
+        dispatchDiscreteEdit(view, tr.scrollIntoView());
         return true;
       },
     };
   },
   addCommands() {
-    return { insertMathBlock: (latex: string) => ({ commands }: { commands: { insertContent: (content: unknown) => boolean } }) => (
-      commands.insertContent({ type: this.name, attrs: { latex } })
-    ) } as never;
+    return { insertMathBlock: (latex: string) => ({ commands, tr }: { commands: { insertContent: (content: unknown) => boolean }; tr: import('@tiptap/pm/state').Transaction }) => {
+      discreteTransaction(tr);
+      return commands.insertContent({ type: this.name, attrs: { latex } });
+    } } as never;
   },
 });

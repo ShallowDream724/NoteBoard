@@ -1,4 +1,4 @@
-/* global window, document, requestAnimationFrame, getComputedStyle, innerWidth */
+/* global window, document, requestAnimationFrame, getComputedStyle, innerWidth, MouseEvent */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
@@ -118,6 +118,59 @@ try {
   await page.keyboard.type('outside');
   assert.deepEqual(await page.evaluate(() => window.mathAlignmentQA.formulas()), ['abc']);
   assert.equal(await page.evaluate(() => window.mathAlignmentQA.text()), 'Before outside after');
+  await page.evaluate(() => window.mathAlignmentQA.mountSharedHistory());
+  const shared = page.locator('[data-math-shared-history]');
+  await shared.locator('.ProseMirror').waitFor();
+  await shared.locator('.ProseMirror').focus();
+  await page.keyboard.press('Control+End');
+  await page.keyboard.type(' text');
+  assert.equal((await page.evaluate(() => window.mathAlignmentQA.sharedState())).text, 'Before text');
+  await page.evaluate(() => window.mathAlignmentQA.insertSharedBlock());
+  const sharedSource = shared.getByRole('textbox', { name: '块公式源码' });
+  await sharedSource.waitFor();
+  await sharedSource.focus();
+  const sourceElement = await sharedSource.elementHandle();
+  await page.keyboard.type('a');
+  await page.waitForTimeout(550);
+  await page.keyboard.type('b');
+  assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, ['ab']);
+  for (const expected of ['a', '']) {
+    await page.keyboard.press('Control+z');
+    assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, [expected]);
+    assert(await sourceElement.evaluate(element => element.isConnected && document.activeElement === element), 'Source undo must retain the textarea and focus');
+    assert.equal(await sourceElement.evaluate(element => element.selectionStart), expected.length);
+  }
+  await page.keyboard.press('Control+z');
+  assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, []);
+  assert.equal(await sharedSource.count(), 0);
+  await page.keyboard.press('Control+z');
+  assert.equal((await page.evaluate(() => window.mathAlignmentQA.sharedState())).text, 'Before');
+  for (let step = 0; step < 4; step++) await page.keyboard.press('Control+y');
+  assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, ['ab']);
+  assert.equal((await page.evaluate(() => window.mathAlignmentQA.sharedState())).text, 'Before text');
+  await page.evaluate(() => window.mathAlignmentQA.prepareSharedInline());
+  await shared.locator('.math-node:not(.math-node-display)').waitFor();
+  await shared.locator('.math-node:not(.math-node-display)').evaluate(element => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  const inlineSource = shared.getByRole('textbox', { name: '行内公式源码' });
+  await inlineSource.waitFor();
+  await inlineSource.focus();
+  const inlineElement = await inlineSource.elementHandle();
+  await page.keyboard.type('a');
+  await page.waitForTimeout(550);
+  await page.keyboard.type('b');
+  for (const expected of ['a', '']) {
+    await page.keyboard.press('Control+z');
+    assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, [expected]);
+    assert(await inlineElement.evaluate(element => element.isConnected && document.activeElement === element), 'Inline source undo must retain the textarea and focus');
+    assert.equal(await inlineElement.evaluate(element => element.selectionStart), expected.length);
+  }
+  for (const expected of ['a', 'ab']) {
+    await page.keyboard.press('Control+y');
+    assert.deepEqual((await page.evaluate(() => window.mathAlignmentQA.sharedState())).formulas, [expected]);
+    assert(await inlineElement.evaluate(element => element.isConnected && document.activeElement === element), 'Inline source redo must retain the textarea and focus');
+    assert.equal(await inlineElement.evaluate(element => element.selectionStart), expected.length);
+  }
+  assert.equal((await page.evaluate(() => window.mathAlignmentQA.sharedState())).text, 'Before  After');
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, checks: results.length, results }, null, 2));
 } finally { await browser.close(); await new Promise(resolve => server.httpServer.close(resolve)); }

@@ -31,9 +31,18 @@ export function FormulaSourceEditor({ value, display, initialSelection, onChange
     const element = input.current!;
     published.current = value;
     if (element.value === value) return;
+    const previous = element.value;
     const { selectionStart, selectionEnd, selectionDirection } = element;
+    let prefix = 0;
+    while (prefix < previous.length && prefix < value.length && previous[prefix] === value[prefix]) prefix++;
+    let suffix = 0;
+    while (suffix < previous.length - prefix && suffix < value.length - prefix
+      && previous[previous.length - suffix - 1] === value[value.length - suffix - 1]) suffix++;
+    const oldEnd = previous.length - suffix, newEnd = value.length - suffix;
+    const mapCaret = (position: number) => position < prefix ? position : position > oldEnd
+      ? position + value.length - previous.length : newEnd;
     element.value = value;
-    element.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+    element.setSelectionRange(mapCaret(selectionStart), mapCaret(selectionEnd), selectionDirection);
   }, [value]);
   useLayoutEffect(() => {
     const element = input.current!;
@@ -60,7 +69,7 @@ export function FormulaSourceEditor({ value, display, initialSelection, onChange
     if (composing.current) pendingBlur.current = true;
     else onClose();
   }} style={{ width: '100%', padding: '8px 0 10px', boxSizing: 'border-box' }}>
-    <textarea ref={input} defaultValue={initialValue.current} aria-label={display ? '块公式源码' : '行内公式源码'} spellCheck={false}
+    <textarea ref={input} defaultValue={initialValue.current} aria-label={display ? '块公式源码' : '行内公式源码'} spellCheck={false} data-shortcuts-suspended
       onFocus={() => { pendingBlur.current = false; }}
       onCompositionStart={() => { composing.current = true; }}
       onCompositionEnd={event => {
