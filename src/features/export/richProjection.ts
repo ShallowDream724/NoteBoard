@@ -54,7 +54,7 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
     value.content?.forEach((child, index) => {
       content.push(...project(child));
       const id = referenceId(child);
-      if (id && referenceId(value.content![index + 1] ?? {}) !== id) content.push(reference(id));
+      if (mode !== 'html' && id && referenceId(value.content![index + 1] ?? {}) !== id) content.push(reference(id));
     });
     if (mode !== 'portable' && value.type === 'imageSlot') {
       const captions = content.filter(child => child.type === 'paragraph');
@@ -64,13 +64,13 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
       }
     }
     const attrs = { ...value.attrs };
-    delete attrs.annotationId;
+    if (mode !== 'html') delete attrs.annotationId;
     if (mode !== 'html') delete attrs.concealed;
-    const marks = value.marks?.filter(mark => mark.type !== 'annotationReference' && (mode === 'html' || mark.type !== 'conceal'));
+    const marks = value.marks?.filter(mark => mode === 'html' || (mark.type !== 'annotationReference' && mark.type !== 'conceal'));
     const clean: JSONContent = { ...value, attrs, ...(marks ? { marks } : {}), ...(value.content ? { content } : {}) };
     const caption = ['table', 'image'].includes(value.type ?? '') ? normalizeFigureCaption(attrs.caption) : null;
     if (mode === 'portable') { delete attrs.caption; delete attrs.captionContent; }
-    const anchor = value.attrs?.annotationId ? reference(String(value.attrs.annotationId)) : null;
+    const anchor = mode !== 'html' && value.attrs?.annotationId ? reference(String(value.attrs.annotationId)) : null;
     if (anchor && ['paragraph', 'heading'].includes(value.type!)) { content.push(anchor); clean.content = content; }
     let result: JSONContent[];
     if (mode === 'portable' && value.type === 'imageSlot') {
@@ -120,7 +120,7 @@ export function richExportDiagnostics(summary: RichExportSummary | undefined, ta
   if (target !== 'html5' && summary.carousels) result.push(`${summary.carousels} 组图片轮播已展开为完整网格。`);
   if (target !== 'html5' && summary.disclosures) result.push(`${summary.disclosures} 个折叠块已展开，标题与正文完整保留。`);
   if (target !== 'html5' && summary.concealed) result.push(`${summary.concealed} 处模糊效果已移除，内容完整保留。`);
-  if (summary.annotations) result.push(`${summary.annotations} 处补充说明已${['docx', 'latex'].includes(target) ? '转换为脚注' : '编号并附于文末'}。`);
+  if (summary.annotations && target !== 'html5') result.push(`${summary.annotations} 处补充说明已${['docx', 'latex'].includes(target) ? '转换为脚注' : '编号并附于文末'}。`);
   if (summary.recovered) result.push(`${summary.recovered} 处无法解析的内容已按原文保留为代码块。`);
   return result;
 }

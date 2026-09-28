@@ -43,7 +43,9 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   expect(message.result).toContain('export-image-carousel');
   expect(message.result).toContain('Whole body');
   expect(message.result).toContain('Whole note');
-  expect(message.result).toContain('export-note-1');
+  expect(message.result).toContain('data-export-annotation="a"');
+  expect(message.result).toContain('data-annotation-body="a"');
+  expect(message.result).not.toContain('export-note-1');
   expect(message.result).toContain('data-export-edge="left top"');
   expect(message.result).toContain('data-export-edge="left bottom"');
   expect(message.result).toContain('class="export-table-scroll"');

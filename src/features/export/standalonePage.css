@@ -9,10 +9,17 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-reader #document { overflow-x:clip; }
 .export-reader .export-table-scroll { max-width:100%; overflow-x:auto; }
 .export-reader .export-math.display { max-width:100%; overflow-x:auto; }
+/* KaTeX's .vlist-s is a fixed 2px table-cell past the visible right edge.
+ * Reserve that space inside right-aligned formulas; genuinely wide bases still scroll. */
+.export-reader .export-math.display[data-math-align="right"] { padding-inline-end:2px; }
 .export-reader #document > :first-child { margin-top:0; }
 .export-reader h1 { font-size:2em; line-height:1.25; letter-spacing:-.015em; }
 .export-reader h2 { padding-bottom:.3em; border-bottom:1px solid #e8ebf0; }
 .export-reader p { margin:.6em 0 1em; }
+/* The reader paragraph rule otherwise overrides documentContent.css's td/th reset. */
+.export-reader :is(th,td) p { margin:0; }
+.export-reader :is(th,td) p + p { margin-top:6px; }
+@media screen { .export-reader table { border-collapse:collapse; } .export-reader :is(th,td) { padding:8px 12px; } }
 .export-reader a { text-underline-offset:3px; }
 .export-reader a:hover { text-decoration:underline; }
 .export-reader figure img { border-radius:10px; }

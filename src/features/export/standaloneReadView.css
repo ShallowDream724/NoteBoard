@@ -1,0 +1,37 @@
+/* Standalone reader controls: deliberately scoped away from PDF and app UI. */
+[data-noteboard-export] .export-code-block { min-width:0; max-width:100%; margin:16px 0; border:1px solid #d8dee7; border-radius:8px; background:#f5f7fa; }
+[data-noteboard-export] .export-code-toolbar { display:flex; align-items:center; gap:8px; min-height:34px; padding:5px 8px; border-bottom:1px solid #d8dee7; border-radius:7px 7px 0 0; background:#fff; color:#64748b; font:12px/1.4 'Segoe UI','Microsoft YaHei',sans-serif; user-select:none; }
+[data-noteboard-export] .export-code-language { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#3b82f6; font-weight:600; }
+[data-noteboard-export] .export-code-actions { display:flex; align-items:center; gap:3px; flex:none; margin-inline-start:auto; }
+[data-noteboard-export] .export-code-toolbar button { display:inline-flex; align-items:center; justify-content:center; min-width:26px; min-height:26px; padding:3px 6px; border:0; border-radius:4px; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+[data-noteboard-export] .export-code-toolbar button:hover { color:#18202b; background:#f1f5f9; }
+[data-noteboard-export] .export-code-toolbar button[aria-pressed=true] { color:#2563eb; background:#eff6ff; }
+[data-noteboard-export] .export-code-block > pre { max-width:100%; margin:0; padding:12px 16px; overflow-x:auto; border:0; border-radius:0 0 7px 7px; background:transparent; font-size:.9em; line-height:1.5; tab-size:4; }
+[data-noteboard-export] .export-code-block > pre > code { display:block; min-height:1.5em; white-space:pre; overflow-wrap:normal; }
+[data-noteboard-export] .export-code-block[data-wrap] > pre > code { white-space:pre-wrap; overflow-wrap:anywhere; }
+[data-noteboard-export] .export-code-block > pre[hidden] { display:none; }
+[data-noteboard-export] .export-code-block[data-collapsed] .export-code-toolbar { border-bottom:0; border-radius:7px; }
+[data-noteboard-export] [data-annotation-store][hidden] { display:none!important; }
+[data-noteboard-export] [data-annotation-store] { margin-top:2em; padding-top:1em; border-top:1px solid #d8dee7; }
+[data-noteboard-export] [data-annotation-store]::before { content:'补充说明'; display:block; font-weight:600; margin-bottom:.6em; }
+[data-noteboard-export] .nb-annotation-anchor,[data-noteboard-export] .export-annotation-text { text-decoration:underline dotted #64748b; text-underline-offset:.22em; }
+[data-noteboard-export] .nb-annotation-anchor { cursor:help; }
+[data-noteboard-export] .nb-annotation-anchor::after { content:'?'; display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; margin-inline:3px; border:1px solid #9ba8b9; border-radius:50%; vertical-align:super; color:#526174; background:#f5f8ff; font:600 10px/1 'Segoe UI',sans-serif; text-decoration:none; }
+[data-noteboard-export] .export-annotation-indicator { display:inline-flex; align-items:center; justify-content:center; flex:none; width:16px; height:16px; min-width:16px!important; min-height:16px!important; padding:0!important; margin-inline:5px; border:1px solid #9ba8b9!important; border-radius:50%!important; color:#526174; background:#f5f8ff; font:600 11px/1 'Segoe UI',sans-serif; cursor:help; vertical-align:super; }
+[data-noteboard-export] .export-annotation-block-marker { position:relative; height:0; overflow:visible; z-index:1; }
+[data-noteboard-export] .export-annotation-block-marker > button { position:absolute; top:4px; right:4px; }
+[data-noteboard-export] .export-annotation-panel { position:fixed; z-index:1300; display:flex; flex-direction:column; width:380px; max-width:calc(100vw - 16px); max-height:min(480px,calc(100vh - 16px)); overflow:hidden; border:1px solid #d8dee7; border-radius:10px; background:#fff; color:#18202b; box-shadow:0 8px 28px #00000024; font:13px/1.65 'Segoe UI','Microsoft YaHei',sans-serif; }
+[data-noteboard-export] .export-annotation-panel[hidden] { display:none; }
+[data-noteboard-export] .export-annotation-header { display:flex; align-items:center; flex:none; min-height:36px; padding:4px 8px 4px 12px; border-bottom:1px solid #d8dee7; }
+[data-noteboard-export] .export-annotation-title { font-size:12px; font-weight:600; }
+[data-noteboard-export] .export-annotation-close { margin-inline-start:auto; min-width:27px; min-height:27px; padding:4px 6px; border:0; border-radius:4px; background:transparent; color:#64748b; font:inherit; cursor:pointer; }
+[data-noteboard-export] .export-annotation-close:hover { background:#f1f5f9; color:#18202b; }
+[data-noteboard-export] .export-annotation-content { min-height:0; overflow:auto; overscroll-behavior:contain; padding:10px 14px 14px; overflow-wrap:anywhere; }
+[data-noteboard-export] .export-annotation-content > section > :first-child { margin-top:0; }
+[data-noteboard-export] .export-annotation-content > section > :last-child { margin-bottom:0; }
+[data-noteboard-export] .export-annotation-content :is(h1,h2,h3,h4,h5,h6) { font-size:1.15em; margin:.65em 0; }
+[data-noteboard-export] .export-annotation-content p { margin:.35em 0 .7em; }
+[data-noteboard-export] .export-annotation-content :is(.export-table-scroll,.export-math.display) { max-width:100%; overflow-x:auto; }
+[data-noteboard-export] .export-annotation-panel :focus-visible,[data-noteboard-export] [data-export-annotation]:focus-visible { outline:2px solid #3b82f6; outline-offset:2px; }
+@media print { [data-noteboard-export] .export-code-toolbar,[data-noteboard-export] .export-annotation-panel,[data-noteboard-export] .export-annotation-indicator,[data-noteboard-export] .export-annotation-block-marker { display:none!important; } [data-noteboard-export] .export-code-block > pre[hidden] { display:block; } [data-noteboard-export] .export-code-block > pre > code { white-space:pre-wrap; overflow-wrap:anywhere; } [data-noteboard-export] .nb-annotation-anchor::after { display:none; } }
+@media print { [data-noteboard-export] [data-annotation-store][hidden] { display:block!important; } }

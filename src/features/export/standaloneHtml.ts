@@ -1,5 +1,6 @@
 import contentCss from './documentContent.css?inline';
 import pageCss from './standalonePage.css?inline';
+import readViewCss from './standaloneReadView.css?inline';
 import katexCss from 'katex/dist/katex.min.css?raw';
 import mathWrappingCss from '../../core/math/wrapping.css?inline';
 import { standaloneEnhancement } from './standaloneEnhancement';
@@ -43,7 +44,8 @@ export function localFileUrl(path: string) {
 export async function standaloneHtml(html: string, title: string) {
   const escapedTitle = title.replace(/[&<>"']/g, value => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[value]!);
   // Compile shared content styles through Vite, including their imports.
-  const css = contentCss + '\n' + (html.includes('class="katex') ? await portableKatexCss() + '\n' + mathWrappingCss : '') + '\n' + pageCss;
+  const css = contentCss + '\n' + (html.includes('class="katex') ? await portableKatexCss() + '\n' + mathWrappingCss : '') + '\n' + pageCss + '\n' + readViewCss;
   const actions = '<nav class="export-page-actions" aria-label="文档操作"><button type="button" data-page-print>打印</button><button type="button" data-page-download>保存副本</button></nav>';
-  return `<!doctype html>\n<html lang="zh-CN" data-noteboard-export><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedTitle}</title><style>${css}</style></head><body>${actions}<main class="export-reader"><div id="document">${html}</div></main><script>${standaloneEnhancement}</script></body></html>`;
+  const fallback = '<noscript><style>[data-noteboard-export] [data-annotation-store][hidden]{display:block!important}</style></noscript>';
+  return `<!doctype html>\n<html lang="zh-CN" data-noteboard-export><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedTitle}</title><style>${css}</style></head><body>${actions}${fallback}<main class="export-reader"><div id="document">${html}</div></main><script>${standaloneEnhancement}</script></body></html>`;
 }

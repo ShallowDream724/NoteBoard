@@ -64,6 +64,7 @@ describe('rich document export conservation', () => {
     const root = document.createElement('div'); root.innerHTML = result.html;
     expect(root.querySelectorAll('.export-image-slot')).toHaveLength(4);
     expect(root.querySelectorAll('img')).toHaveLength(3);
+    expect(root.querySelector('[data-annotation-store]')).toBeNull();
     expect(root.querySelector('.export-image-carousel')).toBeNull();
     expect(root.querySelector('details')?.hasAttribute('open')).toBe(true);
     expect(root.querySelector('[data-nb-conceal]')).toBeNull();
@@ -88,7 +89,7 @@ describe('rich document export conservation', () => {
     }
   });
 
-  it('keeps HTML interactive with a readable script-free fallback and a full print projection', async () => {
+  it('keeps HTML interactive with local annotation anchors and a full print projection', async () => {
     const doc = documentParser().schema.nodeFromJSON(sample());
     const result = await renderDocument('', 'Test', '', undefined, doc, undefined, undefined, 'html');
     const root = document.createElement('div'); root.innerHTML = result.html;
@@ -98,6 +99,11 @@ describe('rich document export conservation', () => {
     expect(root.querySelector('details')?.hasAttribute('open')).toBe(false);
     expect(root.querySelectorAll('[data-nb-conceal]')).toHaveLength(2);
     expect(root.querySelectorAll('img')).toHaveLength(3);
+    expect(root.querySelector('[data-annotation-store]')?.hasAttribute('hidden')).toBe(true);
+    expect(root.querySelector('[data-export-annotation="note-a"]')?.textContent).toContain('锚点');
+    expect(root.querySelector('[data-export-annotation="note-b"]')).not.toBeNull();
+    expect(root.querySelector('.export-annotations')).toBeNull();
+    expect(richExportDiagnostics(result.richSummary, 'html5').join(' ')).not.toContain('文末');
     const fetchFont = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([0, 1, 2])));
     const html = await standaloneHtml(result.html, '<report>');
     fetchFont.mockRestore();
@@ -130,6 +136,31 @@ describe('rich document export conservation', () => {
     const projection = projectRichContent(source, 'html').document;
     documentParser().schema.nodeFromJSON(projection).check();
     expect(projection.content![1].content![0].content!.filter(node => node.type === 'paragraph')).toHaveLength(1);
+  });
+
+  it('keeps shared annotation IDs and orphan bodies while adding read-only code controls only to HTML', async () => {
+    const source: JSONContent = { type: 'doc', content: [
+      { ...paragraph('一处锚点'), attrs: { annotationId: 'shared' } },
+      { type: 'codeBlock', attrs: { language: 'py', annotationId: 'shared' }, content: [{ type: 'text', text: 'print("<tag>")\n  # keep spaces' }] },
+      { type: 'annotationStore', content: [
+        { type: 'annotationBody', attrs: { id: 'shared' }, content: [paragraph('共享正文')] },
+        { type: 'annotationBody', attrs: { id: 'orphan' }, content: [paragraph('没有锚点但必须可读')] },
+      ] },
+    ] };
+    const original = structuredClone(source), doc = documentParser().schema.nodeFromJSON(source);
+    const html = await renderDocument('', '', '', undefined, doc, undefined, undefined, 'html');
+    const root = document.createElement('div'); root.innerHTML = html.html;
+    expect(root.querySelectorAll('[data-export-annotation="shared"]')).toHaveLength(2);
+    expect(root.querySelectorAll('[data-annotation-body="shared"]')).toHaveLength(1);
+    expect(root.querySelector('.export-annotations [data-annotation-body="orphan"]')?.textContent).toContain('没有锚点但必须可读');
+    expect(root.querySelector('.export-code-language')?.textContent).toBe('Python');
+    expect(root.querySelector('.export-code-block pre code')?.textContent).toBe('print("<tag>")\n  # keep spaces');
+    expect(root.querySelector('[data-code-copy]')).not.toBeNull();
+    expect(root.querySelector('[contenteditable=true],script,textarea,input,select')).toBeNull();
+    const print = await renderDocument('', '', '', undefined, doc);
+    expect(print.html).toContain('export-note-1');
+    expect(print.html).not.toContain('export-code-toolbar');
+    expect(source).toEqual(original);
   });
 
   it('preserves unknown/error blocks as ordinary code and rejects missing annotation bodies', () => {
