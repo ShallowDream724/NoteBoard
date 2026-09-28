@@ -2,19 +2,37 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { presentExportedFile } from '../../src/features/export/exportCompletion';
 import { openDocument } from '../../src/features/editor-code/orchestration/openDocument';
 import { refreshExplorerAfterWrite } from '../../src/features/explorer/refreshAfterWrite';
-import { probeDocument } from '../../src/core/ipc/commands';
+import { probeDocument, openWithDefaultApp } from '../../src/core/ipc/commands';
 import { showToast } from '../../src/stores/toastStore';
 vi.mock('../../src/features/editor-code/orchestration/openDocument', () => ({ openDocument: vi.fn() }));
 vi.mock('../../src/features/explorer/refreshAfterWrite', () => ({ refreshExplorerAfterWrite: vi.fn() }));
-vi.mock('../../src/core/ipc/commands', () => ({ probeDocument: vi.fn() }));
+vi.mock('../../src/core/ipc/commands', () => ({ probeDocument: vi.fn(), openWithDefaultApp: vi.fn() }));
 vi.mock('../../src/stores/toastStore', () => ({ showToast: vi.fn() }));
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(openDocument).mockResolvedValue('opened');
+  vi.mocked(openWithDefaultApp).mockResolvedValue(undefined);
   vi.mocked(refreshExplorerAfterWrite).mockResolvedValue(undefined);
   vi.mocked(probeDocument).mockResolvedValue({ size: 4096, kind: 'unsupported', isText: false, exists: true, isDir: false });
 });
 afterEach(() => { vi.restoreAllMocks(); });
+
+it.each(['result.html', 'result.HTM'])('opens exported %s with the OS default application without creating a source tab', async name => {
+  const path = `C:\\notes\\${name}`;
+  await presentExportedFile(path);
+  expect(openWithDefaultApp).toHaveBeenCalledExactlyOnceWith(path);
+  expect(openDocument).not.toHaveBeenCalled();
+  expect(refreshExplorerAfterWrite).toHaveBeenCalledWith(path);
+});
+
+it('an HTML launch failure preserves export success and never opens an unexpected source tab', async () => {
+  vi.mocked(openWithDefaultApp).mockRejectedValue(new Error('no association'));
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  await presentExportedFile('C:\\notes\\result.html');
+  expect(openDocument).not.toHaveBeenCalled();
+  expect(showToast).toHaveBeenCalledWith('导出成功：result.html（4.0 KB）', 'success');
+  expect(showToast).toHaveBeenLastCalledWith(expect.stringContaining('暂时无法启动默认应用'), 'warning');
+});
 
 it('opens the saved file while preserving Explorer and reports its actual byte size', async () => {
   await presentExportedFile('C:\\notes\\result.pdf', 'format warning');

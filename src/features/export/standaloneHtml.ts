@@ -1,19 +1,8 @@
 import contentCss from './documentContent.css?inline';
+import pageCss from './standalonePage.css?inline';
+import { standaloneEnhancement } from './standaloneEnhancement';
 
-/** Enhancement is optional: without scripts every image remains in the flow. */
-const enhancement = `(()=>{
-  for(const collection of document.querySelectorAll('.export-image-carousel')){
-    const slots=Array.from(collection.children).filter(slot=>slot.matches('.export-image-slot:not([data-empty])'));
-    if(slots.length<2)continue;
-    let current=0;
-    const controls=document.createElement('nav');controls.className='export-carousel-controls';controls.setAttribute('aria-label','图片翻页');
-    const previous=document.createElement('button'),next=document.createElement('button'),status=document.createElement('span');
-    previous.textContent='上一张';next.textContent='下一张';previous.type=next.type='button';status.setAttribute('aria-live','polite');
-    const show=index=>{slots[current].removeAttribute('data-current');current=(index+slots.length)%slots.length;slots[current].setAttribute('data-current','');status.textContent=(current+1)+' / '+slots.length};
-    previous.onclick=()=>show(current-1);next.onclick=()=>show(current+1);controls.append(previous,status,next);collection.append(controls);collection.setAttribute('data-enhanced','');show(0);
-  }
-  const closed=[];addEventListener('beforeprint',()=>{for(const item of document.querySelectorAll('details:not([open])')){closed.push(item);item.open=true}});addEventListener('afterprint',()=>{for(const item of closed.splice(0))item.open=false});
-})();`;
+const pageIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M9 12l-3 3 3 3 M15 12l3 3-3 3"/></svg>';
 
 export function localFileUrl(path: string) {
   const slash = path.replace(/\\/g, '/');
@@ -26,6 +15,8 @@ export function standaloneHtml(html: string, title: string) {
   // the math engine differs: native MathML needs no external fonts or scripts.
   // An inline math box follows the block's alignment while displaystyle remains
   // controlled by MathML's display attribute (large operators/fractions).
-  const css = contentCss + '\n:root{--export-font:11pt;--export-line:1.5;--export-width:100%}body{max-width:900px;margin:2em auto;padding:0 1.5em}.katex-html{display:none}.katex-mathml{position:static!important;clip:auto!important;width:auto!important;height:auto!important}.export-math.display math{display:inline math;margin:.5em 0}@media print{body{max-width:none;margin:0;padding:0}details::details-content{content-visibility:visible!important}}';
-  return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedTitle}</title><style>${css}</style></head><body>${html}<script>${enhancement}</script></body></html>`;
+  const css = contentCss + '\n' + pageCss;
+  const favicon = 'data:image/svg+xml,' + encodeURIComponent(pageIcon.replace('currentColor', '#3b82f6'));
+  const toolbar = `<header class="export-page-bar"><span class="export-page-icon" aria-hidden="true">${pageIcon}</span><span class="export-page-title">${escapedTitle}</span><nav class="export-page-actions" aria-label="文档操作"><button type="button" data-page-print>打印</button><a data-page-download>保存副本</a></nav></header>`;
+  return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedTitle}</title><link rel="icon" href="${favicon}"><style>${css}</style></head><body>${toolbar}<main class="export-reader"><div id="document">${html}</div></main><script>${standaloneEnhancement}</script></body></html>`;
 }

@@ -94,6 +94,7 @@ export function StatusBar() {
               ? 'YAML'
               : doc.language === 'xml'
                 ? 'XML'
+                : doc.language === 'html' ? 'HTML'
                 : doc.language === 'markdown'
                   ? 'Markdown'
                   : '纯文本';

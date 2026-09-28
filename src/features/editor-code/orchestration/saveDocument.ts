@@ -158,6 +158,12 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
   if (doc?.kind === 'noteboard') {
     defaultExtension = DEFAULT_NATIVE_EXTENSION;
     filters = NATIVE_DOCUMENT_EXTENSIONS.map(ext => ({ name: `NoteBoard 文档 (*.${ext})`, extensions: [ext] }));
+  } else if (doc?.language === 'html') {
+    defaultExtension = 'html';
+    filters = [
+      { name: 'HTML 网页 (*.html, *.htm)', extensions: ['html', 'htm'] },
+      { name: '全部文件 (*.*)', extensions: ['*'] },
+    ];
   } else if (doc?.kind === 'markdown' || originalKey.includes('markdown')) {
     defaultExtension = 'md';
     filters = [

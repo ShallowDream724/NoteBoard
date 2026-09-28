@@ -21,9 +21,11 @@
 
 `richProjection.ts` 管理 Markdown、HTML 和打印的增强内容投影；Pandoc 由 `pandocDocument.ts` 直接遍历原始文档节点，不再先投影成便携内容或经 JSON 重建第二棵 ProseMirror 树。两条路径均只建立一次说明索引。未知节点与 `nativeError` 保留为普通代码块，后者使用 `attrs.raw` 原文；未知标记、缺失或循环说明引用明确报错。Markdown 使用标准表格保留图片组合中的图片、图注与空槽，说明编号附于文末。Pandoc 使用原生 Table 表示静态网格、Note 表示脚注、Math 表示公式，展开折叠标题与正文。PDF 同样保留完整网格，不依赖当前轮播页或已挂载表格行。
 
-HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片使用原文档目录解析后的文件 URL，PDF 则继续使用 Tauri 资源握手。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
+HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片通过资源握手顺序读取原始字节并内嵌为 data URL，按路径去重，不解码为像素；取消导出立即停止后续读取，读失败则终止导出。远程图片保留原 URL，PDF 继续使用 Tauri 资源地址。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
 
 HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格、提示块、整块颜色、图片集合和公式对齐。独立 HTML 用 Vite 的 `?inline` 展开完整依赖；禁止手工删除 `@import` 后维护另一份样式清单。`document.css` 仅在 PDF/打印路径附加 KaTeX 字体及换行规则；独立 HTML 使用原生 MathML，不依赖外部数学字体。
+
+`standalonePage.css` 只负责浏览器阅读页的留白、操作栏和窄屏适配，打印时移除这些页面装饰。`standaloneEnhancement.ts` 只绑定导出文件中的原生控件：打印、保存副本、箭头/圆点轮播及图片预览；不连接桌面 API、不加载框架。脚本禁用时所有图片仍可读，打印时恢复全部轮播图片；图片预览关闭后释放其图片引用。
 
 ### 图表进入 HTML 与 PDF
 

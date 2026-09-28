@@ -10,6 +10,8 @@
   "yaml": "code",
   "yml": "code",
   "xml": "code",
+  "html": "code",
+  "htm": "code",
   "excalidraw": "board",
   "board": "board",
   "canvas": "board",

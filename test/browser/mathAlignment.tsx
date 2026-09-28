@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { Editor, EditorContent } from '@tiptap/react';
+import { Editor, EditorContent, type JSONContent } from '@tiptap/react';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensions';
 import { initializeEditorDocument, serializeNativeNode } from '../../src/features/editor-md/editorDocumentCodec';
@@ -45,7 +45,10 @@ const qa = {
     return values;
   },
   async export() {
-    const content = editor.getJSON();
+    const content: JSONContent = editor.getJSON();
+    content.content!.push({ type: 'imageCollection', attrs: { layout: 'carousel', columns: 2 }, content: ['#3b82f6', '#10b981'].map(color => ({
+      type: 'imageSlot', content: [{ type: 'image', attrs: { src: 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320"><rect width="640" height="320" fill="${color}"/></svg>`), alt: 'Example image' } }],
+    })) });
     const rendered = await prepareDocument(content, 'Math alignment', '', undefined, 'noteboard');
     const standalone = await prepareHtmlExport(content, 'Math alignment', '', undefined, 'noteboard');
     return { html: rendered.html, css: exportCss, standalone };

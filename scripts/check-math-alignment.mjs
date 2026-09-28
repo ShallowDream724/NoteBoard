@@ -1,4 +1,4 @@
-/* global window, document, requestAnimationFrame, getComputedStyle */
+/* global window, document, requestAnimationFrame, getComputedStyle, innerWidth */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
@@ -59,6 +59,26 @@ try {
       for (const style of callouts) {
         assert.equal(style.position, 'relative'); assert.equal(style.border, '1px'); assert.equal(style.icon, 'absolute');
         assert.notEqual(style.background, 'rgba(0, 0, 0, 0)', `${mode}: callout background missing`);
+      }
+      if (mode === 'standalone' && align === 'left') {
+        await output.emulateMedia({ media: 'screen' });
+        const carousel = output.locator('.export-image-carousel');
+        assert(await carousel.getByRole('button', { name: '上一张', exact: true }).isDisabled());
+        await carousel.getByRole('button', { name: '下一张', exact: true }).click();
+        assert.equal(await carousel.locator('[aria-current=true]').getAttribute('aria-label'), '第 2 张');
+        await carousel.locator('[data-current] img').click();
+        assert(await output.getByRole('dialog', { name: '图片预览' }).isVisible());
+        await output.keyboard.press('Escape');
+        assert.equal(await output.locator('dialog[open]').count(), 0);
+        assert((await output.locator('link[rel=icon]').getAttribute('href')).startsWith('data:image/svg+xml,'));
+        await output.setViewportSize({ width: 390, height: 844 });
+        assert(await output.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await output.screenshot({ path: '.tmp/html-export-mobile.png', fullPage: true });
+        await output.setViewportSize({ width: 1000, height: 800 });
+        await output.screenshot({ path: '.tmp/html-export-desktop.png', fullPage: true });
+        await output.emulateMedia({ media: 'print' });
+        assert.equal(await carousel.locator('.export-image-slot:visible').count(), 2);
+        assert.equal(await output.locator('.export-page-bar:visible').count(), 0);
       }
     }
     await output.close();

@@ -36,6 +36,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useSearchStore } from '../../stores/searchStore';
 import type { LanguageId } from '../../core/ipc/types';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
+import { HtmlFileActions } from './HtmlFileActions';
 
 interface CodeToolbarProps {
   docKey: string;
@@ -45,6 +46,7 @@ interface CodeToolbarProps {
 export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
   const lang = (language ?? 'plaintext') as LanguageId;
   const isJson = lang === 'json';
+  const isHtml = lang === 'html';
   const { canUndo, canRedo } = useDocumentHistory(docKey);
 
   // 下拉菜单开闭状态
@@ -89,6 +91,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
 
   return (
     <ResponsiveToolbar onLayoutChange={() => { setJsonDropdownOpen(false); setTextDropdownOpen(false); }}>
+      {isHtml && <HtmlFileActions docKey={docKey} />}
       {/* ── 历史操作组 ── */}
       <ToolbarButton
         collapsePriority={90}
@@ -110,7 +113,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
       <ToolbarDivider />
 
       {/* ── JSON 工具组（二级菜单） ── */}
-      <ToolbarDropdown
+      {!isHtml && <ToolbarDropdown
         collapsePriority={100}
         isOpen={jsonDropdownOpen}
         onOpenChange={setJsonDropdownOpen}
@@ -185,10 +188,10 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
             </>
           }
         />
-      </ToolbarDropdown>
+      </ToolbarDropdown>}
 
       {/* ── 文本与代码增强工具组（二级菜单） ── */}
-      <ToolbarDropdown
+      {!isHtml && <ToolbarDropdown
         collapsePriority={110}
         isOpen={textDropdownOpen}
         onOpenChange={setTextDropdownOpen}
@@ -241,7 +244,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
             </>
           }
         />
-      </ToolbarDropdown>
+      </ToolbarDropdown>}
 
       <ToolbarDivider />
 

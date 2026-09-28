@@ -39,6 +39,9 @@ export async function loadLanguageExtension(lang: LanguageId): Promise<Extension
     case 'xml':
       promise = import('@codemirror/lang-xml').then((m) => m.xml());
       break;
+    case 'html':
+      promise = import('@codemirror/lang-html').then((m) => m.html());
+      break;
     case 'mermaid':
     case 'plantuml':
     case 'plaintext':

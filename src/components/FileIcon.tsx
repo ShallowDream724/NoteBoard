@@ -192,13 +192,20 @@ export function getFileIcon(
     case 'yml':
       return <FileCode {...iconProps} color="#16a34a" />;
 
+    // HTML: browser window with markup, distinct from XML's angle brackets.
+    case 'html':
+    case 'htm':
+      return <svg width={size} height={size} viewBox="0 0 24 24" className={className} style={iconProps.style} aria-hidden="true" focusable="false">
+        <rect x="2" y="3" width="20" height="18" rx="3" fill="#e56a32" />
+        <path d="M2 8h20" stroke="#ffb88d" strokeWidth="1.5" />
+        <path d="m8 12-3 3 3 3m8-6 3 3-3 3m-3-7-2 8" stroke="white" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>;
+
     // ── XML 与标记语言（珊瑚橙红）──
     case 'xml':
     case 'xsd':
     case 'rss':
     case 'atom':
-    case 'html':
-    case 'htm':
       return <CodeXml {...iconProps} color="#ea580c" />;
 
     // ── 样式表（CSS 蓝/紫）──

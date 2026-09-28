@@ -44,14 +44,15 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
       : { markdown: '', doc: (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content) };
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
     const diagrams: DiagramRenderer = requests => new Promise(resolve => { receiveDiagrams = resolve; self.postMessage({ type: 'diagrams', requests }); });
+    const assetUrls = (paths: string[]) => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); });
     if (data.format === 'standalone-html') {
-      const { standaloneHtml, localFileUrl } = await import('./standaloneHtml');
-      const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, paths => paths.map(localFileUrl), 'html', diagrams);
+      const { standaloneHtml } = await import('./standaloneHtml');
+      const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, assetUrls, 'html', diagrams);
       self.postMessage({ type: 'result', result: standaloneHtml(result.html, data.title) });
       return;
     }
     const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup,
-      paths => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); }), 'print', diagrams);
+      assetUrls, 'print', diagrams);
     const { html, items, richSummary }: ExportDocument = result;
     self.postMessage({ type: 'result', result: { html, items, richSummary, markdown: snapshot.markdown } });
   } catch (error) { self.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) }); }

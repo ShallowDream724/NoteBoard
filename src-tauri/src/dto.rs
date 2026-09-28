@@ -31,6 +31,7 @@ pub enum LanguageId {
     Json,
     Yaml,
     Xml,
+    Html,
     Mermaid,
     Plantuml,
     /// NoteBoard 自研信息图声明式源码（YAML/JSON），与 mermaid / plantuml 同为可独立成文件的图表脚本

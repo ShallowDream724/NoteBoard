@@ -24,6 +24,8 @@ describe('docKind 扩展名映射', () => {
       'yaml',
       'yml',
       'xml',
+      'html',
+      'htm',
       'excalidraw',
       'png',
       'jpg',
@@ -128,5 +130,11 @@ describe('docKind 扩展名映射', () => {
     expect(isEditable('bitable')).toBe(true);
     expect(isEditable('image')).toBe(false);
     expect(isEditable('unsupported')).toBe(false);
+  });
+
+  test.each(['report.html', 'report.HTM', 'C:\\json\\report.HTML'])('HTML source uses its own language and manual saving: %s', path => {
+    expect(kindFromPath(path)).toBe('code');
+    expect(languageFromPath(path)).toBe('html');
+    expect(savePolicyOf(kindFromPath(path))).toBe('manual');
   });
 });

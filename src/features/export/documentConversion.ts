@@ -22,8 +22,13 @@ function convert<T>(markdown: string | JSONContent, title: string, directory: st
     worker.onmessage = ({ data }: MessageEvent<{ type: 'assets'; paths: string[] } | { type: 'diagrams'; requests: DiagramRequest[] } | { type: 'result'; result: T } | { type: 'error'; error: string }>) => {
       if (closed) return;
       if (data.type === 'assets') {
-        try { worker.postMessage({ type: 'asset-urls', urls: data.paths.map(path => convertFileSrc(path)) }); }
-        catch (error) { fail(error); }
+        if (format === 'standalone-html') {
+          void import('./portableHtmlAssets').then(({ portableHtmlAssetUrls }) => portableHtmlAssetUrls(data.paths, rendering.signal))
+            .then(urls => { if (!closed) worker.postMessage({ type: 'asset-urls', urls }); }).catch(fail);
+        } else {
+          try { worker.postMessage({ type: 'asset-urls', urls: data.paths.map(path => convertFileSrc(path)) }); }
+          catch (error) { fail(error); }
+        }
       } else if (data.type === 'diagrams') {
         void import('./renderDiagrams').then(({ renderExportDiagrams }) => renderExportDiagrams(data.requests, rendering.signal))
           .then(results => { if (!closed) worker.postMessage({ type: 'diagram-results', results }); }).catch(fail);
