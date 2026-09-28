@@ -6,6 +6,7 @@ import 'katex/dist/katex.min.css';
 import { MathNodeView } from './MathNodeView';
 import { isDisplayMath, mathInInputRange, type MathMatch } from './mathSyntax';
 import { MathInlineNode, MathBlockNode, mathSource as source } from './documentNodes';
+import { handleMathKey } from './mathNavigation';
 export { clearKatexCache } from './mathRendering';
 
 const compositions = new WeakMap<Editor, { start: number; pending: boolean }>();
@@ -53,7 +54,7 @@ export const MathInline = MathInlineNode.extend({
         if (span) span.start = tr.mapping.map(span.start, -1);
         return null;
       } },
-      props: { handleDOMEvents: {
+      props: { handleKeyDown: (view, event) => handleMathKey(view, event, 'mathInline'), handleDOMEvents: {
         compositionstart(view) {
           if (view.state.selection.$from.parent.isTextblock) compositions.set(editor, { start: view.state.selection.from, pending: false });
           return false;
@@ -118,6 +119,7 @@ export const MathInline = MathInlineNode.extend({
 
 export const MathBlock = MathBlockNode.extend({
   addNodeView() { return ReactNodeViewRenderer(MathNodeView); },
+  addProseMirrorPlugins() { return [new Plugin({ props: { handleKeyDown: (view, event) => handleMathKey(view, event, 'mathBlock') } })]; },
   addKeyboardShortcuts() {
     return {
       Enter: () => {

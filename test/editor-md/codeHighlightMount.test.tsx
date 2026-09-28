@@ -10,6 +10,8 @@ import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
 import { CodeHighlight } from '../../src/features/editor-md/codeHighlightExtension';
 import type { CodeHighlightResult } from '../../src/features/editor-md/codeHighlighting';
 import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
+import { ImageNode, MathInlineNode, MathBlockNode } from '../../src/features/editor-md/documentNodes';
+import { initializeEditorDocument, serializeEditorDocument, serializeNativeNode, parseEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>(), immediate: true, request: vi.fn() }));
 vi.mock('../../src/features/editor-md/codeVisibility', () => ({ observeCodeVisibility: (_editor: HTMLElement, element: HTMLElement, callback: (sample: { visible: boolean; viewport: { top: number; bottom: number; left: number; right: number } }) => void) => {
@@ -31,7 +33,7 @@ async function mount() {
   const frames = new Map<number, FrameRequestCallback>(); let sequence = 0;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++sequence; frames.set(id, callback); return id; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView, CodeHighlight],
+  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView, CodeHighlight, ImageNode, MathInlineNode, MathBlockNode],
     content: { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'def greet(name):\n    return name' }] }] } });
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   await act(async () => root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>));
@@ -157,6 +159,35 @@ it('transports ready syntax tokens during a drag and republishes after the moved
     await mounted.nearby(true); await mounted.tick(); await mounted.flush();
     expect(mounted.host.querySelectorAll('code .hljs-keyword')).toHaveLength(1);
     expect(mounted.host.querySelector('.nb-code-line-gutter')).not.toBeNull();
+  } finally { await mounted.destroy(); }
+});
+
+it.each(['image', 'mathBlock', 'mathInline'])('keeps code colors and its DOM immediately when undo restores a deleted %s', async type => {
+  const mounted = await mount();
+  try {
+    const { editor, host } = mounted;
+    const atom = editor.schema.nodes[type].create(type === 'image' ? { src: 'example.png' } : { latex: 'a+b' });
+    const block = type === 'mathInline' ? editor.schema.nodes.paragraph.create(null, [editor.schema.text('Before '), atom, editor.schema.text(' after')]) : atom;
+    await act(async () => editor.view.dispatch(editor.state.tr.insert(0, block)));
+    initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
+    const before = serializeEditorDocument(editor);
+    await mounted.tick(); await mounted.flush();
+    const codeNode = editor.state.doc.lastChild;
+    expect(host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    const position = type === 'mathInline' ? 8 : 0;
+    await act(async () => editor.view.dispatch(editor.state.tr.delete(position, position + atom.nodeSize)));
+    const code = host.querySelector('code'), keyword = host.querySelector('code .hljs-keyword');
+    const deleted = serializeEditorDocument(editor);
+    const requests = fixture.request.mock.calls.length;
+    await act(async () => parseEditorDocument(editor, before, 'history'));
+    expect(host.querySelector('code')).toBe(code);
+    expect(host.querySelector('code .hljs-keyword')).toBe(keyword);
+    expect(editor.state.doc.lastChild).toBe(codeNode);
+    expect(serializeEditorDocument(editor)).toBe(before);
+    expect(fixture.request).toHaveBeenCalledTimes(requests);
+    await act(async () => parseEditorDocument(editor, deleted, 'history'));
+    expect(host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    expect(editor.state.doc.lastChild).toBe(codeNode);
   } finally { await mounted.destroy(); }
 });
 

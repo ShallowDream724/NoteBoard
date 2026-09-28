@@ -3,15 +3,18 @@ import { createRoot } from 'react-dom/client';
 import { Editor, EditorContent, type JSONContent } from '@tiptap/react';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensions';
-import { initializeEditorDocument, serializeNativeNode } from '../../src/features/editor-md/editorDocumentCodec';
+import { initializeEditorDocument, parseEditorDocument, serializeEditorDocument, serializeNativeNode } from '../../src/features/editor-md/editorDocumentCodec';
 import { setParagraphPresentation } from '../../src/features/document-style/documentStyles';
 import { prepareDocument, prepareHtmlExport } from '../../src/features/export/documentConversion';
 import exportCss from '../../src/features/export/document.css?inline';
+import { CodeBlockView } from '../../src/features/editor-md/codeBlockView';
+import { CodeHighlight } from '../../src/features/editor-md/codeHighlightExtension';
+import { TooltipProvider } from '../../src/components/Tooltip';
 
 const host = document.getElementById('root')!;
 host.style.cssText = 'width:800px;padding:20px;margin:20px;font-size:18px';
 const editor = new Editor({
-  extensions: buildDocumentExtensions().map(extension => extension.name === 'mathBlock' ? MathBlock : extension.name === 'mathInline' ? MathInline : extension),
+  extensions: [...buildDocumentExtensions({ mathBlock: MathBlock, mathInline: MathInline, codeBlock: CodeBlockView }), CodeHighlight],
   content: { type: 'doc', content: [{ type: 'mathBlock', attrs: { latex: 'E=mc^2' } },
     { type: 'paragraph', content: [{ type: 'text', text: 'Inline: ' }, { type: 'mathInline', attrs: { latex: 'a+b' } }] },
     ...['note', 'tip', 'important', 'warning', 'caution'].map(kind => ({ type: 'githubAlert', attrs: { kind }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Callout body' }] }] })),
@@ -19,7 +22,8 @@ const editor = new Editor({
   ] },
 });
 initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
-createRoot(host).render(<EditorContent editor={editor}/>);
+createRoot(host).render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>);
+let historySnapshot = '';
 const qa = {
   align(value: 'left' | 'center' | 'right') {
     editor.commands.setNodeSelection(0);
@@ -44,6 +48,16 @@ const qa = {
     editor.state.doc.descendants(node => { if (node.type.name === 'mathInline') values.push(node.attrs.latex); });
     return values;
   },
+  prepareHistory() {
+    editor.commands.setContent({ type: 'doc', content: [
+      { type: 'mathBlock', attrs: { latex: 'x^2' } },
+      { type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'def greet():\n    return 42' }] },
+      { type: 'paragraph' },
+    ] });
+    historySnapshot = serializeEditorDocument(editor);
+  },
+  deleteFormula() { editor.commands.setNodeSelection(0); editor.commands.deleteSelection(); },
+  restoreFormula() { parseEditorDocument(editor, historySnapshot, 'history'); },
   async export() {
     const content: JSONContent = editor.getJSON();
     content.content!.push({ type: 'imageCollection', attrs: { layout: 'carousel', columns: 2 }, content: ['#3b82f6', '#10b981'].map(color => ({

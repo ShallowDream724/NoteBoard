@@ -10,6 +10,7 @@ import { collectionPresentation } from './collectionPresentation';
 import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } from '../annotations/marker';
 import { continueContainerWriting, handleContainerTailKey, needsContainerTail } from '../containerEditing';
 import { observeImageViewport } from './imageVisibility';
+import { COLLECTION_STEP_EVENT } from './collectionNavigation';
 import './richContent.css';
 import './carousel.css';
 import '../captionAddControl.css';
@@ -56,6 +57,7 @@ class CollectionView implements NodeView {
     this.viewport.addEventListener('scroll', this.onScroll, { passive: true });
     this.viewport.addEventListener('wheel', this.onWheel, { passive: true });
     this.viewport.addEventListener('pointerdown', this.onPointerDown, { passive: true });
+    this.dom.addEventListener(COLLECTION_STEP_EVENT, this.onStep);
     if (typeof ResizeObserver !== 'undefined') { this.resize = new ResizeObserver(() => {
       const width = this.viewport.clientWidth; if (!width || width === this.width) return;
       this.width = width; if (this.node.attrs.layout === 'carousel') this.show(this.active, false);
@@ -71,6 +73,12 @@ class CollectionView implements NodeView {
     cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => { this.frame = 0; this.show(this.active, false); });
   }
   private onPointerDown = () => { this.target = null; };
+  private onStep = (event: Event) => {
+    if (this.node.attrs.layout !== 'carousel') return;
+    const direction = (event as CustomEvent<1 | -1>).detail;
+    event.preventDefault();
+    this.show(this.active + direction);
+  };
   private onWheel = (event: WheelEvent) => { if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) this.target = null; };
   private onScroll = () => {
     if (this.node.attrs.layout !== 'carousel') return;
@@ -123,7 +131,7 @@ class CollectionView implements NodeView {
   update(node: Node, decorations: readonly Decoration[]) { if (node.type !== this.node.type) return false; const changed = this.node.attrs.layout !== node.attrs.layout || this.node.attrs.columns !== node.attrs.columns || this.node.attrs.width !== node.attrs.width || this.node.attrs.align !== node.attrs.align || this.node.childCount !== node.childCount; this.node = node; updateAnnotationMarker(this.annotation, annotationMarkerId(decorations)); if (changed) this.refresh(); return true; }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type !== 'selection' && (mutation.type === 'attributes' && (mutation.target === this.dom || mutation.target === this.contentDOM || mutation.target === this.viewport) || !this.contentDOM.contains(mutation.target)); }
   stopEvent(event: Event) { return this.footer.contains(event.target as globalThis.Node) || this.annotation.contains(event.target as globalThis.Node); }
-  destroy() { this.stopViewport(); cancelAnimationFrame(this.frame); cancelAnimationFrame(this.scrollFrame); clearTimeout(this.settleTimer); this.resize?.disconnect(); this.viewport.removeEventListener('scroll', this.onScroll); this.viewport.removeEventListener('wheel', this.onWheel); this.viewport.removeEventListener('pointerdown', this.onPointerDown); }
+  destroy() { this.stopViewport(); cancelAnimationFrame(this.frame); cancelAnimationFrame(this.scrollFrame); clearTimeout(this.settleTimer); this.resize?.disconnect(); this.dom.removeEventListener(COLLECTION_STEP_EVENT, this.onStep); this.viewport.removeEventListener('scroll', this.onScroll); this.viewport.removeEventListener('wheel', this.onWheel); this.viewport.removeEventListener('pointerdown', this.onPointerDown); }
 }
 class SlotView implements NodeView {
   dom = document.createElement('figure'); contentDOM = document.createElement('div');

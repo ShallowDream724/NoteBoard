@@ -4,13 +4,15 @@ import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { ImageNode } from '../../src/features/editor-md/documentNodes';
 import { InteractiveImageCollection, InteractiveImageSlot } from '../../src/features/editor-md/rich-content/views';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { MediaEditing } from '../../src/features/editor-md/mediaEditing';
 
 const editors: Editor[] = [];
 function create() {
-  const editor = new Editor({ extensions: [StarterKit, ImageNode, InteractiveImageCollection, InteractiveImageSlot], content: {
+  const editor = new Editor({ extensions: [StarterKit, ImageNode, InteractiveImageCollection, InteractiveImageSlot, MediaEditing], editorProps: { handleScrollToSelection: () => true }, content: {
     type: 'doc', content: [{ type: 'imageCollection', attrs: { layout: 'carousel' }, content: Array.from({ length: 5 }, (_, index) => ({
       type: 'imageSlot', content: [{ type: 'image', attrs: { src: `picture-${index}.png`, alt: `Accessible ${index}` } }, { type: 'paragraph', content: [{ type: 'text', text: `Caption ${index}` }] }],
-    })) }],
+    })) }, { type: 'paragraph', content: [{ type: 'text', text: 'After collection' }] }],
   } });
   document.body.append(editor.view.dom); editors.push(editor);
   const viewport = editor.view.dom.querySelector<HTMLElement>('.nb-image-viewport')!;
@@ -21,6 +23,25 @@ function create() {
 }
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('carousel navigation', () => {
+  it('pages a selected collection with left/right, keeps one selection, and leaves with ArrowDown', async () => {
+    const { editor, scrollTo, button } = create(); await new Promise(requestAnimationFrame);
+    editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 0)));
+    const before = editor.state.doc;
+    const key = (key: string) => editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    key('ArrowRight'); key('ArrowRight');
+    expect(button('第 3 张图片').getAttribute('aria-pressed')).toBe('true');
+    expect(scrollTo).toHaveBeenLastCalledWith({ left: 1600, behavior: 'smooth' });
+    expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+    expect((editor.state.selection as NodeSelection).node.type.name).toBe('imageCollection');
+    key('ArrowLeft');
+    expect(button('第 2 张图片').getAttribute('aria-pressed')).toBe('true');
+    key('ArrowLeft'); key('ArrowLeft');
+    expect(button('第 1 张图片').getAttribute('aria-pressed')).toBe('true');
+    key('ArrowDown');
+    expect(editor.state.selection).toBeInstanceOf(TextSelection);
+    expect(editor.state.selection.$from.parent.textContent).toBe('After collection');
+    expect(editor.state.doc).toBe(before);
+  });
   it('preloads neighbours only while the collection is near the viewport and releases its observer', async () => {
     let notify: IntersectionObserverCallback = () => {};
     const unobserve = vi.fn(), disconnect = vi.fn();

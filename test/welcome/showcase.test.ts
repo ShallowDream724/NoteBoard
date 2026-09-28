@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import katex from 'katex';
 import type { JSONContent } from '@tiptap/core';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
@@ -135,18 +136,37 @@ describe('bundled native feature showcase', () => {
     expect(Buffer.byteLength(showcase, 'utf8')).toBeLessThanOrEqual(31593);
   });
 
-  it('demonstrates real color marks and narrower centered and right-aligned tables', () => {
+  it('demonstrates paragraph fill with independent color marks and narrower aligned tables', () => {
     const json = decodeNativeDocument(showcase);
     const markedText = nodesOf(json, 'text');
     expect(markedText.some(node => node.marks?.some(mark => mark.type === 'textColor'))).toBe(true);
     expect(markedText.some(node => node.marks?.some(mark => mark.type === 'highlight'))).toBe(true);
     expect(markedText.some(node => ['textColor', 'highlight'].every(type => node.marks?.some(mark => mark.type === type)))).toBe(true);
+    const paragraph = nodesOf(parseNativeNode(showcase, documentParser().schema).toJSON(), 'paragraph')
+      .find(node => node.attrs?.blockBackground);
+    expect(paragraph?.attrs?.blockBackground).toBe('#eff6ff');
+    const text = nodesOf(paragraph!, 'text');
+    expect(text.some(node => !node.marks?.some(mark => mark.type === 'highlight'))).toBe(true);
+    expect(text.some(node => node.marks?.some(mark => mark.type === 'highlight' && mark.attrs?.color === '#fef08a'))).toBe(true);
     const tables = nodesOf(json, 'table');
     expect(tables.map(table => table.attrs?.tableAlign)).toEqual(['center', 'right']);
     for (const table of tables) {
       const widths = table.content?.[0]?.content?.map(cell => cell.attrs?.colwidth?.[0]) ?? [];
       expect(widths.every(width => typeof width === 'number' && width > 0)).toBe(true);
       expect(widths.reduce((sum, width) => sum + width, 0)).toBeLessThan(600);
+    }
+  });
+
+  it('preserves formula alignment and renders the smooth transition example', () => {
+    const json = parseNativeNode(showcase, documentParser().schema).toJSON();
+    const formulas = nodesOf(json, 'mathBlock');
+    expect(formulas.map(node => node.attrs?.textAlign)).toEqual(['left', 'right']);
+    const transition = formulas.find(node => String(node.attrs?.latex).includes('\\begin{cases}'));
+    expect(transition?.attrs?.latex).toContain('\\int_0^1');
+    for (const formula of [...formulas, ...nodesOf(json, 'mathInline')]) {
+      expect(() => katex.renderToString(String(formula.attrs?.latex), {
+        throwOnError: true, strict: 'error', displayMode: formula.type === 'mathBlock',
+      })).not.toThrow();
     }
   });
 

@@ -5,6 +5,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { normalizeImageSlot } from './imageCaptions';
 import { requestImageRemoval } from './imageRemoval';
 import { dispatchDiscreteEdit } from './discreteEdit';
+import { stepImageCollection } from './rich-content/collectionNavigation';
 import './mediaEditing.css';
 
 const media = (node: Node | null | undefined) => !!node && ['image', 'imageCollection'].includes(node.type.name);
@@ -63,6 +64,12 @@ export function handleMediaKey(view: EditorView, event: KeyboardEvent): boolean 
   const { state } = view, { selection } = state;
   if (['Backspace', 'Delete'].includes(event.key) && selection instanceof NodeSelection && selection.node.type.name === 'image') {
     void requestImageRemoval(view, selection.from); return true;
+  }
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const selected = outerMedia(state);
+    if (selected?.node.type.name !== 'imageCollection' || !stepImageCollection(view, selected.pos, event.key === 'ArrowLeft' ? -1 : 1)) return false;
+    if (selection.from !== selected.pos) view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, selected.pos)));
+    return true;
   }
   if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return false;
   const direction = event.key === 'ArrowUp' ? -1 : 1, selected = outerMedia(state);

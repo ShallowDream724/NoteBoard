@@ -99,6 +99,14 @@ try {
   await page.evaluate(() => window.mathAlignmentQA.prepareTyping()); await frame();
   await page.keyboard.type(String.raw`,$wos$:,$\text{aaa}$,`);
   assert.deepEqual(await page.evaluate(() => window.mathAlignmentQA.formulas()), ['a', 'wos', String.raw`\text{aaa}`]);
+  await page.evaluate(() => window.mathAlignmentQA.prepareHistory());
+  await page.locator('code .hljs-keyword').first().waitFor();
+  await page.evaluate(() => window.mathAlignmentQA.deleteFormula());
+  const code = await page.locator('code').elementHandle();
+  assert(await page.locator('code .hljs-keyword').count() > 0);
+  await page.evaluate(() => window.mathAlignmentQA.restoreFormula());
+  assert(await code.evaluate(element => element === document.querySelector('code')), 'Undo must retain the unaffected code view');
+  assert(await page.locator('code .hljs-keyword').count() > 0, 'Undo must retain already highlighted code immediately');
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, checks: results.length, results }, null, 2));
 } finally { await browser.close(); await new Promise(resolve => server.httpServer.close(resolve)); }

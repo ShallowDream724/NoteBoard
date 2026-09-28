@@ -4,6 +4,7 @@ import { decodeNativeFile, nativeNodeSource, nativeError, nativeErrorChild, NATI
 import { hasMarkdownContentChanged, initializeMarkdownContent, parseMarkdown, rememberMarkdownSource, serializeMarkdown, withEditableTail } from './serialize';
 import { resolveRelativeDocPath } from '../../core/documentPath';
 import { normalizeNativeStructure } from '../../core/nativeDocumentStructure';
+import { reconcileDocumentHistory } from './documentReconciliation';
 
 export type RichDocumentFormat = 'markdown' | 'noteboard';
 const formats = new WeakMap<Editor, RichDocumentFormat>();
@@ -173,7 +174,8 @@ export function parseEditorDocument(editor: Editor, content: string, origin: 'sy
   const original = originalSources.get(doc)!;
   setEditorNativeMetadata(editor, original.metadata);
   if (doc.eq(editor.state.doc)) { originalSources.set(editor.state.doc, original); return; }
-  editor.chain().setContent(doc, { contentType: 'json' }).command(({ tr }) => {
+  if (origin === 'history') reconcileDocumentHistory(editor, doc);
+  else editor.chain().setContent(doc, { contentType: 'json' }).command(({ tr }) => {
     tr.setMeta('addToHistory', false).setMeta('noteboard-document-replacement', origin);
     return true;
   }).run();

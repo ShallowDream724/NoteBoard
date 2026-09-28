@@ -5,5 +5,8 @@
   outline-offset: 3px;
   border-radius: 8px;
 }
+.ProseMirror .nb-image-collection.ProseMirror-selectednode .ProseMirror-selectednode {
+  outline: none;
+}
 .nb-annotation-image { display: block; margin: 12px 0; }
 .nb-annotation-image figcaption { margin-top: 6px; text-align: center; font-size: .85em; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -529,7 +529,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         if (!editor || editor.isDestroyed) throw new Error('编辑器尚未就绪');
         const previousVisualDocument = editor.state.doc;
         if (hasMarkdownContentChanged(editor, entry.content)) {
-          // 统一历史应用属于导航而非新编辑，整篇替换明确排除出 TipTap 原生历史
+          // Shared history applies only the changed slice; unaffected views keep
+          // their media, syntax decorations and rendering state.
           parseEditorDocument(editor, entry.content, 'history');
         }
         const content = serializeEditorDocument(editor);
@@ -548,7 +549,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           .chain()
           .setTextSelection({ from: anchor, to: head })
           .scrollIntoView()
-          .focus()
+          .focus(undefined, { scrollIntoView: false })
           .run();
       },
     });

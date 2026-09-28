@@ -6,6 +6,7 @@
 // 不变式 I-14: 打开 → 切 visual → 切 source → tab 不出现脏圆点
 
 import type { Editor, JSONContent } from '@tiptap/core';
+import { reconcileDocumentHistory } from './documentReconciliation';
 
 // CommonMark 允许反斜杠转义的 ASCII 标点；这些字符前的双反斜杠不能擅自折叠，
 // 否则原本可见的反斜杠会在下一次解析时被当成转义符吞掉。
@@ -549,7 +550,8 @@ export function parseMarkdown(
   if (previous?.doc === editor.state.doc && previous.markdown === markdown) return;
   if (markdown.trim() === '') {
     // 空内容同样必须显式控制历史，否则初次打开空文件后可能出现伪撤销步骤
-    replaceEditorContent(
+    if (origin === 'history') reconcileDocumentHistory(editor, editor.schema.topNodeType.createAndFill()!);
+    else replaceEditorContent(
       editor,
       editor.chain().clearContent(false),
       origin,
@@ -560,8 +562,9 @@ export function parseMarkdown(
   try {
     const json = parseMarkdownJSON(editor, markdown);
     if (json) {
-      const parsed = editor.schema.nodeFromJSON(json);
-      replaceEditorContent(
+      const parsed = withEditableTail(editor, editor.schema.nodeFromJSON(json));
+      if (origin === 'history') reconcileDocumentHistory(editor, parsed);
+      else replaceEditorContent(
         editor,
         editor.chain().setContent(parsed, { contentType: 'json' }),
         origin,
