@@ -6,11 +6,11 @@
 
 **Windows 本地笔记与图表编辑器**
 
-[![正式版](https://img.shields.io/badge/1.0.1-正式版-blue)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
+[![正式版](https://img.shields.io/badge/1.0.2-正式版-blue)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/latest) · [更新说明](docs/releases/1.0.1.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
+[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/latest) · [更新说明](docs/releases/1.0.2.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
 
 </div>
 
@@ -20,7 +20,7 @@ NoteBoard 可以写笔记、整理表格、画流程图，也能打开代码和�
 
 ## 安装与试用
 
-1. 在 [正式版发布页面](https://github.com/ShallowDream724/NoteBoard/releases/latest) 的 **Assets** 中下载 `NoteBoard_1.0.1_x64-setup.exe`。
+1. 在 [正式版发布页面](https://github.com/ShallowDream724/NoteBoard/releases/latest) 的 **Assets** 中下载 `NoteBoard_1.0.2_x64-setup.exe`。
 2. 运行安装程序。需要 Windows 10 / 11 x64 和 WebView2；缺少 WebView2 时，安装程序会联网下载。
 3. 打开应用，在主页点击 **浏览功能示例**。里面的文字、表格、图片和公式都可以直接编辑。
 
@@ -117,7 +117,7 @@ PDF 导出后会在新标签页打开，不改变原来的文件树目录。字�
 - 关联 MD 的自动回传适用于能逐块对应的文字修改。包含折叠、说明等降级结构时，MD 回改会进入冲突保护，需要手动处理。
 - 图片不是打包在 NB 里的附件，移动或分享源文档时需携带外部图片。
 - Word、LaTeX 及其他 Markdown 阅读器的显示结果受各自支持的语法、字体和排版方式影响。
-- 没有内置账号同步和多人实时协作。预发布更新请从 Releases 下载；应用内更新检查面向正式版本。
+- 没有内置账号同步和多人实时协作。正式版检查正式更新；支持预发布通道的 RC 安装也会检测后续正式版，可通过“下载并安装”升级。
 
 ## 反馈与开发
 
