@@ -1,0 +1,4 @@
+/* The document block owns alignment. KaTeX resets it on two nested blocks;
+ * inherit at both boundaries without touching fractions, matrices or tags. */
+[data-math-align] .katex-display,
+[data-math-align] .katex-display > .katex { text-align: inherit; }

@@ -1,4 +1,4 @@
-import { InputRule, type Editor } from '@tiptap/core';
+import { InputRule, getTextContentFromNodes, type Editor } from '@tiptap/core';
 import { NodeSelection, Plugin } from '@tiptap/pm/state';
 import { Fragment } from '@tiptap/pm/model';
 import { ReactNodeViewRenderer } from '@tiptap/react';
@@ -11,25 +11,34 @@ export { clearKatexCache } from './mathRendering';
 const compositions = new WeakMap<Editor, { start: number; pending: boolean }>();
 type BatchMatch = Pick<MathMatch, 'start' | 'end' | 'latex' | 'delimiter'>;
 
-/** Match TipTap's 500-character input-rule window so only this input batch is
- * considered, even when the caret sits inside a long paragraph. */
-function textBeforeCaret(editor: Editor): string {
-  const { $from } = editor.state.selection;
-  const end = $from.parentOffset;
-  let text = '';
-  $from.parent.nodesBetween(Math.max(0, end - 500), end, (node, pos, parent, index) => {
-    const chunk = node.type.spec.toText?.({ node, pos, parent, index }) || node.textContent || '%leaf%';
-    text += node.isAtom && !node.isText ? chunk : chunk.slice(0, Math.max(0, end - pos));
+/** Look ahead only through adjacent text: a closing delimiter can already exist
+ * when the user supplies an opener or edits the formula body. Never consume an
+ * existing image/formula atom, another block or an unbounded document suffix. */
+function textAfterSelection(editor: Editor): string {
+  const { $from, $to } = editor.state.selection;
+  if (!$from.sameParent($to)) return '';
+  const start = $to.parentOffset, end = Math.min($to.parent.content.size, start + 500);
+  let text = '', stopped = false;
+  $to.parent.nodesBetween(start, end, (node, pos) => {
+    if (stopped) return false;
+    if (!node.isText) { stopped = true; return false; }
+    text += node.text!.slice(Math.max(0, start - pos), end - pos);
   });
   return text;
 }
 
-function batchInputMatch(text: string, start: number) {
-  const matches = mathInInputRange(text, start);
+function batchInputMatch(text: string, start: number, inputEnd = text.length) {
+  // TipTap can include a whole text node at the edge of its nominal window.
+  // Bound our scan even when that node is a very long paragraph.
+  const offset = Math.max(0, start - 500);
+  text = text.slice(offset); start -= offset; inputEnd -= offset;
+  const matches = mathInInputRange(text, start).filter(match => match.start < inputEnd);
   if (!matches.length) return null;
   const first = matches[0];
   const replaceStart = Math.min(start, first.start);
-  return { index: replaceStart, text: text.slice(replaceStart), data: {
+  const replaceEnd = Math.max(inputEnd, matches[matches.length - 1].end);
+  return { index: offset + replaceStart, text: text.slice(replaceStart, inputEnd), data: {
+    source: text.slice(replaceStart, replaceEnd), after: replaceEnd - inputEnd,
     batch: matches.map(({ start, end, latex, delimiter }) => ({ start: start - replaceStart, end: end - replaceStart, latex, delimiter })),
   } };
 }
@@ -71,13 +80,12 @@ export const MathInline = MathInlineNode.extend({
           const { selection } = this.editor.state;
           const inserted = selection.from - composition.start;
           if (!selection.empty || inserted <= 0 || inserted > text.length) return null;
-          return batchInputMatch(text, text.length - inserted);
+          return batchInputMatch(text + textAfterSelection(this.editor), text.length - inserted, text.length);
         }
-        const previous = textBeforeCaret(this.editor);
+        const previous = getTextContentFromNodes(this.editor.state.selection.$from);
         if (!text.startsWith(previous)) return null;
-        const input = text.slice(previous.length);
-        if (!/[$)\]]/.test(input)) return null;
-        return batchInputMatch(text, previous.length);
+        if (text.length === previous.length) return null;
+        return batchInputMatch(text + textAfterSelection(this.editor), previous.length, text.length);
       },
       handler: ({ state, range, match }) => {
         const { tr } = state;
@@ -85,7 +93,8 @@ export const MathInline = MathInlineNode.extend({
         const math = source(batch[0], false);
         const $from = tr.doc.resolve(range.from);
         const marks = tr.storedMarks ?? $from.marks();
-        const raw = match[0], content = [];
+        const raw = String(match.data?.source ?? match[0]), content = [];
+        const to = range.to + Number(match.data?.after ?? 0);
         let cursor = 0;
         for (const item of batch) {
           if (item.start > cursor) content.push(this.editor.schema.text(raw.slice(cursor, item.start), marks));
@@ -94,9 +103,9 @@ export const MathInline = MathInlineNode.extend({
         }
         if (cursor < raw.length) content.push(this.editor.schema.text(raw.slice(cursor), marks));
         if (content.length === 1 && isDisplayMath(math.delimiter) && $from.parent.type.name === 'paragraph'
-          && $from.parentOffset === 0 && range.to === $from.end()) {
+          && $from.parentOffset === 0 && to === $from.end()) {
           tr.replaceWith($from.before(), $from.after(), this.editor.schema.nodes.mathBlock.create(math));
-        } else tr.replaceWith(range.from, range.to, Fragment.fromArray(content));
+        } else tr.replaceWith(range.from, to, Fragment.fromArray(content));
       },
     })];
   },

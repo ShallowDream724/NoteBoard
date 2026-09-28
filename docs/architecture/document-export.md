@@ -23,6 +23,8 @@
 
 HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片使用原文档目录解析后的文件 URL，PDF 则继续使用 Tauri 资源握手。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
 
+HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格、提示块、整块颜色、图片集合和公式对齐。独立 HTML 用 Vite 的 `?inline` 展开完整依赖；禁止手工删除 `@import` 后维护另一份样式清单。`document.css` 仅在 PDF/打印路径附加 KaTeX 字体及换行规则；独立 HTML 使用原生 MathML，不依赖外部数学字体。
+
 ### 图表进入 HTML 与 PDF
 
 `renderDocument.ts` 将 Mermaid、PlantUML、Infographic 节点收集成一次请求，保留元素位置，等待 `renderDiagrams.ts` 返回静态图形；正常图表不再统一替换成源码。Mermaid 必须使用浏览器的 SVG 尺寸测量，不能在 LinkeDOM 中伪造结果。`diagram-preview/mermaidRenderer.ts` 是编辑节点、图表分栏预览和导出的共同惰性加载/串行渲染边界，临时可测量容器在成功、失败和取消后释放，排队中的废弃任务可取消。PlantUML 复用原有在线服务与 LRU 缓存，导出请求可取消并设 20 秒超时；信息图复用原有解析器和 React 组件生成静态 HTML，不截图或重写一套图形生成器。

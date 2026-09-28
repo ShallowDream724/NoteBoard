@@ -8,7 +8,7 @@ import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
 import { mountMathPreview, type MathPreviewController } from './mathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
-import './mathNodeView.css';
+import '../../core/math/alignment.css';
 
 /** The document owns the draft, even while the source input has focus. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {

@@ -64,6 +64,46 @@ describe('学术公式语料与源码往返', () => {
 });
 
 describe('定界符空白、上下文与真实输入', () => {
+  it('已有公式后连续输入带逗号、冒号的美元号公式', () => {
+    const value = editor();
+    const source = String.raw`正文$a$,$wos$:,$\text{aaa}$,\(a\):::\(www\)::`;
+    type(value, source);
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'wos', String.raw`\text{aaa}`, 'a', 'www']);
+    expect(value.getText()).toBe(source);
+  });
+  it('先写内容和结束符，再回头补开始符，只转换刚补全的公式', () => {
+    for (const [source, position, input, latex] of [
+      ['前，wos$：后', 3, '$', 'wos'],
+      [String.raw`前，\text{aaa}$：后`, 3, '$', String.raw`\text{aaa}`],
+      [String.raw`前，a\)：后`, 3, String.raw`\(`, 'a'],
+      ['$a+$：后', 4, 'b', 'a+b'],
+    ] as const) {
+      const value = editor();
+      value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: source }] }] });
+      value.commands.setTextSelection(position);
+      type(value, input);
+      expect(formulas(value).map(formula => formula.latex), source).toEqual([latex]);
+      expect(value.getText()).toBe(source.slice(0, position - 1) + input + source.slice(position - 1));
+      expect(value.commands.undoInputRule()).toBe(true);
+      expect(formulas(value)).toHaveLength(0);
+    }
+  });
+  it('补全公式不穿过已有原子节点，不重新解释右侧已有公式文本', () => {
+    const value = editor();
+    value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+      { type: 'text', text: 'a' }, { type: 'mathInline', attrs: { latex: 'z' } }, { type: 'text', text: '$ 后 $b$' },
+    ] }] });
+    value.commands.setTextSelection(1); type(value, '$');
+    expect(formulas(value).map(formula => formula.latex)).toEqual(['z']);
+  });
+  it('输入法提交可在标点间回补公式起始符并保留后文', async () => {
+    const value = editor();
+    value.commands.setContent('<p>前，wos$：后</p>');
+    value.commands.setTextSelection(3);
+    await compose(value, '$');
+    expect(formulas(value).map(formula => formula.latex)).toEqual(['wos']);
+    expect(value.getText()).toBe('前，$wos$：后');
+  });
   it('中文段落手动输入 $a$ 并继续中文标点时建立行内节点', () => {
     const value = editor();
     type(value, '你用缩写看位置变化的思路很有用。例如 $a$ ：');

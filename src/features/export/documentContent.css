@@ -1,0 +1,86 @@
+@import '../editor-md/tablePresentation.css';
+@import '../../core/math/alignment.css';
+@import './richDocument.css';
+@import '../editor-md/callout.css';
+@import '../document-style/blockAppearance.css';
+:root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: white; color: #18202b; }
+body { font-family: var(--export-body-font, 'Segoe UI', 'Microsoft YaHei', sans-serif); font-size: var(--export-font); line-height: var(--export-line); }
+/* An unresolved outlier must not trigger Chromium's whole-page shrink-to-fit.
+ * Layout diagnostics identify it; clipping is confined to the preview boundary. */
+#document { width: var(--export-width); margin: 0; overflow-x: clip; }
+p { margin: .45em 0 .65em; orphans: 2; widows: 2; }
+p,h1,h2,h3,h4,h5,h6,li,blockquote,code { overflow-wrap: anywhere; }
+li[data-type=taskItem] > div { min-width: 0; }
+h1,h2,h3,h4,h5,h6 { break-after: avoid; line-height: 1.25; margin: 1em 0 .5em; font-weight: 650; }
+h1 { font-size: 1.8em; } h2 { font-size: 1.45em; } h3 { font-size: 1.2em; }
+ul,ol { padding-left: 1.8em; margin: .5em 0; } li > p { margin: .2em 0; }
+ul[data-type=taskList] { list-style: none; padding-left: .2em; }
+li[data-type=taskItem] { display: flex; gap: .5em; align-items: flex-start; margin:.35em 0; }
+li[data-type=taskItem] > label { display:flex; align-items:center; flex:0 0 1em; height:1lh; }
+li[data-type=taskItem] > div > :first-child { margin-top:0; }
+li[data-type=taskItem] > div > :last-child { margin-bottom:0; }
+.export-task-check { display:block; flex:none; width:1em; height:1em; }
+li[data-type=taskItem][data-checked=true] > div > p { text-decoration:line-through; }
+a { color: #245bc1; text-decoration: none; overflow-wrap: anywhere; }
+img,svg { max-width: 100%; } img { height: auto; }
+.export-diagram { margin: .8em 0; min-width: 0; break-inside: avoid; color: #18202b; --editor-text:#18202b; --editor-text-muted:#526174; --editor-surface:#fff; --editor-bg:#f8fafc; --editor-border:#d8dee7; }
+.export-diagram > svg { display: block; width: auto; height: auto; margin: 0 auto; max-width: 100%; }
+.export-diagram[data-diagram-kind="infographic"] { break-inside: auto; }
+.export-diagram-error { color: #a12c2c; font-size: .9em; white-space: pre-wrap; }
+blockquote { margin: .7em 0; padding: .2em 1em; border-left: 3px solid #c5cedb; color: #526174; }
+hr { border: 0; border-top: 1px solid #d8dee7; margin: 1em 0; }
+code,pre { font-family: var(--export-mono-font, Consolas, 'Microsoft YaHei', monospace); }
+code { background: #f2f4f7; border-radius: 3px; padding: .08em .25em; }
+pre { background: #f5f7fa; border: 1px solid #e3e7ed; border-radius: 5px; padding: .7em .9em; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; font-size: .9em; }
+pre code { background: transparent; padding: 0; }
+/* Separate borders belong to each completed row, so Chromium retains the last
+ * row's bottom rule at a page break instead of dropping a collapsed border. */
+table { border-collapse: separate; border-spacing: 0; margin: .8em 0; max-width: none; border: 0; }
+table > caption, figure[data-nb-image] > figcaption { padding: .5em .25em 0; color:#526174; font-size:.86em; line-height:1.5; text-align:center; white-space:pre-wrap; overflow-wrap:anywhere; break-before:avoid; }
+table > caption { caption-side:bottom; }
+figure[data-nb-image] { max-width:100%; break-inside:avoid; }
+th,td { border: 0 solid #cbd3de; border-width: 0 1px 1px 0; padding: .35em .6em; text-align: left; vertical-align: top; }
+/* Mark logical edges instead of :first-child: a cell above may own the left
+ * edge through rowspan. Header-owned top rules repeat with every print header. */
+:is(th,td)[data-export-edge~="left"] { border-left-width: 1px; }
+:is(th,td)[data-export-edge~="top"] { border-top-width: 1px; }
+th { background: #f1f4f8; font-weight: 600; }
+td p,th p { margin: 0; }
+td p + p,th p + p { margin-top: .35em; }
+thead { display: table-header-group; } tfoot { display: table-footer-group; }
+tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
+.table-wrap { width: var(--export-table-width, 100%); table-layout: fixed; } .table-wrap th,.table-wrap td { overflow-wrap: anywhere; }
+.export-table-measure :is(th,td,p,a) { white-space: nowrap; overflow-wrap: normal; }
+.export-table-measure .export-math { --math-white-space: nowrap; }
+.export-table-measure-min :is(th,td,p,a) { white-space: normal; }
+.export-table-measure-min .export-math { --math-white-space: normal; }
+.export-row-continues > :is(th,td) { border-bottom-style: dashed; }
+.export-row-continuation > :is(th,td) { border-top: 1px dashed #a3adba; }
+.export-row-marker { display: block; color: #637084; font-size: .85em; line-height: 1.25; }
+[data-table-style="three-line"] table { border: 0; }
+[data-table-style="three-line"] :is(th,td)[data-export-edge~="top"] { border-top: 2px solid var(--editor-text-secondary, #526174); }
+[data-table-style="three-line"] :is(th,td)[data-export-edge~="bottom"] { border-bottom: 2px solid var(--editor-text-secondary, #526174); }
+[data-table-style="three-line"] .export-row-continues > :is(th,td) { border-bottom-color: #a3adba; }
+.table-continuation { color: #637084; font-size: .85em; margin-top: 1em; break-after: avoid; }
+.export-math { color: inherit; } .export-math.inline { display: inline; }
+.export-math.display { display: block; margin: .65em 0; text-align: center; break-inside: avoid; }
+.katex-display { margin: 0; }
+.export-math.wrap .katex-html > .base { margin: .15em 0; }
+.export-math.wrap { --math-white-space: normal; break-inside: auto; }
+.export-math[data-math-continued] { display: block; break-inside: auto; text-align: left; }
+.math-continuation-part { break-inside: avoid; margin: .7em 0; }
+.math-continuation-caption { color: #637084; font-size: .9em; margin-bottom: .35em; break-after: avoid; }
+.math-continuation-content { width: max-content; max-width: none; }
+.math-continuation-content .katex-html { white-space: nowrap; }
+.export-item-link { color: inherit; text-decoration: none; overflow-wrap: normal; }
+.export-location-host { position: relative; }
+.export-math-location { position: absolute; inset: 0; display: block; color: transparent; font-size: 1px; line-height: 1px; }
+.export-table-location { display: block; height: 1px; line-height: 1px; font-size: 1px; color: transparent; overflow: hidden; }
+.hljs-keyword,.hljs-selector-tag,.hljs-literal { color: #8950a9; }
+.hljs-string,.hljs-regexp,.hljs-addition { color: #218349; }
+.hljs-number,.hljs-symbol,.hljs-bullet { color: #b55d25; }
+.hljs-title,.hljs-section,.hljs-built_in { color: #2467b0; }
+.hljs-comment,.hljs-quote { color: #6c7a8d; font-style: italic; }
+.hljs-attr,.hljs-variable,.hljs-template-variable { color: #995322; }

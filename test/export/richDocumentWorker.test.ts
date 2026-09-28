@@ -13,6 +13,7 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
     type: 'doc', content: [
       { type: 'documentPresentation', attrs: { tableStyle: 'three-line' } },
       { type: 'paragraph', content: [{ type: 'text', text: 'Anchor', marks: [{ type: 'annotationReference', attrs: { id: 'a' } }] }] },
+      { type: 'mathBlock', attrs: { latex: String.raw`\frac{a}{b}`, textAlign: 'left' } },
       { type: 'imageCollection', attrs: { layout: 'carousel', columns: 2 }, content: [
         { type: 'imageSlot', content: [{ type: 'image', attrs: { src: 'img/a #1.png', alt: 'First' } }] },
         { type: 'imageSlot', content: [{ type: 'image', attrs: { src: 'img/b.png', alt: 'Second' } }] },
@@ -35,6 +36,8 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   expect(message.result).toContain('export-note-1');
   expect(message.result).toContain('data-export-edge="left top"');
   expect(message.result).toContain('data-export-edge="left bottom"');
-  expect(message.result).toContain('display:block math');
+  expect(message.result).toMatch(/<math[^>]+display="block"/);
+  expect(message.result).toContain('data-math-align="left"');
+  expect(message.result).not.toContain('@import');
   expect(postMessage.mock.calls.some(call => call[0].type === 'assets')).toBe(false);
 });

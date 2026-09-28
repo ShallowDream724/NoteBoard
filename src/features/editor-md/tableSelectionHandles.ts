@@ -141,17 +141,22 @@ export const TableSelectionHandles = Extension.create({
       frame = 0;
       if (!visible || !table || !cell || !view.editable || !view.dom.contains(cell)) { hide(); return; }
       const t = table.getBoundingClientRect(), viewport = scroll.getBoundingClientRect();
+      const rows = table.rows;
+      if (!rows.length) { hide(); return; }
+      // A table's border box includes its caption. Selection belongs to the
+      // cell grid, including the reserved heights of virtualized rows.
+      const gridTop = rows[0].getBoundingClientRect().top;
+      const gridBottom = rows[rows.length - 1].getBoundingClientRect().bottom;
       const wrapper = table.parentElement!.getBoundingClientRect();
       const left = Math.max(t.left, wrapper.left, viewport.left), right = Math.min(t.right, wrapper.right, viewport.right);
-      const top = Math.max(t.top, viewport.top), bottom = Math.min(t.bottom, viewport.bottom);
+      const top = Math.max(gridTop, viewport.top), bottom = Math.min(gridBottom, viewport.bottom);
       if (right <= left || bottom <= top) { hide(); return; }
       paintedBounds = { left, right, top, bottom };
       paintedRowSide = pointerX <= (left + right) / 2 ? 'left' : 'right';
       paintedColumnSide = pointerY <= (top + bottom) / 2 ? 'top' : 'bottom';
       const railLeft = paintedRowSide === 'left' ? Math.max(2, left - 22) : Math.max(left, Math.min(right, viewport.right - 22, window.innerWidth - 24));
-      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, t.top - 22) : Math.max(top, Math.min(bottom, viewport.bottom - 22, window.innerHeight - 24));
+      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, gridTop - 22) : Math.max(top, Math.min(bottom, viewport.bottom - 22, window.innerHeight - 24));
       let count = 0;
-      const rows = table.rows;
       const rowIndex = Math.min(rows.length - 1, firstVisible(rows, 'bottom', pointerY));
       const row = rows[rowIndex], r = row.getBoundingClientRect();
       const y = Math.max(r.top, top), end = Math.min(r.bottom, bottom);

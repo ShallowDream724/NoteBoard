@@ -1,6 +1,4 @@
-import documentCss from './document.css?raw';
-import richCss from './richDocument.css?raw';
-import tableCss from '../editor-md/tablePresentation.css?raw';
+import contentCss from './documentContent.css?inline';
 
 /** Enhancement is optional: without scripts every image remains in the flow. */
 const enhancement = `(()=>{
@@ -24,7 +22,10 @@ export function localFileUrl(path: string) {
 
 export function standaloneHtml(html: string, title: string) {
   const escapedTitle = title.replace(/[&<>"']/g, value => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[value]!);
-  // Native MathML keeps formulas self-contained without remote fonts or scripts.
-  const css = tableCss + documentCss.replace(/^@import[^\n]*\n/gm, '') + richCss + '\n:root{--export-font:11pt;--export-line:1.5;--export-width:100%}body{max-width:900px;margin:2em auto;padding:0 1.5em}.katex-html{display:none}.katex-mathml{position:static!important;clip:auto!important;width:auto!important;height:auto!important}.export-math.display math{display:block math;margin:.5em auto}@media print{body{max-width:none;margin:0;padding:0}details::details-content{content-visibility:visible!important}}';
+  // Compile shared content styles through Vite, including their imports. Only
+  // the math engine differs: native MathML needs no external fonts or scripts.
+  // An inline math box follows the block's alignment while displaystyle remains
+  // controlled by MathML's display attribute (large operators/fractions).
+  const css = contentCss + '\n:root{--export-font:11pt;--export-line:1.5;--export-width:100%}body{max-width:900px;margin:2em auto;padding:0 1.5em}.katex-html{display:none}.katex-mathml{position:static!important;clip:auto!important;width:auto!important;height:auto!important}.export-math.display math{display:inline math;margin:.5em 0}@media print{body{max-width:none;margin:0;padding:0}details::details-content{content-visibility:visible!important}}';
   return `<!doctype html>\n<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapedTitle}</title><style>${css}</style></head><body>${html}<script>${enhancement}</script></body></html>`;
 }

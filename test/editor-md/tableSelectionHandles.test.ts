@@ -81,4 +81,13 @@ describe('table selection handles', () => {
     expect([row.style.left, column.style.top]).toEqual(['308px', '168px']);
     expect([row.dataset.index, column.dataset.index]).toEqual(['1', '1']);
   });
+  it('anchors below the cell grid rather than below an empty or multi-line caption', async () => {
+    for (const captionHeight of [30, 120]) {
+      const { table, cells, hover } = create();
+      vi.mocked(table.getBoundingClientRect).mockReturnValue(rect(200, 100, 200, 100 + captionHeight));
+      const [, column] = await hover(cells[3], 380, 180);
+      expect(column.style.top).toBe('200px');
+      editors.pop()!.destroy();
+    }
+  });
 });
