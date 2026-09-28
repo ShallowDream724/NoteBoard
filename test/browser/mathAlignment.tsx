@@ -58,6 +58,12 @@ const qa = {
   },
   deleteFormula() { editor.commands.setNodeSelection(0); editor.commands.deleteSelection(); },
   restoreFormula() { parseEditorDocument(editor, historySnapshot, 'history'); },
+  prepareInlineEntry() {
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Before $$ after' }] }] });
+    editor.commands.setTextSelection(9);
+    editor.view.focus();
+  },
+  text: () => editor.state.doc.textContent,
   async export() {
     const content: JSONContent = editor.getJSON();
     content.content!.push({ type: 'imageCollection', attrs: { layout: 'carousel', columns: 2 }, content: ['#3b82f6', '#10b981'].map(color => ({

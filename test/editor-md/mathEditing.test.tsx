@@ -10,6 +10,45 @@ import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { mathContent } from '../../src/features/editor-md/insertContentRecipes';
 
 describe('公式源码输入', () => {
+  it.each([
+    { source: '正文 $$ 后文', position: 5, input: 'a', latex: 'a', caret: 1 },
+    { source: '正文 $ab$ 后文', position: 6, input: 'x', latex: 'axb', caret: 2 },
+  ])('在预先闭合的美元号内继续输入：$source', async ({ source, position, input, latex, caret }) => {
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    const editor = new Editor({ editorProps: { handleScrollToSelection: () => true }, extensions: [StarterKit, MathInline, MathBlock, Markdown],
+      content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: source }] }] } });
+    const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+    try {
+      await act(async () => root.render(<EditorContent editor={editor}/>));
+      await act(async () => {
+        editor.commands.setTextSelection(position);
+        const { from, to } = editor.state.selection;
+        const handled = editor.view.someProp('handleTextInput', handler => handler(editor.view, from, to, input, () => editor.state.tr.insertText(input)));
+        expect(handled).toBe(true);
+      });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 35)); });
+      const textarea = host.querySelector('textarea')!;
+      expect(textarea?.value).toBe(latex);
+      expect(document.activeElement).toBe(textarea);
+      expect(textarea.selectionStart).toBe(caret);
+      const continued = latex.slice(0, caret) + '继续，' + latex.slice(caret);
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, continued);
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      const math = () => { let value = ''; editor.state.doc.descendants(node => { if (node.type.name === 'mathInline') value = node.attrs.latex; }); return value; };
+      expect(math()).toBe(continued);
+      expect(document.activeElement).toBe(textarea);
+      await act(async () => {
+        textarea.setSelectionRange(continued.length, continued.length);
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      });
+      expect(host.querySelector('textarea')).toBeNull();
+      await act(async () => editor.view.dispatch(editor.state.tr.insertText('正文继续')));
+      expect(math()).toBe(continued);
+      expect(editor.state.doc.textContent).toContain('正文继续 后文');
+    } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
+  });
   it('inserting an empty block opens and focuses its source without a second edit', async () => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const editor = new Editor({ extensions: [StarterKit, MathInline, MathBlock, Markdown], content: '<p></p>' });

@@ -4,9 +4,10 @@ import { Fragment } from '@tiptap/pm/model';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import 'katex/dist/katex.min.css';
 import { MathNodeView } from './MathNodeView';
-import { isDisplayMath, mathInInputRange, type MathMatch } from './mathSyntax';
+import { isDisplayMath, mathClosingDelimiter, mathInInputRange, type MathMatch } from './mathSyntax';
 import { MathInlineNode, MathBlockNode, mathSource as source } from './documentNodes';
 import { handleMathKey } from './mathNavigation';
+import { mathEditingRequestPlugin, requestMathEditing } from './mathEditingRequest';
 export { clearKatexCache } from './mathRendering';
 
 const compositions = new WeakMap<Editor, { start: number; pending: boolean }>();
@@ -48,7 +49,7 @@ export const MathInline = MathInlineNode.extend({
   addNodeView() { return ReactNodeViewRenderer(MathNodeView); },
   addProseMirrorPlugins() {
     const editor = this.editor;
-    return [new Plugin({
+    return [mathEditingRequestPlugin(), new Plugin({
       state: { init: () => null, apply(tr) {
         const span = compositions.get(editor);
         if (span) span.start = tr.mapping.map(span.start, -1);
@@ -96,17 +97,23 @@ export const MathInline = MathInlineNode.extend({
         const marks = tr.storedMarks ?? $from.marks();
         const raw = String(match.data?.source ?? match[0]), content = [];
         const to = range.to + Number(match.data?.after ?? 0);
-        let cursor = 0;
+        const caret = match[0].length;
+        const active = batch.find(item => caret >= item.start + item.delimiter.length && caret <= item.end - mathClosingDelimiter(item.delimiter).length);
+        let cursor = 0, offset = 0, activePos = range.from;
         for (const item of batch) {
-          if (item.start > cursor) content.push(this.editor.schema.text(raw.slice(cursor, item.start), marks));
+          if (item.start > cursor) { content.push(this.editor.schema.text(raw.slice(cursor, item.start), marks)); offset += item.start - cursor; }
+          if (item === active) activePos = range.from + offset;
           content.push(this.type.create(source(item, false), null, marks));
+          offset++;
           cursor = item.end;
         }
         if (cursor < raw.length) content.push(this.editor.schema.text(raw.slice(cursor), marks));
         if (content.length === 1 && isDisplayMath(math.delimiter) && $from.parent.type.name === 'paragraph'
           && $from.parentOffset === 0 && to === $from.end()) {
           tr.replaceWith($from.before(), $from.after(), this.editor.schema.nodes.mathBlock.create(math));
+          activePos = $from.before();
         } else tr.replaceWith(range.from, to, Fragment.fromArray(content));
+        if (active) requestMathEditing(tr, activePos, Math.max(0, Math.min(active.latex.length, caret - active.start - active.delimiter.length)));
       },
     })];
   },

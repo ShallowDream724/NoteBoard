@@ -107,6 +107,17 @@ try {
   await page.evaluate(() => window.mathAlignmentQA.restoreFormula());
   assert(await code.evaluate(element => element === document.querySelector('code')), 'Undo must retain the unaffected code view');
   assert(await page.locator('code .hljs-keyword').count() > 0, 'Undo must retain already highlighted code immediately');
+  await page.evaluate(() => window.mathAlignmentQA.prepareInlineEntry());
+  await page.keyboard.type('abc', { delay: 15 });
+  const source = page.getByRole('textbox', { name: '行内公式源码' });
+  assert.equal(await source.inputValue(), 'abc');
+  assert.deepEqual(await page.evaluate(() => window.mathAlignmentQA.formulas()), ['abc']);
+  assert(await source.evaluate(element => document.activeElement === element));
+  await page.keyboard.press('ArrowRight');
+  await source.waitFor({ state: 'detached' });
+  await page.keyboard.type('outside');
+  assert.deepEqual(await page.evaluate(() => window.mathAlignmentQA.formulas()), ['abc']);
+  assert.equal(await page.evaluate(() => window.mathAlignmentQA.text()), 'Before outside after');
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, checks: results.length, results }, null, 2));
 } finally { await browser.close(); await new Promise(resolve => server.httpServer.close(resolve)); }

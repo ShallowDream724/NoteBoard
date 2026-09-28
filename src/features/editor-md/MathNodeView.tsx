@@ -6,11 +6,12 @@ import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { isDisplayMath, writeMath, type MathDelimiter } from './mathSyntax';
 import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
+import { consumeMathEditingRequest } from './mathEditingRequest';
 import { mountMathPreview, type MathPreviewController } from './mathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
 import '../../core/math/alignment.css';
 
-/** The document owns the draft, even while the source input has focus. */
+/** The document owns committed source; the native input owns only an IME preedit. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
   const enabled = useSettingsStore(state => state.settings.editor.enableMath);
   const block = node.type.name === 'mathBlock';
@@ -18,11 +19,20 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const display = isDisplayMath(delimiter);
   const latex = String(node.attrs.latex ?? '');
   const [editing, setEditing] = useState(false);
+  const [initialSelection, setInitialSelection] = useState<{ anchor: number; head: number }>();
   const seenSelection = useRef(false);
   const alignment = block && ['left', 'center', 'right'].includes(node.attrs.textAlign) ? node.attrs.textAlign : 'center';
   const viewportRef = useRef<HTMLSpanElement>(null);
   const previewRef = useRef<MathPreviewController | null>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const pos = getPos();
+    if (typeof pos !== 'number') return;
+    const request = consumeMathEditingRequest(editor, pos);
+    if (!request) return;
+    setInitialSelection(request);
+    setEditing(true);
+  });
   useLayoutEffect(() => {
     if (!editing) { setInputHost(null); return; }
     const pos = getPos();
@@ -64,12 +74,13 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     setEditing(false);
     const pos = getPos();
     if (typeof pos !== 'number') return;
-    editor.chain().focus().command(({ tr }) => {
-      const after = pos + node.nodeSize;
-      if (block && after === tr.doc.content.size) tr.insert(after, editor.schema.nodes.paragraph.create());
-      tr.setSelection(TextSelection.near(tr.doc.resolve(after), 1));
-      return true;
-    }).run();
+    const tr = editor.state.tr, after = pos + node.nodeSize;
+    if (block && after === tr.doc.content.size) tr.insert(after, editor.schema.nodes.paragraph.create());
+    tr.setSelection(TextSelection.near(tr.doc.resolve(after), 1));
+    editor.view.dispatch(tr);
+    // Hand focus back in the same key event. A queued focus leaves a gap after
+    // the textarea unmounts and can drop the user's next fast keystrokes.
+    editor.view.focus();
   };
 
   const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -79,14 +90,19 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       const pos = getPos();
       if (typeof pos !== 'number') return;
       setEditing(false);
-      editor.chain().focus().command(({ tr }) => {
-        tr.delete(pos, pos + node.nodeSize);
-        tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos, tr.doc.content.size)), -1));
-        return true;
-      }).run();
+      const tr = editor.state.tr.delete(pos, pos + node.nodeSize);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(pos, tr.doc.content.size)), -1));
+      editor.view.dispatch(tr);
+      editor.view.focus();
       return;
     }
     const control = event.ctrlKey || event.metaKey;
+    if (!display && event.key === 'ArrowRight' && !event.shiftKey && !event.altKey && !control
+      && event.currentTarget.selectionStart === event.currentTarget.selectionEnd
+      && event.currentTarget.selectionEnd === event.currentTarget.value.length) {
+      event.preventDefault(); event.stopPropagation(); exit();
+      return;
+    }
     if (control && ['z', 'y'].includes(event.key.toLowerCase())) {
       event.preventDefault(); event.stopPropagation();
       dispatchEditorShortcut(editor.view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
@@ -111,9 +127,9 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
         background: node.attrs.background || undefined,
         boxShadow: selected && !editing ? '0 0 0 2px var(--editor-selection-background)' : undefined,
       }}
-      onClick={() => setEditing(true)}
+      onClick={() => { if (!editing) setInitialSelection(undefined); setEditing(true); }}
     >
-      {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display}
+      {editing && inputHost && createPortal(<FormulaSourceEditor value={latex} display={display} initialSelection={initialSelection}
         onChange={value => updateAttributes({ latex: value })} onKeyDown={handleKey} onClose={() => setEditing(false)}/>, inputHost)}
       <span ref={viewportRef} title={editing ? undefined : '点击编辑公式'}
         style={{ display: display ? 'block' : 'inline-block', overflowWrap: 'anywhere', whiteSpace: enabled ? undefined : 'pre-wrap', fontFamily: enabled ? undefined : 'var(--mono-font-family)' }}/>
