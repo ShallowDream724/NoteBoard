@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { AlertCircle, Check, Copy } from 'lucide-react';
+import type { ExportItem, LayoutIssue } from './model';
+
+/** Sidebar feedback keeps layout decisions separate from content projection notes. */
+export function ExportSidebarFeedback({ issues = [], items, notes, accepted, onNavigate, onAccept }: {
+  issues?: LayoutIssue[]; items: ReadonlyMap<string, ExportItem>; notes: string[]; accepted: boolean;
+  onNavigate: (id: string) => void; onAccept: (accepted: boolean) => void;
+}) {
+  const blocked = issues.some(issue => issue.blocking);
+  return <>
+    {!!issues.length && <section className="export-sidebar-section export-layout-issues" aria-label="排版检查"><h4>排版检查</h4>
+      <div className="export-issue-list">{issues.slice(0, 100).map((issue, index) => <button key={index} className={`export-issue${issue.blocking ? ' is-blocking' : ''}`} onClick={() => onNavigate(issue.id)}><AlertCircle size={15}/><span>{items.get(issue.id)?.label && <strong>{items.get(issue.id)!.label}</strong>}<span>{issue.message}</span></span></button>)}</div>
+      {blocked && <label className="export-check export-acceptance"><input type="checkbox" checked={accepted} onChange={event => onAccept(event.target.checked)}/><span>仍按预览导出<small>含缺失或裁切内容</small></span></label>}
+    </section>}
+    {!!notes.length && <section className="export-sidebar-section export-content-notes" role="status"><h4>内容处理说明</h4><div className="export-note">{notes.map(message => <p key={message}>{message}</p>)}</div></section>}
+  </>;
+}
 
 /** Full diagnostics remain copyable; only the visible excerpt is bounded. */
 export function ExportDiagnostics({ message, details }: { message: string; details: string }) {

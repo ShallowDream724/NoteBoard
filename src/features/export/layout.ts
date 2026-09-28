@@ -1,6 +1,6 @@
 import { paperSize, type LayoutIssue, type LayoutReport, type PdfOptions } from './model';
 import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
-import { readableScale, renderedScale } from './layoutMetrics';
+import { mathContentWidth, readableScale, renderedScale } from './layoutMetrics';
 import { continueFraction, continueMatrix } from './mathLayout';
 import { createProseOverflowCheck } from './proseOverflow';
 import { allocateTableWidths, captureTablePresentation, markTableEdges, measureTableWidths, restoreTablePresentation, setAutomaticTableWidths, tableColumnWidths, type TablePresentation } from './tableLayout';
@@ -187,7 +187,7 @@ export function createLayoutSession(root: HTMLElement) {
     const measures = formulas.map(element => {
       const math = element.dataset.mathContinued ? null : element.querySelector<HTMLElement>('.katex-html');
       const available = availableWidth(element, width);
-      const measured = math ? extent(math) : 0;
+      const measured = math ? mathContentWidth(math) : 0;
       const bases = math ? Array.from(math.children).filter(child => child.classList.contains('base')) : [];
       return { math, available, measured, height: math?.getBoundingClientRect().height ?? 0, wide: measured > available + 1,
         canContinue: bases.length > 1 && bases.every(base => base.getBoundingClientRect().height <= pageHeight) };
@@ -206,7 +206,7 @@ export function createLayoutSession(root: HTMLElement) {
     const plans = formulas.map((element, i) => {
       const { math, available, measured, height } = measures[i];
       if (!math || options.items[element.dataset.exportItem!] === 'fit' || !element.classList.contains('wrap')) return null;
-      return planMath({ width: measured, height, wrappedWidth: extent(math), wrappedHeight: math.getBoundingClientRect().height,
+      return planMath({ width: measured, height, wrappedWidth: mathContentWidth(math), wrappedHeight: math.getBoundingClientRect().height,
         availableWidth: available, availableHeight: measures[i].canContinue ? Infinity : pageHeight, minimumScale: readableScale(math, options.fontPt) });
     });
     plans.forEach((plan, i) => {
@@ -226,8 +226,8 @@ export function createLayoutSession(root: HTMLElement) {
         measures[i].math = element.querySelector<HTMLElement>('.katex-html');
         const math = measures[i].math;
         if (math) measures[i].canContinue = Array.from(math.children).filter(child => child.classList.contains('base')).every(base => base.getBoundingClientRect().height <= pageHeight);
-        if (math && extent(math) > measures[i].available + 1) {
-          const scale = measures[i].available / extent(math);
+        if (math && mathContentWidth(math) > measures[i].available + 1) {
+          const scale = measures[i].available / mathContentWidth(math);
           if (scale >= readableScale(math, options.fontPt)) math.style.zoom = String(scale);
         }
       }
@@ -236,7 +236,7 @@ export function createLayoutSession(root: HTMLElement) {
     formulas.forEach((element, i) => {
       const { math, available } = measures[i], id = element.dataset.exportItem!;
       if (element.dataset.mathContinued) return;
-      if (math && extent(math) > available + 1) issue(id, '换行后仍超宽，继续缩小会影响阅读；可手动选择适宽缩放。');
+      if (math && mathContentWidth(math) > available + 1) issue(id, '换行后仍超宽，继续缩小会影响阅读；可手动选择适宽缩放。');
       if (element.getBoundingClientRect().height > pageHeight && !(element.classList.contains('wrap') && measures[i].canContinue)) issue(id, '此公式整体高于一页，需分段排版或调整源码。');
     });
     for (const id of changed) for (const table of elements(id).filter(e => e.tagName === 'TABLE'))

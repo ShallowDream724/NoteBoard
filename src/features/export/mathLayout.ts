@@ -1,8 +1,7 @@
 import { renderMath } from '../editor-md/mathRendering';
 import { matrixSource, matrixPart, reflowFractions } from '../../core/math/structure';
-import { readableScale, renderedScale } from './layoutMetrics';
+import { mathContentWidth, readableScale } from './layoutMetrics';
 
-function width(element: HTMLElement) { return Math.max(element.getBoundingClientRect().width, element.scrollWidth * renderedScale(element)); }
 interface Region { r0: number; r1: number; c0: number; c1: number }
 export interface MathLayoutResult { handled: boolean; issue?: string }
 const MAX_PARTS = 4096;
@@ -21,7 +20,7 @@ export async function continueMatrix(element: HTMLElement, available: number, pa
   const minimum = manualFit ? .001 : original ? readableScale(original, bodyFontPt) : Math.min(1, 8 / bodyFontPt);
   // A sample can itself exceed one-render admission limits. Start from coarse
   // dimensions in that case; actual bounded candidates establish fit/readability.
-  const columnWidth = original ? width(original) / (sampled ? Math.min(8, source.columns) : source.columns) : bodyFontPt * 4;
+  const columnWidth = original ? mathContentWidth(original) / (sampled ? Math.min(8, source.columns) : source.columns) : bodyFontPt * 4;
   const rowHeight = original ? original.getBoundingClientRect().height / (sampled ? Math.min(4, source.rows.length) : source.rows.length) : bodyFontPt * 2;
   const maxColumns = manualFit ? source.columns : Math.max(1, Math.min(source.columns, Math.floor(available / minimum / Math.max(1, columnWidth))));
   const estimatedScale = Math.min(1, available / Math.max(1, columnWidth * maxColumns));
@@ -75,7 +74,7 @@ export async function continueMatrix(element: HTMLElement, available: number, pa
     // Read every part before changing any geometry.
     const measures = parts.map(({ math }) => {
       const content = math.querySelector<HTMLElement>('.katex-html') ?? math;
-      return { width: width(content), height: content.getBoundingClientRect().height, minimum: manualFit ? .001 : readableScale(content, bodyFontPt) };
+      return { width: mathContentWidth(content), height: content.getBoundingClientRect().height, minimum: manualFit ? .001 : readableScale(content, bodyFontPt) };
     });
     parts.forEach(({ part, math, region, failed }, index) => {
       if (failed) { count++; return; }
@@ -106,7 +105,7 @@ export async function continueFraction(element: HTMLElement, available: number, 
     const result = await renderMath(candidate, true); if (result.error) continue;
     element.innerHTML = result.html; element.classList.add('wrap');
     const math = element.querySelector<HTMLElement>('.katex-html');
-    if (math && width(math) <= available + 1) return true;
+    if (math && mathContentWidth(math) <= available + 1) return true;
   }
   return false;
 }

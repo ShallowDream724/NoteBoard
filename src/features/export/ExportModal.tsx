@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Download, X, FileOutput, AlertCircle } from 'lucide-react';
+import { Download, X, FileOutput } from 'lucide-react';
 import { captureDocument } from './capture';
 import { DEFAULT_PDF, type ExportDocument, type ItemMode } from './model';
 import { usePdfJob } from './usePdfJob';
 import { PdfPreview } from './PdfPreview';
-import { ExportDiagnostics } from './ExportDiagnostics';
+import { ExportDiagnostics, ExportSidebarFeedback } from './ExportDiagnostics';
 import { ExportProgress } from './ExportProgress';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { presentExportedFile } from './exportCompletion';
@@ -131,7 +131,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
           <label className="export-field">方向<select value={String(options.landscape)} onChange={e => setOptions(o => ({ ...o, landscape: e.target.value === 'true' }))}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
         {number('marginMm', '页边距 (mm)', 0, 40, 1)}
         <div className="export-two">{number('fontPt', '正文字号 (pt)', 8, 24, .5)}{number('lineHeight', '行距', 1, 2.5, .1)}</div>
-        <label className="export-check"><input type="checkbox" checked={options.pageNumbers} onChange={e => setOptions(o => ({ ...o, pageNumbers: e.target.checked }))}/>页码</label>
+        <label className="export-check export-page-numbers"><input type="checkbox" checked={options.pageNumbers} onChange={e => setOptions(o => ({ ...o, pageNumbers: e.target.checked }))}/>页码</label>
         {options.pageNumbers && <div className="export-two">
           <label className="export-field">位置<select value={options.pageNumberPosition} onChange={e => setOptions(o => ({ ...o, pageNumberPosition: e.target.value as typeof o.pageNumberPosition }))}>
             <option value="bottom-center">底部居中</option><option value="bottom-left">左下角</option><option value="bottom-right">右下角</option>
@@ -141,17 +141,15 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
             <option value="number">1</option><option value="total">1 / 10</option><option value="dashes">- 1 -</option>
           </select></label>
         </div>}
-        {!!pdf.receipt?.adjustable.length && <section className="export-item-settings"><h4>超宽内容</h4>
+        {!!pdf.receipt?.adjustable.length && <section className="export-sidebar-section export-item-settings"><h4>超宽内容</h4>
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
           <div className="export-item-list" aria-label="需要调整的内容">{visibleItems.map(value => <button key={value.id} title={value.label} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
           {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => setOptions(o => ({ ...o, items: { ...o.items, [item]: e.target.value as ItemMode } }))}>
             <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
           </select></label>}
         </section>}
-        {pdf.receipt?.issues.slice(0, 100).map((issue, index) => <button key={index} className="export-issue" onClick={() => navigateToItem(issue.id)}><AlertCircle size={15}/><span>{itemIndex.get(issue.id)?.label && <strong>{itemIndex.get(issue.id)!.label}<br/></strong>}{issue.message}</span></button>)}
-        {blocked && <label className="export-check"><input type="checkbox" checked={accepted} onChange={e => setAcceptedReceipt(e.target.checked ? receiptKey : undefined)}/>仍按预览导出（含缺失或裁切内容）</label>}
-      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。图片保留原文件引用。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
-      {!!richDiagnostics.length && <div className="export-note" role="status">{richDiagnostics.map(message => <p key={message}>{message}</p>)}</div>}
+      </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? '保留完整排版与表格结构，可继续在 NoteBoard 中编辑。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。本地图片随文件保存，可直接分享；网络图片保留链接。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}
+      <ExportSidebarFeedback issues={format === 'pdf' ? pdf.receipt?.issues : undefined} items={itemIndex} notes={richDiagnostics} accepted={accepted} onNavigate={navigateToItem} onAccept={value => setAcceptedReceipt(value ? receiptKey : undefined)}/>
     </aside><main>{format === 'pdf' ? <>
       {pdf.receipt ? <PdfPreview receipt={pdf.receipt} onPages={setPages} onSettled={pdf.previewSettled} selected={item} navigation={navigation} onSelect={id => { setItem(id); setNavigation(undefined); }} issues={issueIds}/>
         : pdf.error || (!document && error) ? <div className="export-empty">暂时无法生成预览</div>

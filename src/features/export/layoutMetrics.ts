@@ -3,6 +3,21 @@
 export function renderedScale(element: HTMLElement): number {
   return element.offsetWidth ? element.getBoundingClientRect().width / element.offsetWidth : 1;
 }
+
+/** KaTeX's HTML wrapper fills a display line. Its scroll area also includes
+ * invisible vlist struts, which extend about 2px past a trailing sub/superscript.
+ * Measure the allocated TeX groups instead: their union includes both sides of
+ * a real overflow and the longest wrapped line, without alignment whitespace. */
+export function mathContentWidth(element: HTMLElement): number {
+  let left = Infinity, right = -Infinity;
+  for (const child of element.children) {
+    if (!child.classList.contains('base') && !child.classList.contains('tag')) continue;
+    const box = child.getBoundingClientRect();
+    left = Math.min(left, box.left); right = Math.max(right, box.right);
+  }
+  return Number.isFinite(left) ? right - left : element.getBoundingClientRect().width;
+}
+
 export function readableScale(element: HTMLElement, bodyFontPt: number): number {
   const scale = renderedScale(element);
   let minimum = Math.min(1, 8 / (bodyFontPt * scale));
