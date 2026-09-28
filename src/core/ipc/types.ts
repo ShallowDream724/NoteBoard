@@ -280,7 +280,20 @@ export interface ImageEditorPreferences {
   magnifierMode?: 'circle' | 'ellipse';
 }
 
-export interface ExportSettings { pandocPath: string }
+/** Reusable page defaults; document item overrides and export acceptance are session state. */
+export interface PdfPagePreferences {
+  paper: 'A4' | 'Letter';
+  landscape: boolean;
+  marginMm: number;
+  horizontalMarginMm: number;
+  fontPt: number;
+  lineHeight: number;
+  paragraphSpacingEm: number;
+  pageNumbers: boolean;
+  pageNumberPosition: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  pageNumberStyle: 'number' | 'total' | 'dashes';
+}
+export interface ExportSettings { pandocPath: string; pdf?: Partial<PdfPagePreferences> }
 export interface UpdateSettings { ignoredVersion: string }
 
 export interface AppearanceSettings {

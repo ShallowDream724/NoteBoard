@@ -148,7 +148,10 @@ function applyPatch(settings: Settings, patch: SettingsPatch): Settings {
     ...(patch.editor && { editor: { ...settings.editor, ...patch.editor } }),
     ...(patch.file && { file: { ...settings.file, ...patch.file } }),
     ...(patch.layout && { layout: { ...settings.layout, ...patch.layout } }),
-    ...(patch.export && { export: { pandocPath: '', ...settings.export, ...patch.export } }),
+    ...(patch.export && { export: {
+      pandocPath: '', ...settings.export, ...patch.export,
+      ...(patch.export.pdf && { pdf: { ...settings.export?.pdf, ...patch.export.pdf } }),
+    } }),
     ...(patch.updates && { updates: { ignoredVersion: '', ...settings.updates, ...patch.updates } }),
     ...(patch.shortcuts && { shortcuts: { overrides: { ...settings.shortcuts?.overrides, ...patch.shortcuts.overrides } } }),
     ...(patch.imageEditor && { imageEditor: {

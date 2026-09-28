@@ -4,6 +4,19 @@ import type { Settings } from '../../src/core/ipc/types';
 
 const base = (): Settings => structuredClone(useSettingsStore.getState().settings);
 
+it('PDF page patches preserve other page fields and Pandoc paths from another window', () => {
+  const initial = base(), replica = new SettingsReplica(initial);
+  const first = replica.enqueue({ export: { pdf: { fontPt: 16 } } });
+  replica.enqueue({ export: { pdf: { pageNumberStyle: 'total' } } });
+  const remote = { ...initial, revision: 2, export: { pandocPath: 'C:/Pandoc/pandoc.exe', pdf: { landscape: true, marginMm: 20 } } };
+  replica.receive(remote);
+  expect(replica.view().export).toEqual({ pandocPath: remote.export.pandocPath, pdf: {
+    landscape: true, marginMm: 20, fontPt: 16, pageNumberStyle: 'total',
+  } });
+  replica.settle(first); // A failed write retracts only its own leaf.
+  expect(replica.view().export?.pdf).toEqual({ landscape: true, marginMm: 20, pageNumberStyle: 'total' });
+});
+
 it('shortcut patches preserve other commands edited by another window', () => {
   const initial = base(), replica = new SettingsReplica(initial);
   const id = replica.enqueue({ shortcuts: { overrides: { 'markdown.heading1': ['Ctrl+F8'] } } });

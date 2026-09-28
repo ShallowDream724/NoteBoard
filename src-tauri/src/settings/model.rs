@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, sync::Mutex};
 use super::image_editor::{self, ImageEditorPreferences};
+use super::pdf_preferences::{self, PdfPagePreferences};
 
 // One process-wide authority serializes every read/modify/write transaction.
 // Client revisions never allocate revisions and cannot replace this snapshot.
@@ -69,7 +70,10 @@ impl Default for Settings {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct ExportSettings { #[serde(default)] pub pandoc_path: String }
+pub struct ExportSettings {
+    #[serde(default)] pub pandoc_path: String,
+    #[serde(default)] pub pdf: PdfPagePreferences,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ShortcutSettings {
@@ -386,6 +390,7 @@ fn read_from_disk() -> Settings {
 
 fn parse_settings(content: &str) -> Result<Settings, serde_json::Error> {
     let mut value: serde_json::Value = serde_json::from_str(content)?;
+    if let Some(pdf) = value.pointer_mut("/export/pdf") { pdf_preferences::normalize_saved(pdf); }
     if let Some(typography) = value.get_mut("typography").and_then(serde_json::Value::as_object_mut) {
         // An absent field proves that this slot has never stored a choice. Existing
         // names, including old defaults and system fallbacks, remain unclassified.
@@ -467,6 +472,10 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
         if section == "imageEditor" { image_editor::merge_patch(target, fields)?; continue; }
         for (field, field_value) in fields {
             if !target.contains_key(field) { return Err(format!("未知设置字段: {section}.{field}")); }
+            if section == "export" && field == "pdf" {
+                pdf_preferences::merge_patch(target.get_mut(field).ok_or("PDF 页面设置无效")?, field_value)?;
+                continue;
+            }
             if section == "shortcuts" && field == "overrides" {
                 let changes = field_value.as_object().ok_or("快捷键修改必须是对象")?;
                 let bindings = target.get_mut(field).and_then(|value| value.as_object_mut()).ok_or("快捷键配置无效")?;
@@ -485,6 +494,7 @@ fn patched(current: &Settings, patch: &serde_json::Value) -> Result<Settings, St
     }
     let mut updated: Settings = serde_json::from_value(value).map_err(|e| format!("设置值无效: {e}"))?;
     updated.image_editor.validate()?;
+    updated.export.pdf.validate()?;
     crate::shortcut_probe::validate_overrides(&updated.shortcuts.overrides)?;
     updated.revision = next_revision(current)?;
     Ok(updated)
@@ -507,6 +517,7 @@ pub fn patch(patch: serde_json::Value) -> Result<Settings, String> {
 pub fn save(settings: &mut Settings) -> Result<u64, String> {
     crate::shortcut_probe::validate_overrides(&settings.shortcuts.overrides)?;
     settings.image_editor.validate()?;
+    settings.export.pdf.validate()?;
     let mut state = SETTINGS.lock().unwrap();
     let current = state.get_or_insert_with(read_from_disk);
     if settings.revision != current.revision { return Err("设置已在其他窗口更新，请重新载入后保存".into()); }
@@ -606,6 +617,63 @@ mod tests {
         assert!(patched(&Settings::default(), &serde_json::json!({"revision":9})).is_err());
         assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"unknown":true}})).is_err());
         assert!(patched(&Settings::default(), &serde_json::json!({"editor":{"tabSize":"oops"}})).is_err());
+    }
+
+    #[test]
+    fn pdf_preferences_survive_restart_and_merge_only_edited_fields() {
+        let mut current = parse_settings(r#"{"export":{"pandocPath":"custom-pandoc.exe"},"editor":{"softWrap":false}}"#).unwrap();
+        assert_eq!(current.export.pdf.font_pt, 10.5);
+        commit_patch(&mut current, &serde_json::json!({"export":{"pdf":{
+            "paper":"Letter", "landscape":true, "marginMm":22, "horizontalMarginMm":18,
+            "fontPt":16, "lineHeight":1.8, "paragraphSpacingEm":1.2, "pageNumbers":false,
+            "pageNumberPosition":"top-right", "pageNumberStyle":"total"
+        }}}), |_| Ok(())).unwrap();
+        let second = commit_patch(&mut current, &serde_json::json!({"export":{"pdf":{"fontPt":18}}}), |_| Ok(())).unwrap();
+        let restored = parse_settings(&serde_json::to_string(&second).unwrap()).unwrap();
+        assert_eq!(restored.revision, 2);
+        assert_eq!(restored.export.pandoc_path, "custom-pandoc.exe");
+        assert!(!restored.editor.soft_wrap);
+        assert_eq!(serde_json::to_value(restored.export.pdf).unwrap(), serde_json::json!({
+            "paper":"Letter", "landscape":true, "marginMm":22.0, "horizontalMarginMm":18.0,
+            "fontPt":18.0, "lineHeight":1.8, "paragraphSpacingEm":1.2, "pageNumbers":false,
+            "pageNumberPosition":"top-right", "pageNumberStyle":"total"
+        }));
+    }
+
+    #[test]
+    fn invalid_saved_pdf_fields_use_defaults_without_discarding_valid_settings() {
+        let settings = parse_settings(r#"{"editor":{"softWrap":false},"export":{"pandocPath":"pandoc.exe","pdf":{
+            "paper":"A3", "landscape":"yes", "marginMm":-1, "horizontalMarginMm":41,
+            "fontPt":"large", "lineHeight":3, "paragraphSpacingEm":null, "pageNumbers":1,
+            "pageNumberPosition":"middle", "pageNumberStyle":"total", "items":{"private":"wrap"}, "acceptedReceipt":"old"
+        }}}"#).unwrap();
+        assert!(!settings.editor.soft_wrap);
+        assert_eq!(settings.export.pandoc_path, "pandoc.exe");
+        let mut expected = serde_json::to_value(PdfPagePreferences::default()).unwrap();
+        expected["pageNumberStyle"] = serde_json::json!("total");
+        assert_eq!(serde_json::to_value(settings.export.pdf).unwrap(), expected);
+        let invalid_group = parse_settings(r#"{"export":{"pdf":null}}"#).unwrap();
+        assert_eq!(invalid_group.export.pdf.font_pt, 10.5);
+    }
+
+    #[test]
+    fn pdf_preferences_reject_invalid_or_document_specific_writes() {
+        for pdf in [
+            serde_json::json!({"paper":"A3"}), serde_json::json!({"landscape":"true"}),
+            serde_json::json!({"marginMm":41}), serde_json::json!({"horizontalMarginMm":-1}),
+            serde_json::json!({"fontPt":0}), serde_json::json!({"lineHeight":3}),
+            serde_json::json!({"paragraphSpacingEm":-1}), serde_json::json!({"pageNumbers":1}),
+            serde_json::json!({"pageNumberPosition":"middle"}), serde_json::json!({"pageNumberStyle":"roman"}),
+            serde_json::json!({"items":{"table":"wrap"}}), serde_json::json!({"acceptedReceipt":"old"}),
+            serde_json::Value::Null,
+        ] {
+            assert!(patched(&Settings::default(), &serde_json::json!({"export":{"pdf":pdf}})).is_err(), "accepted {pdf}");
+        }
+        let mut current = Settings::default();
+        let failed = commit_patch(&mut current, &serde_json::json!({"export":{"pdf":{"fontPt":18}}}), |_| Err("disk full".into()));
+        assert!(failed.is_err());
+        assert_eq!(current.revision, 0);
+        assert_eq!(current.export.pdf.font_pt, 10.5);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { AlertCircle, Check, Copy } from 'lucide-react';
 import type { ExportItem, LayoutIssue } from './model';
 
@@ -18,7 +18,7 @@ export function ExportSidebarFeedback({ issues = [], items, notes, accepted, onN
 }
 
 /** Full diagnostics remain copyable; only the visible excerpt is bounded. */
-export function ExportDiagnostics({ message, details }: { message: string; details: string }) {
+export function ExportDiagnostics({ message, details, children }: { message: string; details: string; children?: ReactNode }) {
   const [copied, setCopied] = useState(false), [copyFailed, setCopyFailed] = useState(false);
   useEffect(() => { setCopied(false); setCopyFailed(false); }, [details]);
   const copy = async () => {
@@ -26,7 +26,7 @@ export function ExportDiagnostics({ message, details }: { message: string; detai
     catch { setCopyFailed(true); }
   };
   return <div className="export-diagnostics">
-    <span role="status" tabIndex={0}>{message.slice(0, 12000)}{message.length > 12000 ? '\n后续内容请复制查看。' : ''}{copyFailed ? '\n复制失败，可选中文字后按 Ctrl+C。' : ''}</span>
-    {!!details && <button className="export-copy" title="复制完整信息" onClick={() => void copy()}>{copied ? <Check size={15}/> : <Copy size={15}/>} {copied ? '已复制' : '复制信息'}</button>}
+    <span role="status" tabIndex={message ? 0 : undefined}>{message ? message.slice(0, 12000) : children}{message.length > 12000 ? '\n后续内容请复制查看。' : ''}{copyFailed ? '\n复制失败，可选中文字后按 Ctrl+C。' : ''}</span>
+    {!!details && <button className="export-copy" title="复制完整报错" onClick={() => void copy()}>{copied ? <Check size={15}/> : <Copy size={15}/>} {copied ? '已复制' : '复制报错'}</button>}
   </div>;
 }

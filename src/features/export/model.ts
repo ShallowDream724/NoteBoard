@@ -1,9 +1,7 @@
+import type { PdfPagePreferences } from '../../core/ipc/types';
+
 export type ItemMode = 'auto' | 'fit' | 'wrap' | 'columns';
-export interface PdfOptions {
-  paper: 'A4' | 'Letter'; landscape: boolean; marginMm: number; horizontalMarginMm: number;
-  fontPt: number; lineHeight: number; paragraphSpacingEm: number; pageNumbers: boolean;
-  pageNumberPosition: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
-  pageNumberStyle: 'number' | 'total' | 'dashes';
+export interface PdfOptions extends PdfPagePreferences {
   items: Record<string, ItemMode>;
 }
 export const DEFAULT_PDF: PdfOptions = {

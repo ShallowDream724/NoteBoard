@@ -3,8 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { Download, X, FileOutput } from 'lucide-react';
 import { captureDocument } from './capture';
-import { DEFAULT_PDF, type ExportDocument, type ItemMode } from './model';
+import { type ExportDocument, type ItemMode } from './model';
 import { usePdfJob } from './usePdfJob';
+import { usePdfOptions } from './usePdfOptions';
 import { PdfPreview } from './PdfPreview';
 import { ExportDiagnostics, ExportSidebarFeedback } from './ExportDiagnostics';
 import { ExportProgress } from './ExportProgress';
@@ -20,9 +21,9 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const dialog = useRef<HTMLDivElement>(null);
   const [document, setDocument] = useState<ExportDocument | null>(null);
   const [captureStartedAt, setCaptureStartedAt] = useState(() => performance.now());
-  const [options, setOptions] = useState(DEFAULT_PDF);
   const [format, setFormat] = useState('pdf');
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false);
+  const { options, updatePage, updateItem } = usePdfOptions(error => setError(`无法记住页面设置：${String(error)}`));
   const [acceptedReceipt, setAcceptedReceipt] = useState<string>();
   const [item, setItem] = useState('');
   const [navigation, setNavigation] = useState<{ id: string; serial: number }>();
@@ -79,6 +80,10 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   const blocked = pdf.receipt?.issues.some(issue => issue.blocking);
   const receiptKey = pdf.receipt ? `${pdf.receipt.id}:${pdf.receipt.revision}` : undefined;
   const accepted = acceptedReceipt !== undefined && acceptedReceipt === receiptKey;
+  const footerMessage = error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : '');
+  const pdfSummary = format === 'pdf' && pdf.receipt
+    ? <span className="export-pdf-meta" aria-label="已生成 PDF 信息">{pdf.receipt.pages} 页 · {formatFileSize(pdf.receipt.size)}{pdf.busy ? ' · 正在更新' : ''}</span>
+    : undefined;
   const download = async () => {
     const current = session.current;
     if (!document || !current || savingRef.current) return;
@@ -120,7 +125,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
   };
   const number = (key: 'marginMm' | 'horizontalMarginMm' | 'fontPt' | 'lineHeight' | 'paragraphSpacingEm', label: string, min: number, max: number, step: number) =>
     <DraftNumberField label={label} value={options[key]} min={min} max={max} step={step}
-      onCommit={value => setOptions(current => ({ ...current, [key]: value }))}/>;
+      onCommit={value => updatePage(key, value)}/>;
   return <div className="export-backdrop"><div ref={dialog} tabIndex={-1} data-shortcuts-suspended role="dialog" aria-modal="true" aria-label="导出文档" className="export-dialog">
     <header><div><FileOutput size={18}/><strong>导出</strong><span className="export-title">{document?.title}</span></div>
       <button className="export-icon" aria-label="关闭导出" onClick={onClose}><X size={18}/></button></header>
@@ -130,8 +135,8 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
       </section>
       {format === 'pdf' ? <>
         <section className="export-settings-section"><h4>页面</h4>
-        <div className="export-two"><label className="export-field">纸张<select value={options.paper} onChange={e => setOptions(o => ({ ...o, paper: e.target.value as 'A4' | 'Letter' }))}><option>A4</option><option>Letter</option></select></label>
-          <label className="export-field">方向<select value={String(options.landscape)} onChange={e => setOptions(o => ({ ...o, landscape: e.target.value === 'true' }))}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
+        <div className="export-two"><label className="export-field">纸张<select value={options.paper} onChange={e => updatePage('paper', e.target.value as 'A4' | 'Letter')}><option>A4</option><option>Letter</option></select></label>
+          <label className="export-field">方向<select value={String(options.landscape)} onChange={e => updatePage('landscape', e.target.value === 'true')}><option value="false">纵向</option><option value="true">横向</option></select></label></div>
         <div className="export-two">{number('marginMm', '上下边距 (mm)', 0, 40, 1)}{number('horizontalMarginMm', '左右边距 (mm)', 0, 40, 1)}</div>
         </section>
         <section className="export-settings-section"><h4>正文</h4>
@@ -139,13 +144,13 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         <div className="export-two">{number('lineHeight', '段内行距 (倍)', 1, 2.5, .1)}{number('paragraphSpacingEm', '段后距 (em)', 0, 2, .05)}</div>
         </section>
         <section className="export-settings-section"><h4>页码</h4>
-        <label className="export-check export-page-numbers"><input type="checkbox" checked={options.pageNumbers} onChange={e => setOptions(o => ({ ...o, pageNumbers: e.target.checked }))}/>页码</label>
+        <label className="export-check export-page-numbers"><input type="checkbox" checked={options.pageNumbers} onChange={e => updatePage('pageNumbers', e.target.checked)}/>页码</label>
         {options.pageNumbers && <div className="export-two">
-          <label className="export-field">页码位置<select value={options.pageNumberPosition} onChange={e => setOptions(o => ({ ...o, pageNumberPosition: e.target.value as typeof o.pageNumberPosition }))}>
+          <label className="export-field">页码位置<select value={options.pageNumberPosition} onChange={e => updatePage('pageNumberPosition', e.target.value as typeof options.pageNumberPosition)}>
             <option value="bottom-center">底部居中</option><option value="bottom-left">左下角</option><option value="bottom-right">右下角</option>
             <option value="top-center">顶部居中</option><option value="top-left">左上角</option><option value="top-right">右上角</option>
           </select></label>
-          <label className="export-field">页码格式<select value={options.pageNumberStyle} onChange={e => setOptions(o => ({ ...o, pageNumberStyle: e.target.value as typeof o.pageNumberStyle }))}>
+          <label className="export-field">页码格式<select value={options.pageNumberStyle} onChange={e => updatePage('pageNumberStyle', e.target.value as typeof options.pageNumberStyle)}>
             <option value="number">仅页码（1）</option><option value="total">页码 / 总页数（1 / 10）</option><option value="dashes">横线页码（- 1 -）</option>
           </select></label>
         </div>}
@@ -153,7 +158,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         {!!pdf.receipt?.adjustable.length && <section className="export-sidebar-section export-item-settings"><h4>超宽内容</h4>
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
           <div className="export-item-list" aria-label="需要调整的内容">{visibleItems.map(value => <button key={value.id} title={value.label} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
-          {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => setOptions(o => ({ ...o, items: { ...o.items, [item]: e.target.value as ItemMode } }))}>
+          {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => updateItem(item, e.target.value as ItemMode)}>
             <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
           </select></label>}
         </section>}
@@ -165,8 +170,8 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         : <ExportProgress progress={pdf.progress ?? { phase: document ? 'starting' : 'preparing', startedAt: captureStartedAt }}/>}
       {pdf.receipt && pdf.busy && <div className="export-updating"><ExportProgress compact progress={pdf.progress ?? { phase: 'starting', startedAt: captureStartedAt }}/></div>}
     </> : <div className="export-empty"><FileOutput size={36}/><p>{format === 'md' ? 'Markdown 文档' : format === 'noteboard' ? 'NoteBoard 文档' : format === 'docx' ? '可编辑的 Word 文档' : format === 'latex' ? 'LaTeX 源文件' : '独立 HTML 文件'}</p></div>}</main></div>
-    <footer><ExportDiagnostics message={error || pdf.error || (blocked ? '有内容超出页面，点击红色标记调整。' : '')} details={diagnostics}/>
-      {format === 'pdf' && pdf.receipt && <span className="export-pdf-meta" aria-label="已生成 PDF 信息">{pdf.receipt.pages} 页 · {formatFileSize(pdf.receipt.size)}{pdf.busy ? ' · 正在更新' : ''}</span>}
+    <footer><ExportDiagnostics message={footerMessage} details={diagnostics}>{pdfSummary}</ExportDiagnostics>
+      {!!footerMessage && pdfSummary}
       <button className="export-primary" onClick={() => void download()} disabled={!document || saving || (format === 'pdf' && (pdf.busy || !pdf.receipt || !!pdf.error || (blocked && !accepted)))}><Download size={16}/>{saving ? '导出中…' : '导出'}</button></footer>
   </div></div>;
 }
