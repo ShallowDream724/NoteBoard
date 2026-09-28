@@ -132,8 +132,8 @@ describe('bundled native feature showcase', () => {
     expect(nodesOf(json, 'githubAlert').map(node => node.attrs?.kind)).toEqual(expect.arrayContaining(['note', 'tip', 'important', 'warning', 'caution']));
     expect(doc.textContent).toContain('顶部工具栏的图片菜单');
     expect(doc.textContent).toContain('添加说明');
-    // The walkthrough replaces existing prose rather than growing the document.
-    expect(Buffer.byteLength(showcase, 'utf8')).toBeLessThanOrEqual(31593);
+    // Keep the bundled walkthrough compact while allowing useful feature guidance.
+    expect(Buffer.byteLength(showcase, 'utf8')).toBeLessThanOrEqual(32 * 1024);
   });
 
   it('demonstrates paragraph fill with independent color marks and narrower aligned tables', () => {

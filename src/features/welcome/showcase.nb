@@ -5,6 +5,8 @@
 @block {"type":"heading","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null,"level":1},"content":[{"type":"text","text":"欢迎使用 NoteBoard"}]}
 @block {"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"把想法写下来，把关系画出来。"}]}
 @block {"type":"paragraph","content":[{"type":"text","text":"这份示例可以直接编辑。左上角按钮可收起侧栏；段落左侧的六点把手可拖动整块。按 "},{"type":"text","text":"Ctrl+S","marks":[{"type":"bold"}]},{"type":"text","text":" 保存自己的版本。"}]}
+@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"用鼠标添加："},{"type":"text","text":"按 Enter 新起一个空段落，将鼠标移到这一行左侧，点击出现的 +，就能插入表格、图片、公式或折叠块。"}]}
+@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"用键盘添加："},{"type":"text","text":"在空段落输入 / 打开命令菜单，继续输入名称搜索。试试 /fold 折叠块、/table 表格或 /note 提示块；用 ↑ / ↓ 选择，Enter 确认，→ 展开分类，Esc 收起。清除格式也可以在菜单中选择，或搜索 /clear。"}]}
 @block {"type":"githubAlert","attrs":{"concealed":false,"annotationId":null,"kind":"tip"},"content":[{"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"先选中一句话，试试加粗、下划线和配色。彩色 A 记住上次的颜色与高亮；停留在右侧箭头上可展开色板。"}]}]}
 @block {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"先试试：把一段旅程放进文档"}]}
 @block {"type":"paragraph","content":[{"type":"text","text":"从顶部工具栏的图片菜单，可以插入单张图片、四宫格、六宫格、九宫格或图片轮播。下面的四宫格留了一格给你，点击空格即可加入自己的图片。图注也可以直接修改。"}]}
@@ -74,7 +76,8 @@
 @block {"type":"heading","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null,"level":2},"content":[{"type":"text","text":"保存、导出，然后分享"}]}
 @block {"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"按 "},{"type":"text","marks":[{"type":"bold"}],"text":"Ctrl+O"},{"type":"text","text":" 打开文件或文件夹，也可以直接粘贴路径。刷新目录时，已经展开的文件夹会保持展开。"}]}
 @block {"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"按 "},{"type":"text","marks":[{"type":"bold"}],"text":"Ctrl+P"},{"type":"text","text":" 进入 PDF 排版预览，调整纸张、页边距、字号和页码。导出完成后，PDF 会在新标签页打开，原来的工作目录保持不变。"}]}
-@block {"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"需要 Word、HTML 或 LaTeX 时，在导出窗口切换格式。这些转换使用本机 Pandoc，可在设置的“导出”页查看检测到的路径或手动指定。"}]}
+@block {"type":"paragraph","content":[{"type":"text","text":"导出会包含此刻尚未保存的修改，不必先保存，也不会替你保存原文件。页面配置会记住上次选择。"}]}
+@block {"type":"paragraph","content":[{"type":"text","text":"在导出窗口切换为 HTML，可以保留轮播、折叠和公式，用默认浏览器打开或定位文件后分享。Word 与 LaTeX 转换需要本机 Pandoc，可在设置的“导出”页查看或指定路径。"}]}
 @block {"type":"heading","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null,"level":3},"content":[{"type":"text","text":"几个顺手的快捷键"}]}
 @block {"type":"table","attrs":{"annotationId":null,"tableAlign":"right"}}
 @child {"type":"tableRow","content":[{"type":"tableHeader","attrs":{"colwidth":[220]},"content":[{"type":"paragraph","content":[{"type":"text","text":"按键"}]}]},{"type":"tableHeader","attrs":{"colwidth":[180]},"content":[{"type":"paragraph","content":[{"type":"text","text":"操作"}]}]}]}
