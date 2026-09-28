@@ -1,0 +1,2 @@
+.math-node-display[data-math-align="left"] .katex-display { text-align: left; }
+.math-node-display[data-math-align="right"] .katex-display { text-align: right; }

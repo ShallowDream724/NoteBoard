@@ -53,7 +53,7 @@ export function applyTextStyle(editor: Editor, pair: TextStylePair): boolean {
 export function setParagraphPresentation(editor: Editor, change: { textAlign?: 'left'|'center'|'right'; indentBy?: number }): boolean {
   const scope = selectionPresentation(editor.state);
   if (scope.cells && change.textAlign) return alignTableSelection(editor, { textAlign: change.textAlign });
-  const targets = change.indentBy ? scope.indentBlocks : scope.textBlocks;
+  const targets = change.indentBy ? scope.indentBlocks : [...scope.textBlocks, ...scope.mathBlocks];
   if (!targets.length || scope.cells) return false;
   if (!editorSupportsCapability(editor, 'alignment')) return runWithDocumentCapability(editor, 'alignment', next => setParagraphPresentation(next, change));
   const { state } = editor, tr = state.tr;

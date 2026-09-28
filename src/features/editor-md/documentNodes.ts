@@ -38,7 +38,11 @@ export const MathInlineNode = Node.create({
 });
 export const MathBlockNode = Node.create({
   name: 'mathBlock', group: 'block', atom: true, selectable: true,
-  addAttributes() { return { latex: { default: '' }, delimiter: { default: '$$' } }; },
+  addAttributes() { return { latex: { default: '' }, delimiter: { default: '$$' },
+    textAlign: { default: 'center',
+      parseHTML: element => ['left', 'center', 'right'].includes(element.getAttribute('data-math-align') ?? '') ? element.getAttribute('data-math-align') : 'center',
+      renderHTML: attributes => ({ 'data-math-align': ['left', 'center', 'right'].includes(attributes.textAlign) ? attributes.textAlign : 'center' }) },
+  }; },
   parseHTML() { return [{ tag: 'div[data-math-block]' }]; },
   renderHTML({ HTMLAttributes }) { return ['div', mergeAttributes(HTMLAttributes, { 'data-math-block': '' })]; },
   renderText({ node }) { return writeMath(mathSource(node.attrs, true), true); },

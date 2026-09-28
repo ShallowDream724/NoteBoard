@@ -18,6 +18,7 @@ import { installPresentationCodec } from '../document-style/presentationMetadata
 import { richContentGrammar } from './rich-content/schema';
 import { annotationSchemaExtensions } from './annotations/schema';
 import { NativeError } from './nativeError';
+import { BlockAppearance } from '../document-style/blockAppearanceSchema';
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
 const MarkdownCode = Code.extend({ excludes: '', addKeyboardShortcuts() { return {}; } });
@@ -40,7 +41,7 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     }),
     // Highlight must wrap inline code; serializing its markup inside backticks
     // would turn the mark into literal code and discard the highlight on reload.
-    MarkdownHighlight.configure({ multicolor: true }), TextColor, BlockPresentation, MarkdownCode, MarkdownBlockquote, ImageNode,
+    MarkdownHighlight.configure({ multicolor: true }), TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,
     MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
     MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, NativeError, ...richContentGrammar, ...annotationSchemaExtensions,

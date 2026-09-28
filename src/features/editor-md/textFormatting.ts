@@ -26,7 +26,7 @@ export function supportsBlockTextFormatting(node: Node): boolean {
   return BLOCK_TEXT_FORMATTING[node.type.name] === true;
 }
 
-export function clearSelectionTextFormatting(editor: Editor): boolean {
+export function clearSelectionTextFormatting(editor: Editor, clearBlockTextColor = false): boolean {
   const { state } = editor, { selection } = state;
   if (selection instanceof NodeSelection && selection.node.type.name === 'githubAlert') return unwrapCallout(editor, selection.from);
   const marks = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
@@ -39,6 +39,11 @@ export function clearSelectionTextFormatting(editor: Editor): boolean {
     : selection.ranges.map(({ $from, $to }) => ({ from: $from.pos, to: $to.pos }));
   const tr = state.tr;
   for (const { from, to } of ranges) for (const mark of marks) tr.removeMark(from, to, state.schema.marks[mark]);
+  // The block-menu action also removes inherited text color. Row/cell fills
+  // remain structural appearance, separate from selected-text formatting.
+  if (clearBlockTextColor) for (const { from, to } of ranges) state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.attrs.blockTextColor && pos >= from && pos + node.nodeSize <= to) tr.setNodeAttribute(pos, 'blockTextColor', null);
+  });
   if (selection.empty) for (const mark of marks) tr.removeStoredMark(state.schema.marks[mark]);
   if (!tr.docChanged && !tr.storedMarksSet) return false;
   // No implicit focus/scroll: this action belongs to the selected text, even if
@@ -51,7 +56,7 @@ export function clearBlockFormatting(editor: Editor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
   if (node?.type.name === 'githubAlert') return unwrapCallout(editor, pos);
   if (!node || !supportsBlockTextFormatting(node) || !selectBlock(editor, pos, true)) return false;
-  return clearSelectionTextFormatting(editor);
+  return clearSelectionTextFormatting(editor, true);
 }
 
 export function hasCaptionTextFormatting(node: Node): boolean {

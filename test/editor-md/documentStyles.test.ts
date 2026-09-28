@@ -5,8 +5,30 @@ import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/featur
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { setParagraphPresentation, setTextColor } from '../../src/features/document-style/documentStyles';
 import { nativeTestEditor } from './nativeTestEditor';
+import { renderDocument } from '../../src/features/export/renderDocument';
 
 describe('body-first document styles', () => {
+  it('centers display math by default and preserves left/right alignment in native, Markdown metadata, and HTML export', async () => {
+    const editor = nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [
+      { type: 'mathBlock', attrs: { latex: 'a=b' } },
+      { type: 'mathBlock', attrs: { latex: 'c=d' } },
+    ] } }));
+    try {
+      expect(editor.state.doc.firstChild?.attrs.textAlign).toBe('center');
+      editor.commands.setNodeSelection(0);
+      expect(setParagraphPresentation(editor, { textAlign: 'left' })).toBe(true);
+      expect(editor.state.doc.firstChild?.attrs.textAlign).toBe('left');
+      editor.commands.setNodeSelection(editor.state.doc.firstChild!.nodeSize);
+      expect(setParagraphPresentation(editor, { textAlign: 'right' })).toBe(true);
+      const markdown = serializeMarkdown(editor);
+      expect(parseMarkdownDocument(markdown).toJSON().content).toEqual(editor.getJSON().content?.slice(0, 2));
+      const exported = await renderDocument('', 'Math', '', undefined, editor.state.doc, async () => ({ html: '<span class="katex-display">formula</span>' }));
+      expect(exported.html).toContain('data-math-align="left"');
+      expect(exported.html).toContain('data-math-align="right"');
+      expect(exported.html).toContain('text-align: left');
+      expect(exported.html).toContain('text-align: right');
+    } finally { editor.destroy(); }
+  });
   it('preserves overlapping inline colors, highlight, paragraph styles and normal Markdown', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>one <strong>two</strong> three</p>' });
     try {

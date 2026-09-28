@@ -12,6 +12,8 @@
 - `readDocumentSnapshot.ts` 从当前编辑器捕获权威快照：可视化模式取不可变节点的 JSON，源码模式取当前 CodeMirror 文本。导出不为此物化历史、更新镜像或保存文件；其他编辑器走能力接口的 `flush('export')`。
 - `export/documentConversion.ts` 管理一次性 Worker。`documentWorker.ts` 在后台完成文本投影、解析、KaTeX 和只读 HTML；关闭对话框立即终止 Worker。图片资源采用一次批量握手：Worker 保留生成的图片元素引用，主线程只将路径交给 `convertFileSrc` 并返回 URL。图表也按批次握手，由真实浏览器调用共享图表渲染器；Worker 等待图形回填后再做唯一一次 HTML 序列化。主线程不重新解析整份导出 DOM，也不猜测 Tauri URL 前缀。LinkeDOM 只在 Worker 内提供 DOM，并补齐浏览器对 HTML 片段的文档包装，保留原始 HTML 的解析语义。
 - `renderDocument.ts` 输出包含公式、提示块 SVG、着色代码、图片和真实 thead 的独立 HTML，剔除交互控件。资源路径使用 `core/documentPath.ts`，生成后的资源重定位只更新图片 `src`，保留正文与代码中的 URI 文本。Pandoc 使用同一文档语法转成 JSON AST，公式是 Math 节点，不再次猜测货币定界符；表格列数采用共享稀疏逻辑网格，计入行列合并。
+- 待办以捕获时的 `checked` 状态输出静态 SVG：完成项为实底白勾且正文带删除线，未完成项为空框，HTML 另有完成状态无障碍标签。点击勾选后未保存、NB 重开、撤销后的状态均通过同一路径，打印不依赖交互 checkbox 的浏览器默认外观。
+- 待办 SVG 用 `createElementNS` 创建 rect/path 同级子元素。不能向 LinkeDOM 的独立 SVG 写入自闭合形状字符串：其 HTML 片段解析会把 path 嵌入 rect，使勾号虽在 HTML 中却不绘制。`documentWorker.test.ts` 检查生产线程中的同级结构，浏览器打印视图另做视觉验收。
 
 转换是 O(输入与输出大小) 的整体任务，公式的实际成本还取决于 TeX 复杂度。后台并不意味着零内存：转换期间会有文档树和 HTML。Worker 完成或取消即释放；临时公式缓存上限 4 MiB。编辑器 JSON 捕获本身仍是 O(节点数)，不建立逐字符映射或常驻第二份编辑器。
 

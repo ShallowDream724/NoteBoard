@@ -8,6 +8,7 @@ import { openEmbeddedEditor } from './embeddedEditor';
 import { FormulaSourceEditor } from './FormulaSourceEditor';
 import { mountMathPreview, type MathPreviewController } from './mathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
+import './mathNodeView.css';
 
 /** The document owns the draft, even while the source input has focus. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
@@ -17,6 +18,8 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   const display = isDisplayMath(delimiter);
   const latex = String(node.attrs.latex ?? '');
   const [editing, setEditing] = useState(false);
+  const seenSelection = useRef(false);
+  const alignment = block && ['left', 'center', 'right'].includes(node.attrs.textAlign) ? node.attrs.textAlign : 'center';
   const viewportRef = useRef<HTMLSpanElement>(null);
   const previewRef = useRef<MathPreviewController | null>(null);
   const [inputHost, setInputHost] = useState<HTMLElement | null>(null);
@@ -43,6 +46,19 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   }, [enabled, latex, delimiter, block, display, editor]);
   // Focus changes are priority changes, not a new formula or DOM lifetime.
   useEffect(() => { previewRef.current?.setEditing(editing); });
+  // New empty blocks have a node selection; opening this transient editor adds
+  // no document or history step.
+  useEffect(() => {
+    if (!selected) { seenSelection.current = false; return; }
+    if (seenSelection.current) return;
+    seenSelection.current = true;
+    if (block && !latex) {
+      // TipTap's focus command runs in the next frame. Queue behind it so the
+      // source textarea keeps focus after toolbar/slash insertion.
+      const frame = requestAnimationFrame(() => setEditing(true));
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [block, selected, latex]);
 
   const exit = () => {
     setEditing(false);
@@ -86,10 +102,11 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       as={block ? 'div' : 'span'}
       className={'math-node' + (display ? ' math-node-display' : '')}
       data-math-delimiter={delimiter}
+      data-math-align={block ? alignment : undefined}
       contentEditable={false}
       style={{
-        display: display ? 'block' : 'inline-block', maxWidth: '100%', verticalAlign: 'baseline',
-        padding: display ? '8px 0' : '0 2px', borderRadius: 'var(--radius-sm)',
+        display: display ? 'block' : 'inline-block', width: block ? '100%' : undefined, boxSizing: 'border-box', maxWidth: '100%', verticalAlign: 'baseline',
+        padding: display ? '8px 10px' : '0 2px', borderRadius: 'var(--radius-sm)', textAlign: block ? alignment : undefined,
         color: node.attrs.textColor || undefined,
         background: node.attrs.background || undefined,
         boxShadow: selected && !editing ? '0 0 0 2px var(--editor-selection-background)' : undefined,

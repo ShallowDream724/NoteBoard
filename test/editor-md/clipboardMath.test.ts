@@ -76,6 +76,9 @@ describe('HTML formula boundaries', () => {
   it('does not create blank paragraphs around standalone display math', () => {
     expect(normalize(String.raw`<p>  \[x\]  </p>`).content.map(node => node.type)).toEqual(['mathBlock']);
   });
+  it('keeps adjacent inline formulas separate in ordinary HTML text', () => {
+    expect(mathNodes(normalize('<p>$a$$b$</p>').content).map(node => node.attrs?.latex)).toEqual(['a', 'b']);
+  });
   it('handles 10000 HTML formula paragraphs with the same browser and Worker policy', () => {
     const source = String.raw`<p><b>编号</b> \(C1'\)</p>`.repeat(10000);
     const result = normalize(source, true);

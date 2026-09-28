@@ -4,6 +4,7 @@
  */
 
 @import "tailwindcss";
+@import '../features/document-style/blockAppearance.css';
 
 /* ═════════════════════════════════════════════════════════
  * 重置

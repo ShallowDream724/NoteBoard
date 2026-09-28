@@ -3,6 +3,7 @@
 @import '../../core/math/wrapping.css';
 @import './richDocument.css';
 @import '../editor-md/callout.css';
+@import '../document-style/blockAppearance.css';
 :root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: white; color: #18202b; }
@@ -22,6 +23,7 @@ li[data-type=taskItem] > label { display:flex; align-items:center; flex:0 0 1em;
 li[data-type=taskItem] > div > :first-child { margin-top:0; }
 li[data-type=taskItem] > div > :last-child { margin-bottom:0; }
 .export-task-check { display:block; flex:none; width:1em; height:1em; }
+li[data-type=taskItem][data-checked=true] > div > p { text-decoration:line-through; }
 a { color: #245bc1; text-decoration: none; overflow-wrap: anywhere; }
 img,svg { max-width: 100%; } img { height: auto; }
 .export-diagram { margin: .8em 0; min-width: 0; break-inside: avoid; color: #18202b; --editor-text:#18202b; --editor-text-muted:#526174; --editor-surface:#fff; --editor-bg:#f8fafc; --editor-border:#d8dee7; }
@@ -65,6 +67,8 @@ tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
 .table-continuation { color: #637084; font-size: .85em; margin-top: 1em; break-after: avoid; }
 .export-math { color: inherit; } .export-math.inline { display: inline; }
 .export-math.display { display: block; margin: .65em 0; text-align: center; break-inside: avoid; }
+.export-math.display[data-math-align="left"] .katex-display { text-align: left; }
+.export-math.display[data-math-align="right"] .katex-display { text-align: right; }
 .katex-display { margin: 0; }
 .export-math.wrap .katex-html > .base { margin: .15em 0; }
 .export-math.wrap { --math-white-space: normal; break-inside: auto; }

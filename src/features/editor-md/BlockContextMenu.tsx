@@ -1,12 +1,13 @@
 import type { Editor } from '@tiptap/core';
-import { Type, Table2, Image, Braces, Quote, List, ListTodo, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, PanelTop, Minus, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
+import { Type, Table2, Image, Braces, Quote, List, CheckSquare, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, PanelTop, Minus, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
+import { BlockFormulaIcon } from '../../components/FormulaIcons';
 import { blockRange, copyBlock, deleteBlock, formatBlock, insertAfterBlock } from './blockActions';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
-import { HighlightControl } from '../toolbar/HighlightControl';
-import { applyTextStyle, setTextColor, setHighlightColor } from '../document-style/documentStyles';
+import { BlockColorControl } from '../document-style/BlockColorControl';
+import { blockColors, setBlockColors } from '../document-style/blockAppearance';
+import { supportsBlockColors } from '../document-style/blockAppearanceSchema';
 import { Tooltip } from '../../components/Tooltip';
-import { useState } from 'react';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
 import { TableFillMenu } from './TableFillMenu';
 import { documentTableStyle } from './documentPresentation';
@@ -32,17 +33,17 @@ import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormat
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
-  const Icon = type === 'table' ? Table2 : type === 'image' ? Image : type === 'imageCollection' ? Grid2X2 : type === 'disclosure' ? PanelTopClose : type === 'githubAlert' ? PanelTop : type === 'horizontalRule' ? Minus : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
+  const Icon = type === 'mathBlock' ? BlockFormulaIcon : type === 'taskItem' || type === 'taskList' ? CheckSquare : type === 'table' ? Table2 : type === 'image' ? Image : type === 'imageCollection' ? Grid2X2 : type === 'disclosure' ? PanelTopClose : type === 'githubAlert' ? PanelTop : type === 'horizontalRule' ? Minus : type === 'codeBlock' ? Braces : type === 'blockquote' ? Quote : Type;
   return <Icon size={15}/>;
 }
 export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: number; close: () => void }) {
-  const [colorsOpen, setColorsOpen] = useState(false);
   const native = useNativeFeatureVisibility();
   useFormattingUpdates(editor);
   const range = blockRange(editor, pos); if (!range) return null;
-  if (isEmptyParagraph(range.node)) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
+  const colors = blockColors(range.node);
+  if (isEmptyParagraph(range.node) && !colors.color && !colors.background) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem'].includes(type);
-  const styled = text || type === 'mathBlock';
+  const styled = supportsBlockColors(type);
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
   const selectNode = () => editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
@@ -63,7 +64,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level}><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
       {([{ label:'无序列表', Icon:List, command:'toggleBulletList' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList' },
-        { label:'待办', Icon:ListTodo, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
+        { label:'待办', Icon:CheckSquare, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
         { label:'引用', Icon:Quote, command:'toggleBlockquote' }] as const).map(({ label, Icon, command }) =>
         <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
       {native && canWrapCallout && <Tooltip content="设为提示块"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
@@ -76,12 +77,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     </div>}
     {native && type === 'table' && <TableAlignmentMenu editor={editor} pos={pos} value={range.node.attrs.tableAlign} close={close}/>}
     {native && (styled || type === 'table' || type === 'horizontalRule') && <div className="nb-block-style-row">
-      {type !== 'mathBlock' && <AlignmentMenu editor={editor}/>}
-      {styled && <HighlightControl open={colorsOpen} onOpenChange={setColorsOpen} active={editor.isActive('highlight') || !!editor.getAttributes('mathBlock').background}
-        currentColor={editor.getAttributes('mathBlock').background ?? editor.getAttributes('highlight').color} textColor={editor.getAttributes('mathBlock').textColor ?? editor.getAttributes('textColor').color}
-        onApplyStyle={pair => applyTextStyle(editor, pair)} onTextColor={color => setTextColor(editor, color)}
-        onApply={color => setHighlightColor(editor, color)} onRemove={() => setHighlightColor(editor, null)}
-        onReturnToEditor={() => editor.view.focus()}/>}
+      <AlignmentMenu editor={editor}/>
+      {styled && <BlockColorControl {...colors} onChange={patch => setBlockColors(editor, pos, patch)}/>}
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
     {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}

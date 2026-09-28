@@ -4,6 +4,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
+import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import type { Editor } from '@tiptap/core';
 import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
 import { insertDocumentTable } from '../editor-md/insertDocumentTable';
@@ -708,12 +709,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           submenu={
             <>
               <ToolbarDropdownItem
-                icon={<Sigma size={14} />}
+                icon={<InlineFormulaIcon size={16} />}
                 label="行内公式 ($...$)"
                 onClick={() => handleInsertMath('inline')}
               />
               <ToolbarDropdownItem
-                icon={<Sigma size={14} />}
+                icon={<BlockFormulaIcon size={16} />}
                 label="独立公式块 ($$...$$)"
                 onClick={() => handleInsertMath('block')}
               />

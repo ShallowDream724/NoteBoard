@@ -1,6 +1,7 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { BarChart3, Braces, GalleryHorizontalEnd, Grid2X2, Image, Link2, List, ListTodo, Minus, PanelTop, PanelTopClose, Quote, Sigma, Table2, Type, Workflow } from 'lucide-react';
+import { BarChart3, Braces, GalleryHorizontalEnd, Grid2X2, Image, Link2, List, CheckSquare, Minus, PanelTop, PanelTopClose, Quote, Table2, Type, Workflow } from 'lucide-react';
+import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import { OrderedListIcon } from '../../components/OrderedListIcon';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import type { DocumentCapabilityId } from '../document-format/capabilities';
@@ -41,7 +42,7 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
       <div className="nb-empty-block-grid">
         {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] })}
         {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] })}
-        {block('待办', <ListTodo size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] })}
+        {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] })}
         {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos))}
       </div>
     </div>
@@ -68,8 +69,8 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
     <div className="nb-empty-block-group" role="group" aria-label="公式与图表">
       <div className="nb-empty-block-label">公式与图表</div>
       <div className="nb-empty-block-grid">
-        {block('行内公式', <Sigma size={16}/>, { type: 'paragraph', content: [mathContent('inline')] })}
-        {block('公式块', <Sigma size={16}/>, mathContent('block'))}
+        {block('行内公式', <InlineFormulaIcon size={16}/>, { type: 'paragraph', content: [mathContent('inline')] })}
+        {block('公式块', <BlockFormulaIcon size={16}/>, mathContent('block'))}
         {block('Mermaid', <Workflow size={16}/>, diagramContent('mermaid'))}
         {block('信息图', <BarChart3 size={16}/>, diagramContent('infographic'))}
       </div>

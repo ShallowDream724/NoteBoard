@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
+import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import { ReactRenderer } from '@tiptap/react';
 import type { SuggestionProps } from '@tiptap/suggestion';
 import type { Editor, Range } from '@tiptap/core';
@@ -24,7 +25,6 @@ import {
   Quote,
   Minus,
   Image as ImageIcon,
-  Sigma,
   Workflow,
   Info,
   Lightbulb,
@@ -311,7 +311,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     groupId: 'math',
     groupLabel: '公式与图表',
     shortcutHint: '/math',
-    icon: <Sigma size={17} />,
+    icon: <InlineFormulaIcon size={17} />,
     aliases: ['gongshi', 'gs', 'math', 'latex', 'inline', 'katex'],
     keywords: '公式 数学公式 math latex inline katex gongshi',
     action: (editor, range) => {
@@ -325,7 +325,7 @@ const MATH_LEAFS: LeafCommandItem[] = [
     groupId: 'math',
     groupLabel: '公式与图表',
     shortcutHint: '/blockmath',
-    icon: <Sigma size={17} />,
+    icon: <BlockFormulaIcon size={17} />,
     aliases: ['kuaijigongshi', 'kjgs', 'math', 'latex', 'block', 'katex'],
     keywords: '块级公式 数学公式 math latex block katex',
     action: (editor, range) => {

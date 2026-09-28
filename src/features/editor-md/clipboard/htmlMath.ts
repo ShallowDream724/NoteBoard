@@ -37,13 +37,13 @@ export function clipboardTextMath(content: JSONContent[]): JSONContent[] {
         if (within === pieces[index].length) { index++; within = 0; }
       }
     };
-    let candidate: RegExpExecArray | null;
+    let candidate: RegExpExecArray | null, previousEnd = -1;
     while (budget.remaining > 0 && (candidate = candidates.exec(source))) {
-      const match = readMath(source, candidate.index, false, budget); if (!match) continue;
+      const match = readMath(source, candidate.index, false, budget, candidate.index === previousEnd); if (!match) continue;
       advance(match.start, true);
       const display = isDisplayMath(match.delimiter), marks = run[index]?.marks;
       output.push({ type: display ? 'mathBlock' : 'mathInline', attrs: { latex: display ? match.latex.trim() : match.latex, delimiter: match.delimiter }, ...(!display && marks?.length ? { marks } : {}) });
-      advance(match.end, false); candidates.lastIndex = match.end;
+      advance(match.end, false); candidates.lastIndex = match.end; previousEnd = match.end;
     }
     advance(source.length, true); run = [];
   };

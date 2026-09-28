@@ -3,6 +3,22 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
+it('preserves completed task checks in the production worker DOM', async () => {
+  const postMessage = vi.fn();
+  const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
+  vi.stubGlobal('self', scope);
+  for (const name of ['window', 'document', 'DOMParser']) vi.stubGlobal(name, undefined);
+  await import('../../src/features/export/documentWorker');
+  await scope.onmessage!({ data: { type: 'convert', markdown: '- [x] 已完成\n- [ ] 待完成', title: 'Tasks', directory: '', format: 'html' } });
+  const message = postMessage.mock.calls.at(-1)?.[0];
+  expect(message?.type, JSON.stringify(message)).toBe('result');
+  const root = document.createElement('div'); root.innerHTML = message.result.html;
+  const tasks = root.querySelectorAll('li[data-type="taskItem"]');
+  expect(tasks[0].querySelector('.export-task-check')?.getAttribute('aria-label')).toBe('已完成');
+  expect(tasks[0].querySelector('.export-task-check > path')).not.toBeNull();
+  expect(tasks[1].querySelector('.export-task-check path')).toBeNull();
+});
+
 it('converts Markdown in the real worker entry without browser window events or nested workers', async () => {
   const postMessage = vi.fn();
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };

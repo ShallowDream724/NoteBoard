@@ -18,7 +18,9 @@ export const TableSelectionHandles = Extension.create({
     overlay.dataset.nbEditorMenu = 'true';
     host.body.append(overlay);
     let table: HTMLTableElement | null = null, frame = 0, hideTimer: ReturnType<typeof setTimeout> | undefined;
-    let cell: HTMLTableCellElement | null = null, pointerX = 0;
+    let cell: HTMLTableCellElement | null = null, pointerX = 0, pointerY = 0;
+    let paintedBounds: { left: number; right: number; top: number; bottom: number } | null = null;
+    let paintedRowSide: 'left' | 'right' = 'left', paintedColumnSide: 'top' | 'bottom' = 'top';
     let visible = false;
     let gesture: { axis: Axis; index: number; pos: number; node: PMNode; table: HTMLTableElement; pointer: number; button: HTMLButtonElement;
       x: number; y: number; startX: number; startY: number; started: boolean; boundary: number } | null = null;
@@ -143,11 +145,17 @@ export const TableSelectionHandles = Extension.create({
       const left = Math.max(t.left, wrapper.left, viewport.left), right = Math.min(t.right, wrapper.right, viewport.right);
       const top = Math.max(t.top, viewport.top), bottom = Math.min(t.bottom, viewport.bottom);
       if (right <= left || bottom <= top) { hide(); return; }
-      const railLeft = Math.max(2, left - 22), railTop = Math.max(viewport.top + 1, t.top - 22);
+      paintedBounds = { left, right, top, bottom };
+      paintedRowSide = pointerX <= (left + right) / 2 ? 'left' : 'right';
+      paintedColumnSide = pointerY <= (top + bottom) / 2 ? 'top' : 'bottom';
+      const railLeft = paintedRowSide === 'left' ? Math.max(2, left - 22) : Math.max(left, Math.min(right, viewport.right - 22, window.innerWidth - 24));
+      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, t.top - 22) : Math.max(top, Math.min(bottom, viewport.bottom - 22, window.innerHeight - 24));
       let count = 0;
-      const row = cell.parentElement as HTMLTableRowElement, r = row.getBoundingClientRect();
+      const rows = table.rows;
+      const rowIndex = Math.min(rows.length - 1, firstVisible(rows, 'bottom', pointerY));
+      const row = rows[rowIndex], r = row.getBoundingClientRect();
       const y = Math.max(r.top, top), end = Math.min(r.bottom, bottom);
-      if (end > y) handle(count++, 'row', row.rowIndex, { left: railLeft, top: y, width: 22, height: end - y });
+      if (end > y) handle(count++, 'row', rowIndex, { left: railLeft, top: y, width: 22, height: end - y });
       const columns = table.querySelector(':scope > colgroup')?.children;
       if (columns?.length) {
         const index = Math.min(columns.length - 1, firstVisible(columns, 'right', pointerX));
@@ -155,6 +163,8 @@ export const TableSelectionHandles = Extension.create({
         const x = Math.max(c.left, left), end = Math.min(c.right, right);
         if (end > x) handle(count++, 'column', index, { left: x, top: railTop, width: end - x, height: 22 });
       }
+      if (handles[0] && count) handles[0].button.classList.toggle('nb-table-select-row-right', paintedRowSide === 'right');
+      if (handles[1] && count > 1) handles[1].button.classList.toggle('nb-table-select-column-bottom', paintedColumnSide === 'bottom');
       for (let i = count; i < handles.length; i++) handles[i].button.hidden = true;
       overlay.hidden = false;
     }
@@ -165,8 +175,11 @@ export const TableSelectionHandles = Extension.create({
       const nextCell = event.target.closest<HTMLTableCellElement>('td,th'), next = nextCell?.closest('table');
       if (nextCell && next && view.dom.contains(next)) {
         cancelHide();
-        const changed = cell !== nextCell || !visible || nextCell.colSpan > 1;
-        cell = nextCell; table = next; pointerX = event.clientX; visible = true;
+        const bounds = paintedBounds;
+        const changed = cell !== nextCell || table !== next || !visible || nextCell.colSpan > 1 || nextCell.rowSpan > 1
+          || !!bounds && (paintedRowSide !== (event.clientX <= (bounds.left + bounds.right) / 2 ? 'left' : 'right')
+            || paintedColumnSide !== (event.clientY <= (bounds.top + bounds.bottom) / 2 ? 'top' : 'bottom'));
+        cell = nextCell; table = next; pointerX = event.clientX; pointerY = event.clientY; visible = true;
         if (changed) schedule();
       } else deferHide();
     };

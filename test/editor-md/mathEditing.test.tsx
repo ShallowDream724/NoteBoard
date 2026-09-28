@@ -7,8 +7,27 @@ import { Markdown } from '@tiptap/markdown';
 import { describe, expect, it, vi } from 'vitest';
 import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensions';
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
+import { mathContent } from '../../src/features/editor-md/insertContentRecipes';
 
 describe('公式源码输入', () => {
+  it('inserting an empty block opens and focuses its source without a second edit', async () => {
+    (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+    const editor = new Editor({ extensions: [StarterKit, MathInline, MathBlock, Markdown], content: '<p></p>' });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => root.render(<EditorContent editor={editor}/>));
+      await act(async () => { editor.chain().focus().insertContent(mathContent('block')).run(); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 35)); });
+      expect(editor.state.doc.firstChild?.type.name).toBe('mathBlock');
+      expect(host.querySelector('textarea')?.getAttribute('aria-label')).toBe('块公式源码');
+      expect(document.activeElement).toBe(host.querySelector('textarea'));
+      await act(async () => { host.querySelector('textarea')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+      expect(host.querySelector('textarea')).toBeNull();
+      await act(async () => { editor.commands.undo(); });
+      expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
+  });
   it('Ctrl+A selects the document without opening or focusing its formulas', async () => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const editor = new Editor({ extensions: [StarterKit, MathInline, MathBlock, Markdown],

@@ -2,7 +2,7 @@
 
 ## 边界
 
-`features/document-style` 管理文字颜色、高亮、段落对齐/缩进和单元格对齐。表格结构、尺寸与底色继续由 `markdownTable` 的局部元数据负责，二者共用颜色校验和编辑 schema。文字 mark 与格子 background 是不同层，允许叠加。
+`features/document-style` 管理文字颜色、高亮、整块颜色、段落对齐/缩进和单元格对齐。表格结构、尺寸与底色继续由 `markdownTable` 的局部元数据负责，二者共用颜色校验和编辑 schema。文字 mark、整块底色与格子 background 是不同层，允许叠加。
 
 Markdown 正文保持普通语法。新增样式不靠插入行内 `<span>` 或 `<mark>` 保存，而在文件末尾独立写入 `<!-- noteboard-styles {...} -->`。支持 HTML 的预览器通常忽略注释；禁用 HTML 的预览器可能显示注释文字。该限制已作为单文件方案的兼容边界确认，不能宣称所有 Markdown 软件都保持相同显示。已有 `<mark>` 仍可读，可视化保存时迁移到新格式。
 
@@ -10,7 +10,9 @@ Markdown 正文保持普通语法。新增样式不靠插入行内 `<span>` 或 
 
 - `documentStyles.ts` 定义 `textColor` mark、段落 `textAlign`/`indent` 和单元格 `verticalAlign`；单元格水平对齐复用原有 `align`，不建立第二份状态。
 - `colors.ts` 只接受六位十六进制颜色，统一文字与背景色板。透明背景、默认文字色使用 null，不将任意 CSS 写入 HTML。
-- 行内公式和文字共用 marks；行间公式使用节点 `textColor` / `background` 属性。共同命令同时处理两种表示，行间公式不会挂载不合法的行内 marks。公式原子范围覆盖完整 TeX，源码增删沿用增量区间树；恢复 marks 时不再跳过行内公式。只在点击公式正文时进入编辑，块选中与菜单悬停不启动公式编辑。
+- 行内公式和文字共用 marks；行间公式使用节点 `textColor` / `background` 属性，背景覆盖整行。公式块的 `textAlign` 默认 center，可设置 left/right，编辑与 HTML/PDF 一致。共同命令同时处理两种表示，行间公式不会挂载不合法的行内 marks。公式原子范围覆盖完整 TeX，源码增删沿用增量区间树；恢复 marks 时不再跳过行内公式。新建空公式块选中后自动聚焦源码；已有公式点击正文编辑，菜单悬停不启动编辑。
+- `blockAppearanceSchema.ts` 为段落、标题、引用、无序/有序/待办列表与各列表项声明 `blockTextColor` / `blockBackground`。块菜单使用独立的 `BlockColorControl`，只改当前块的节点默认色；行内 mark 覆盖继承色，列表符号随整块文字色。列表项底色覆盖符号区域且不改变文字位置，待办复选框位于块内。代码、媒体、提示块和表格使用各自专用呈现，不将文字 mark 强套给所有节点。
+- 整块颜色是一次离散历史事务，不移动选区或滚动。删光文字仍保留行底色，删除空行才移除；文档最后一行无法物理删除时，Backspace 清空其块颜色，可独立撤销。拆分出的新行使用默认块颜色。选择文字后清除格式只清 marks；块菜单的清除文本格式还清该块及其子块的文字默认色，保留行/表格底色、链接、结构与说明。重置整块颜色只移除块默认色，保留行内高亮。
 - `stylePreference.ts` 保存上次使用的前景/背景组合，独立于当前文档选区。主按钮一次事务应用两种颜色；色板中的单项只改变对应层。
 - `HighlightControl` 是顶部工具栏和文字选区共用的控件。A 与箭头共享外形，各自有操作区域；与其他工具栏菜单共用 `useHoverMenu`：悬停 180ms 开始旋转，再过 90ms 打开面板，离开有 300ms 缓冲。配色仅箭头触发悬停，A 直接应用记忆组合。键盘、触摸点击和 reduced-motion 均有独立路径，悬停不移动编辑器焦点。
 - `AlignmentMenu` 共用对齐入口。文字选区操作段落，格子选区操作单元格；表格批量操作由 `TablePresentationStep` 完成，文本内容与位置不变。
@@ -43,4 +45,4 @@ HTML/PDF 由同一 schema 输出颜色、对齐及缩进，打印颜色设置 ex
 
 ## 回归
 
-`documentStyles.test.ts` 覆盖重叠样式、重复块、外部编辑、旧高亮、嵌套表格/列表和通用 Markdown 预览；`sourceDocumentStyles.test.ts` 覆盖源码动作不新增私有 metadata、不同换行及已有注释读取保留。`sourceStyleTracking.test.ts` 覆盖中间增删、换段、历史快照、注释手动编辑、输入热路径和十万样式片段的路径共享。真实浏览器检查组合按钮、悬停、记忆配色、透明第一格及字号变化。
+`documentStyles.test.ts` 覆盖重叠样式、重复块、外部编辑、旧高亮、嵌套表格/列表和通用 Markdown 预览；`blockAppearance.test.ts` 覆盖块与行内颜色叠加、空行删除/撤销、NB/Markdown 保存和导出。`sourceDocumentStyles.test.ts` 覆盖源码动作不新增私有 metadata、不同换行及已有注释读取保留。`sourceStyleTracking.test.ts` 覆盖中间增删、换段、历史快照、注释手动编辑、输入热路径和十万样式片段的路径共享。真实浏览器检查组合按钮、悬停、记忆配色、透明第一格及字号变化。

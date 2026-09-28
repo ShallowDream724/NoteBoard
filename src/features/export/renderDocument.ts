@@ -48,6 +48,10 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     const id = `formula-${++mathIndex}`;
     element.dataset.exportItem = id;
     element.className = display ? 'export-math display' : 'export-math inline';
+    if (element.hasAttribute('data-math-block')) {
+      const align = element.getAttribute('data-math-align');
+      element.style.textAlign = align === 'left' || align === 'right' ? align : 'center';
+    }
     element.dataset.latex = latex;
     element.removeAttribute('latex');
     let renderSource = latex;
@@ -149,10 +153,20 @@ export async function renderDocument(markdown: string, title: string, baseDirect
   for (const item of container.querySelectorAll<HTMLElement>('li[data-type="taskItem"]')) {
     const input = item.querySelector('input');
     if (!input) continue;
+    const checked = item.dataset.checked === 'true';
     const check = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     check.setAttribute('viewBox', '0 0 20 20'); check.setAttribute('class', 'export-task-check');
-    check.innerHTML = '<rect x="2" y="2" width="16" height="16" rx="3" fill="none" stroke="currentColor"/>'
-      + (item.dataset.checked === 'true' ? '<path d="m5 10 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.6"/>' : '');
+    check.setAttribute('role', 'img'); check.setAttribute('aria-label', checked ? '已完成' : '未完成');
+    // LinkeDOM parses innerHTML on a standalone SVG through its HTML parser:
+    // self-closing <rect/> then swallows the path. Build namespace-aware siblings
+    // so the worker and browser both produce a visible tick.
+    const appendShape = (name: 'rect' | 'path', attrs: Record<string, string>) => {
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', name);
+      for (const [key, value] of Object.entries(attrs)) shape.setAttribute(key, value);
+      check.append(shape);
+    };
+    appendShape('rect', { x: '2', y: '2', width: '16', height: '16', rx: '3', fill: checked ? 'currentColor' : 'none', stroke: 'currentColor' });
+    if (checked) appendShape('path', { d: 'm5 10 3 3 7-7', fill: 'none', stroke: '#fff', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
     input.replaceWith(check);
   }
   // Export never contains editing controls or active document scripts.

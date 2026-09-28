@@ -14,11 +14,11 @@ export function AlignmentMenu({ editor }: { editor: Editor }) {
   const hover = useHoverMenu(open, setOpen);
   const visible = useNativeFeatureVisibility();
   const scope = selectionPresentation(editor.state), cells = scope.cells;
-  const targets = cells ? scope.cellBlocks : scope.textBlocks;
-  const textAlign = commonPresentationValue(targets, cells ? 'align' : 'textAlign', 'left');
+  const targets = cells ? scope.cellBlocks : [...scope.textBlocks, ...scope.mathBlocks];
+  const textAlign = commonPresentationValue(targets, cells ? 'align' : 'textAlign', targets.every(({ node }) => node.type.name === 'mathBlock') ? 'center' : 'left');
   const verticalAlign = commonPresentationValue(scope.cellBlocks, 'verticalAlign', 'top');
   const canIndent = !cells && scope.indentBlocks.length > 0;
-  const label = cells ? '单元格对齐' : targets.length ? '对齐与缩进' : '缩进';
+  const label = cells ? '单元格对齐' : scope.mathBlocks.length && !scope.textBlocks.length ? '公式对齐' : targets.length ? '对齐与缩进' : '缩进';
   const horizontal = [ ['left','左对齐',AlignLeft], ['center','居中',AlignCenter], ['right','右对齐',AlignRight] ] as const;
   const vertical = [ ['top','顶部对齐',ArrowUpToLine], ['middle','垂直居中',AlignVerticalJustifyCenter], ['bottom','底部对齐',ArrowDownToLine] ] as const;
   const apply = (action: () => void) => { action(); setOpen(false); };

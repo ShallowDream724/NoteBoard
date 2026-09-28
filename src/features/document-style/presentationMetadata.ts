@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { documentColor } from './colors';
+import { BLOCK_COLOR_FIELDS, BLOCK_COLOR_TYPES } from './blockAppearanceSchema';
 
 const PREFIX = '<!-- noteboard-styles ';
 const MAX_BYTES = 2_000_000, MAX_RECORDS = 20_000;
@@ -14,6 +15,7 @@ const installed = new WeakSet<object>();
 const textBlocks = new Set(['paragraph', 'heading']);
 const indentBlocks = new Set(['paragraph', 'heading', 'horizontalRule']);
 const cells = new Set(['tableCell', 'tableHeader']);
+const coloredBlocks = new Set<string>(BLOCK_COLOR_TYPES);
 
 /** Only remove our well-formed final comment, never a fenced/quoted example. */
 export function presentationBody(markdown: string, lexer: { lexer: (source: string) => Array<{ type: string; raw: string }> }): string {
@@ -32,10 +34,14 @@ export function presentationBody(markdown: string, lexer: { lexer: (source: stri
 
 function presentationAttrs(node: JSONContent): Attributes {
   const attrs: Attributes = {}, source = node.attrs ?? {};
+  if (coloredBlocks.has(node.type!)) for (const field of BLOCK_COLOR_FIELDS) {
+    const color = documentColor(source[field]); if (color) attrs[field] = color;
+  }
   if (textBlocks.has(node.type!) && ['left', 'center', 'right'].includes(source.textAlign)) attrs.textAlign = source.textAlign;
   if (indentBlocks.has(node.type!) && Number.isInteger(source.indent) && source.indent > 0 && source.indent <= 8) attrs.indent = source.indent;
   if (cells.has(node.type!) && ['top', 'middle', 'bottom'].includes(source.verticalAlign)) attrs.verticalAlign = source.verticalAlign;
   if (cells.has(node.type!) && ['left', 'center', 'right'].includes(source.textAlign ?? source.align)) attrs.align = source.textAlign ?? source.align;
+  if (node.type === 'mathBlock' && ['left', 'right'].includes(source.textAlign)) attrs.textAlign = source.textAlign;
   if (node.type === 'mathBlock') for (const key of ['textColor', 'background']) {
     const color = documentColor(source[key]); if (color) attrs[key] = color;
   }
@@ -54,11 +60,12 @@ function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSO
   }
   if (Object.keys(attrs).length || ranges.length) records.push({ path, ...(Object.keys(attrs).length ? { attrs } : {}), ...(ranges.length ? { ranges } : {}) });
   const cleanAttrs = { ...node.attrs };
+  if (coloredBlocks.has(node.type!)) for (const field of BLOCK_COLOR_FIELDS) delete cleanAttrs[field];
   if (node.type === 'table') delete cleanAttrs.tableAlign;
   if (textBlocks.has(node.type!)) delete cleanAttrs.textAlign;
   if (indentBlocks.has(node.type!)) delete cleanAttrs.indent;
   if (cells.has(node.type!)) { delete cleanAttrs.align; delete cleanAttrs.textAlign; delete cleanAttrs.verticalAlign; }
-  if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; }
+  if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; delete cleanAttrs.textAlign; }
   return { ...node, ...(node.attrs ? { attrs: cleanAttrs } : {}),
     ...(node.marks ? { marks: node.marks.filter(mark => mark.type !== 'highlight' && mark.type !== 'textColor') } : {}),
     ...(node.content ? { content: node.content.map((child, index) => extract(child, [...path, index], records)) } : {}) };

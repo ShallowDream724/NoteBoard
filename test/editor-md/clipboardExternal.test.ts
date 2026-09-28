@@ -39,6 +39,13 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
     editor.commands.undo(); expect(editor.state.doc.textContent).toBe('target');
     editor.commands.redo(); expect(editor.getJSON()).toEqual(json);
   });
+  it('recognizes a single inline formula inside a Chinese prose sentence on ordinary paste', () => {
+    const editor = create(format);
+    paste(editor, { 'text/plain': '你用缩写看位置变化的思路很有用。例如 $a$ ：' });
+    expect(editor.getJSON().content?.[0].content?.map(node => node.type)).toEqual(['text', 'mathInline', 'text']);
+    const formula = editor.getJSON().content?.[0].content?.[1];
+    expect(formula && 'attrs' in formula && formula.attrs?.latex).toBe('a');
+  });
   it('recognizes source-editor HTML wrappers without discarding semantic HTML', () => {
     const editor = create(format);
     paste(editor, { 'text/html': '<div style="font-family:monospace;white-space:pre"><div><span style="color:#f00"># 222</span></div><div><span>$a$ is \\(b\\)</span></div></div>', 'text/plain': '# 222\n$a$ is \\(b\\)' });

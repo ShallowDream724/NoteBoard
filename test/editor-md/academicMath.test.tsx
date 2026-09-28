@@ -34,6 +34,12 @@ function type(value: Editor, text: string) {
 function enter(value: Editor) {
   return value.view.someProp('handleKeyDown', (handler) => handler(value.view, new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true })));
 }
+async function compose(value: Editor, text: string) {
+  value.view.dom.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  value.view.dispatch(value.state.tr.insertText(text));
+  value.view.dom.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+}
 
 describe('学术公式语料与源码往返', () => {
   for (const sample of cases) {
@@ -58,6 +64,144 @@ describe('学术公式语料与源码往返', () => {
 });
 
 describe('定界符空白、上下文与真实输入', () => {
+  it('中文段落手动输入 $a$ 并继续中文标点时建立行内节点', () => {
+    const value = editor();
+    type(value, '你用缩写看位置变化的思路很有用。例如 $a$ ：');
+    expect(formulas(value)).toEqual([{ latex: 'a', delimiter: '$', type: 'mathInline' }]);
+  });
+  it('输入法一次提交闭合美元号与其后标点时仍识别公式', async () => {
+    const value = editor();
+    const source = '你用缩写看位置变化的思路很有用。例如 $a$ ：';
+    await compose(value, source);
+    expect(formulas(value)).toEqual([{ latex: 'a', delimiter: '$', type: 'mathInline' }]);
+    expect(value.getText()).toBe(source);
+    expect(value.commands.undoInputRule()).toBe(true);
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe(source);
+  });
+  it('行首、行中和行尾的闭合符只替换光标前的公式，保留已有后文', () => {
+    for (const [before, at, result] of [
+      ['后文', 1, '$a$后文'],
+      ['前文后文', 3, '前文$a$后文'],
+      ['前文', 3, '前文$a$'],
+    ] as const) {
+      const value = editor();
+      value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: before }] }] });
+      value.commands.setTextSelection(at);
+      type(value, '$a$');
+      expect(formulas(value), before).toEqual([{ latex: 'a', delimiter: '$', type: 'mathInline' }]);
+      expect(value.getText(), before).toBe(result);
+    }
+    const selected = editor();
+    selected.commands.setContent('<p>前XY后</p>');
+    selected.commands.setTextSelection({ from: 2, to: 4 });
+    type(selected, '$a$');
+    expect(formulas(selected).map(({ latex }) => latex)).toEqual(['a']);
+    expect(selected.getText()).toBe('前$a$后');
+  });
+  it('输入法一次提交普通后文和连续公式，只处理本次输入并可撤销', async () => {
+    const value = editor();
+    await compose(value, '$a$和$b$ 是变量');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'b']);
+    expect(value.getText()).toBe('$a$和$b$ 是变量');
+    expect(value.commands.undoInputRule()).toBe(true);
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe('$a$和$b$ 是变量');
+    expect(value.commands.undo()).toBe(true);
+    expect(value.state.doc.textContent).toBe('');
+    expect(value.commands.redo()).toBe(true);
+    expect(value.state.doc.textContent).toBe('$a$和$b$ 是变量');
+  });
+  it('非输入法的批量文字输入也按本次提交范围识别', () => {
+    const value = editor();
+    const { from, to } = value.state.selection;
+    const input = '前文$a$ 是变量';
+    const handled = value.view.someProp('handleTextInput', handler => handler(value.view, from, to, input, () => value.state.tr.insertText(input)));
+    if (!handled) value.view.dispatch(value.state.tr.insertText(input));
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a']);
+    expect(value.getText()).toBe(input);
+  });
+  it('长段落的行中与行尾跨样式输入窗口不越界，保留既有公式与后文', () => {
+    const value = editor();
+    const left = '前'.repeat(550), middle = '中'.repeat(30), right = '后'.repeat(550);
+    value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+      { type: 'text', text: left },
+      { type: 'text', text: middle, marks: [{ type: 'bold' }] },
+      { type: 'mathInline', attrs: { latex: 'z' } },
+      { type: 'text', text: right, marks: [{ type: 'italic' }] },
+    ] }] });
+    value.commands.setTextSelection(1 + left.length + 15);
+    type(value, '$a$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'z']);
+    const first = value.state.doc.firstChild?.child(2);
+    expect(first?.marks.map(mark => mark.type.name)).toContain('bold');
+    value.commands.setTextSelection(value.state.doc.firstChild!.nodeSize - 1);
+    type(value, '$b$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'z', 'b']);
+    expect(value.state.doc.firstChild?.lastChild?.type.name).toBe('mathInline');
+    expect(value.state.doc.firstChild?.lastChild?.marks.map(mark => mark.type.name)).toContain('italic');
+    let afterExisting = -1;
+    value.state.doc.descendants((node, pos) => { if (node.type.name === 'mathInline' && node.attrs.latex === 'z') afterExisting = pos + node.nodeSize; });
+    value.commands.setTextSelection(afterExisting);
+    type(value, '$c$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'z', 'c', 'b']);
+    expect(value.getText()).toBe(left + middle.slice(0, 15) + '$a$' + middle.slice(15) + '$z$$c$' + right + '$b$');
+  });
+  it('输入法补全已有未闭合开头，只转换跨越本次提交边界的公式', async () => {
+    const value = editor();
+    value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '说明 $a' }] }] });
+    value.commands.setTextSelection(6);
+    await compose(value, '$ 后文');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a']);
+    expect(value.getText()).toBe('说明 $a$ 后文');
+    expect(value.commands.undoInputRule()).toBe(true);
+    expect(value.state.doc.textContent).toBe('说明 $a$ 后文');
+  });
+  it('紧邻的两个公式都保留为独立节点', async () => {
+    const value = editor();
+    await compose(value, '$a$$b$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'b']);
+    expect(value.getText()).toBe('$a$$b$');
+    parseMarkdown(value, '$a$$b$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'b']);
+    expect(serializeMarkdown(value)).toContain('$a$$b$');
+    value.commands.clearContent();
+    type(value, '$a$$b$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a', 'b']);
+  });
+  it('输入法在已有后文前替换选区，保留后文和粗体样式', async () => {
+    const value = editor();
+    value.commands.setContent('<p><strong>前XY后</strong></p>');
+    value.commands.setTextSelection({ from: 2, to: 4 });
+    await compose(value, '$a$ 是变量');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['a']);
+    expect(value.getText()).toBe('前$a$ 是变量后');
+    const formula = value.state.doc.firstChild?.child(1);
+    expect(formula?.marks.map(mark => mark.type.name)).toContain('bold');
+    expect(value.state.doc.firstChild?.lastChild?.marks.map(mark => mark.type.name)).toContain('bold');
+  });
+  it('输入法提交代码、转义美元号和金额时不重解释旧文本', async () => {
+    const value = editor();
+    for (const text of ['`$a$`', String.raw`\$a\$`, 'costs $100 and $200', '$5，并且$2']) {
+      value.commands.clearContent();
+      await compose(value, text);
+      expect(formulas(value), text).toHaveLength(0);
+      expect(value.state.doc.textContent, text).toBe(text.startsWith('`') ? '$a$' : text);
+    }
+    value.commands.setContent('<p><code>before</code></p>');
+    value.commands.setTextSelection(3);
+    await compose(value, '$a$');
+    expect(formulas(value)).toHaveLength(0);
+    value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '$old$' }] }] });
+    value.commands.setTextSelection(6);
+    await compose(value, ' 普通后文');
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe('$old$ 普通后文');
+    value.commands.clearContent();
+    await compose(value, '价格 $100 and $200；公式 $x$');
+    expect(formulas(value).map(({ latex }) => latex)).toEqual(['x']);
+    expect(value.getText()).toContain('$100 and $200');
+  });
   for (const delimiter of ['$', '\\(', '$$', '\\['] as MathDelimiter[]) {
     for (const padding of ['', ' ', '  ', '\t']) {
       it('空白 ' + JSON.stringify([delimiter, padding]), () => {

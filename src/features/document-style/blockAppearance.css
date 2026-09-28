@@ -1,0 +1,13 @@
+/* Block defaults paint independently of inline marks. Keep the text geometry
+ * unchanged when changing color, including the outside list-marker gutter. */
+:is(.ProseMirror, article[data-export-mode]) [data-block-background] {
+  border-radius: 4px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+:is(.ProseMirror, article[data-export-mode]) li[data-block-background]:not([data-type="taskItem"]) {
+  box-shadow: -1.5em 0 var(--nb-block-background);
+}
+:is(.ProseMirror, article[data-export-mode]) [data-block-text-color] :where(p,h1,h2,h3,h4,h5,h6,li,blockquote):not([data-block-text-color]) {
+  color: inherit;
+}

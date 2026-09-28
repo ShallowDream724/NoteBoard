@@ -17,12 +17,12 @@ export function isMathEscaped(source: string, offset: number): boolean {
 }
 
 /** An opener never starts at the second slash of a TeX row break. */
-export function readMath(source: string, start = 0, blockContext = false, budget?: { remaining: number }): MathMatch | null {
+export function readMath(source: string, start = 0, blockContext = false, budget?: { remaining: number }, adjacentOpener = false): MathMatch | null {
   let delimiter: MathDelimiter;
   if (source.startsWith('$$', start)) delimiter = '$$';
   else if (source.startsWith('\\(', start)) delimiter = '\\(';
   else if (source.startsWith('\\[', start)) delimiter = '\\[';
-  else if (source[start] === '$' && source[start - 1] !== '$') delimiter = '$';
+  else if (source[start] === '$' && (source[start - 1] !== '$' || adjacentOpener)) delimiter = '$';
   else return null;
   if (isMathEscaped(source, start)) return null;
   const closing = mathClosingDelimiter(delimiter);
@@ -48,7 +48,10 @@ export function readMath(source: string, start = 0, blockContext = false, budget
     if (braces) continue;
     if (delimiter === '\\[' && source.startsWith('\\[', cursor) && !isMathEscaped(source, cursor)) return null;
     if (!source.startsWith(closing, cursor) || isMathEscaped(source, cursor)) continue;
-    if (delimiter === '$' && (source[cursor - 1] === '$' || source[cursor + 1] === '$')) continue;
+    if (delimiter === '$' && source[cursor - 1] === '$') continue;
+    // A shared "$$" boundary can close one inline formula and open the next:
+    // $a$$b$. A terminal "$$" still belongs to a display delimiter.
+    if (delimiter === '$' && source[cursor + 1] === '$' && (!source[cursor + 2] || /[$\r\n]/.test(source[cursor + 2]))) continue;
     // "$100 and $200" is money; "$ 100 $" is an explicit paired expression.
     const latex = source.slice(payloadStart, cursor);
     // Bare monetary amounts must not borrow a later formula's opener.
@@ -134,9 +137,13 @@ export function writeMath(source: MathSource, block = false): string {
     : source.delimiter + source.latex + close;
 }
 
-/** A bounded input rule; never reparse the document on each keystroke. */
-export function mathAtTextEnd(text: string): MathMatch | null {
+/** Scan one committed input span. Older formulas are ignored, while an opener
+ * immediately before the span may still be completed by its new closing token. */
+export function mathInInputRange(text: string, start: number): MathMatch[] {
+  const matches: MathMatch[] = [];
+  const budget = { remaining: text.length * 4 };
   let codeRun = 0;
+  let previousEnd = -1;
   for (let cursor = 0; cursor < text.length; cursor++) {
     if (text[cursor] === '`' && !isMathEscaped(text, cursor)) {
       let end = cursor;
@@ -147,11 +154,12 @@ export function mathAtTextEnd(text: string): MathMatch | null {
       cursor = end - 1;
       continue;
     }
-    if (codeRun) continue;
-    const match = readMath(text, cursor);
+    if (codeRun || (text[cursor] !== '$' && text[cursor] !== '\\')) continue;
+    const match = readMath(text, cursor, false, budget, cursor === previousEnd);
     if (!match) continue;
-    if (match.end === text.length) return match;
+    if (match.end > start) matches.push(match);
+    previousEnd = match.end;
     cursor = match.end - 1;
   }
-  return null;
+  return matches;
 }
