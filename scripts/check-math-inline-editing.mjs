@@ -1,4 +1,4 @@
-/* global window, document, requestAnimationFrame, getComputedStyle, HTMLTextAreaElement, InputEvent, CompositionEvent, KeyboardEvent */
+/* global window, document, requestAnimationFrame, getComputedStyle, InputEvent, CompositionEvent, KeyboardEvent */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const outDir = '.tmp/math-inline-editing-dist';
-await build({ configFile: false, plugins: [react()], worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/mathInlineEditing.html' } }, logLevel: 'error' });
+if (!process.argv.includes('--skip-build')) await build({ configFile: false, plugins: [react()], worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/mathInlineEditing.html' } }, logLevel: 'error' });
 const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 const results = [];
@@ -39,6 +39,7 @@ try {
     return { width: b.width, height: b.height, paragraphHeight: p.height, top: b.top, paragraphTop: p.top };
   });
   assert(compact.width < 100 && compact.height < 35, JSON.stringify(compact));
+  assert.equal(await source.evaluate(element => getComputedStyle(element).outlineStyle), 'none', 'Source must not acquire paragraph-fragment focus boxes');
   assert(Math.abs(compact.paragraphHeight - before.height) < 3, 'Inline source must retain the paragraph line height');
   assert(Math.abs((await page.locator('.ProseMirror > p').nth(1).boundingBox()).y - nextBefore.y) < 3, 'Preview must not push following prose down');
   assert(await rendered.evaluate(element => element === document.querySelector('.math-node-preview .math-preview')), 'Entering must reuse the rendered preview');
@@ -61,9 +62,9 @@ try {
       await page.locator('.ProseMirror').evaluate(element => { element.style.fontSize = '26px'; });
       await page.locator('.math-node .katex-html').waitFor(); await open();
       assert.deepEqual(await page.locator('.formula-source-delimiter').allTextContents(), [delimiter, closing]);
-      assert.equal(await source.inputValue(), String.raw`\frac{a+b}{c}`);
+      assert.equal(await source.textContent(), String.raw`\frac{a+b}{c}`);
       const colors = await source.evaluate(element => {
-        const wrapper = element.closest('.formula-source-inline'), opening = wrapper.querySelector('.formula-source-opening'), closing = wrapper.querySelector('.formula-source-closing');
+        const wrapper = element.closest('.formula-source-inline'), opening = wrapper.querySelector('.formula-source-delimiter'), closing = wrapper.querySelector('.formula-source-delimiter:last-child');
         const input = element.getBoundingClientRect(), start = opening.getBoundingClientRect(), end = closing.getBoundingClientRect();
         return { source: getComputedStyle(element).color, delimiter: getComputedStyle(opening).color,
           openingRight: start.right, sourceLeft: input.left, sourceRight: input.right, closingLeft: end.left };
@@ -76,43 +77,45 @@ try {
     for (const [text, position, delimiters] of [['Before $$ after', 9, ['$', '$']], [String.raw`Before \(\) after`, 10, ['\\(', '\\)']]]) {
       await mount([paragraph(text)]); await page.evaluate(position => window.mathInlineEditingQA.focus(position), position);
       await page.keyboard.type('abc', { delay: 10 });
-      assert.equal(await source.inputValue(), 'abc'); assert.deepEqual((await state()).formulas, ['abc']);
+      assert.equal(await source.textContent(), 'abc'); assert.deepEqual((await state()).formulas, ['abc']);
       assert.deepEqual(await page.locator('.formula-source-delimiter').allTextContents(), delimiters);
       await page.keyboard.press('ArrowRight'); await page.keyboard.type('tail');
       assert.equal((await state()).text, 'Before tail after');
     }
   } else {
-  // Native preedit stays in the same textarea, commits once, and shares document history.
+  // Native preedit stays in the same inline source, commits once, and shares document history.
   const input = await source.elementHandle();
   await page.evaluate(() => window.mathInlineEditingQA.watchUpdates());
   await source.evaluate(element => {
     element.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(element, 'a+bzhong');
+    element.textContent = 'a+bzhong';
     element.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, inputType: 'insertCompositionText' }));
     element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   });
   assert.deepEqual((await state()).formulas, ['a+b']); assert.equal((await state()).updates, 0);
   assert(await input.evaluate(element => element.isConnected && document.activeElement === element));
   await source.evaluate(element => {
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(element, 'a+b中，');
+    element.textContent = 'a+b中，';
     element.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, inputType: 'insertCompositionText' }));
     element.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '中，' }));
     element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
   });
   assert.deepEqual((await state()).formulas, ['a+b中，']); assert.equal((await state()).updates, 1);
   await page.keyboard.press('Control+z');
-  assert.deepEqual((await state()).formulas, ['a+b']); assert.equal(await source.inputValue(), 'a+b');
+  assert.deepEqual((await state()).formulas, ['a+b']); assert.equal(await source.textContent(), 'a+b');
   await page.keyboard.press('Control+y');
   assert.deepEqual((await state()).formulas, ['a+b中，']);
   assert(await input.evaluate(element => element.isConnected && document.activeElement === element));
-  await page.keyboard.press('End'); await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('End');
+  assert(await source.evaluate(element => document.activeElement === element), 'End must stay inside inline source');
+  await page.keyboard.press('ArrowRight');
   await source.waitFor({ state: 'detached' }); await page.keyboard.type('outside');
   assert.equal((await state()).text, 'Before outside afterThe following paragraph must stay in place.');
   assert.equal(await page.locator('.math-node-preview').evaluate(element => getComputedStyle(element).position), 'static');
 
   await mount([paragraph('Before $$ after')]); await page.evaluate(() => window.mathInlineEditingQA.focus(9));
   await page.keyboard.type('abc', { delay: 10 });
-  assert.equal(await source.inputValue(), 'abc'); assert.deepEqual((await state()).formulas, ['abc']);
+  assert.equal(await source.textContent(), 'abc'); assert.deepEqual((await state()).formulas, ['abc']);
   await page.keyboard.press('ArrowRight'); await page.keyboard.type('tail');
   assert.equal((await state()).text, 'Before tail after');
 
@@ -123,7 +126,7 @@ try {
       await page.getByRole('button', { name: /^行内公式 \(/ }).click();
     } else await page.evaluate(() => window.mathInlineEditingQA.insertInline());
     await source.waitFor(); await frame();
-    assert.equal(await source.inputValue(), '');
+    assert.equal(await source.textContent(), '');
     assert(await source.evaluate(element => document.activeElement === element), `${entry} must focus blank inline source`);
     await page.keyboard.type('abc'); assert.deepEqual((await state()).formulas, ['abc']);
     await page.keyboard.press('Control+z'); assert.deepEqual((await state()).formulas, ['']);
@@ -136,7 +139,39 @@ try {
     results.push({ entry, blankAndFocused: true, history: true });
   }
 
-  // Long source wraps at the editor width; the preview stays inside the scroll viewport.
+  // Real Chromium preedit in the inline host preserves the first character and
+  // grows in the paragraph rather than scrolling inside a small input.
+  await mount([inline('你好', '正文 ', ' 后文')]); await open();
+  const cdp = await page.context().newCDPSession(page);
+  await page.keyboard.press('End');
+  for (const text of ['z', 'zhong', "zhong'wen"]) {
+    await cdp.send('Input.imeSetComposition', { text, selectionStart: text.length, selectionEnd: text.length });
+    assert.deepEqual((await state()).formulas, ['你好']);
+  }
+  await cdp.send('Input.insertText', { text: '中文，' });
+  await page.waitForFunction(() => window.mathInlineEditingQA.state().formulas[0] === '你好中文，');
+  assert.equal(await source.textContent(), '你好中文，');
+  await page.keyboard.press('Control+a');
+  assert.equal(await page.evaluate(() => window.getSelection().toString()), '你好中文，');
+  await page.keyboard.press('End');
+  const extended = '你好中文，' + 'a'.repeat(200);
+  await page.keyboard.type('a'.repeat(200)); await frame();
+  assert.equal(await source.textContent(), extended);
+  assert.deepEqual((await state()).formulas, [extended]);
+  const flowing = await source.evaluate(element => {
+    const rects = [...element.getClientRects()];
+    const range = document.createRange(); range.setStart(element.firstChild, 0); range.setEnd(element.firstChild, 1);
+    const first = range.getBoundingClientRect(), paragraph = element.closest('p').getBoundingClientRect();
+    return { fragments: rects.length, overflow: getComputedStyle(element).overflow, scrollTop: element.scrollTop, scrollLeft: element.scrollLeft,
+      firstLeft: first.left, firstTop: first.top, paragraphLeft: paragraph.left, paragraphTop: paragraph.top };
+  });
+  assert(flowing.fragments > 1 && flowing.overflow === 'visible' && flowing.scrollTop === 0 && flowing.scrollLeft === 0, JSON.stringify(flowing));
+  assert(flowing.firstLeft >= flowing.paragraphLeft && flowing.firstTop >= flowing.paragraphTop, JSON.stringify(flowing));
+  await page.screenshot({ path: '.tmp/math-inline-flowing.png' });
+  results.push({ nativeComposition: true, flowing });
+  await cdp.detach();
+
+  // Long source flows at the paragraph width; the preview stays inside the scroll viewport.
   await mount([inline(String.raw`\frac{a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t}{1+\sqrt{x^2+y^2}}`, 'A sentence close to the line boundary with preceding words. '), ...Array.from({ length: 20 }, (_, i) => paragraph(`Following line ${i}`))]);
   await open();
   const long = await source.evaluate(element => {

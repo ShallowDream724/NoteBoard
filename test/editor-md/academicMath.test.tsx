@@ -64,6 +64,78 @@ describe('学术公式语料与源码往返', () => {
 });
 
 describe('定界符空白、上下文与真实输入', () => {
+  it.each(['￥', '¥'])('人民币快捷符 %s 逐键输入公式，保存标准美元定界符', symbol => {
+    const value = editor();
+    type(value, `费用${symbol}100和${symbol}200；公式${symbol}a${symbol}：${symbol}b+c${symbol}。`);
+    expect(formulas(value)).toEqual([
+      { latex: 'a', delimiter: '$', type: 'mathInline' },
+      { latex: 'b+c', delimiter: '$', type: 'mathInline' },
+    ]);
+    expect(value.getText()).toBe(`费用${symbol}100和${symbol}200；公式$a$：$b+c$。`);
+    expect(serializeMarkdown(value)).toContain('$a$：$b+c$');
+  });
+  it('人民币符号的输入法提交支持混合与紧邻公式，撤销保留实际输入', async () => {
+    const value = editor(), input = '前￥a￥￥b￥，¥c¥；费用￥100和￥200。';
+    await compose(value, input);
+    expect(formulas(value).map(({ latex, delimiter }) => ({ latex, delimiter }))).toEqual([
+      { latex: 'a', delimiter: '$' }, { latex: 'b', delimiter: '$' }, { latex: 'c', delimiter: '$' },
+    ]);
+    expect(value.getText()).toBe('前$a$$b$，$c$；费用￥100和￥200。');
+    expect(value.commands.undoInputRule()).toBe(true);
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe(input);
+  });
+  it.each(['￥', '¥', '$'])('金额 %s100 与中文连接的两笔金额在逐键和输入法提交中保持文本', async symbol => {
+    const value = editor();
+    for (const input of [`${symbol}100`, `${symbol}100和${symbol}200`, `${symbol}100并且${symbol}200`, `${symbol}100、${symbol}200`]) {
+      value.commands.clearContent(); type(value, input);
+      expect(formulas(value), input).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(input);
+      value.commands.clearContent(); await compose(value, input);
+      expect(formulas(value), input).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(input);
+    }
+  });
+  it.each(['￥', '¥', '$'])('带空格金额 %s 保留半角、全角和不换行空格，第二个符号不会提前闭合公式', async symbol => {
+    const value = editor();
+    for (const space of [' ', '\u3000', '\u00a0']) {
+      const single = `${symbol}${space}100`, prefix = `${single}${space}和${space}${symbol}`, complete = `${prefix}${space}200`;
+      value.commands.clearContent(); type(value, single);
+      expect(formulas(value), single).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(single);
+      value.commands.clearContent(); type(value, prefix);
+      expect(formulas(value), prefix).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(prefix);
+      type(value, space + '200');
+      expect(formulas(value), complete).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(complete);
+      value.commands.clearContent(); await compose(value, complete);
+      expect(formulas(value), complete).toHaveLength(0);
+      expect(value.state.doc.textContent).toBe(complete);
+    }
+  });
+  it('人民币快捷输入保留 TeX 正文的货币字形，并遵守转义和代码边界', async () => {
+    const value = editor(), latex = String.raw`\text{￥ and ¥}+x`;
+    await compose(value, '￥' + latex + '￥，');
+    expect(formulas(value)).toEqual([{ latex, delimiter: '$', type: 'mathInline' }]);
+    expect(serializeMarkdown(value)).toContain('$' + latex + '$');
+    for (const input of [String.raw`\￥a\￥`, String.raw`\¥a\¥`, '`￥a￥`', '`¥a¥`', '￥a¥', '￥￥ 后文']) {
+      value.commands.clearContent(); await compose(value, input);
+      expect(formulas(value), input).toHaveLength(0);
+    }
+  });
+  it('人民币快捷符仅用于新输入，导入和已有字面正文不会重新解释', async () => {
+    const value = editor(), input = '￥a￥，¥b¥；费用￥100和￥200';
+    parseMarkdown(value, input);
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe(input);
+    expect(readMath('￥a￥')).toBeNull(); expect(readMath('¥b¥')).toBeNull();
+    value.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: input }] }] });
+    value.commands.setTextSelection(input.length + 1);
+    await compose(value, ' 普通后文');
+    expect(formulas(value)).toHaveLength(0);
+    expect(value.state.doc.textContent).toBe(input + ' 普通后文');
+  });
   it('已有公式后连续输入带逗号、冒号的美元号公式', () => {
     const value = editor();
     const source = String.raw`正文$a$,$wos$:,$\text{aaa}$,\(a\):::\(www\)::`;
@@ -279,9 +351,9 @@ describe('定界符空白、上下文与真实输入', () => {
     parseMarkdown(value, '价格 $100 and $200；公式 $x$2');
     expect(formulas(value)).toMatchObject([{ latex: 'x', delimiter: '$' }]);
   });
-  it('中文输入法的 ￥￥ Enter 建立标准 $$ 块，单个货币符号保持文本', () => {
+  it.each(['￥￥', '¥¥'])('中文输入法的 %s Enter 建立标准 $$ 块，导入货币符号保持文本', opener => {
     const value = editor();
-    type(value, '￥￥');
+    type(value, opener);
     expect(enter(value)).toBe(true);
     expect(formulas(value)).toEqual([{ latex: '', delimiter: '$$', type: 'mathBlock' }]);
     expect(serializeMarkdown(value)).toContain('$$');

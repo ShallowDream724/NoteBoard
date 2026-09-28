@@ -110,6 +110,20 @@ describe('rich document export conservation', () => {
     expect(localFileUrl('C:\\Notes\\图片 #1.png')).toBe('file:///C:/Notes/%E5%9B%BE%E7%89%87%20%231.png');
   });
 
+  it('isolates HTML table scrolling without changing the PDF table tree', async () => {
+    const table = { type: 'table', content: [{ type: 'tableRow', content: [
+      { type: 'tableCell', content: [paragraph('宽表格')] },
+      { type: 'tableCell', content: [paragraph('第二列')] },
+    ] }] };
+    const doc = documentParser().schema.nodeFromJSON({ type: 'doc', content: [table] });
+    const html = await renderDocument('', 'Test', '', undefined, doc, undefined, undefined, 'html');
+    const print = await renderDocument('', 'Test', '', undefined, doc, undefined, undefined, 'print');
+    const root = document.createElement('div'); root.innerHTML = html.html;
+    expect(root.querySelector('.export-table-scroll > table')).not.toBeNull();
+    expect(root.querySelector('.export-table-scroll table')?.getAttribute('data-export-item')).toBe('table-1');
+    expect(print.html).not.toContain('export-table-scroll');
+  });
+
   it('keeps image block references inside the slot caption grammar', () => {
     const source = sample();
     source.content![1].content![0].content![0].attrs!.annotationId = 'note-a';

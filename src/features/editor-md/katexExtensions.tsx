@@ -140,9 +140,9 @@ export const MathBlock = MathBlockNode.extend({
         $from.parent.forEach((child) => { if (child.marks.some((mark) => mark.type.spec.code)) code = true; });
         if (code) return false;
         const opener = $from.parent.textContent.trim();
-        if (opener !== '$$' && opener !== '\\[' && opener !== '￥￥') return false;
+        if (opener !== '$$' && opener !== '\\[' && opener !== '￥￥' && opener !== '¥¥') return false;
         // Chinese IME convenience is an editing gesture, never a Markdown rewrite.
-        const delimiter = opener === '￥￥' ? '$$' : opener;
+        const delimiter = opener === '￥￥' || opener === '¥¥' ? '$$' : opener;
         const pos = $from.before();
         const tr = state.tr.replaceWith(pos, $from.after(), this.type.create({ latex: '', delimiter }));
         tr.setSelection(NodeSelection.create(tr.doc, pos));

@@ -12,12 +12,13 @@ import { afterCodeComposition } from './codeComposition';
 
 type Owner = () => number | undefined;
 interface Block { owner: Owner; position: number; node: Node; structure: CodeStructure; folded: Set<number>; active: boolean; visibleFrom: number; visibleTo: number }
-interface State { blocks: Map<Owner, Block>; decorations: DecorationSet }
+interface State { blocks: Map<Owner, Block>; decorations: DecorationSet; invalidated: Set<Owner> }
 type BlockUpdate = { owner: Owner; node?: Node; language?: string; active?: boolean; remove?: boolean; structure?: CodeStructure; range?: [number, number] };
 type Update = BlockUpdate | { updates: BlockUpdate[] } | { toggle: Owner; from: number };
 const key = new PluginKey<State>('code-block-controls');
 const batches = new WeakMap<Editor, Map<Owner, BlockUpdate>>();
 const deferred = new WeakMap<Editor, () => void>();
+const recoveries = new WeakMap<EditorView, Map<Owner, () => void>>();
 
 function flushControls(editor: Editor) {
   if (editor.isDestroyed || !key.getState(editor.state)) { batches.delete(editor); return; }
@@ -118,14 +119,29 @@ function blockDecorations(block: Block): Decoration[] {
 export function createCodeBlockControlsPlugin(): Plugin<State> {
   const rememberedFolds = new WeakMap<Node, Set<number>>();
   let view: EditorView | undefined;
+  let observedState: State | undefined;
   return new Plugin<State>({
     key,
-    view: current => { view = current; return { destroy: () => { if (view === current) view = undefined; } }; },
+    view: current => {
+      view = current;
+      observedState = key.getState(current.state);
+      return {
+        update(next, previousState) {
+          const state = key.getState(next.state);
+          observedState = state;
+          if (state === key.getState(previousState) || !state?.invalidated.size) return;
+          const owners = state.invalidated;
+          queueMicrotask(() => { for (const owner of owners) recoveries.get(next)?.get(owner)?.(); });
+        },
+        destroy: () => { if (view === current) view = undefined; },
+      };
+    },
     state: {
-      init: () => ({ blocks: new Map(), decorations: DecorationSet.empty }),
+      init: () => ({ blocks: new Map(), decorations: DecorationSet.empty, invalidated: new Set<Owner>() }),
       apply(tr, previous) {
         const update = tr.getMeta(key) as Update | undefined;
         if (!tr.docChanged && !tr.selectionSet && !update) return previous;
+        const invalidated = new Set(previous === observedState ? [] : previous.invalidated);
         if (view?.composing && tr.docChanged && !update) {
           // Keep the already rendered presentation stable while the browser owns
           // the preedit DOM. The NodeView publishes final metadata on completion.
@@ -134,7 +150,7 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
             const position = tr.mapping.map(block.position, 1);
             if (tr.doc.nodeAt(position)?.type === block.node.type) blocks.set(owner, { ...block, position });
           }
-          return { blocks, decorations: previous.decorations.map(tr.mapping, tr.doc) };
+          return { blocks, decorations: previous.decorations.map(tr.mapping, tr.doc), invalidated };
         }
         const blocks = new Map<Owner, Block>();
         let changed = false;
@@ -144,13 +160,14 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
             ? move.inserted + old.position - move.from : tr.mapping.map(old.position, 1);
           // Edits in this block invalidate offsets immediately. Its NodeView
           // publishes fresh metadata, never hiding a newly edited source range.
-          if (tr.doc.nodeAt(position) !== old.node) { changed = true; continue; }
+          const node = tr.doc.nodeAt(position);
+          if (!node?.eq(old.node)) { changed = true; invalidated.add(owner); continue; }
           const folded = new Set([...old.folded].filter(from => {
             const fold = old.structure.folds.find(candidate => candidate.from === from)!;
             return !selectionTouches(tr.selection, position, fold);
           }));
-          const altered = position !== old.position || folded.size !== old.folded.size;
-          blocks.set(owner, altered ? { ...old, position, folded } : old); changed ||= altered;
+          const altered = position !== old.position || node !== old.node || folded.size !== old.folded.size;
+          blocks.set(owner, altered ? { ...old, position, node, folded } : old); changed ||= altered;
         }
         if (update && 'toggle' in update) {
           const block = blocks.get(update.toggle);
@@ -162,12 +179,13 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
         } else if (update) {
           for (const item of 'updates' in update ? update.updates : [update]) {
             const position = item.owner();
-            if (!item.remove && position !== undefined && item.node && tr.doc.nodeAt(position) === item.node) {
+            const node = position === undefined ? undefined : tr.doc.nodeAt(position);
+            if (!item.remove && position !== undefined && item.node && node?.eq(item.node)) {
               const existing = blocks.get(item.owner);
-              if (!existing || existing.node !== item.node) {
+              if (!existing || !existing.node.eq(item.node)) {
                 if (item.active) {
                   const structure = item.structure ?? getCodeStructure(item.node.textContent, item.language ?? '');
-                  if (structure) blocks.set(item.owner, { owner: item.owner, position, node: item.node, structure, folded: rememberedFolds.get(item.node) ?? new Set(), active: true,
+                  if (structure) blocks.set(item.owner, { owner: item.owner, position, node, structure, folded: rememberedFolds.get(item.node) ?? new Set(), active: true,
                     visibleFrom: item.range?.[0] ?? 0, visibleTo: item.range?.[1] ?? (structure.lines.length > WINDOWED_CODE_LINES ? INITIAL_CODE_GUTTERS : structure.lines.length) });
                   changed = true;
                 }
@@ -191,7 +209,7 @@ export function createCodeBlockControlsPlugin(): Plugin<State> {
         for (const [owner, block] of blocks) {
           if (previous.blocks.get(owner) !== block) decorations = decorations.add(tr.doc, blockDecorations(block));
         }
-        return { blocks, decorations };
+        return { blocks, decorations, invalidated };
       },
     },
     props: { decorations: state => key.getState(state)?.decorations },
@@ -217,15 +235,24 @@ export function useCodeBlockControls(editor: Editor, node: Node, getPos: Owner, 
       const position = getPos();
       const range = active && structure && structure.lines.length > WINDOWED_CODE_LINES && position !== undefined
         ? visibleCodeLines(editor.view, position, structure.lines, viewport) : undefined;
-      if (existing?.node === node && existing.active === active && (!range || (range[0] === existing.visibleFrom && range[1] === existing.visibleTo))) return;
+      if (existing?.node.eq(node) && existing.active === active && (!range || (range[0] === existing.visibleFrom && range[1] === existing.visibleTo))) return;
       if (!active && !existing) return;
       publishControls(editor, { owner: getPos, node, active, language, structure: structure ?? undefined, range });
       if (structure && element.current) {
         element.current.style.setProperty('--nb-code-line-digits', String(Math.min(5, Math.max(2, String(structure.lines.length).length))));
       }
     };
-    const stop = observeCodeVisibility(editor.view.dom, element.current, onVisibility);
-    return () => { resume?.(); stop(); };
+    const recover = () => { if (latestSample) onVisibility(latestSample); };
+    const view = editor.view;
+    let owners = recoveries.get(view);
+    if (!owners) { owners = new Map(); recoveries.set(view, owners); }
+    owners.set(getPos, recover);
+    const stop = observeCodeVisibility(view.dom, element.current, onVisibility);
+    return () => {
+      resume?.(); stop();
+      if (owners.get(getPos) === recover) owners.delete(getPos);
+      if (!owners.size) recoveries.delete(view);
+    };
   }, [editor, node, getPos, language, element, expanded]);
   useEffect(() => () => {
     queueMicrotask(() => {

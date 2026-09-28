@@ -18,14 +18,27 @@ export function isMathEscaped(source: string, offset: number): boolean {
 
 /** An opener never starts at the second slash of a TeX row break. */
 export function readMath(source: string, start = 0, blockContext = false, budget?: { remaining: number }, adjacentOpener = false): MathMatch | null {
+  return readMathBoundary(source, start, blockContext, budget, adjacentOpener);
+}
+
+/** Input-only currency aliases share the exact TeX and money boundary rules.
+ * Read the original payload rather than replacing currency glyphs inside TeX. */
+function readMathBoundary(source: string, start: number, blockContext: boolean, budget: { remaining: number } | undefined, adjacentOpener: boolean, inputCurrency = false): MathMatch | null {
+  const currency = inputCurrency && (source[start] === '￥' || source[start] === '¥') ? source[start] : null;
   let delimiter: MathDelimiter;
-  if (source.startsWith('$$', start)) delimiter = '$$';
+  if (currency) {
+    // A blank pair stays editable text (or an own-line block opener); it must
+    // not borrow a later formula's opening token as its closing token.
+    if (source[start + 1] === currency) return null;
+    if (source[start - 1] === currency && !adjacentOpener) return null;
+    delimiter = '$';
+  } else if (source.startsWith('$$', start)) delimiter = '$$';
   else if (source.startsWith('\\(', start)) delimiter = '\\(';
   else if (source.startsWith('\\[', start)) delimiter = '\\[';
   else if (source[start] === '$' && (source[start - 1] !== '$' || adjacentOpener)) delimiter = '$';
   else return null;
   if (isMathEscaped(source, start)) return null;
-  const closing = mathClosingDelimiter(delimiter);
+  const closing = currency ?? mathClosingDelimiter(delimiter);
   const display = isDisplayMath(delimiter);
   const payloadStart = start + delimiter.length;
   let comment = false;
@@ -48,16 +61,16 @@ export function readMath(source: string, start = 0, blockContext = false, budget
     if (braces) continue;
     if (delimiter === '\\[' && source.startsWith('\\[', cursor) && !isMathEscaped(source, cursor)) return null;
     if (!source.startsWith(closing, cursor) || isMathEscaped(source, cursor)) continue;
-    if (delimiter === '$' && source[cursor - 1] === '$') continue;
+    if (delimiter === '$' && source[cursor - 1] === closing) continue;
     // A shared "$$" boundary can close one inline formula and open the next:
     // $a$$b$. A terminal "$$" still belongs to a display delimiter.
-    if (delimiter === '$' && source[cursor + 1] === '$' && (!source[cursor + 2] || /[$\r\n]/.test(source[cursor + 2]))) continue;
+    if (delimiter === '$' && source[cursor + 1] === closing && (!source[cursor + 2] || source[cursor + 2] === closing || /[\r\n]/.test(source[cursor + 2]))) continue;
     // "$100 and $200" is money; "$ 100 $" is an explicit paired expression.
     const latex = source.slice(payloadStart, cursor);
     // Bare monetary amounts must not borrow a later formula's opener.
     const amount = latex.trimStart();
     if (delimiter === '$' && /^[+-]?(?:\d|\.\d)/.test(amount)) {
-      const prose = /[，；。！？]/.test(amount)
+      const prose = /[，；。！？、]|和|并且|以及|或|与/.test(amount)
         || /\b(?:and|or|each|per|plus|costs?|costing|for|then)\b/i.test(amount);
       const currencyUnit = /^[+-]?[\d.,]+\s*(?:USD|EUR|CAD|AUD|CNY|RMB|JPY|GBP|HKD|SGD|美元|美金|人民币|元|欧元|英镑|日元)/i.test(amount);
       if (!/[\\{}_^]/.test(amount) && (prose || currencyUnit)) return null;
@@ -154,8 +167,8 @@ export function mathInInputRange(text: string, start: number): MathMatch[] {
       cursor = end - 1;
       continue;
     }
-    if (codeRun || (text[cursor] !== '$' && text[cursor] !== '\\')) continue;
-    const match = readMath(text, cursor, false, budget, cursor === previousEnd);
+    if (codeRun || (text[cursor] !== '$' && text[cursor] !== '\\' && text[cursor] !== '￥' && text[cursor] !== '¥')) continue;
+    const match = readMathBoundary(text, cursor, false, budget, cursor === previousEnd, true);
     if (!match) continue;
     if (match.end > start) matches.push(match);
     previousEnd = match.end;

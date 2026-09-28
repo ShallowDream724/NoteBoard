@@ -11,11 +11,14 @@ import { BLOCK_MOVE_META, type BlockMove } from './headingFolding';
 import { Mapping, StepMap } from '@tiptap/pm/transform';
 import { afterCodeComposition } from './codeComposition';
 
-const key = new PluginKey<DecorationSet>('code-token-colors');
-interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: () => number | undefined }
+type Owner = () => number | undefined;
+interface State { decorations: DecorationSet; invalidated: Set<Owner> }
+const key = new PluginKey<State>('code-token-colors');
+interface Update { position: number; node: Node; tokens: CodeToken[]; getPosition: Owner }
 interface Batch { updates: Map<Update['getPosition'], Update>; frame: number; resume?: () => void }
 const batches = new WeakMap<Editor, Batch>();
 const pluginViews = new WeakMap<Editor, object>();
+const recoveries = new WeakMap<Editor, Map<Owner, () => void>>();
 
 function flushHighlights(editor: Editor, batch: Batch) {
   if (editor.isDestroyed) { batches.delete(editor); return; }
@@ -30,7 +33,7 @@ function flushHighlights(editor: Editor, batch: Batch) {
     if (updates.length && tokenCount + update.tokens.length > 4096) break;
     batch.updates.delete(identity);
     const position = update.getPosition();
-    if (position === undefined || editor.state.doc.nodeAt(position) !== update.node) continue;
+    if (position === undefined || !editor.state.doc.nodeAt(position)?.eq(update.node)) continue;
     updates.push({ ...update, position }); tokenCount += update.tokens.length;
   }
   if (batch.updates.size) batch.frame = requestAnimationFrame(() => flushHighlights(editor, batch));
@@ -41,7 +44,7 @@ function flushHighlights(editor: Editor, batch: Batch) {
 function publishHighlight(editor: Editor, update: Update) {
   let batch = batches.get(editor);
   if (!update.tokens.length && !batch?.updates.has(update.getPosition)
-    && !key.getState(editor.state)?.find(update.position + 1, update.position + update.node.nodeSize - 1).length) return;
+    && !key.getState(editor.state)?.decorations.find(update.position + 1, update.position + update.node.nodeSize - 1).length) return;
   if (!batch) {
     batch = { updates: new Map(), frame: 0 }; batches.set(editor, batch);
     const scheduled = batch;
@@ -54,11 +57,24 @@ export const CodeHighlight = Extension.create({
   name: 'codeHighlight',
   addProseMirrorPlugins() {
     const editor = this.editor;
+    let observedState: State | undefined;
     return [new Plugin({
     key,
     view: () => {
+      observedState = key.getState(editor.state);
       const owner = {}; pluginViews.set(editor, owner);
-      return { destroy() {
+      return { update(view, previousState) {
+        const current = key.getState(view.state);
+        observedState = current;
+        if (current === key.getState(previousState) || !current?.invalidated.size) return;
+        // A replace can discard decorations while ProseMirror keeps an equal
+        // NodeView. Its effect will not restart. Wait until getPos is updated,
+        // then let only the affected visible owners reinstall cached tokens.
+        const owners = current.invalidated;
+        queueMicrotask(() => {
+          if (!editor.isDestroyed) for (const owner of owners) recoveries.get(editor)?.get(owner)?.();
+        });
+      }, destroy() {
         // registerPlugin/unregisterPlugin recreates all plugin views. Its state
         // and node views survive, so their already requested first tokens must
         // survive too. Only a genuinely removed view owns final cancellation.
@@ -71,12 +87,17 @@ export const CodeHighlight = Extension.create({
       } };
     },
     state: {
-      init: () => DecorationSet.empty,
+      init: () => ({ decorations: DecorationSet.empty, invalidated: new Set<Owner>() }),
       apply(tr, previous) {
-        let decorations = previous.map(tr.mapping, tr.doc);
+        // appendTransaction can run several applies before the view observes
+        // them. Preserve removals from the earlier steps of that same batch.
+        const invalidated = new Set(previous === observedState ? [] : previous.invalidated);
+        let decorations = previous.decorations.map(tr.mapping, tr.doc, { onRemove: spec => {
+          if (spec.owner) invalidated.add(spec.owner as Owner);
+        } });
         const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
         if (move) {
-          const moved = previous.find(move.from, move.to);
+          const moved = previous.decorations.find(move.from, move.to);
           if (moved.length) {
             const shift = new Mapping([StepMap.offset(move.inserted - move.from)]);
             const transported = DecorationSet.create(tr.before, moved).map(shift, tr.doc);
@@ -85,15 +106,15 @@ export const CodeHighlight = Extension.create({
         }
         const updates = tr.getMeta(key) as Update[] | undefined;
         for (const update of updates ?? []) {
-          if (tr.doc.nodeAt(update.position) !== update.node) continue;
+          if (!tr.doc.nodeAt(update.position)?.eq(update.node)) continue;
           const start = update.position + 1, end = start + update.node.content.size;
           decorations = decorations.remove(decorations.find(start, end));
-          decorations = decorations.add(tr.doc, update.tokens.map(token => Decoration.inline(start + token.from, start + token.to, { class: token.className })));
+          decorations = decorations.add(tr.doc, update.tokens.map(token => Decoration.inline(start + token.from, start + token.to, { class: token.className }, { owner: update.getPosition })));
         }
-        return decorations;
+        return { decorations, invalidated };
       },
     },
-    props: { decorations: state => key.getState(state) },
+    props: { decorations: state => key.getState(state)?.decorations },
     })];
   },
 });
@@ -110,7 +131,9 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
     let range: [number, number] = [0, node.content.size], published = '';
     const publish = (tokens: CodeToken[]) => {
       const position = getPos();
-      if (cancelled || editor.isDestroyed || position === undefined || editor.state.doc.nodeAt(position) !== node) return;
+      // Equal nodes may reuse a NodeView without updating its React props.
+      // Identity alone would strand its async result after snapshot history.
+      if (cancelled || editor.isDestroyed || position === undefined || !editor.state.doc.nodeAt(position)?.eq(node)) return;
       publishHighlight(editor, { position, node, tokens, getPosition: getPos });
     };
     const publishVisible = () => {
@@ -162,7 +185,15 @@ export function useCodeHighlight(editor: Editor, node: Node, getPos: () => numbe
       if (!active) { active = true; retries = 0; controller = new AbortController(); void request(controller); }
       else publishVisible();
     };
+    const recover = () => { published = ''; publishVisible(); };
+    let owners = recoveries.get(editor);
+    if (!owners) { owners = new Map(); recoveries.set(editor, owners); }
+    owners.set(getPos, recover);
     const stop = observeCodeVisibility(editor.view.dom, element.current, onVisibility);
-    return () => { cancelled = true; resume?.(); clearTimeout(timer); controller?.abort(); stop(); };
+    return () => {
+      cancelled = true; resume?.(); clearTimeout(timer); controller?.abort(); stop();
+      if (owners.get(getPos) === recover) owners.delete(getPos);
+      if (!owners.size) recoveries.delete(editor);
+    };
   }, [editor, node, getPos, element]);
 }

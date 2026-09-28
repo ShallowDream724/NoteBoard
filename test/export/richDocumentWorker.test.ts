@@ -46,6 +46,7 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   expect(message.result).toContain('export-note-1');
   expect(message.result).toContain('data-export-edge="left top"');
   expect(message.result).toContain('data-export-edge="left bottom"');
+  expect(message.result).toContain('class="export-table-scroll"');
   expect(message.result).toMatch(/<math[^>]+display="block"/);
   expect(message.result).toContain('data:font/woff2;base64,');
   expect(message.result).toContain('data-math-align="left"');

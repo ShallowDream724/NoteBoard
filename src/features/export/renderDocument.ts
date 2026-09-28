@@ -99,7 +99,14 @@ export async function renderDocument(markdown: string, title: string, baseDirect
     const body = document.createElement('tbody');
     Array.from(table.children).filter(child => child.tagName === 'TR').forEach(row => body.append(row));
     if (body.children.length) table.append(body);
-    if (mode === 'html') markTableEdges(table);
+    if (mode === 'html') {
+      markTableEdges(table);
+      // Keep a manually sized table intact while scrolling only that table.
+      // Scrolling the whole article also shifts callout borders out of view.
+      const scroll = document.createElement('div');
+      scroll.className = 'export-table-scroll';
+      table.replaceWith(scroll); scroll.append(table);
+    }
     items.push({ id, kind: 'table', label: `表格 ${tableIndex} · ${first?.textContent?.slice(0, 40) ?? ''}` });
   }
   let codeEngine: typeof import('../editor-md/codeHighlightEngine') | undefined;

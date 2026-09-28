@@ -12,6 +12,7 @@ import type { CodeHighlightResult } from '../../src/features/editor-md/codeHighl
 import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 import { ImageNode, MathInlineNode, MathBlockNode } from '../../src/features/editor-md/documentNodes';
 import { initializeEditorDocument, serializeEditorDocument, serializeNativeNode, parseEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
+import { Disclosure } from '../../src/features/editor-md/rich-content/schema';
 
 const fixture = vi.hoisted(() => ({ observers: new Map<HTMLElement, (near: boolean) => void>(), immediate: true, request: vi.fn() }));
 vi.mock('../../src/features/editor-md/codeVisibility', () => ({ observeCodeVisibility: (_editor: HTMLElement, element: HTMLElement, callback: (sample: { visible: boolean; viewport: { top: number; bottom: number; left: number; right: number } }) => void) => {
@@ -33,7 +34,7 @@ async function mount() {
   const frames = new Map<number, FrameRequestCallback>(); let sequence = 0;
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { const id = ++sequence; frames.set(id, callback); return id; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
-  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView, CodeHighlight, ImageNode, MathInlineNode, MathBlockNode],
+  const editor = new Editor({ extensions: [StarterKit.configure({ codeBlock: false }), CodeBlockView, CodeHighlight, ImageNode, MathInlineNode, MathBlockNode, Disclosure],
     content: { type: 'doc', content: [{ type: 'codeBlock', attrs: { language: 'python' }, content: [{ type: 'text', text: 'def greet(name):\n    return name' }] }] } });
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   await act(async () => root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>));
@@ -171,6 +172,82 @@ it('preserves surviving colors while a remounted NodeView awaits its first obser
     expect(mounted.host.querySelector('code .hljs-keyword')).toBeNull();
     await mounted.nearby(true); await mounted.tick(); await mounted.flush();
     expect(mounted.host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+  } finally { await mounted.destroy(); }
+});
+
+it('highlights an equal reused NodeView after history replaces content on both sides before its first visibility sample', async () => {
+  fixture.immediate = false;
+  const mounted = await mount();
+  try {
+    const { editor, host } = mounted;
+    const paragraph = (text: string) => editor.schema.nodes.paragraph.create(null, editor.schema.text(text));
+    await act(async () => {
+      const tr = editor.state.tr.insert(0, paragraph('before'));
+      editor.view.dispatch(tr.insert(tr.doc.content.size, paragraph('after')));
+    });
+    initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
+    const target = editor.schema.nodes.doc.create(null, [paragraph('before changed'), editor.state.doc.child(1), paragraph('after changed')]);
+    const code = host.querySelector('code');
+    const node = editor.state.doc.child(1);
+    await act(async () => parseEditorDocument(editor, serializeNativeNode(target), 'history'));
+    expect(host.querySelector('code')).toBe(code);
+    expect(editor.state.doc.child(1)).not.toBe(node);
+    expect(editor.state.doc.child(1).eq(node)).toBe(true);
+    await mounted.nearby(true); await mounted.tick(); await mounted.flush();
+    expect(host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    expect(host.querySelectorAll('.nb-code-line-gutter')).toHaveLength(2);
+  } finally { await mounted.destroy(); }
+});
+
+it('restores cached colors when a replacement drops decorations but reuses the same code node', async () => {
+  const mounted = await mount();
+  try {
+    const { editor, host } = mounted;
+    await mounted.tick(); await mounted.flush();
+    const node = editor.state.doc.firstChild!;
+    const requests = fixture.request.mock.calls.length;
+    await act(async () => editor.registerPlugin(new Plugin({
+      key: new PluginKey('after-replacement'),
+      appendTransaction: (transactions, _previous, state) => transactions.some(tr => tr.docChanged)
+        ? state.tr.setMeta('addToHistory', false) : null,
+    })));
+    await act(async () => editor.view.dispatch(editor.state.tr.replaceWith(0, node.nodeSize, node)));
+    await mounted.tick(); await mounted.flush();
+    expect(host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+    expect(host.querySelectorAll('.nb-code-line-gutter')).toHaveLength(2);
+    expect(fixture.request).toHaveBeenCalledTimes(requests);
+  } finally { await mounted.destroy(); }
+});
+
+it('recovers visible code after repeated disclosure, slash-text and formula snapshot undo/redo', async () => {
+  const mounted = await mount();
+  try {
+    const { editor, host } = mounted;
+    const paragraph = (text: string) => editor.schema.nodes.paragraph.create(null, editor.schema.text(text));
+    const code = editor.state.doc.firstChild!;
+    const disclosure = editor.schema.nodes.disclosure.create({ title: '展开', open: true }, paragraph('正文'));
+    const inline = editor.schema.nodes.paragraph.create(null, [editor.schema.text('公式 '), editor.schema.nodes.mathInline.create({ latex: 'a+b' })]);
+    const block = editor.schema.nodes.mathBlock.create({ latex: '\\frac{a}{b}' });
+    const snapshots = [
+      [paragraph('开头'), code, paragraph('结尾')],
+      [disclosure, code, paragraph('/math')],
+      [disclosure, code, inline],
+      [paragraph('折叠块之前'), disclosure, code, block, paragraph('公式之后')],
+    ].map(content => serializeNativeNode(editor.schema.nodes.doc.create(null, content)));
+    initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
+    await mounted.tick(); await mounted.flush();
+    for (let pass = 0; pass < 3; pass++) {
+      // A temporarily hidden or scrolled-away block can survive several equal
+      // snapshot nodes without any NodeView update or new visibility sample.
+      await mounted.nearby(false); await mounted.flush();
+      for (const snapshot of [...snapshots, ...[...snapshots].reverse()]) {
+        await act(async () => parseEditorDocument(editor, snapshot, 'history'));
+      }
+      await mounted.nearby(true); await mounted.tick(); await mounted.flush();
+      expect(host.querySelector('code .hljs-keyword')?.textContent).toBe('def');
+      expect(host.querySelectorAll('.nb-code-line-gutter')).toHaveLength(2);
+      expect(editor.state.doc.child(1).textContent).toBe(code.textContent);
+    }
   } finally { await mounted.destroy(); }
 });
 

@@ -5,10 +5,12 @@ import { EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { FormulaSourceEditor } from '../../src/features/editor-md/FormulaSourceEditor';
+import { readSourceText, writeSourceText } from '../../src/features/editor-md/nativeSourceDom';
 import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensions';
 
-function inputValue(element: HTMLTextAreaElement, value: string, composing = false) {
-  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(element, value);
+function inputValue(element: HTMLElement, value: string, composing = false) {
+  if (element.tagName === 'TEXTAREA') Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(element, value);
+  else writeSourceText(element, value);
   element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: composing ? 'insertCompositionText' : 'insertText', isComposing: composing }));
 }
 
@@ -20,14 +22,14 @@ describe('formula source IME ownership', () => {
     const render = (value: string) => root.render(<FormulaSourceEditor value={value} display={display} onChange={change} onKeyDown={key} onClose={close}/>);
     try {
       await act(async () => render('x'));
-      const textarea = host.querySelector('textarea')!;
+      const textarea = host.querySelector<HTMLElement>('textarea, [role=textbox]')!;
       await act(async () => {
         textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
         inputValue(textarea, 'xzhong', true);
       });
       expect(change).not.toHaveBeenCalled();
       await act(async () => render('x'));
-      expect(textarea.value).toBe('xzhong');
+      expect(readSourceText(textarea)).toBe('xzhong');
       expect(document.activeElement).toBe(textarea);
       await act(async () => {
         // Some IMEs omit isComposing/229 on their candidate confirmation key.
@@ -38,10 +40,10 @@ describe('formula source IME ownership', () => {
       });
       expect(key).not.toHaveBeenCalled();
       expect(change.mock.calls).toEqual([['x中，']]);
-      expect(textarea.value).toBe('x中，');
+      expect(readSourceText(textarea)).toBe('x中，');
       expect(close).not.toHaveBeenCalled();
       await act(async () => render('x中，'));
-      expect(host.querySelector('textarea')).toBe(textarea);
+      expect(host.querySelector<HTMLElement>('textarea, [role=textbox]')).toBe(textarea);
     } finally { await act(async () => root.unmount()); host.remove(); }
   });
 
@@ -52,7 +54,7 @@ describe('formula source IME ownership', () => {
     const render = (value: string) => root.render(<FormulaSourceEditor value={value} display={display} onChange={change} onKeyDown={() => {}} onClose={() => {}}/>);
     try {
       await act(async () => render('x'));
-      const textarea = host.querySelector('textarea')!;
+      const textarea = host.querySelector<HTMLElement>('textarea, [role=textbox]')!;
       await act(async () => {
         textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
         inputValue(textarea, 'x，', true);
@@ -62,7 +64,7 @@ describe('formula source IME ownership', () => {
       expect(change.mock.calls).toEqual([['x，'], ['x，中']]);
       await act(async () => render('x，中'));
       await act(async () => render('x'));
-      expect(textarea.value).toBe('x');
+      expect(readSourceText(textarea)).toBe('x');
       expect(document.activeElement).toBe(textarea);
     } finally { await act(async () => root.unmount()); host.remove(); }
   });

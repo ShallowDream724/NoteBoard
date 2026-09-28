@@ -11,6 +11,7 @@ import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } fr
 import { continueContainerWriting, handleContainerTailKey, needsContainerTail } from '../containerEditing';
 import { observeImageViewport } from './imageVisibility';
 import { COLLECTION_STEP_EVENT } from './collectionNavigation';
+import { DisclosureEditing, unwrapEmptyDisclosure } from './disclosureEditing';
 import './richContent.css';
 import './carousel.css';
 import '../captionAddControl.css';
@@ -172,7 +173,14 @@ class DisclosureView implements NodeView {
     this.toggle.replaceChildren(createDisclosureTriangle(this.dom.ownerDocument));
     this.title.className = 'nb-disclosure-title'; this.title.value = node.attrs.title; this.title.placeholder = '标题'; this.title.setAttribute('aria-label', '折叠块标题');
     this.title.onblur = () => this.commit();
-    this.title.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); } else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); } };
+    this.title.onkeydown = event => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Backspace' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !this.title.value) {
+        const pos = this.getPos();
+        if (pos !== undefined && unwrapEmptyDisclosure(this.editor, pos, '')) { event.preventDefault(); event.stopPropagation(); this.editor.view.focus(); }
+      } else if (event.key === 'Enter') { event.preventDefault(); this.commit(); this.editor.commands.focus(); }
+      else if (event.key === 'Escape') { this.title.value = this.node.attrs.title; this.title.blur(); this.editor.commands.focus(); }
+    };
     this.annotation = createAnnotationMarker(annotationMarkerId(decorations), 'toolbar');
     this.tail = button('在折叠块末尾继续输入', 'nb-disclosure-tail', () => this.continueWriting()); this.tail.textContent = '';
     this.contentDOM.addEventListener('keydown', this.onTailKeyDown);
@@ -196,4 +204,4 @@ class DisclosureView implements NodeView {
 }
 export const InteractiveImageCollection = ImageCollection.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new CollectionView(node, editor, getPos, decorations); } });
 export const InteractiveImageSlot = ImageSlot.extend<{ docKey: string }>({ addOptions() { return { docKey: '' }; }, addNodeView() { return ({ node, editor, getPos }) => new SlotView(node, editor, getPos, this.options.docKey); } });
-export const InteractiveDisclosure = Disclosure.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new DisclosureView(node, editor, getPos, decorations); } });
+export const InteractiveDisclosure = Disclosure.extend({ addOptions() { return { ...this.parent?.(), ownsAnnotationMarker: true }; }, addExtensions() { return [DisclosureEditing]; }, addNodeView() { return ({ node, editor, getPos, decorations }) => new DisclosureView(node, editor, getPos, decorations); } });

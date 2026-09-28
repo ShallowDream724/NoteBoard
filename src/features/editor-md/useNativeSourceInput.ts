@@ -1,13 +1,15 @@
-import { useLayoutEffect, useRef, type ChangeEvent, type CompositionEvent } from 'react';
+import { useLayoutEffect, useRef, type FormEvent, type CompositionEvent } from 'react';
+import { readSourceText, writeSourceText, readSourceSelection, writeSourceSelection } from './nativeSourceDom';
 
 /** The document owns committed source; native textareas own IME preedit and caret.
  * History updates the same input without resetting its focus or input session. */
-export function useNativeSourceInput({ value, onChange, onCompositionCommit }: {
+interface SourceInputOptions {
   value: string;
   onChange: (value: string) => void;
   onCompositionCommit?: (changed: boolean) => void;
-}) {
-  const input = useRef<HTMLTextAreaElement>(null);
+}
+function useSourceInput<T extends HTMLElement>({ value, onChange, onCompositionCommit }: SourceInputOptions) {
+  const input = useRef<T>(null);
   const initialValue = useRef(value);
   const composing = useRef(false);
   const published = useRef(value);
@@ -22,9 +24,9 @@ export function useNativeSourceInput({ value, onChange, onCompositionCommit }: {
     const element = input.current;
     if (!element) return;
     published.current = value;
-    if (element.value === value) return;
-    const previous = element.value;
-    const { selectionStart, selectionEnd, selectionDirection } = element;
+    if (readSourceText(element) === value) return;
+    const previous = readSourceText(element);
+    const { anchor, head } = readSourceSelection(element);
     let prefix = 0;
     while (prefix < previous.length && prefix < value.length && previous[prefix] === value[prefix]) prefix++;
     let suffix = 0;
@@ -33,21 +35,31 @@ export function useNativeSourceInput({ value, onChange, onCompositionCommit }: {
     const oldEnd = previous.length - suffix, newEnd = value.length - suffix;
     const mapCaret = (position: number) => position < prefix ? position : position > oldEnd
       ? position + value.length - previous.length : newEnd;
-    element.value = value;
-    element.setSelectionRange(mapCaret(selectionStart), mapCaret(selectionEnd), selectionDirection);
+    const focused = element.ownerDocument.activeElement === element;
+    writeSourceText(element, value);
+    if (focused) writeSourceSelection(element, { anchor: mapCaret(anchor), head: mapCaret(head) });
   }, [value]);
-  return { input, composing, inputProps: {
+  return { input, composing, publish, initialValue: initialValue.current, inputProps: {
     ref: input,
-    defaultValue: initialValue.current,
     onCompositionStart: () => { composing.current = true; },
-    onCompositionEnd: (event: CompositionEvent<HTMLTextAreaElement>) => {
+    onCompositionEnd: (event: CompositionEvent<T>) => {
       composing.current = false;
-      const changed = publish(event.currentTarget.value);
+      const changed = publish(readSourceText(event.currentTarget));
       onCompositionCommit?.(changed);
     },
-    onChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onInput: (event: FormEvent<T>) => {
       if (composing.current || (event.nativeEvent as InputEvent).isComposing) return;
-      publish(event.currentTarget.value);
+      publish(readSourceText(event.currentTarget));
     },
   } };
+}
+
+export function useNativeSourceInput(options: SourceInputOptions) {
+  const session = useSourceInput<HTMLTextAreaElement>(options);
+  const { onInput, ...props } = session.inputProps;
+  return { ...session, inputProps: { ...props, defaultValue: session.initialValue, onChange: onInput } };
+}
+
+export function useInlineSourceInput(options: SourceInputOptions) {
+  return useSourceInput<HTMLSpanElement>(options);
 }

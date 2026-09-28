@@ -5,6 +5,6 @@ import type { EditorView } from '@tiptap/pm/view';
 export function focusedEditorControl(view: EditorView): HTMLElement | null {
   const active = view.dom.ownerDocument.activeElement;
   return active instanceof HTMLElement && view.dom.contains(active)
-    && active.matches('textarea,input,[contenteditable="true"]')
+    && active.matches('textarea,input,[contenteditable="true"],[contenteditable="plaintext-only"]')
     && active.closest('[data-editor-control]') ? active : null;
 }

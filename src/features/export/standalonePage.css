@@ -6,7 +6,9 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-page-actions button:hover { background:#e8ebf0; color:#1e293b; }
 .export-page-actions button:active { background:#dfe5ee; }
 .export-reader { padding:clamp(24px,5vw,58px); background:#fff; border:1px solid #e6e9ef; border-radius:16px; box-shadow:0 3px 16px #1e293b05; }
-.export-reader #document { overflow-x:auto; }
+.export-reader #document { overflow-x:clip; }
+.export-reader .export-table-scroll { max-width:100%; overflow-x:auto; }
+.export-reader .export-math.display { max-width:100%; overflow-x:auto; }
 .export-reader #document > :first-child { margin-top:0; }
 .export-reader h1 { font-size:2em; line-height:1.25; letter-spacing:-.015em; }
 .export-reader h2 { padding-bottom:.3em; border-bottom:1px solid #e8ebf0; }
@@ -31,4 +33,4 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-image-dialog img { display:block; max-width:88vw; max-height:78vh; width:auto; height:auto; object-fit:contain; }
 .export-image-dialog button { display:block; margin:0 0 10px auto; padding:6px 10px; border:0; border-radius:8px; background:#f1f5f9; color:#334155; font:14px/1.4 system-ui,sans-serif; cursor:pointer; }
 @media (max-width:600px) { body { padding:10px 10px 20px; } .export-reader { padding:24px 18px; border-radius:12px; } }
-@media print { html,body { background:#fff; } body { max-width:none; margin:0; padding:0; } .export-page-actions,.export-image-dialog { display:none; } .export-reader { border:0; padding:0; border-radius:0; box-shadow:none; } .export-reader #document { overflow:visible; } details::details-content { content-visibility:visible!important; } }
+@media print { html,body { background:#fff; } body { max-width:none; margin:0; padding:0; } .export-page-actions,.export-image-dialog { display:none; } .export-reader { border:0; padding:0; border-radius:0; box-shadow:none; } .export-reader #document,.export-reader .export-table-scroll,.export-reader .export-math.display { overflow:visible; } details::details-content { content-visibility:visible!important; } }

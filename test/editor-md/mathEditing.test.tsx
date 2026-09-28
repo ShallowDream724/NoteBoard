@@ -9,9 +9,12 @@ import { MathBlock, MathInline } from '../../src/features/editor-md/katexExtensi
 import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { mathContent } from '../../src/features/editor-md/insertContentRecipes';
 import { insertMath } from '../../src/features/editor-md/insertMath';
+import { readSourceText, readSourceSelection, writeSourceSelection } from '../../src/features/editor-md/nativeSourceDom';
 import { replaceEmptyParagraph } from '../../src/features/editor-md/emptyBlockInsertion';
 
 describe('公式源码输入', () => {
+  // DOM geometry is verified in the Edge fixture; jsdom has no range layout.
+  Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() });
   it.each(['toolbar', 'slash', 'empty-paragraph'] as const)('creates a blank inline formula and opens only this creation request: %s', async entry => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const editor = new Editor({ editorProps: { handleScrollToSelection: () => true }, extensions: [StarterKit, MathInline, MathBlock, Markdown],
@@ -24,20 +27,20 @@ describe('公式源码输入', () => {
         else insertMath(editor, 'inline', entry === 'slash' ? { from: 1, to: 6 } : undefined);
       });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 35)); });
-      const textarea = host.querySelector('textarea')!;
-      expect(textarea?.value).toBe(''); expect(document.activeElement).toBe(textarea);
+      const textarea = host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')!;
+      expect(readSourceText(textarea)).toBe(''); expect(document.activeElement).toBe(textarea);
       await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, 'abc');
+        textarea.textContent = 'abc';
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('abc');
       await act(async () => editor.commands.undo());
-      expect(host.querySelector('textarea')).toBe(textarea); expect(textarea.value).toBe('');
+      expect(host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')).toBe(textarea); expect(readSourceText(textarea)).toBe('');
       await act(async () => editor.commands.undo());
-      expect(host.querySelector('textarea')).toBeNull();
+      expect(host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')).toBeNull();
       await act(async () => editor.commands.redo());
       expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('');
-      expect(host.querySelector('textarea')).toBeNull();
+      expect(host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')).toBeNull();
       await act(async () => editor.commands.redo());
       expect(editor.state.doc.firstChild?.firstChild?.attrs.latex).toBe('abc');
     } finally { await act(async () => root.unmount()); editor.destroy(); host.remove(); }
@@ -45,7 +48,11 @@ describe('公式源码输入', () => {
   it.each([
     { source: '正文 $$ 后文', position: 5, input: 'a', latex: 'a', caret: 1 },
     { source: '正文 $ab$ 后文', position: 6, input: 'x', latex: 'axb', caret: 2 },
-  ])('在预先闭合的美元号内继续输入：$source', async ({ source, position, input, latex, caret }) => {
+    { source: '正文 ￥￥ 后文', position: 5, input: 'a', latex: 'a', caret: 1 },
+    { source: '正文 ￥ab￥ 后文', position: 6, input: 'x', latex: 'axb', caret: 2 },
+    { source: '正文 ¥¥ 后文', position: 5, input: 'a', latex: 'a', caret: 1 },
+    { source: '正文 ¥ab¥ 后文', position: 6, input: 'x', latex: 'axb', caret: 2 },
+  ])('在预先闭合的公式定界符内继续输入：$source', async ({ source, position, input, latex, caret }) => {
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
     const editor = new Editor({ editorProps: { handleScrollToSelection: () => true }, extensions: [StarterKit, MathInline, MathBlock, Markdown],
       content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: source }] }] } });
@@ -59,23 +66,24 @@ describe('公式源码输入', () => {
         expect(handled).toBe(true);
       });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 35)); });
-      const textarea = host.querySelector('textarea')!;
-      expect(textarea?.value).toBe(latex);
+      const textarea = host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')!;
+      expect(readSourceText(textarea)).toBe(latex);
+      expect(serializeMarkdown(editor)).toContain('$' + latex + '$');
       expect(document.activeElement).toBe(textarea);
-      expect(textarea.selectionStart).toBe(caret);
+      expect(readSourceSelection(textarea).head).toBe(caret);
       const continued = latex.slice(0, caret) + '继续，' + latex.slice(caret);
       await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, continued);
+        textarea.textContent = continued;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
       });
       const math = () => { let value = ''; editor.state.doc.descendants(node => { if (node.type.name === 'mathInline') value = node.attrs.latex; }); return value; };
       expect(math()).toBe(continued);
       expect(document.activeElement).toBe(textarea);
       await act(async () => {
-        textarea.setSelectionRange(continued.length, continued.length);
+        writeSourceSelection(textarea, { anchor: continued.length, head: continued.length });
         textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
       });
-      expect(host.querySelector('textarea')).toBeNull();
+      expect(host.querySelector<HTMLElement>('[aria-label="行内公式源码"]')).toBeNull();
       await act(async () => editor.view.dispatch(editor.state.tr.insertText('正文继续')));
       expect(math()).toBe(continued);
       expect(editor.state.doc.textContent).toContain('正文继续 后文');

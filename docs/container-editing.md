@@ -19,4 +19,12 @@ Callout 的 React 视图与折叠块的 DOM 视图共用 `continueContainerWriti
 
 状态仅保存在对应编辑器的 ProseMirror 插件中，不使用全局光标状态、定时器或全文扫描。图注/公式弹窗等独立编辑器保持自身的全选边界。
 
+## 空折叠块的退格
+
+`rich-content/disclosureEditing.ts` 在正文的空选区位于段首时处理 Backspace。只有正文恰好剩一个空段落才解除最近一层折叠容器，完全空的折叠块回到可输入的普通段落；非空标题转为该段落正文并将光标放在末尾。容器与段落的批注关联继续保留。
+
+标题输入框只有在标题已空、正文同样只剩空段落时，额外一次 Backspace 才解除容器。文字选区、IME 组合输入、修饰键和有正文的标题输入维持原编辑行为。判断直接读取文档节点，不以 `textContent` 或折叠后的 DOM 可见性判断空内容，因此图片、公式、嵌套折叠块和多个段落不会被误删。
+
+解除容器复用 `discreteEdit` 的原子事务，与之前的清空和之后的输入分开撤销；标题输入尚未失焦时先独立提交清空标题，撤销解除容器可恢复用户刚看到的空标题。文档只含该折叠块、折叠块嵌套于其他容器时仍保留合法的可编辑段落。交互扩展由 `InteractiveDisclosure` 携带，公共文档语法与转换路径不依赖键盘逻辑。
+
 回归覆盖：`containerEditing.test.tsx`、`containerSelection.test.ts`、`disclosureEditing.test.ts` 和 `textFormatting.test.ts`。

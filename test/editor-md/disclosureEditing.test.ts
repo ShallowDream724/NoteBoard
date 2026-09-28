@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
@@ -9,13 +9,14 @@ import { insertImportedSlice } from '../../src/features/editor-md/clipboard/clip
 import { selectionAllowsAuxiliaryControls } from '../../src/features/editor-md/blockInteractionScope';
 import { findTopLevelBlockElement, getTopLevelBlockInfo, isTopLevelBlockMoveAllowed, moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 import { blockRange } from '../../src/features/editor-md/blockActions';
+import { ContainerSelectAll } from '../../src/features/editor-md/containerSelection';
 
 const editors: Editor[] = [];
 const p = (text = ''): JSONContent => ({ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] });
 const fold = (...content: JSONContent[]): JSONContent => ({ type: 'disclosure', content });
 const image: JSONContent = { type: 'image', attrs: { src: 'data:image/png;base64,aA==' } };
 function create(content: JSONContent[]) {
-  const editor = new Editor({ extensions: buildDocumentExtensions({ disclosure: InteractiveDisclosure }), content: { type: 'doc', content } });
+  const editor = new Editor({ extensions: [...buildDocumentExtensions({ disclosure: InteractiveDisclosure }), ContainerSelectAll], content: { type: 'doc', content } });
   editors.push(editor); return editor;
 }
 function position(editor: Editor, text: string) {
@@ -23,9 +24,121 @@ function position(editor: Editor, text: string) {
   editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph' && node.textContent === text) result = pos; });
   return result;
 }
+function key(editor: Editor, key: string, options: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options });
+  editor.view.dom.dispatchEvent(event); return event;
+}
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); });
 
 describe('disclosure editing boundaries', () => {
+  it.each(['', 'Keep this title'])('removes an empty disclosure shell and retains title %j through undo and redo', title => {
+    const editor = create([p('before'), { ...fold(p()), attrs: { title } }, p('after')]);
+    editor.commands.setTextSelection(position(editor, '') + 1);
+    const before = editor.state.doc, cursor = editor.state.selection;
+    expect(key(editor, 'Backspace').defaultPrevented).toBe(true);
+    expect(editor.getJSON().content?.map(node => node.type)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    expect(editor.state.doc.child(1).textContent).toBe(title);
+    expect(editor.state.selection.$from.parent.textContent).toBe(title);
+    expect(editor.state.selection.$from.parentOffset).toBe(title.length);
+    const after = editor.state.doc;
+    editor.commands.insertContent('next');
+    editor.commands.undo(); expect(editor.state.doc.eq(after)).toBe(true);
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    expect(editor.state.selection.eq(cursor)).toBe(true);
+    editor.commands.redo(); expect(editor.state.doc.eq(after)).toBe(true);
+  });
+  it('clears container content first, then removes the empty shell as a separate undo step', () => {
+    const editor = create([{ ...fold(image, p('inside'), image), attrs: { title: '' } }, p('outside')]);
+    editor.commands.setTextSelection(position(editor, 'inside') + 1);
+    const before = editor.state.doc;
+    key(editor, 'a', { ctrlKey: true });
+    key(editor, 'Backspace');
+    const empty = editor.state.doc;
+    expect(empty.firstChild?.type.name).toBe('disclosure');
+    expect(empty.firstChild?.childCount).toBe(1);
+    expect(key(editor, 'Backspace').defaultPrevented).toBe(true);
+    expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.doc.lastChild?.textContent).toBe('outside');
+    editor.commands.undo(); expect(editor.state.doc.eq(empty)).toBe(true);
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+  });
+  it('removes only the nearest empty disclosure and leaves an editable paragraph in its parent', () => {
+    const editor = create([{ ...fold({ ...fold(p()), attrs: { title: '' } }), attrs: { title: 'outer' } }]);
+    editor.commands.setTextSelection(position(editor, '') + 1);
+    expect(key(editor, 'Backspace').defaultPrevented).toBe(true);
+    expect(editor.state.doc.firstChild?.type.name).toBe('disclosure');
+    expect(editor.state.doc.firstChild?.attrs.title).toBe('outer');
+    expect(editor.state.doc.firstChild?.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.selection.$from.node(-1).type.name).toBe('disclosure');
+  });
+  it.each([p('inside'), image, { type: 'mathBlock', attrs: { latex: 'x' } }, fold(p())])('preserves nonempty or structured bodies %j', content => {
+    const editor = create([{ ...fold(p(), content), attrs: { title: '', open: false } }, p('outside')]);
+    editor.commands.setTextSelection(2);
+    const before = editor.state.doc;
+    key(editor, 'Backspace');
+    expect(editor.state.doc.eq(before)).toBe(true);
+  });
+  it('does not unwrap selected text or during composition', () => {
+    const editor = create([{ ...fold(p('inside')), attrs: { title: '' } }]);
+    editor.commands.setTextSelection({ from: 2, to: 8 });
+    key(editor, 'Backspace');
+    expect(editor.state.doc.firstChild?.type.name).toBe('disclosure');
+    expect(editor.state.doc.firstChild?.textContent).toBe('');
+    const before = editor.state.doc;
+    const composing = vi.spyOn(editor.view, 'composing', 'get').mockReturnValue(true);
+    key(editor, 'Backspace', { isComposing: true });
+    expect(editor.state.doc.eq(before)).toBe(true);
+    composing.mockRestore();
+  });
+  it('removes a fully empty disclosure from its empty title input and restores it on undo', () => {
+    const editor = create([{ ...fold(p()), attrs: { title: '' } }]);
+    // Establish the cursor first, letting StarterKit's trailing paragraph policy settle.
+    editor.commands.setTextSelection(2);
+    const before = editor.state.doc, title = editor.view.dom.querySelector('.nb-disclosure-title') as HTMLInputElement;
+    const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true });
+    title.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.selection.$from.parent.type.name).toBe('paragraph');
+    editor.commands.undo(); expect(editor.state.doc.toJSON()).toEqual(before.toJSON());
+    editor.commands.redo(); expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+  });
+  it('retains separate container and paragraph annotations when removing the shell', () => {
+    const editor = create([{ ...fold({ ...p(), attrs: { annotationId: 'body-note' } }), attrs: { title: 'title', annotationId: 'fold-note' } }, p('outside')]);
+    editor.commands.setTextSelection(2);
+    key(editor, 'Backspace');
+    expect(editor.state.doc.firstChild?.textContent).toBe('title');
+    expect(editor.state.doc.firstChild?.attrs.annotationId).toBe('fold-note');
+    expect(editor.state.doc.child(1).attrs.annotationId).toBe('body-note');
+  });
+  it('commits a newly cleared title before removing its shell so each action can be undone', () => {
+    const editor = create([{ ...fold(p()), attrs: { title: 'previous title' } }, p('outside')]);
+    const before = editor.state.doc, input = editor.view.dom.querySelector('.nb-disclosure-title') as HTMLInputElement;
+    input.value = '';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+    expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    editor.commands.undo();
+    expect(editor.state.doc.firstChild?.type.name).toBe('disclosure');
+    expect(editor.state.doc.firstChild?.attrs.title).toBe('');
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+    editor.commands.redo(); editor.commands.redo();
+    expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+  });
+  it.each([
+    { title: 'title', body: p(), options: {} },
+    { title: '', body: p('inside'), options: {} },
+    { title: '', body: image, options: {} },
+    { title: '', body: p(), options: { isComposing: true } },
+    { title: '', body: p(), options: { ctrlKey: true } },
+  ])('keeps title input Backspace local at protected boundaries %j', ({ title, body, options }) => {
+    const editor = create([{ ...fold(body), attrs: { title } }]);
+    const before = editor.state.doc, input = editor.view.dom.querySelector('.nb-disclosure-title') as HTMLInputElement;
+    input.setSelectionRange(0, 0);
+    const event = new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true, ...options });
+    input.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(editor.state.doc.eq(before)).toBe(true);
+  });
   it.each([1, 2])('continues after pasted images at depth %i and undoes in one step', depth => {
     const editor = create([depth === 1 ? fold(p()) : fold(fold(p())), p('outside')]);
     const before = editor.state.doc, at = position(editor, '') + 1;

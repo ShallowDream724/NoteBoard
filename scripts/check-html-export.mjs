@@ -1,4 +1,4 @@
-/* global window, document, getComputedStyle, performance */
+/* global window, document, getComputedStyle, innerWidth, performance */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { writeFile } from 'node:fs/promises';
@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createServer } from 'vite';
 
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const server = await createServer({ configFile: false, server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const server = await createServer({ configFile: false, server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'error' });
 await server.listen();
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true, args: ['--enable-precise-memory-info', '--js-flags=--expose-gc'] });
 try {
@@ -79,8 +79,37 @@ try {
   assert(Math.abs(offlineMath.height - reference.height) < 1);
   await offline.getByRole('button', { name: '下一张' }).click();
   assert.equal(await offline.locator('.export-image-slot[data-current] img').getAttribute('alt'), '乙');
+  const layout = [];
+  for (const width of [818, 360]) {
+    await offline.setViewportSize({ width, height: 800 });
+    const geometry = await offline.evaluate(() => {
+      const article = document.querySelector('#document > article');
+      let alert = article.querySelector('.github-alert');
+      let wrapper = article.querySelector('.export-table-scroll');
+      if (!alert) {
+        alert = document.createElement('div'); alert.className = 'github-alert'; alert.textContent = '提示块左边框';
+        wrapper = document.createElement('div'); wrapper.className = 'export-table-scroll';
+        wrapper.innerHTML = '<table style="width:450px"><tbody><tr><td>宽表格</td><td>内容</td></tr></tbody></table>';
+        article.append(alert, wrapper);
+      }
+      const doc = document.querySelector('#document');
+      doc.scrollLeft = 999;
+      wrapper.scrollLeft = 999;
+      return { viewport: innerWidth, pageWidth: document.documentElement.scrollWidth, documentScrollLeft: doc.scrollLeft,
+        alertLeft: alert.getBoundingClientRect().left, documentLeft: doc.getBoundingClientRect().left,
+        borderLeft: getComputedStyle(alert).borderLeftWidth, tableWidth: wrapper.querySelector('table').getBoundingClientRect().width,
+        tableViewport: wrapper.clientWidth, tableScrollWidth: wrapper.scrollWidth, tableScrollLeft: wrapper.scrollLeft };
+    });
+    assert.equal(geometry.pageWidth, width);
+    assert.equal(geometry.documentScrollLeft, 0, 'whole-document horizontal scroll clips callout borders');
+    assert(Math.abs(geometry.alertLeft - geometry.documentLeft) < 1);
+    assert.equal(geometry.borderLeft, '1px');
+    assert.equal(geometry.tableWidth, 450, 'manual table width must survive narrow windows');
+    if (width === 360) assert(geometry.tableScrollWidth > geometry.tableViewport && geometry.tableScrollLeft > 0);
+    layout.push(geometry);
+  }
   assert.deepEqual(errors, []);
-  const result = { passed: true, exported, reference, offlineMath, source, coexistence, preview: previewState, errors };
+  const result = { passed: true, exported, reference, offlineMath, source, coexistence, preview: previewState, layout, errors };
   await writeFile(resolve('.tmp/html-export-browser-results.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 } finally {

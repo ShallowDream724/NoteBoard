@@ -10,6 +10,7 @@ import { consumeMathEditingRequest } from './mathEditingRequest';
 import { mountMathPreview, type MathPreviewController } from './mathPreview';
 import { positionInlineMathPreview } from './positionInlineMathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { readSourceSelection, readSourceText } from './nativeSourceDom';
 import '../../core/math/alignment.css';
 
 /** The document owns committed source; the native input owns only an IME preedit. */
@@ -90,7 +91,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
     editor.view.focus();
   };
 
-  const handleKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKey = (event: KeyboardEvent<HTMLElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if ((event.key === 'Backspace' || event.key === 'Delete') && !latex.trim()) {
       event.preventDefault(); event.stopPropagation();
@@ -104,9 +105,9 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       return;
     }
     const control = event.ctrlKey || event.metaKey;
+    const caret = readSourceSelection(event.currentTarget);
     if (!display && event.key === 'ArrowRight' && !event.shiftKey && !event.altKey && !control
-      && event.currentTarget.selectionStart === event.currentTarget.selectionEnd
-      && event.currentTarget.selectionEnd === event.currentTarget.value.length) {
+      && caret.anchor === caret.head && caret.head === readSourceText(event.currentTarget).length) {
       event.preventDefault(); event.stopPropagation(); exit();
       return;
     }
@@ -128,7 +129,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
       data-math-align={block ? alignment : undefined}
       contentEditable={false}
       style={{
-        display: display ? 'block' : 'inline-block', width: block ? '100%' : undefined, boxSizing: 'border-box', maxWidth: '100%', verticalAlign: 'baseline',
+        display: display ? 'block' : editing ? 'inline' : 'inline-block', width: block ? '100%' : undefined, boxSizing: 'border-box', maxWidth: '100%', verticalAlign: 'baseline',
         padding: display ? (editing ? '0 10px 8px' : '8px 10px') : '0 2px', borderRadius: 'var(--radius-sm)', textAlign: block ? alignment : undefined,
         color: node.attrs.textColor || undefined,
         background: node.attrs.background || undefined,
