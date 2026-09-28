@@ -24,10 +24,13 @@ function create(rows = [row(cell(), cell()), row(cell(), cell()), row(cell(), ce
   editors.push(editor); scroll.append(editor.view.dom);
   // The plugin finds the owner when it is initialized, before this test mounts.
   const table = editor.view.dom.querySelector('table')!, wrapper = table.parentElement!;
+  vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: editor.view.posAtDOM(table, 0), inside: -1 });
   const geometry = (element: Element, box: DOMRect) => vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(box);
   geometry(document.documentElement, rect(0, 0, 800, 600));
   geometry(editor.view.dom, rect(100, 0, 500, 600));
+  geometry(editor.view.dom.firstElementChild!, rect(100, 40, 500, 40));
   geometry(wrapper, rect(100, 100, 500, rows.length * 40 + 50));
+  geometry(editor.view.dom.lastElementChild!, rect(100, 166 + rows.length * 40, 500, 40));
   geometry(table, rect(250, 100, 200, rows.length * 40 + 50));
   const rowBounds = Array.from(table.rows).map((item, index) => geometry(item, rect(250, 100 + index * 40, 200, 40)));
   return { editor, table, wrapper, rowBounds };
@@ -39,6 +42,14 @@ function selected(editor: Editor) {
   const map = TableMap.get(selection.$anchorCell.node(-1)), start = selection.$anchorCell.start(-1);
   const bounds = map.rectBetween(selection.$anchorCell.pos - start, selection.$headCell.pos - start);
   return [bounds.top, bounds.bottom];
+}
+function selectedColumns(editor: Editor) {
+  const selection = editor.state.selection as CellSelection;
+  expect(selection).toBeInstanceOf(CellSelection);
+  expect(selection.isColSelection()).toBe(true);
+  const map = TableMap.get(selection.$anchorCell.node(-1)), start = selection.$anchorCell.start(-1);
+  const bounds = map.rectBetween(selection.$anchorCell.pos - start, selection.$headCell.pos - start);
+  return [bounds.left, bounds.right];
 }
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); document.body.replaceChildren(); vi.restoreAllMocks(); });
 
@@ -72,6 +83,53 @@ describe('table margin row selection', () => {
     pointer(wrapper, 'pointerdown', 550, 110);
     expect(selected(editor)).toEqual([0, 3]);
     pointer(document, 'pointerup', 550, 110);
+  });
+
+  it('selects columns from editor-targeted space above the table and below its caption, including horizontal drag', async () => {
+    const { editor, wrapper, table } = create(), original = editor.state.doc;
+    wrapper.style.margin = '16px 0';
+    const before = editor.view.dom.querySelector('p')!, after = editor.view.dom.lastElementChild!;
+    vi.spyOn(before, 'getBoundingClientRect').mockReturnValue(rect(100, 40, 500, 40));
+    vi.spyOn(after, 'getBoundingClientRect').mockReturnValue(rect(100, 330, 500, 40));
+    for (const [index, cell] of Array.from(table.rows[0].cells).entries()) {
+      vi.spyOn(cell, 'getBoundingClientRect').mockReturnValue(rect(250 + index * 100, 100, 100, 40));
+    }
+    expect(pointer(editor.view.dom, 'pointerdown', 300, 92).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([0, 1]);
+    pointer(document, 'pointerup', 300, 92);
+    expect(selectedColumns(editor)).toEqual([0, 1]);
+    expect(pointer(editor.view.dom, 'pointerdown', 400, 318).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([1, 2]);
+    pointer(document, 'pointermove', 300, 318); await new Promise(requestAnimationFrame);
+    expect(selectedColumns(editor)).toEqual([0, 2]);
+    pointer(document, 'pointerup', 300, 318);
+    expect(selectedColumns(editor)).toEqual([0, 2]);
+    expect(editor.state.doc).toBe(original);
+  });
+
+  it('closes a column selection over overlapping colspans', () => {
+    const { editor, wrapper, table } = create([
+      row(cell({ colspan: 2 }), cell()), row(cell(), cell({ colspan: 2 })), row(cell(), cell(), cell()),
+    ]);
+    wrapper.style.marginTop = '16px';
+    vi.spyOn(table.rows[0].cells[0], 'getBoundingClientRect').mockReturnValue(rect(250, 100, 200, 40));
+    vi.spyOn(table.rows[0].cells[1], 'getBoundingClientRect').mockReturnValue(rect(450, 100, 100, 40));
+    expect(pointer(editor.view.dom, 'pointerdown', 275, 92).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([0, 3]);
+    pointer(document, 'pointerup', 275, 92);
+  });
+
+  it('does not capture caption, caption editor, body text, or another block’s space', () => {
+    const { editor, wrapper, table } = create();
+    wrapper.style.margin = '16px 0';
+    const caption = document.createElement('caption'); table.append(caption);
+    const input = document.createElement('input'); caption.append(input);
+    const paragraph = editor.view.dom.lastElementChild!;
+    vi.spyOn(paragraph, 'getBoundingClientRect').mockReturnValue(rect(100, 310, 500, 40));
+    for (const [target, x, y] of [
+      [caption, 300, 280], [input, 300, 280], [paragraph, 300, 320],
+      [editor.view.dom, 300, 325], [editor.view.dom, 300, 70],
+    ] as const) expect(pointer(target, 'pointerdown', x, y).defaultPrevented).toBe(false);
   });
 
   it('leaves grid, caption, text, editor padding and touch input alone', () => {
@@ -119,6 +177,75 @@ describe('table margin row selection', () => {
     pointer(document, 'pointermove', 150, 456); await new Promise(requestAnimationFrame);
     expect(transactions).toHaveBeenCalledTimes(1);
     pointer(document, 'pointerup', 150, 456);
+  });
+
+  it('measures only neighboring blocks when editor-targeted space belongs to one of many tables', () => {
+    const scroll = document.createElement('div'); scroll.dataset.editorScroll = ''; document.body.append(scroll);
+    const editor = new Editor({ extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
+      type: 'doc', content: Array.from({ length: 128 }, () => ({ type: 'table', content: [row(cell(), cell())] })),
+    } });
+    editors.push(editor); scroll.append(editor.view.dom);
+    vi.spyOn(document.documentElement, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
+    vi.spyOn(editor.view.dom, 'getBoundingClientRect').mockReturnValue(rect(100, 0, 500, 600));
+    const wrappers = Array.from(editor.view.dom.children) as HTMLElement[];
+    expect(wrappers).toHaveLength(128);
+    const targetTable = wrappers[64].querySelector('table')!;
+    vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: editor.view.posAtDOM(targetTable, 0), inside: -1 });
+    const bounds = wrappers.map((wrapper, index) => {
+      const top = 20 + index * 4, table = wrapper.querySelector('table')!;
+      wrapper.style.margin = '2px 0';
+      const spy = vi.spyOn(wrapper, 'getBoundingClientRect').mockReturnValue(rect(100, top, 500, 3));
+      vi.spyOn(table, 'getBoundingClientRect').mockReturnValue(rect(250, top, 200, 3));
+      vi.spyOn(table.rows[0], 'getBoundingClientRect').mockReturnValue(rect(250, top, 200, 3));
+      Array.from(table.rows[0].cells).forEach((item, column) => {
+        vi.spyOn(item, 'getBoundingClientRect').mockReturnValue(rect(250 + column * 100, top, 100, 3));
+      });
+      return spy;
+    });
+    bounds.forEach(spy => spy.mockClear());
+    const y = 20 + 64 * 4 - .5;
+    expect(pointer(editor.view.dom, 'pointerdown', 300, y).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([0, 1]);
+    expect(bounds.reduce((count, spy) => count + spy.mock.calls.length, 0)).toBeLessThanOrEqual(12);
+    pointer(document, 'pointerup', 300, y);
+  });
+
+  it('finds the visible table across folded sibling blocks without using their zero rects as bounds', () => {
+    const hidden = () => ({ type: 'paragraph', content: [{ type: 'text', text: 'folded' }] });
+    const scroll = document.createElement('div'); scroll.dataset.editorScroll = ''; document.body.append(scroll);
+    const editor = new Editor({ extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
+      type: 'doc', content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'before' }] },
+        ...Array.from({ length: 24 }, hidden),
+        { type: 'table', content: [row(cell(), cell()), row(cell(), cell())] },
+        ...Array.from({ length: 24 }, hidden),
+        { type: 'paragraph', content: [{ type: 'text', text: 'after' }] },
+      ],
+    } });
+    editors.push(editor); scroll.append(editor.view.dom);
+    const blocks = Array.from(editor.view.dom.children) as HTMLElement[];
+    const before = blocks[0], wrapper = blocks[25], after = blocks[50], table = wrapper.querySelector('table')!;
+    for (const block of [...blocks.slice(1, 25), ...blocks.slice(26, 50)]) {
+      block.classList.add('nb-heading-fold-hidden');
+      vi.spyOn(block, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 0, 0));
+    }
+    vi.spyOn(document.documentElement, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
+    vi.spyOn(editor.view.dom, 'getBoundingClientRect').mockReturnValue(rect(100, 0, 500, 600));
+    vi.spyOn(before, 'getBoundingClientRect').mockReturnValue(rect(100, 40, 500, 40));
+    vi.spyOn(after, 'getBoundingClientRect').mockReturnValue(rect(100, 240, 500, 40));
+    wrapper.style.margin = '16px 0';
+    vi.spyOn(wrapper, 'getBoundingClientRect').mockReturnValue(rect(100, 100, 500, 110));
+    vi.spyOn(table, 'getBoundingClientRect').mockReturnValue(rect(250, 100, 200, 110));
+    Array.from(table.rows).forEach((item, index) => vi.spyOn(item, 'getBoundingClientRect').mockReturnValue(rect(250, 100 + index * 40, 200, 40)));
+    Array.from(table.rows[0].cells).forEach((item, column) => vi.spyOn(item, 'getBoundingClientRect').mockReturnValue(rect(250 + column * 100, 100, 100, 40)));
+    const beforePos = editor.view.posAtDOM(before, 0), afterPos = editor.view.posAtDOM(after, 0);
+    vi.spyOn(editor.view, 'posAtCoords').mockImplementation(({ top }) => ({ pos: top < 100 ? beforePos : afterPos, inside: -1 }));
+    expect(pointer(editor.view.dom, 'pointerdown', 300, 92).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([0, 1]);
+    pointer(document, 'pointerup', 300, 92);
+    expect(pointer(editor.view.dom, 'pointerdown', 400, 218).defaultPrevented).toBe(true);
+    expect(selectedColumns(editor)).toEqual([1, 2]);
+    pointer(document, 'pointerup', 400, 218);
   });
 
   it('scrolls at a bounded rate and stops when the table edge is visible', async () => {

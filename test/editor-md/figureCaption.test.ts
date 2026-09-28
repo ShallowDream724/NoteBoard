@@ -80,16 +80,19 @@ describe('whole-table notes and figure captions', () => {
     editor.commands.undo(); expect(editor.state.doc.firstChild!.eq(before)).toBe(true);
   });
 
-  it('opens a caption on the first click without moving the document caret into its table', async () => {
+  it.each(['label', 'caption'])('opens the %s hit area on the first click without moving the document caret into its table', async hit => {
     const editor = create();
     setFigureCaption(editor.view, 0, 'Table details');
     editor.commands.setTextSelection(editor.state.doc.content.size - 2); editor.view.dom.focus();
     const selection = editor.state.selection, label = editor.view.dom.querySelector<HTMLElement>('.nb-table-caption:not(.nb-caption-edit-host)')!;
+    const target = hit === 'caption' ? label.parentElement! : label;
+    const outerClick = vi.fn(); editor.view.dom.addEventListener('click', outerClick);
     for (const type of ['pointerdown', 'mousedown']) {
       const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 });
-      label.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
+      target.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
     }
-    label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    expect(outerClick).not.toHaveBeenCalled();
     expect(label.hidden).toBe(false); expect(label.textContent).toBe('Table details');
     expect(editor.state.selection.eq(selection)).toBe(true);
     await vi.dynamicImportSettled();

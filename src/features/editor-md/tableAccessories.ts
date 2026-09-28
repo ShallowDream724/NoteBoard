@@ -30,9 +30,11 @@ export class TableAccessories {
     if (view) this.transition = new FigureCaptionTransition(this.label, this.input, {
       view, getPos: this.position, label: '表注', onEditingChange: editing => { this.editing = editing; this.update(this.node); },
     });
-    this.label.addEventListener('pointerdown', this.preserveSelection);
-    this.label.addEventListener('mousedown', this.preserveSelection);
-    this.label.addEventListener('click', this.edit);
+    // The caption owns its whole line box, including the gap above its label.
+    // Leaving that gap to the browser places a caret in the table's first cell.
+    this.dom.addEventListener('pointerdown', this.preserveSelection);
+    this.dom.addEventListener('mousedown', this.preserveSelection);
+    this.dom.addEventListener('click', this.click);
     this.label.addEventListener('keydown', event => { if (['Enter', ' '].includes(event.key)) { event.preventDefault(); this.edit(); } });
     view?.dom.addEventListener(FIGURE_CAPTION_EDIT_EVENT, this.request);
     this.update(node);
@@ -45,8 +47,14 @@ export class TableAccessories {
     const editor = (this.view?.dom as (HTMLElement & { editor?: Editor }) | undefined)?.editor;
     if (editor) editFigureCaption(editor, this.position());
   };
+  private isPreviewHit = (event: Event) => !this.editing && !!this.view?.editable
+    && event.target instanceof globalThis.Node && !this.marker.contains(event.target) && !this.input.contains(event.target);
+  private click = (event: Event) => {
+    if (!this.isPreviewHit(event)) return;
+    event.preventDefault(); event.stopPropagation(); this.edit();
+  };
   private preserveSelection = (event: Event) => {
-    if (!this.view?.editable) return;
+    if (!this.isPreviewHit(event)) return;
     event.preventDefault(); event.stopPropagation();
   };
   private position = () => this.view!.posAtDOM(this.contentDOM, 0) - 1;
