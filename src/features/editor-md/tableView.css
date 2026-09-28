@@ -4,6 +4,7 @@
 .nb-table-accessories[hidden], .nb-table-accessories > [hidden] { display:none!important; }
 .nb-table-accessories .nb-table-annotation-indicator { top:4px; right:4px; width:18px; height:18px; font-size:12px; }
 .nb-table-caption:not(.nb-caption-add) { box-sizing:border-box; display:block; width:100%; min-width:0; margin:6px 0 0; padding:0 4px; border:0; background:transparent; color:var(--editor-text-secondary); font:inherit; font-size:.85em; line-height:1.6; text-align:center; white-space:pre-wrap; overflow-wrap:anywhere; cursor:text; }
+.nb-table-caption.nb-caption-edit-host { padding:0; }
 .nb-table-accessories.nb-caption-empty { padding-top:6px; }
 .nb-table-caption[role=text] { cursor:default; }
 .nb-table-caption:focus-visible { outline:1px solid var(--editor-accent); border-radius:4px; }

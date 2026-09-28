@@ -155,7 +155,10 @@ export const TableSelectionHandles = Extension.create({
       paintedRowSide = pointerX <= (left + right) / 2 ? 'left' : 'right';
       paintedColumnSide = pointerY <= (top + bottom) / 2 ? 'top' : 'bottom';
       const railLeft = paintedRowSide === 'left' ? Math.max(2, left - 22) : Math.max(left, Math.min(right, viewport.right - 22, window.innerWidth - 24));
-      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, gridTop - 22) : Math.max(top, Math.min(bottom, viewport.bottom - 22, window.innerHeight - 24));
+      // The bottom entry belongs to the grid's inner edge, never the caption
+      // below it. A slim hit strip also leaves the last row's text editable.
+      const columnHeight = paintedColumnSide === 'top' ? 22 : Math.min(10, bottom - top);
+      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, gridTop - 22) : Math.max(top, Math.min(bottom, viewport.bottom, window.innerHeight - 2) - columnHeight);
       let count = 0;
       const rowIndex = Math.min(rows.length - 1, firstVisible(rows, 'bottom', pointerY));
       const row = rows[rowIndex], r = row.getBoundingClientRect();
@@ -166,7 +169,7 @@ export const TableSelectionHandles = Extension.create({
         const index = Math.min(columns.length - 1, firstVisible(columns, 'right', pointerX));
         const c = columns[index].getBoundingClientRect();
         const x = Math.max(c.left, left), end = Math.min(c.right, right);
-        if (end > x) handle(count++, 'column', index, { left: x, top: railTop, width: end - x, height: 22 });
+        if (end > x) handle(count++, 'column', index, { left: x, top: railTop, width: end - x, height: columnHeight });
       }
       if (handles[0] && count) handles[0].button.classList.toggle('nb-table-select-row-right', paintedRowSide === 'right');
       if (handles[1] && count > 1) handles[1].button.classList.toggle('nb-table-select-column-bottom', paintedColumnSide === 'bottom');
@@ -176,6 +179,7 @@ export const TableSelectionHandles = Extension.create({
     const schedule = () => { if (!frame && visible) frame = requestAnimationFrame(paint); };
     const move = (event: PointerEvent) => {
       if (gesture || event.buttons || !(event.target instanceof Element)) return;
+      if (event.target.closest('.nb-table-accessories')) { hide(); return; }
       if (overlay.contains(event.target)) { cancelHide(); return; }
       const nextCell = event.target.closest<HTMLTableCellElement>('td,th'), next = nextCell?.closest('table');
       if (nextCell && next && view.dom.contains(next)) {
@@ -191,9 +195,11 @@ export const TableSelectionHandles = Extension.create({
     const leaveWindow = (event: PointerEvent) => { if (!event.relatedTarget) deferHide(); };
     const focusIn = () => { cancelHide(); };
     const focusOut = (event: FocusEvent) => { if (!overlay.contains(event.relatedTarget as Node | null)) deferHide(); };
+    const captionFocus = (event: FocusEvent) => { if (event.target instanceof Element && event.target.closest('.nb-table-accessories')) hide(); };
     overlay.hidden = true;
     host.addEventListener('pointermove', move, { passive: true });
     host.addEventListener('pointerout', leaveWindow, { passive: true });
+    host.addEventListener('focusin', captionFocus);
     overlay.addEventListener('focusin', focusIn); overlay.addEventListener('focusout', focusOut);
     host.addEventListener('scroll', schedule, true); window.addEventListener('resize', schedule);
     const cancelGesture = () => finishGesture(false);
@@ -203,6 +209,7 @@ export const TableSelectionHandles = Extension.create({
       finishGesture(false); window.removeEventListener('blur', cancelGesture); host.removeEventListener('keydown', escape);
       cancelHide(); cancelAnimationFrame(frame); overlay.remove();
       host.removeEventListener('pointermove', move); host.removeEventListener('pointerout', leaveWindow);
+      host.removeEventListener('focusin', captionFocus);
       host.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule);
     } };
   } })]; },

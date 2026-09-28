@@ -57,6 +57,8 @@ describe('whole-table notes and figure captions', () => {
     const editor = create(), before = editor.state.doc.firstChild!, selection = editor.state.selection;
     const layout = vi.spyOn(TableRowLayout.prototype, 'update');
     expect(editFigureCaption(editor, 0)).toBe(true);
+    expect(editor.view.dom.querySelector<HTMLElement>('.nb-table-caption:not(.nb-caption-edit-host)')?.hidden).toBe(false);
+    expect(editor.view.dom.querySelector<HTMLElement>('.nb-caption-edit-host')?.hidden).toBe(true);
     await vi.dynamicImportSettled();
     const input = editor.view.dom.querySelector<HTMLElement & { editor: Editor }>('.nb-caption-editor')!;
     expect(input.closest('table')!.lastElementChild).toBe(input.closest('caption'));
@@ -76,6 +78,24 @@ describe('whole-table notes and figure captions', () => {
     expect(editor.state.doc.firstChild!.attrs.caption).toBeNull();
     editor.commands.undo(); expect(editor.state.doc.firstChild!.attrs.caption).toBe('Table details\nSecond line');
     editor.commands.undo(); expect(editor.state.doc.firstChild!.eq(before)).toBe(true);
+  });
+
+  it('opens a caption on the first click without moving the document caret into its table', async () => {
+    const editor = create();
+    setFigureCaption(editor.view, 0, 'Table details');
+    editor.commands.setTextSelection(editor.state.doc.content.size - 2); editor.view.dom.focus();
+    const selection = editor.state.selection, label = editor.view.dom.querySelector<HTMLElement>('.nb-table-caption:not(.nb-caption-edit-host)')!;
+    for (const type of ['pointerdown', 'mousedown']) {
+      const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 });
+      label.dispatchEvent(event); expect(event.defaultPrevented).toBe(true);
+    }
+    label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    expect(label.hidden).toBe(false); expect(label.textContent).toBe('Table details');
+    expect(editor.state.selection.eq(selection)).toBe(true);
+    await vi.dynamicImportSettled();
+    const input = editor.view.dom.querySelector<HTMLElement>('.nb-caption-editor')!;
+    expect(input?.textContent).toBe('Table details'); expect(document.activeElement).toBe(input);
+    expect(editor.state.selection.eq(selection)).toBe(true);
   });
 
   it('preserves rich caption formatting through native reopening, HTML, print, Markdown and Pandoc', async () => {

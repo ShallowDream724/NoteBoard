@@ -2,6 +2,7 @@
 .nb-image-caption-text:not(.nb-caption-add) { display:block; box-sizing:border-box; width:100%; padding:0 4px; margin:0; border:0; background:transparent; color:inherit; font:inherit; text-align:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }
 .nb-image-caption-text[role=button]:not(.nb-caption-add) { cursor:text; }
 .nb-image-caption-text:focus-visible { outline:1px solid var(--editor-accent); outline-offset:2px; }
+.nb-image-caption > [hidden] { display:none!important; }
 .nb-image-caption.nb-caption-empty { margin:0; padding-top:6px; }
 .nb-caption-edit-host { min-width:0; }
 .ProseMirror .nb-caption-editor, .nb-caption-editor { box-sizing:border-box; min-width:0; min-height:1.6em; width:100%; padding:0 4px; margin:0; border:0; outline:none; background:transparent; color:inherit; font:inherit; line-height:inherit; text-align:inherit; white-space:pre-wrap; overflow-wrap:anywhere; }

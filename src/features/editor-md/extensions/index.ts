@@ -148,6 +148,7 @@ const UnifiedDocumentHistoryKeys = Extension.create<{ docKey: string }>({
 import { EnhancedImageBlock } from '../imageNodeView';
 import { ImageAssetLifecycle } from '../imageAssetExtension';
 import { TableSelectionHandles } from '../tableSelectionHandles';
+import { TableMarginSelection } from '../tableMarginSelection';
 import { HeadingFolding } from '../headingFolding';
 import { InteractiveImageCollection, InteractiveImageSlot, InteractiveDisclosure } from '../rich-content/views';
 import { withRichPresentation } from '../rich-content/presentedView';
@@ -179,7 +180,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
-    CharacterCount, TableClipboard, TableViewport, TableSizing, TableSelectionHandles, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
+    CharacterCount, TableClipboard, TableViewport, TableSizing, TableSelectionHandles, TableMarginSelection, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
       addOptions() { return { suggestion: slashSuggestion }; },

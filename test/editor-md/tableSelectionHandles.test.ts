@@ -52,7 +52,7 @@ describe('table selection handles', () => {
     column.click(); expect((editor.state.selection as CellSelection).isColSelection()).toBe(true);
 
     [row, column] = await hover(cells[3], 380, 180);
-    expect([row.style.left, column.style.top]).toEqual(['400px', '200px']);
+    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
     expect(row.classList.contains('nb-table-select-row-right')).toBe(true);
     expect(column.classList.contains('nb-table-select-column-bottom')).toBe(true);
     row.click(); expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true);
@@ -71,22 +71,25 @@ describe('table selection handles', () => {
     const [row, column] = await hover(cells[0], 220, 120);
     expect([row.style.left, column.style.top]).toEqual(['178px', '78px']);
     await hover(cells[0], 380, 180);
-    expect([row.style.left, column.style.top]).toEqual(['400px', '200px']);
+    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
   });
 
   it('keeps the right and bottom rails usable when the scroll viewport clips the table', async () => {
     const { cells, hover } = create();
     vi.mocked(document.documentElement.getBoundingClientRect).mockReturnValue(rect(200, 100, 130, 90));
     const [row, column] = await hover(cells[3], 320, 185);
-    expect([row.style.left, column.style.top]).toEqual(['308px', '168px']);
+    expect([row.style.left, column.style.top]).toEqual(['308px', '180px']);
     expect([row.dataset.index, column.dataset.index]).toEqual(['1', '1']);
   });
-  it('anchors below the cell grid rather than below an empty or multi-line caption', async () => {
+  it('keeps the entire bottom hit strip inside the grid, before empty or multi-line captions', async () => {
     for (const captionHeight of [30, 120]) {
       const { table, cells, hover } = create();
       vi.mocked(table.getBoundingClientRect).mockReturnValue(rect(200, 100, 200, 100 + captionHeight));
       const [, column] = await hover(cells[3], 380, 180);
-      expect(column.style.top).toBe('200px');
+      expect(Number.parseFloat(column.style.top) + Number.parseFloat(column.style.height)).toBe(200);
+      const caption = document.createElement('caption'); caption.className = 'nb-table-accessories'; table.append(caption);
+      caption.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 300, clientY: 215 }));
+      expect(column.parentElement?.hidden).toBe(true);
       editors.pop()!.destroy();
     }
   });

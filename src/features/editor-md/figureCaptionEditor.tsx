@@ -24,7 +24,6 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
   view: EditorView; getPos: () => number | undefined; label: string; close: () => void;
 }) {
   const { view, getPos } = options;
-  active.get(view)?.(); active.set(view, options.close);
   view.dispatch(closeHistory(view.state.tr).setMeta('addToHistory', false));
   const position = getPos(), original = typeof position === 'number' ? view.state.doc.nodeAt(position) : null;
   const element = document.createElement('div'), menuHost = document.createElement('div');
@@ -90,12 +89,15 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
     options.close();
   };
   const stopKey = (event: Event) => event.stopPropagation();
+  active.get(view)?.(); active.set(view, options.close);
   host.addEventListener('keydown', stopKey);
   document.addEventListener('pointerdown', outside, true);
   document.addEventListener('focusin', outside);
-  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
-  editor.view.dom.focus({ preventScroll: true });
-  return { editor, sync, destroy() {
+  return { editor, sync, focus() {
+    if (destroyed) return;
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    editor.view.dom.focus({ preventScroll: true });
+  }, destroy() {
     if (destroyed) return; destroyed = true;
     if (active.get(view) === options.close) active.delete(view);
     document.removeEventListener('pointerdown', outside, true); document.removeEventListener('focusin', outside);
