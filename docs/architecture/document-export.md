@@ -21,7 +21,9 @@
 
 `richProjection.ts` 管理 Markdown、HTML 和打印的增强内容投影；Pandoc 由 `pandocDocument.ts` 直接遍历原始文档节点，不再先投影成便携内容或经 JSON 重建第二棵 ProseMirror 树。两条路径均只建立一次说明索引。未知节点与 `nativeError` 保留为普通代码块，后者使用 `attrs.raw` 原文；未知标记、缺失或循环说明引用明确报错。Markdown 使用标准表格保留图片组合中的图片、图注与空槽，说明编号附于文末。Pandoc 使用原生 Table 表示静态网格、Note 表示脚注、Math 表示公式，展开折叠标题与正文。PDF 同样保留完整网格，不依赖当前轮播页或已挂载表格行。
 
-HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片通过资源握手顺序读取原始字节并内嵌为 data URL，按路径去重，不解码为像素；取消导出立即停止后续读取，读失败则终止导出。远程图片保留原 URL，PDF 继续使用 Tauri 资源地址。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
+HTML 直接在一次性 Worker 中生成，不需要 Pandoc。`standaloneHtml.ts` 装配独立 CSS 与小型增强脚本；保留 details、模糊揭示及轮播，禁用脚本时图片全部可读。打印前展开内容，打印后恢复阅读状态。HTML 的本地图片通过现有 `convertFileSrc` 资产 URL 顺序读取原始字节并内嵌为 data URL，按路径去重，不解码为像素；读取沿用应用的 asset protocol 范围，无需 plugin-fs 文件读取权限。取消导出会中止请求及后续读取，响应失败、空文件或读取失败则终止导出。远程图片保留原 URL，PDF 继续使用 Tauri 资源地址。HTML 和 PDF 共用表格边缘标记与三线表样式。导出面板仅展示当前内容实际产生的降级摘要。
+
+`node scripts/probe-portable-html-assets.mjs` 将生产图片读取模块打包并注入隔离的隐藏 Tauri WebView2；它用应用原有 CSP 和 asset protocol 从含中文、空格的暂存及已保存图片路径读取字节，再核对完整 data URL。该探针不会启动主应用页面或用户会话。
 
 HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格、提示块、整块颜色、图片集合和公式对齐。独立 HTML 用 Vite 的 `?inline` 展开完整依赖；禁止手工删除 `@import` 后维护另一份样式清单。`document.css` 仅在 PDF/打印路径附加 KaTeX 字体及换行规则；独立 HTML 使用原生 MathML，不依赖外部数学字体。
 

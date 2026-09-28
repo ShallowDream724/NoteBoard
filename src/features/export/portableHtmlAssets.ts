@@ -1,3 +1,5 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
+
 const mimeByExtension: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   svg: 'image/svg+xml', bmp: 'image/bmp', avif: 'image/avif', ico: 'image/x-icon', tif: 'image/tiff', tiff: 'image/tiff',
@@ -38,13 +40,16 @@ async function dataUrl(bytes: Uint8Array, path: string, signal?: AbortSignal): P
 /** Read each original once, sequentially, so only one source byte buffer is live. */
 export async function portableHtmlAssetUrls(paths: string[], signal?: AbortSignal): Promise<string[]> {
   signal?.throwIfAborted();
-  const { readFile } = await import('@tauri-apps/plugin-fs');
   const urls = new Map<string, string>();
   for (const path of paths) {
     signal?.throwIfAborted();
     if (urls.has(path)) continue;
     try {
-      const bytes = await readFile(path);
+      const response = await fetch(convertFileSrc(path), {
+        signal, credentials: 'omit', referrerPolicy: 'no-referrer',
+      });
+      if (!response.ok) throw new Error(`资源请求失败（HTTP ${response.status}）`);
+      const bytes = new Uint8Array(await response.arrayBuffer());
       signal?.throwIfAborted();
       urls.set(path, await dataUrl(bytes, path, signal));
     } catch (error) {
