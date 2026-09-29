@@ -18,22 +18,21 @@ function pointer(target: EventTarget, name: string, x: number, y: number, extra:
 }
 function create(rows = [row(cell(), cell()), row(cell(), cell()), row(cell(), cell()), row(cell(), cell())]) {
   const scroll = document.createElement('div'); scroll.dataset.editorScroll = ''; document.body.append(scroll);
-  const editor = new Editor({ extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
+  const editor = new Editor({ element: scroll, extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
     type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Before' }] }, { type: 'table', content: rows }, { type: 'paragraph' }],
   } });
-  editors.push(editor); scroll.append(editor.view.dom);
-  // The plugin finds the owner when it is initialized, before this test mounts.
+  editors.push(editor);
   const table = editor.view.dom.querySelector('table')!, wrapper = table.parentElement!;
   vi.spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: editor.view.posAtDOM(table, 0), inside: -1 });
   const geometry = (element: Element, box: DOMRect) => vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(box);
-  geometry(document.documentElement, rect(0, 0, 800, 600));
+  geometry(scroll, rect(0, 0, 800, 600));
   geometry(editor.view.dom, rect(100, 0, 500, 600));
   geometry(editor.view.dom.firstElementChild!, rect(100, 40, 500, 40));
   geometry(wrapper, rect(100, 100, 500, rows.length * 40 + 50));
   geometry(editor.view.dom.lastElementChild!, rect(100, 166 + rows.length * 40, 500, 40));
   geometry(table, rect(250, 100, 200, rows.length * 40 + 50));
   const rowBounds = Array.from(table.rows).map((item, index) => geometry(item, rect(250, 100 + index * 40, 200, 40)));
-  return { editor, table, wrapper, rowBounds };
+  return { editor, table, wrapper, rowBounds, scroll };
 }
 function selected(editor: Editor) {
   const selection = editor.state.selection as CellSelection;
@@ -181,11 +180,11 @@ describe('table margin row selection', () => {
 
   it('measures only neighboring blocks when editor-targeted space belongs to one of many tables', () => {
     const scroll = document.createElement('div'); scroll.dataset.editorScroll = ''; document.body.append(scroll);
-    const editor = new Editor({ extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
+    const editor = new Editor({ element: scroll, extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
       type: 'doc', content: Array.from({ length: 128 }, () => ({ type: 'table', content: [row(cell(), cell())] })),
     } });
-    editors.push(editor); scroll.append(editor.view.dom);
-    vi.spyOn(document.documentElement, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
+    editors.push(editor);
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
     vi.spyOn(editor.view.dom, 'getBoundingClientRect').mockReturnValue(rect(100, 0, 500, 600));
     const wrappers = Array.from(editor.view.dom.children) as HTMLElement[];
     expect(wrappers).toHaveLength(128);
@@ -213,7 +212,7 @@ describe('table margin row selection', () => {
   it('finds the visible table across folded sibling blocks without using their zero rects as bounds', () => {
     const hidden = () => ({ type: 'paragraph', content: [{ type: 'text', text: 'folded' }] });
     const scroll = document.createElement('div'); scroll.dataset.editorScroll = ''; document.body.append(scroll);
-    const editor = new Editor({ extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
+    const editor = new Editor({ element: scroll, extensions: [...buildDocumentExtensions(), TableMarginSelection], content: {
       type: 'doc', content: [
         { type: 'paragraph', content: [{ type: 'text', text: 'before' }] },
         ...Array.from({ length: 24 }, hidden),
@@ -222,14 +221,14 @@ describe('table margin row selection', () => {
         { type: 'paragraph', content: [{ type: 'text', text: 'after' }] },
       ],
     } });
-    editors.push(editor); scroll.append(editor.view.dom);
+    editors.push(editor);
     const blocks = Array.from(editor.view.dom.children) as HTMLElement[];
     const before = blocks[0], wrapper = blocks[25], after = blocks[50], table = wrapper.querySelector('table')!;
     for (const block of [...blocks.slice(1, 25), ...blocks.slice(26, 50)]) {
       block.classList.add('nb-heading-fold-hidden');
       vi.spyOn(block, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 0, 0));
     }
-    vi.spyOn(document.documentElement, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
+    vi.spyOn(scroll, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 800, 600));
     vi.spyOn(editor.view.dom, 'getBoundingClientRect').mockReturnValue(rect(100, 0, 500, 600));
     vi.spyOn(before, 'getBoundingClientRect').mockReturnValue(rect(100, 40, 500, 40));
     vi.spyOn(after, 'getBoundingClientRect').mockReturnValue(rect(100, 240, 500, 40));
@@ -249,11 +248,11 @@ describe('table margin row selection', () => {
   });
 
   it('scrolls at a bounded rate and stops when the table edge is visible', async () => {
-    const { editor, wrapper, rowBounds } = create(Array.from({ length: 13 }, () => row(cell())));
+    const { editor, wrapper, rowBounds, scroll } = create(Array.from({ length: 13 }, () => row(cell())));
     let scrollTop = 0;
     const increments: number[] = [];
-    vi.spyOn(document.documentElement, 'scrollTop', 'get').mockImplementation(() => scrollTop);
-    vi.spyOn(document.documentElement, 'scrollTop', 'set').mockImplementation(value => { increments.push(value - scrollTop); scrollTop = value; });
+    vi.spyOn(scroll, 'scrollTop', 'get').mockImplementation(() => scrollTop);
+    vi.spyOn(scroll, 'scrollTop', 'set').mockImplementation(value => { increments.push(value - scrollTop); scrollTop = value; });
     rowBounds.forEach((spy, index) => spy.mockImplementation(() => rect(250, 100 + index * 40 - scrollTop, 200, 40)));
     pointer(wrapper, 'pointerdown', 150, 155);
     pointer(document, 'pointermove', 150, 590);

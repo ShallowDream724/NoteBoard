@@ -6,7 +6,7 @@ import { build, preview } from 'vite';
 
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const outDir = '.tmp/export-math-overflow-dist';
-await build({ configFile: false, worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/exportMathOverflow.html' } }, logLevel: 'error' });
+if (!process.argv.includes('--reuse')) await build({ configFile: false, worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/exportMathOverflow.html' } }, logLevel: 'error' });
 const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || 'msedge', headless: true });
 try {
@@ -44,6 +44,22 @@ try {
   assert.deepEqual(wrapped.report.issues, []);
   wrapped.after.forEach(formula => { contained(formula); assert(formula.wrap); });
   results.push({ name: 'wrapped-operators', ...wrapped });
+  const sum = Array.from({ length: 24 }, (_, index) => `x_{${index}}+y_{${index}}`).join('+');
+  for (const [name, source] of [
+    ['fraction', `R=\\frac{${sum}}{${sum}}`],
+    ['root', `R=\\sqrt{${sum}}`],
+    ['nested', `R=\\left(\\frac{${sum}}{1+\\sqrt{${sum}}}\\right)`],
+  ]) {
+    const structured = await page.evaluate(source => window.exportMathOverflowQA.render({ source }), source);
+    if (structured.report.issues.length) {
+      await fs.writeFile('.tmp/export-structured-failure.json', JSON.stringify({ name, structured, html: await page.locator('.export-math').first().innerHTML() }, null, 2));
+      await page.screenshot({ path: '.tmp/export-structured-failure.png', fullPage: true });
+    }
+    assert.deepEqual(structured.report.issues, [], `${name}: shared structural reflow must fit all alignments`);
+    structured.after.forEach(contained);
+    results.push({ name: `structured-${name}`, ...structured });
+  }
+  await page.screenshot({ path: '.tmp/export-math-structured-wrap.png', fullPage: true });
   await page.evaluate(() => window.exportMathOverflowQA.sidebar());
   await page.getByRole('heading', { name: '内容处理说明' }).waitFor();
   await page.locator('.export-dialog').screenshot({ path: '.tmp/ux6-export-sidebar.png' });

@@ -6,7 +6,7 @@ import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const outDir = '.tmp/long-content-dist';
+const outDir = process.env.NOTEBOARD_VIEWPORT_BUILD || '.tmp/long-content-dist';
 if (!process.argv.includes('--reuse')) await build({ configFile: false, plugins: [react()], worker: { format: 'es' }, build: { outDir, emptyOutDir: true, rollupOptions: { input: 'test/browser/longContentViewport.html' } }, logLevel: 'error' });
 const server = await preview({ configFile: false, build: { outDir }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -49,10 +49,10 @@ try {
   await page.screenshot({ path: '.tmp/long-content-table.png' });
   const wide = tables.nth(1);
   await wide.evaluate(table => table.scrollIntoView({ block: 'start' }));
-  await page.waitForFunction(() => document.querySelectorAll('table')[1].rows[0].cells.length === 30);
+  await page.waitForFunction(() => { const row = document.querySelectorAll('table')[1].rows[0]; return row.cells.length === 30 && !row.classList.contains('nb-row-placeholder'); });
   const readWide = () => wide.evaluate(table => { const wrap = table.parentElement; return { width: table.getBoundingClientRect().width, column: table.rows[0].cells[0].getBoundingClientRect().width, row: table.rows[0].getBoundingClientRect().height, overflow: getComputedStyle(wrap).overflowX, height: table.rows.length, editorWidth: document.querySelector('.nb-document-content').getBoundingClientRect().width }; });
   const open = await readWide();
-  assert(open.width > 2000 && open.column >= 100 && open.row < 150, 'Wide automatic columns must stay legible');
+  assert(open.width > 2000 && open.column >= 100 && open.row < 150, `Wide automatic columns must stay legible: ${JSON.stringify(open)}`);
   assert.equal(open.overflow, 'visible', 'Natural view must not create a nested scroller');
   await page.evaluate(() => window.longContentQA.outline(false));
   const closed = await readWide();
@@ -75,7 +75,7 @@ try {
   await page.waitForFunction(() => {
     const table = document.querySelectorAll('table')[1], box = table.parentElement.getBoundingClientRect();
     return [...table.rows].every(row => { const rect = row.getBoundingClientRect(); return rect.bottom <= box.top || rect.top >= box.bottom || !row.classList.contains('nb-row-placeholder'); });
-  });
+  }).catch(async error => { await page.screenshot({ path: '.tmp/long-content-local-scroll-failure.png' }); console.log(JSON.stringify(await wide.evaluate(table => ({ box: table.parentElement.getBoundingClientRect().toJSON(), outer: document.querySelector('[data-editor-scroll]').getBoundingClientRect().toJSON(), top: document.querySelector('[data-editor-scroll]').scrollTop, rows: [...table.rows].filter(row => row.getBoundingClientRect().bottom > table.parentElement.getBoundingClientRect().top && row.getBoundingClientRect().top < table.parentElement.getBoundingClientRect().bottom).map(row => ({ index: row.rowIndex, placeholder: row.classList.contains('nb-row-placeholder') })) })))); throw error; });
   await page.evaluate(pos => window.longContentQA.showMenu(pos), positions[1]);
   await page.getByRole('menuitemradio', { name: '自然展开' }).click();
   assert.equal((await readWide()).overflow, 'visible');

@@ -1,7 +1,7 @@
 import { paperSize, type LayoutIssue, type LayoutReport, type PdfOptions } from './model';
 import { planMath, planTableColumns, type TablePlan } from './layoutPolicy';
 import { mathContentWidth, readableScale, renderedScale } from './layoutMetrics';
-import { continueFraction, continueMatrix } from './mathLayout';
+import { continueFormula, continueMatrix } from './mathLayout';
 import { createProseOverflowCheck } from './proseOverflow';
 import { allocateTableWidths, captureTablePresentation, markTableEdges, measureTableWidths, restoreTablePresentation, setAutomaticTableWidths, tableColumnWidths, type TablePresentation } from './tableLayout';
 import { continueTableRows } from './tableContinuation';
@@ -222,7 +222,7 @@ export function createLayoutSession(root: HTMLElement) {
       const matrix = await continueMatrix(element, measures[i].available, pageHeight, options.fontPt, false);
       if (matrix.issue) issue(id, matrix.issue);
       if (!matrix.handled) {
-        await continueFraction(element, measures[i].available, options.fontPt);
+        await continueFormula(element, measures[i].available, options.fontPt);
         measures[i].math = element.querySelector<HTMLElement>('.katex-html');
         const math = measures[i].math;
         if (math) measures[i].canContinue = Array.from(math.children).filter(child => child.classList.contains('base')).every(base => base.getBoundingClientRect().height <= pageHeight);

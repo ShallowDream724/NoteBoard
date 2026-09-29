@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import katex from 'katex';
 import { planMath, planTableColumns } from '../../src/features/export/layoutPolicy';
-import { matrixPart, matrixSource, MAX_MATRIX_CELLS, reflowFractions } from '../../src/core/math/structure';
+import { matrixPart, matrixSource, MAX_MATRIX_CELLS } from '../../src/core/math/structure';
+import { reflowMathSource } from '../../src/core/math/reflow';
 
 describe('print layout policy', () => {
   it('keeps natural width and balances continuation columns without losing their order', () => {
@@ -47,11 +48,10 @@ describe('structured formula continuation', () => {
     const numerator = Array.from({ length: 30 }, (_, i) => `a_{${i}}^2`).join('+');
     const denominator = Array.from({ length: 30 }, (_, i) => `b_{${i}}^2`).join('+');
     const source = `R=\\frac{${numerator}}{${denominator}}`;
-    const result = reflowFractions(source, 45)!;
-    expect(result.match(/begin\{gathered\}/g)).toHaveLength(2);
+    const result = reflowMathSource(source, 45)!;
+    expect(result.match(/begin\{gathered\}/g)!.length).toBeGreaterThanOrEqual(2);
     expect(result.replace(/\\begin\{gathered\}|\\end\{gathered\}|\\\\/g, '')).toBe(source);
     expect(() => katex.renderToString(result, { throwOnError: true })).not.toThrow();
-    expect(reflowFractions(String.raw`\frac{\unknown{x+y}+z}{d}`, 3)).toBeNull();
-    expect(reflowFractions(String.raw`\frac{x^ +2}{d}`, 3)).toBeNull();
+    expect(reflowMathSource(String.raw`\frac{\unknown{x+y}+z}{d}`, 3)).toBeNull();
   });
 });

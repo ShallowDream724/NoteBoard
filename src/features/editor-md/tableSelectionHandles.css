@@ -8,6 +8,9 @@
 .nb-table-select-row-right::before { inset:1px 11px 1px 0; }
 .nb-table-select-column::before { inset:11px 1px 0; }
 .nb-table-select-column-bottom::before { inset:auto 1px 0; height:3px; }
+.nb-table-select-row-compact::before { inset:1px auto 1px 0; width:3px; }
+.nb-table-select-row-right.nb-table-select-row-compact::before { inset:1px 0 1px auto; }
+.nb-table-select-column-compact::before { inset:0 1px auto; height:3px; }
 .nb-table-select-handle:hover { background:transparent; }
 .nb-table-select-handle:hover::before,.nb-table-select-handle:focus-visible::before { background:var(--editor-accent,#397bfa); }
 .nb-table-select-handle:focus-visible { outline:2px solid var(--editor-accent); outline-offset:2px; }

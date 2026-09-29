@@ -7,6 +7,7 @@ import { useWindowStore } from '../../src/stores/windowStore';
 import { getMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { parseEditorDocument, serializeEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
 import { tableViewportKey } from '../../src/features/editor-md/tableViewport';
+import { setDocumentFormulaReadingMode, setDocumentTableReadingMode, type FormulaReadingMode, type TableReadingMode } from '../../src/features/editor-md/documentReadingView';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { BlockContextMenu } from '../../src/features/editor-md/BlockContextMenu';
 import { applyTheme, applyTypography } from '../../src/core/theme/applyTheme';
@@ -31,6 +32,7 @@ const qa = {
   ready: () => !!getMdTipTapEditor(key),
   load: (source: string) => { const editor = getMdTipTapEditor(key)!; parseEditorDocument(editor, source); contentTransactions = 0; editor.on('transaction', ({ transaction }) => { if (transaction.docChanged) contentTransactions++; }); },
   editor: () => getMdTipTapEditor(key)!,
+  reading: (formula: FormulaReadingMode, table: TableReadingMode = 'expand') => { const editor = getMdTipTapEditor(key)!; setDocumentFormulaReadingMode(editor, formula); setDocumentTableReadingMode(editor, table); },
   source: () => serializeEditorDocument(getMdTipTapEditor(key)!),
   contentTransactions: () => contentTransactions,
   tablePositions: () => { const values: number[] = []; getMdTipTapEditor(key)!.state.doc.descendants((node, pos) => { if (node.type.name === 'table') values.push(pos); }); return values; },

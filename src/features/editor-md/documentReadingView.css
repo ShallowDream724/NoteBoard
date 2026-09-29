@@ -1,8 +1,12 @@
 /* One document scroller by default. Local scrolling is an explicit reading choice. */
 .ProseMirror .tableWrapper { overflow:visible; }
-.ProseMirror .tableWrapper[data-block-reading="scroll"] { overflow:auto; max-height:min(65vh,640px); overscroll-behavior:auto; }
+.ProseMirror[data-table-reading="scroll"] .tableWrapper { overflow:auto; max-height:min(65vh,640px); overscroll-behavior:auto; }
 .ProseMirror[data-formula-reading="scroll"] .math-node-display .math-node-preview { overflow:auto; max-height:min(65vh,640px); }
-.ProseMirror[data-formula-reading="wrap"] .math-node-display .math-node-preview { --math-white-space:normal; }
-.ProseMirror[data-formula-reading="wrap"] .math-node-display .math-preview { width:100%!important; min-width:0!important; }
+.ProseMirror[data-formula-reading="wrap"] .math-node:not(.math-node-editing) .math-node-preview,
+.ProseMirror[data-formula-reading="scroll"] .math-node:not(.math-node-display):not(.math-node-editing) .math-node-preview { --math-white-space:normal; max-width:100%; }
+.ProseMirror[data-formula-reading="wrap"] .math-node:not(.math-node-editing) .math-preview:not(.nb-matrix-view),
+.ProseMirror[data-formula-reading="scroll"] .math-node:not(.math-node-display):not(.math-node-editing) .math-preview:not(.nb-matrix-view) { width:auto!important; max-width:100%; min-width:0!important; }
+.ProseMirror[data-formula-reading="wrap"] .math-preview-placeholder,
+.ProseMirror[data-formula-reading="scroll"] .math-node:not(.math-node-display) .math-preview-placeholder { max-width:100%; }
 .nb-block-reading-label { padding:5px 10px 2px; font-size:11px; color:var(--editor-text-muted); }
 .nb-block-context-menu > button[role="menuitemradio"][aria-checked="true"] { color:var(--editor-accent); background:var(--toolbar-active); }

@@ -28,14 +28,20 @@ vi.mock('../../src/features/editor-md/mathRenderQueue', () => ({
 }));
 import { mountMathPreview } from '../../src/features/editor-md/mathPreview';
 
-class TestResizeObserver {
-  static current: TestResizeObserver;
-  constructor(private callback: ResizeObserverCallback) { TestResizeObserver.current = this; }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  notify(target: Element, width: number, height: number) {
-    this.callback([{ target, contentRect: { width, height } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+class TestResizeObserver implements ResizeObserver {
+  static active = new Set<TestResizeObserver>();
+  private targets = new Set<Element>();
+  constructor(private callback: ResizeObserverCallback) {}
+  observe(target: Element) { this.targets.add(target); TestResizeObserver.active.add(this); }
+  unobserve(target: Element) { this.targets.delete(target); if (!this.targets.size) TestResizeObserver.active.delete(this); }
+  disconnect() { this.targets.clear(); TestResizeObserver.active.delete(this); }
+  static notify(target: Element, width: number, height: number) {
+    const entry: ResizeObserverEntry = { target, contentRect: new DOMRect(0, 0, width, height),
+      borderBoxSize: [], contentBoxSize: [{ inlineSize: width, blockSize: height }], devicePixelContentBoxSize: [],
+    };
+    for (const observer of [...TestResizeObserver.active]) {
+      if (observer.targets.has(target)) observer.callback([entry], observer);
+    }
   }
 }
 
@@ -45,7 +51,11 @@ describe('formula preview reclamation geometry', () => {
     state.near = undefined; state.renders = []; state.retirements.clear();
     vi.stubGlobal('ResizeObserver', TestResizeObserver);
   });
-  afterEach(() => { cleanups.splice(0).forEach(clean => clean()); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => {
+    cleanups.splice(0).forEach(clean => clean());
+    expect(TestResizeObserver.active.size).toBe(0);
+    document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals();
+  });
   const mount = (display: boolean, result: { html: string; error?: string } = { html: '<span class="katex">fraction</span>' }) => {
     const host = document.createElement('span'); host.style.display = display ? 'block' : 'inline-block'; document.body.append(host);
     cleanups.push(mountMathPreview(host, '\\frac{x}{y}', display, false).dispose);
@@ -59,7 +69,7 @@ describe('formula preview reclamation geometry', () => {
     const probe = preview.querySelector<HTMLElement>('[aria-hidden="true"]')!;
     expect(measure).not.toHaveBeenCalled();
     vi.spyOn(probe, 'getBoundingClientRect').mockReturnValue({ top: 166 } as DOMRect);
-    TestResizeObserver.current.notify(host, 240, 80);
+    TestResizeObserver.notify(host, 240, 80);
     expect(measure).toHaveBeenCalledTimes(1);
     state.near!(false, false);
     expect(host.firstElementChild).toBe(preview);
@@ -80,12 +90,22 @@ describe('formula preview reclamation geometry', () => {
 
   it('preserves a display formula’s host height and wide horizontal extent', () => {
     const host = mount(true), preview = host.firstElementChild!;
-    TestResizeObserver.current.notify(preview, 900, 72);
-    TestResizeObserver.current.notify(host, 600, 80);
+    TestResizeObserver.notify(preview, 900, 72);
+    TestResizeObserver.notify(host, 600, 80);
     state.near!(false, false); state.retirements.values().next().value!();
     const strut = host.firstElementChild as HTMLElement;
     expect(strut.style.display).toBe('block'); expect(strut.style.width).toBe('900px'); expect(strut.style.height).toBe('80px');
     expect(host.style.width).toBe('');
+  });
+
+  it('preserves fitted geometry on eviction instead of restoring the unscaled overflow', () => {
+    const host = mount(true), preview = host.firstElementChild as HTMLElement;
+    preview.style.zoom = '0.5';
+    TestResizeObserver.notify(preview, 1200, 160);
+    TestResizeObserver.notify(host, 600, 80);
+    state.near!(false, false); state.retirements.values().next().value!();
+    const strut = host.firstElementChild as HTMLElement;
+    expect(strut.style.width).toBe('600px'); expect(strut.style.height).toBe('80px');
   });
 
   it('takes an error preview baseline from its final smaller-font line', () => {
@@ -93,7 +113,7 @@ describe('formula preview reclamation geometry', () => {
     const error = host.querySelector<HTMLElement>('[role="status"]')!, probe = error.querySelector<HTMLElement>('[aria-hidden="true"]')!;
     vi.spyOn(host, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
     vi.spyOn(probe, 'getBoundingClientRect').mockReturnValue({ top: 158 } as DOMRect);
-    TestResizeObserver.current.notify(host, 240, 60);
+    TestResizeObserver.notify(host, 240, 60);
     state.near!(false, false); state.retirements.values().next().value!();
     const placeholder = host.firstElementChild as HTMLElement;
     expect(placeholder.style.height).toBe('60px'); expect(placeholder.style.fontSize).toBe('0px');
@@ -104,7 +124,7 @@ describe('formula preview reclamation geometry', () => {
     const host = mount(false), preview = host.firstElementChild;
     state.near!(false, false); expect(state.retirements.size).toBe(0);
     expect(host.firstElementChild).toBe(preview);
-    state.near!(true, true); TestResizeObserver.current.notify(host, 240, 80);
+    state.near!(true, true); TestResizeObserver.notify(host, 240, 80);
     state.near!(false, false); expect(state.retirements.size).toBe(1);
     state.near!(true, true); expect(state.retirements.size).toBe(0);
     expect(host.firstElementChild).toBe(preview);
@@ -123,8 +143,8 @@ describe('formula preview reclamation geometry', () => {
     const host = document.createElement('span'); host.style.display = 'block'; document.body.append(host);
     const first = mountMathPreview(host, '\\begin{matrix}a&b\\\\[3em]c&d\\end{matrix}', true, true); cleanups.push(first.dispose);
     state.renders.at(-1)!.done({ html: '<span class="katex">matrix</span>' });
-    TestResizeObserver.current.notify(host.firstElementChild!, 480, 965);
-    TestResizeObserver.current.notify(host, 480, 965);
+    TestResizeObserver.notify(host.firstElementChild!, 480, 965);
+    TestResizeObserver.notify(host, 480, 965);
     const measure = vi.spyOn(host, 'getBoundingClientRect');
     first.dispose(true);
     const placeholder = host.firstElementChild as HTMLElement;
@@ -146,7 +166,7 @@ describe('formula preview reclamation geometry', () => {
     const host = document.createElement('span'); host.style.display = 'block'; document.body.append(host);
     const first = mountMathPreview(host, '\\begin{matrix}a&b\\\\[3em]c&d\\end{matrix}', true, true);
     state.renders.at(-1)!.done({ html: '<span class="katex">matrix</span>' });
-    TestResizeObserver.current.notify(host, 480, 965);
+    TestResizeObserver.notify(host, 480, 965);
     expect(host.style.minHeight).toBe('965px');
     first.dispose(true);
     const invalid = mountMathPreview(host, '\\begin{matrix}a&b\\end{matrix', true, true); cleanups.push(invalid.dispose);

@@ -1,18 +1,21 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { Editor } from '@tiptap/core';
+import { Editor, type JSONContent } from '@tiptap/core';
 import { Plugin } from '@tiptap/pm/state';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
-import { DocumentReadingView, documentFormulaReadingMode, documentReadingViewKey, setDocumentFormulaReadingMode,
-  setTableReadingMode, tableReadingMode } from '../../src/features/editor-md/documentReadingView';
+import { DocumentReadingView, documentFormulaReadingMode, documentReadingViewKey, documentTableReadingMode,
+  setDocumentFormulaReadingMode, setDocumentTableReadingMode } from '../../src/features/editor-md/documentReadingView';
+
+const table: JSONContent = { type: 'table', content: [{ type: 'tableRow', content: [0, 1].map(() => ({
+  type: 'tableCell', content: [{ type: 'paragraph' }],
+})) }] };
 
 function create() {
-  const cell = { type: 'tableCell', content: [{ type: 'paragraph' }] };
   return new Editor({ extensions: [...buildDocumentExtensions(), DocumentReadingView], content: {
     type: 'doc', content: [
       { type: 'mathBlock', attrs: { latex: 'a+b', delimiter: '$$' } },
       { type: 'mathBlock', attrs: { latex: 'x+y', delimiter: '$$' } },
-      ...[0, 1].map(() => ({ type: 'table', content: [{ type: 'tableRow', content: [cell, cell] }] })),
+      table, table,
       { type: 'paragraph', content: [{ type: 'text', text: '正文' }] },
     ],
   } });
@@ -34,7 +37,6 @@ describe('document reading view', () => {
         expect(editor.view.dom.dataset.formulaReading).toBe(mode);
         expect(editor.state.doc).toBe(document);
         expect([editor.view.nodeDOM(0), editor.view.nodeDOM(1)]).toEqual(nodes);
-        expect(documentReadingViewKey.getState(editor.state)?.tables.find()).toHaveLength(0);
         expect(editor.getHTML()).toBe(html);
       }
       expect(editor.commands.undo()).toBe(false);
@@ -56,21 +58,51 @@ describe('document reading view', () => {
       expect(editor.view.dom.dataset.formulaReading).toBe('wrap');
     } finally { editor.destroy(); }
   });
-  it('keeps table overrides local and mapped through edits independently of formulas', () => {
+  it('applies one table policy without changing the document, selection, node views or history', () => {
     const editor = create();
     try {
-      const [first, second] = tablePositions(editor);
-      setTableReadingMode(editor, first, 'scroll');
+      const document = editor.state.doc, selection = editor.state.selection, html = editor.getHTML();
+      const nodes = tablePositions(editor).map(pos => editor.view.nodeDOM(pos));
+      const changes: { documentChanged: boolean; addToHistory: unknown }[] = [];
+      editor.on('transaction', ({ transaction }) => changes.push({
+        documentChanged: transaction.docChanged, addToHistory: transaction.getMeta('addToHistory'),
+      }));
       setDocumentFormulaReadingMode(editor, 'wrap');
-      expect(tableReadingMode(editor.state, first)).toBe('scroll');
-      expect(tableReadingMode(editor.state, second)).toBe('expand');
+      for (const mode of ['scroll', 'expand'] as const) {
+        expect(setDocumentTableReadingMode(editor, mode)).toBe(true);
+        expect(documentTableReadingMode(editor.state)).toBe(mode);
+        expect(editor.view.dom.dataset.tableReading).toBe(mode);
+        expect(editor.state.doc).toBe(document);
+        expect(editor.state.selection).toBe(selection);
+        expect(tablePositions(editor).map(pos => editor.view.nodeDOM(pos))).toEqual(nodes);
+        expect(editor.getHTML()).toBe(html);
+        expect(documentFormulaReadingMode(editor.state)).toBe('wrap');
+      }
+      expect(changes).toEqual(Array.from({ length: 3 }, () => ({ documentChanged: false, addToHistory: false })));
+      expect(editor.commands.undo()).toBe(false);
+    } finally { editor.destroy(); }
+  });
+  it('lets existing and new tables inherit the policy through edits, reconfiguration, undo and redo', () => {
+    const editor = create();
+    try {
+      setDocumentTableReadingMode(editor, 'scroll');
+      setDocumentFormulaReadingMode(editor, 'wrap');
+      editor.registerPlugin(new Plugin({}));
+      const position = editor.state.doc.content.size;
+      editor.commands.insertContentAt(position, table);
+      expect(tablePositions(editor)).toHaveLength(3);
+      expect(editor.view.dom.dataset.tableReading).toBe('scroll');
+      expect(documentTableReadingMode(editor.state)).toBe('scroll');
+      expect(editor.commands.undo()).toBe(true);
+      expect(tablePositions(editor)).toHaveLength(2);
+      expect(documentTableReadingMode(editor.state)).toBe('scroll');
+      expect(editor.commands.redo()).toBe(true);
+      expect(tablePositions(editor)).toHaveLength(3);
       editor.commands.insertContentAt(0, { type: 'paragraph', content: [{ type: 'text', text: '前言' }] });
-      const [movedFirst, movedSecond] = tablePositions(editor);
-      expect(tableReadingMode(editor.state, movedFirst)).toBe('scroll');
-      expect(tableReadingMode(editor.state, movedSecond)).toBe('expand');
+      expect(documentTableReadingMode(editor.state)).toBe('scroll');
+      expect(editor.view.dom.dataset.tableReading).toBe('scroll');
       expect(documentFormulaReadingMode(editor.state)).toBe('wrap');
-      setTableReadingMode(editor, movedFirst, 'expand');
-      expect(documentReadingViewKey.getState(editor.state)?.tables.find()).toHaveLength(0);
+      expect(documentReadingViewKey.getState(editor.state)).toEqual({ formula: 'wrap', table: 'scroll' });
     } finally { editor.destroy(); }
   });
   it('does not change another open document or dispatch for an unchanged policy', () => {
@@ -80,9 +112,13 @@ describe('document reading view', () => {
       first.on('transaction', () => transactions++);
       setDocumentFormulaReadingMode(first, 'scroll');
       setDocumentFormulaReadingMode(first, 'scroll');
-      expect(transactions).toBe(1);
+      setDocumentTableReadingMode(first, 'scroll');
+      setDocumentTableReadingMode(first, 'scroll');
+      expect(transactions).toBe(2);
       expect(documentFormulaReadingMode(second.state)).toBe('expand');
+      expect(documentTableReadingMode(second.state)).toBe('expand');
       expect(second.view.dom.dataset.formulaReading).toBe('expand');
+      expect(second.view.dom.dataset.tableReading).toBe('expand');
     } finally { first.destroy(); second.destroy(); }
   });
 });

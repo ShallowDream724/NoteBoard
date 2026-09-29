@@ -44,11 +44,11 @@ export function observeNearby(element: HTMLElement, callback: Callback): () => v
       current.observer.disconnect(); current.observer = create();
       callbacks.forEach((_, node) => current.observer.observe(node));
     }) };
-    pools.set(root, pool); pool.resize?.observe(root); root.addEventListener('scroll', pool.onScroll, { passive: true });
+    pools.set(root, pool); pool.resize?.observe(root); root.addEventListener('scroll', pool.onScroll, { passive: true, capture: true });
   }
   roots.set(element, root); pool.callbacks.set(element, { callback, near: false, visible: false, nearKnown: false }); pool.observer.observe(element); pool.visible.observe(element);
   return () => {
     roots.delete(element); pool!.observer.unobserve(element); pool!.visible.unobserve(element); pool!.callbacks.delete(element);
-    if (!pool!.callbacks.size) { pool!.observer.disconnect(); pool!.visible.disconnect(); pool!.resize?.disconnect(); root.removeEventListener('scroll', pool!.onScroll); pools.delete(root); }
+    if (!pool!.callbacks.size) { pool!.observer.disconnect(); pool!.visible.disconnect(); pool!.resize?.disconnect(); root.removeEventListener('scroll', pool!.onScroll, true); pools.delete(root); }
   };
 }

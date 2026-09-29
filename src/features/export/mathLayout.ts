@@ -1,5 +1,6 @@
 import { renderMath } from '../editor-md/mathRendering';
-import { matrixSource, matrixPart, reflowFractions } from '../../core/math/structure';
+import { matrixSource, matrixPart } from '../../core/math/structure';
+import { reflowMathToWidth } from '../../core/math/layout';
 import { mathContentWidth, readableScale } from './layoutMetrics';
 
 interface Region { r0: number; r1: number; c0: number; c1: number }
@@ -96,16 +97,7 @@ export async function continueMatrix(element: HTMLElement, available: number, pa
   return { handled: count > 0, issue };
 }
 
-export async function continueFraction(element: HTMLElement, available: number, bodyFontPt: number): Promise<boolean> {
-  const latex = element.dataset.latex ?? '';
-  // A bounded pair of candidates, independent of document size.
-  const budget = Math.max(12, Math.floor(available / (bodyFontPt * 1.333 * .55)));
-  for (const factor of [1, .6]) {
-    const candidate = reflowFractions(latex, Math.round(budget * factor)); if (!candidate) return false;
-    const result = await renderMath(candidate, true); if (result.error) continue;
-    element.innerHTML = result.html; element.classList.add('wrap');
-    const math = element.querySelector<HTMLElement>('.katex-html');
-    if (math && mathContentWidth(math) <= available + 1) return true;
-  }
-  return false;
+export async function continueFormula(element: HTMLElement, available: number, bodyFontPt: number): Promise<boolean> {
+  element.classList.add('wrap');
+  return reflowMathToWidth({ element, latex: element.dataset.latex ?? '', available, fontPixels: bodyFontPt * 96 / 72, render: source => renderMath(source, true) });
 }

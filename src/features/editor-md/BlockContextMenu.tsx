@@ -31,7 +31,8 @@ import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
 import { RemoveFormatting } from 'lucide-react';
 import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting, clearCaptionTextFormatting } from './textFormatting';
 import { ArrowRightLeft, WrapText, Square, Check } from 'lucide-react';
-import { documentFormulaReadingMode, setDocumentFormulaReadingMode, tableReadingMode, setTableReadingMode } from './documentReadingView';
+import { documentFormulaReadingMode, setDocumentFormulaReadingMode, documentTableReadingMode, setDocumentTableReadingMode } from './documentReadingView';
+import { preserveReadingAnchor } from '../../core/dom/readingAnchor';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -45,7 +46,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const colors = blockColors(range.node);
   if (isEmptyParagraph(range.node) && !colors.color && !colors.background) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem'].includes(type);
-  const readingMode = type === 'mathBlock' ? documentFormulaReadingMode(editor.state) : tableReadingMode(editor.state, pos);
+  const readingMode = type === 'mathBlock' ? documentFormulaReadingMode(editor.state) : documentTableReadingMode(editor.state);
   const styled = supportsBlockColors(type);
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
@@ -53,6 +54,12 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const grid = type === 'table' ? tableGrid(range.node) : null;
   const headerRow = grid?.cells.filter(cell => cell.row === 0), headerColumn = grid?.cells.filter(cell => cell.column === 0);
   const action = (run: () => unknown) => { run(); close(); };
+  const readingAction = (run: () => unknown) => action(() => {
+    const node = editor.view.nodeDOM(pos);
+    const selector = type === 'table' ? '.tableWrapper' : '.math-node-preview';
+    const viewport = node instanceof HTMLElement ? node.matches(selector) ? node : node.querySelector<HTMLElement>(selector) : null;
+    preserveReadingAnchor(viewport, run);
+  });
   const copy = (cut: boolean) => { if (!copyBlock(editor, pos, cut)) showToast('无法写入剪贴板，请用键盘快捷键重试', 'warning'); };
   const header = (axis: 'row' | 'column') => {
     const node = editor.state.doc.nodeAt(pos); if (node?.type.name !== 'table') return;
@@ -85,12 +92,12 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
     {(type === 'table' || type === 'mathBlock') && <>
-      <div className="nb-block-reading-label">{type === 'mathBlock' ? '阅读视图 · 全文公式' : '阅读视图'}</div>
+      <div className="nb-block-reading-label">{type === 'mathBlock' ? '阅读视图 · 全文公式' : '阅读视图 · 全文表格'}</div>
       {([{ mode: 'expand', label: '自然展开', Icon: ArrowRightLeft },
         ...(type === 'mathBlock' ? [{ mode: 'wrap' as const, label: '自动换行', Icon: WrapText }] : []),
         { mode: 'scroll', label: '滚动块', Icon: Square }] as const).map(({ mode, label, Icon }) =>
         <button key={mode} type="button" role="menuitemradio" aria-checked={readingMode === mode}
-          onClick={() => action(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setTableReadingMode(editor, pos, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
+          onClick={() => readingAction(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setDocumentTableReadingMode(editor, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
       <hr/>
     </>}
     {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}

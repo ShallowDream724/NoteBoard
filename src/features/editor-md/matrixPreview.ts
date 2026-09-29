@@ -1,8 +1,10 @@
 import type { MatrixSource } from '../../core/math/structure';
 import { SizeIndex } from '../../core/dom/sizeIndex';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
+import { contentViewport, observeContentViewport } from '../../core/dom/contentViewport';
 import { queueMath, refreshMathQueue } from './mathRenderQueue';
 import { observeNearby, viewportIsScrolling } from './nearViewport';
+import { mountMathReadingLayout } from './mathReadingLayout';
 import { MATH_LIMITS, checkMathSource, mathLimitFailure, mathMarkupNodeCount, type MathLimitReason } from './mathLimits';
 import './matrixPreview.css';
 
@@ -44,6 +46,7 @@ export function mountMatrixPreview(host: HTMLElement, source: MatrixSource) {
   let windowNotice: HTMLElement | undefined;
   let cancelPrefix: (() => void) | undefined, prefixReady = false;
   const cells = new Map<string, Cell>();
+  const reading = mountMathReadingLayout({ host, preview: view, owner: host.closest<HTMLElement>('.ProseMirror') ?? host.parentElement ?? host, display: !!host.closest('.math-node-display') });
   const geometry = () => { grid.style.width = `${columns.total}px`; grid.style.height = `${rowSizes.total}px`; };
   geometry();
   const place = (cell: Cell) => {
@@ -59,7 +62,12 @@ export function mountMatrixPreview(host: HTMLElement, source: MatrixSource) {
       if (height > rowSizes.at(cell.row) + .5) { const delta = rowSizes.set(cell.row, height); if (cell.row < firstVisibleRow) correction += delta; changed = true; }
       if (width > columns.at(cell.column) + .5) { columns.set(cell.column, width); changed = true; }
     }
-    if (changed) { geometry(); cells.forEach(place); if (correction) scroll.scrollTop += correction; schedule(); }
+    if (changed) { geometry(); reading.invalidate(); cells.forEach(place); if (correction) {
+      const owner = contentViewport(grid, scroll).scrollY;
+      const scale = grid.getBoundingClientRect().width / (grid.offsetWidth || 1);
+      const ownerScale = owner.getBoundingClientRect().width / (owner.offsetWidth || 1);
+      owner.scrollTop += correction * scale / (ownerScale || 1);
+    } schedule(); }
   });
   const paint = (cell: Cell, html?: string, error?: string, limited?: MathLimitReason) => {
     if (disposed || cells.get(cell.element.dataset.matrixCell!) !== cell) return;
@@ -82,14 +90,16 @@ export function mountMatrixPreview(host: HTMLElement, source: MatrixSource) {
   };
   const update = () => {
     scheduled = 0; if (disposed || !near || !scroll.clientHeight) return;
-    const bounds = grid.getBoundingClientRect(), viewport = scroll.getBoundingClientRect();
-    const top = Math.max(0, viewport.top - bounds.top), left = Math.max(0, viewport.left - bounds.left);
+    const bounds = grid.getBoundingClientRect(), viewport = contentViewport(grid, scroll).bounds;
+    const scale = bounds.width / (grid.offsetWidth || 1) || 1;
+    const height = viewport.height / scale, width = viewport.width / scale;
+    const top = Math.max(0, (viewport.top - bounds.top) / scale), left = Math.max(0, (viewport.left - bounds.left) / scale);
     firstVisibleRow = rowSizes.indexAt(top);
-    let fromRow = rowSizes.indexAt(Math.max(0, top - scroll.clientHeight / 2));
-    let toRow = Math.min(source.rows.length, rowSizes.indexAt(top + scroll.clientHeight * 1.5) + 1);
-    let fromColumn = columns.indexAt(Math.max(0, left - scroll.clientWidth / 2));
-    let toColumn = Math.min(source.columns, columns.indexAt(left + scroll.clientWidth * 1.5) + 1);
-    const lastVisibleRow = rowSizes.indexAt(top + scroll.clientHeight), firstVisibleColumn = columns.indexAt(left), lastVisibleColumn = columns.indexAt(left + scroll.clientWidth);
+    let fromRow = rowSizes.indexAt(Math.max(0, top - height / 2));
+    let toRow = Math.min(source.rows.length, rowSizes.indexAt(top + height * 1.5) + 1);
+    let fromColumn = columns.indexAt(Math.max(0, left - width / 2));
+    let toColumn = Math.min(source.columns, columns.indexAt(left + width * 1.5) + 1);
+    const lastVisibleRow = rowSizes.indexAt(top + height), firstVisibleColumn = columns.indexAt(left), lastVisibleColumn = columns.indexAt(left + width);
     if ((toRow - fromRow) * (toColumn - fromColumn) > MATH_LIMITS.matrixViewportCells) {
       fromRow = firstVisibleRow; toRow = lastVisibleRow + 1; fromColumn = firstVisibleColumn; toColumn = lastVisibleColumn + 1;
     }
@@ -127,19 +137,21 @@ export function mountMatrixPreview(host: HTMLElement, source: MatrixSource) {
     grid.append(fragment); refreshMathQueue();
   };
   function schedule() { if (!scheduled && !disposed) scheduled = requestAnimationFrame(update); }
-  const viewportResize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
-  viewportResize?.observe(scroll);
+  let stopViewport = () => {};
   const stopNear = observeNearby(view, (value, isVisible) => {
+    if (value && !near) stopViewport = observeContentViewport(grid, schedule, scroll);
+    else if (!value && near) { stopViewport(); stopViewport = () => {}; }
     near = value; visible = isVisible;
+    reading.nearby(near);
     if (near) {
-      scroll.addEventListener('scroll', schedule, { passive: true }); schedule();
+      schedule();
       if (source.prefix && !prefixReady && !cancelPrefix) cancelPrefix = queueMath(`${id}:prefix`, { latex: source.prefix, display: false, priority: () => visible ? 0 : 1, done: result => { cancelPrefix = undefined; prefixReady = true; if (!result.error) prefix.innerHTML = result.html; else if (result.limited) prefix.textContent = result.error; } });
     } else {
       cancelPrefix?.(); cancelPrefix = undefined;
-      scroll.removeEventListener('scroll', schedule); clearCells(); windowNotice?.remove(); windowNotice = undefined;
+      clearCells(); windowNotice?.remove(); windowNotice = undefined;
     }
   });
   if (source.suffix) view.append(document.createTextNode(source.suffix));
   schedule();
-  return () => { disposed = true; cancelPrefix?.(); cancelAnimationFrame(scheduled); stopNear(); scroll.removeEventListener('scroll', schedule); resize?.disconnect(); viewportResize?.disconnect(); cells.forEach(cell => cell.cancel?.()); cells.clear(); view.remove(); };
+  return () => { disposed = true; cancelPrefix?.(); cancelAnimationFrame(scheduled); stopNear(); stopViewport(); reading.dispose(); resize?.disconnect(); cells.forEach(cell => cell.cancel?.()); cells.clear(); view.remove(); };
 }

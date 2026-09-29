@@ -7,6 +7,7 @@ import { moveTableAxis, safeTableBoundary, tableAxisRange } from './tableStructu
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 import { tableReadingBounds, tableReadingScroll } from './tableReadingViewport';
+import { clientBounds, CONTENT_VIEW_CHANGED } from '../../core/dom/contentViewport';
 
 type Axis = 'row' | 'column';
 interface Handle { button: HTMLButtonElement; axis: Axis; index: number }
@@ -84,7 +85,7 @@ export const TableSelectionHandles = Extension.create({
           return { start: Math.max(0, rect.top), end: Math.min(window.innerHeight, rect.bottom) }; },
       }];
       if (active.axis === 'column') {
-        const horizontal = owner;
+        const horizontal = tableReadingScroll(active.table, scroll, 'x');
         axes.push({ element: horizontal, direction: 'x', edge: 40, maxSpeed: 880,
           bounds: () => { const rect = tableReadingBounds(active.table, scroll);
             return { start: rect.left, end: rect.right }; },
@@ -167,16 +168,20 @@ export const TableSelectionHandles = Extension.create({
       paintedBounds = { left, right, top, bottom };
       paintedRowSide = pointerX <= (left + right) / 2 ? 'left' : 'right';
       paintedColumnSide = pointerY <= (top + bottom) / 2 ? 'top' : 'bottom';
-      const railLeft = paintedRowSide === 'left' ? Math.max(2, left - 22) : Math.max(left, Math.min(right, viewport.right - 22, window.innerWidth - 24));
+      const outer = clientBounds(scroll);
+      const rowOutside = paintedRowSide === 'left' ? left - 22 >= outer.left : right + 22 <= outer.right;
+      const rowWidth = rowOutside ? 22 : 6;
+      const railLeft = paintedRowSide === 'left' ? (rowOutside ? left - 22 : left) : (rowOutside ? right : right - rowWidth);
       // The bottom entry belongs to the grid's inner edge, never the caption
       // below it. A slim hit strip also leaves the last row's text editable.
-      const columnHeight = paintedColumnSide === 'top' ? 22 : Math.min(10, bottom - top);
-      const railTop = paintedColumnSide === 'top' ? Math.max(viewport.top + 1, gridTop - 22) : Math.max(top, Math.min(bottom, viewport.bottom, window.innerHeight - 2) - columnHeight);
+      const topOutside = top - 22 >= outer.top;
+      const columnHeight = paintedColumnSide === 'top' ? (topOutside ? 22 : 6) : Math.min(10, bottom - top);
+      const railTop = paintedColumnSide === 'top' ? (topOutside ? top - 22 : top) : Math.max(top, Math.min(bottom, viewport.bottom, window.innerHeight - 2) - columnHeight);
       let count = 0;
       const rowIndex = Math.min(rows.length - 1, firstVisible(rows, 'bottom', pointerY));
       const row = rows[rowIndex], r = row.getBoundingClientRect();
       const y = Math.max(r.top, top), end = Math.min(r.bottom, bottom);
-      if (end > y) handle(count++, 'row', rowIndex, { left: railLeft, top: y, width: 22, height: end - y });
+      if (end > y) handle(count++, 'row', rowIndex, { left: railLeft, top: y, width: rowWidth, height: end - y });
       const columns = table.querySelector(':scope > colgroup')?.children;
       if (columns?.length) {
         const index = Math.min(columns.length - 1, firstVisible(columns, 'right', pointerX));
@@ -185,7 +190,9 @@ export const TableSelectionHandles = Extension.create({
         if (end > x) handle(count++, 'column', index, { left: x, top: railTop, width: end - x, height: columnHeight });
       }
       if (handles[0] && count) handles[0].button.classList.toggle('nb-table-select-row-right', paintedRowSide === 'right');
+      if (handles[0] && count) handles[0].button.classList.toggle('nb-table-select-row-compact', !rowOutside);
       if (handles[1] && count > 1) handles[1].button.classList.toggle('nb-table-select-column-bottom', paintedColumnSide === 'bottom');
+      if (handles[1] && count > 1) handles[1].button.classList.toggle('nb-table-select-column-compact', paintedColumnSide === 'top' && !topOutside);
       for (let i = count; i < handles.length; i++) handles[i].button.hidden = true;
       overlay.hidden = false;
     }
@@ -226,6 +233,7 @@ export const TableSelectionHandles = Extension.create({
     host.addEventListener('focusin', captionFocus);
     overlay.addEventListener('focusin', focusIn); overlay.addEventListener('focusout', focusOut);
     host.addEventListener('scroll', schedule, true); window.addEventListener('resize', schedule);
+    view.dom.addEventListener(CONTENT_VIEW_CHANGED, schedule);
     const cancelGesture = () => finishGesture(false);
     const escape = (event: KeyboardEvent) => { if (gesture && event.key === 'Escape') { event.preventDefault(); finishGesture(false); } };
     window.addEventListener('blur', cancelGesture); host.addEventListener('keydown', escape);
@@ -235,6 +243,7 @@ export const TableSelectionHandles = Extension.create({
       host.removeEventListener('pointermove', move); host.removeEventListener('pointerout', leaveWindow);
       host.removeEventListener('focusin', captionFocus);
       host.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule);
+      view.dom.removeEventListener(CONTENT_VIEW_CHANGED, schedule);
     } };
   } })]; },
 });

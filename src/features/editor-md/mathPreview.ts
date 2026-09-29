@@ -4,6 +4,7 @@ import { matrixSource } from '../../core/math/structure';
 import { mountMatrixPreview } from './matrixPreview';
 import { checkMathSource, mathMarkupNodeCount, MATH_LIMITS } from './mathLimits';
 import { registerMathPreview } from './mathPreviewSession';
+import { mountMathReadingLayout } from './mathReadingLayout';
 import '../../core/math/wrapping.css';
 
 let nextId = 0;
@@ -61,6 +62,7 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
   let cancel: (() => void) | undefined, cancelRetirement: (() => void) | undefined;
   let live = true, mounted = false, near = false, visible = false, size: Geometry | undefined;
   let stopSize = () => {};
+  let reading: ReturnType<typeof mountMathReadingLayout> | undefined;
   const holdEditingHeight = () => {
     if (editing && display && size) host.style.minHeight = `${Math.max(Number.parseFloat(host.style.minHeight) || 0, size.height)}px`;
   };
@@ -98,19 +100,28 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
         baselineProbe.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline'; lastLine.append(baselineProbe);
       }
       let previewWidth = 0, hostWidth = 0;
+      const previewExtent = () => previewWidth * (Number.parseFloat(preview.style.zoom) || 1);
       const stopPreviewSize = display ? observeSize(preview, value => {
         previewWidth = value.width;
-        if (mounted && size) size.width = Math.max(previewWidth, hostWidth);
+        if (mounted && size) size.width = Math.max(previewExtent(), hostWidth);
       }) : () => {};
       const stopHostSize = observeSize(host, value => {
         if (!mounted || value.height <= 0) return;
         hostWidth = value.width;
         const baseline = baselineProbe ? baselineProbe.getBoundingClientRect().top - host.getBoundingClientRect().top : undefined;
-        size = { width: Math.max(value.width, display ? previewWidth : 0), height: value.height, baseline };
+        size = { width: Math.max(value.width, display ? previewExtent() : 0), height: value.height, baseline };
         holdEditingHeight();
         lease.measured();
       });
       stopSize = () => { stopPreviewSize(); stopHostSize(); };
+      reading = mountMathReadingLayout({ host, preview, owner, display, latex, original: result, apply: value => {
+        const count = mathMarkupNodeCount(value.html) + 4;
+        if (!lease.canMount(count)) return false;
+        preview.innerHTML = value.html;
+        if (baselineProbe) preview.append(baselineProbe);
+        lease.mounted(count); return true;
+      } });
+      reading.editing(editing); reading.nearby(near || editing);
     } });
   };
   const lease = registerMathPreview(owner, {
@@ -123,6 +134,7 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
       cancelRetirement = undefined;
       if (!live || !size) { lease.cancelRetirement(); return; }
       stopSize(); stopSize = () => {};
+      reading?.dispose(); reading = undefined;
       // A block child adds no new host-font line box. Its zero-leading line
       // exports exactly the recorded baseline, including errors whose last line
       // uses a smaller font; explicit height preserves the remaining descent.
@@ -139,6 +151,7 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
       cancelRetirement?.(); cancelRetirement = undefined; lease.cancelRetirement();
     }
     lease.nearby(near || editing); refreshMathQueue();
+    reading?.nearby(near || editing);
     if (near || editing) show();
     else if (!lease.preparesBackground()) { cancel?.(); cancel = undefined; }
   });
@@ -152,10 +165,11 @@ export function mountMathPreview(host: HTMLElement, latex: string, display: bool
       if (editing) holdEditingHeight(); else host.style.minHeight = '';
       if (near || editing) { cancelRetirement?.(); cancelRetirement = undefined; lease.cancelRetirement(); }
       lease.nearby(near || editing); refreshMathQueue();
+      reading?.editing(editing); reading?.nearby(near || editing);
       if (near || editing) show();
     },
     dispose: (preserveGeometry = false) => {
-      live = false; cancel?.(); cancelRetirement?.(); stopNear(); stopSize();
+      live = false; cancel?.(); cancelRetirement?.(); stopNear(); stopSize(); reading?.dispose();
       lease.dispose();
       if (!preserveGeometry) host.style.minHeight = '';
       if (preserveGeometry && size) host.replaceChildren(geometryPlaceholder(size, display));

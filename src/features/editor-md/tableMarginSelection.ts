@@ -165,7 +165,7 @@ export const TableMarginSelection = Extension.create({
       };
       const startDragScroll = (active: Gesture) => {
         const axes: Parameters<typeof createDragEdgeScroller>[0] = [];
-        const owner = tableReadingScroll(active.table, scroll);
+        const owner = tableReadingScroll(active.table, scroll, active.axis === 'row' ? 'y' : 'x');
         if (active.axis === 'row') axes.push({
           element: owner, direction: 'y', edge: 40, maxSpeed: 880,
           bounds: () => { const rect = tableReadingBounds(active.table, scroll);
