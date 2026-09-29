@@ -2,16 +2,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { CellSelection } from '@tiptap/pm/tables';
-import { TextSelection } from '@tiptap/pm/state';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { Plugin, TextSelection } from '@tiptap/pm/state';
+import { buildDocumentExtensions, materializeDocument, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { MarkdownTable } from '../../src/features/editor-md/markdownTable';
 import { ResizableTableRow } from '../../src/features/editor-md/tableSizing';
 import { EfficientTableView } from '../../src/features/editor-md/tableView';
 import { TableViewport, tableViewportKey } from '../../src/features/editor-md/tableViewport';
+import { EditableTableCell, EditableTableHeader } from '../../src/features/editor-md/tableCellView';
 
 function create(rows: number, merged = false) {
   return new Editor({ extensions: [
-    ...buildDocumentExtensions({ tableRow: ResizableTableRow,
+    ...buildDocumentExtensions({ tableRow: ResizableTableRow, tableCell: EditableTableCell, tableHeader: EditableTableHeader,
       table: MarkdownTable.configure({ resizable: false, View: EfficientTableView }) }), TableViewport,
   ], content: { type: 'doc', content: [{ type: 'table', content: Array.from({ length: rows }, (_, index) => ({
     type: 'tableRow', content: Array.from({ length: merged && index === 0 ? 1 : 2 }, (_, column) => ({
@@ -38,12 +39,14 @@ describe('large table viewport', () => {
     const editor = create(1000);
     try {
       const before = editor.state.doc, rows = positions(editor);
+      const originalRows = [...editor.view.dom.querySelectorAll('tr')];
       expect(editor.view.dom.querySelectorAll('tr')).toHaveLength(1000);
-      expect(editor.view.dom.querySelectorAll('td')).toHaveLength(72);
+      expect(editor.view.dom.querySelectorAll('td > p')).toHaveLength(72);
       editor.view.dispatch(editor.state.tr.setMeta(tableViewportKey, [
         { pos: rows[500], visible: true }, { pos: rows[0], visible: false },
       ]).setMeta('addToHistory', false));
       expect(editor.view.nodeDOM(rows[500])?.textContent).toBe('500:0500:1');
+      expect([...editor.view.dom.querySelectorAll('tr')]).toEqual(originalRows);
       // The selection in the first cell keeps its row mounted.
       expect(editor.view.nodeDOM(rows[0])?.textContent).toBe('0:00:1');
       expect(editor.state.doc).toBe(before);
@@ -68,13 +71,52 @@ describe('large table viewport', () => {
       expect(editor.state.doc.firstChild?.child(700).textContent).toContain('edited');
     } finally { editor.destroy(); }
   });
+  it('keeps observers attached when a toolbar recreates plugin views', async () => {
+    let callback: IntersectionObserverCallback | undefined;
+    const observed = new Set<Element>();
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(next: IntersectionObserverCallback) { callback = next; }
+      observe(element: Element) { observed.add(element); }
+      unobserve(element: Element) { observed.delete(element); }
+      disconnect() { observed.clear(); }
+    });
+    const editor = create(1000);
+    try {
+      const target = editor.view.dom.querySelectorAll('tr')[700];
+      editor.registerPlugin(new Plugin({}));
+      expect(observed.has(target)).toBe(true);
+      const bounds = target.getBoundingClientRect();
+      callback!([{ target, isIntersecting: true, boundingClientRect: bounds, intersectionRatio: 1,
+        intersectionRect: bounds, rootBounds: bounds, time: 0 }], {} as IntersectionObserver);
+      await new Promise(requestAnimationFrame);
+      expect(target.textContent).toBe('700:0700:1');
+      expect(editor.view.dom.querySelectorAll('tr')[700]).toBe(target);
+    } finally { editor.destroy(); expect(observed.size).toBe(0); vi.unstubAllGlobals(); }
+  });
+  it('tabs into an unmounted row and saves all rows after editing that cell', () => {
+    const editor = create(1000);
+    try {
+      const rows = positions(editor), row = editor.state.doc.nodeAt(rows[700])!;
+      editor.commands.setTextSelection(rows[700] + row.firstChild!.nodeSize + 3);
+      const event = new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true });
+      expect(editor.view.someProp('handleKeyDown', handler => handler(editor.view, event))).toBe(true);
+      expect(editor.state.selection.$from.parent.textContent).toBe('701:0');
+      expect(editor.view.nodeDOM(rows[701])?.textContent).toBe('701:0701:1');
+      editor.commands.insertContent('保存测试');
+      const markdown = materializeDocument(editor.getJSON()).markdown;
+      const restored = parseMarkdownDocument(markdown);
+      expect(restored.firstChild?.childCount).toBe(1000);
+      expect(restored.firstChild?.child(701).textContent).toContain('保存测试');
+      expect(restored.firstChild?.lastChild?.textContent).toBe('999:0999:1');
+    } finally { editor.destroy(); }
+  });
   it('whole-table selection mounts endpoints without expanding its interior', () => {
     const editor = create(1000);
     try {
       const rows = positions(editor), last = editor.state.doc.nodeAt(rows[999])!;
       const endCell = rows[999] + 1 + last.firstChild!.nodeSize;
       editor.view.dispatch(editor.state.tr.setSelection(CellSelection.create(editor.state.doc, rows[0] + 1, endCell)));
-      expect(editor.view.dom.querySelectorAll('td')).toHaveLength(74);
+      expect(editor.view.dom.querySelectorAll('td > p')).toHaveLength(74);
       expect(editor.state.selection.content().content.firstChild?.childCount).toBe(1000);
       editor.view.dispatch(editor.state.tr.setSelection(CellSelection.create(editor.state.doc, rows[450] + 1, rows[700] + 1)));
       expect(editor.view.nodeDOM(rows[450])?.textContent).toBe('450:0450:1');
@@ -94,7 +136,7 @@ describe('large table viewport', () => {
       expect(editor.view.dom.querySelectorAll('td')).toHaveLength(10);
       expect(editor.view.dom.querySelectorAll('.nb-row-placeholder')).toHaveLength(0);
       editor.commands.setContent(large);
-      expect(editor.view.dom.querySelectorAll('td')).toHaveLength(72);
+      expect(editor.view.dom.querySelectorAll('td > p')).toHaveLength(72);
       expect(editor.view.dom.querySelectorAll('tr')).toHaveLength(1000);
     } finally { editor.destroy(); }
   });
@@ -117,7 +159,7 @@ describe('large table viewport', () => {
       const transaction = editor.state.tr.replaceWith(0, table.nodeSize, table);
       transaction.setSelection(TextSelection.create(transaction.doc, target)); editor.view.dispatch(transaction);
       await frame(); await frame();
-      expect(editor.view.dom.querySelector('tr')!.cells.length).toBe(0);
+      expect(editor.view.dom.querySelector('tr')!.textContent).toBe('');
       expect(tableViewportKey.getState(editor.state)?.rows.get(1)?.visible).toBe(false);
     } finally { editor.destroy(); vi.unstubAllGlobals(); }
   });

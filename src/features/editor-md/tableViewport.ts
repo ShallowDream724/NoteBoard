@@ -8,7 +8,8 @@ import { hasSimpleTableRows, isLargeTable } from './tableRowLayout';
 
 const INITIAL_ROWS = 36;
 const ESTIMATED_HEIGHT = 40;
-interface Row { end: number; visible: boolean }
+const ROW_BATCH = 16;
+interface Row { end: number; index: number; visible: boolean; node: Node }
 interface ViewportState { rows: Map<number, Row>; decorations: DecorationSet; selected: Set<number> }
 interface Visibility { pos: number; visible: boolean }
 export const tableViewportKey = new PluginKey<ViewportState>('tableViewport');
@@ -25,7 +26,13 @@ function selectedRows(selection: Selection) {
   return rows;
 }
 function decoration(pos: number, row: Row, selected: Set<number>) {
-  return row.visible || selected.has(pos) ? Decoration.node(pos, row.end, {}, { tableViewport: 'visible', viewportVisible: row.visible }) : null;
+  if (!row.visible && !selected.has(pos)) return [];
+  const result = [Decoration.node(pos, row.end, {}, { tableViewport: 'visible', viewportVisible: row.visible })];
+  // Resolve cell offsets only for the mounted window, not every cell in a large
+  // table after each keystroke. Immutable row nodes already own their structure.
+  row.node.forEach((cell, offset) => result.push(Decoration.node(pos + 1 + offset,
+    pos + 1 + offset + cell.nodeSize, {}, { tableCellViewport: 'visible' })));
+  return result;
 }
 function build(state: EditorState, previous?: ViewportState, transaction?: Transaction): ViewportState {
   const rows = new Map<number, Row>(), selected = selectedRows(state.selection), decorations: Decoration[] = [];
@@ -39,8 +46,8 @@ function build(state: EditorState, previous?: ViewportState, transaction?: Trans
     if (node.type.spec.tableRole !== 'table') return;
     if (isLargeTable(node) && hasSimpleTableRows(node)) node.forEach((child, offset, index) => {
       const at = pos + 1 + offset;
-      const row = { end: at + child.nodeSize, visible: prior.get(at)?.visible ?? index < INITIAL_ROWS };
-      rows.set(at, row); const shown = decoration(at, row, selected); if (shown) decorations.push(shown);
+      const row = { end: at + child.nodeSize, index, node: child, visible: prior.get(at)?.visible ?? index < INITIAL_ROWS };
+      rows.set(at, row); decorations.push(...decoration(at, row, selected));
     });
     return false;
   });
@@ -71,16 +78,21 @@ export function createTableViewportPlugin() {
         let decorations = value.decorations;
         for (const pos of dirty) {
           const row = rows.get(pos); if (!row) continue;
-          decorations = decorations.remove(decorations.find(pos, row.end, spec => !!spec.tableViewport).filter(item => item.from === pos));
-          const shown = decoration(pos, row, selected); if (shown) decorations = decorations.add(state.doc, [shown]);
+          decorations = decorations.remove(decorations.find(pos, row.end, spec => !!spec.tableViewport || !!spec.tableCellViewport)
+            .filter(item => item.from >= pos && item.to <= row.end));
+          decorations = decorations.add(state.doc, decoration(pos, row, selected));
         }
         return { rows, selected, decorations };
       },
     },
     props: { decorations: state => tableViewportKey.getState(state)?.decorations ?? null },
-    view(view) { return {
+    view(view) {
+      // ProseMirror recreates plugin views whenever a toolbar registers a plugin,
+      // but retains row node views. Reattach their observers to that same registry.
+      controllers.get(view)?.resume();
+      return {
       update(next, previous) { if (next.state.doc !== previous.doc) controllers.get(next)?.refresh(); },
-      destroy() { controllers.get(view)?.destroy(); controllers.delete(view); },
+      destroy() { controllers.get(view)?.pause(); },
     }; },
   });
 }
@@ -102,6 +114,14 @@ export function isViewportRow(view: EditorView, position: number | undefined, en
 export function rowInViewport(decorations: readonly Decoration[]): boolean {
   return !!decorations.find(item => item.spec.tableViewport)?.spec.viewportVisible;
 }
+export function isViewportCell(view: EditorView, position: number | undefined, enabled: boolean) {
+  if (!enabled || position === undefined) return false;
+  const resolved = view.state.doc.resolve(position);
+  return resolved.parent.type.spec.tableRole === 'row' && isViewportRow(view, resolved.before(), enabled);
+}
+export function cellInViewport(decorations: readonly Decoration[]) {
+  return decorations.some(item => item.spec.tableCellViewport === 'visible');
+}
 export function tableRowHeight(node: Node) { return Math.max(Number(node.attrs.height) || 0, heights.get(node) ?? ESTIMATED_HEIGHT); }
 
 interface ObservedRow { getPos: () => number | undefined; getNode: () => Node; isVisible: () => boolean; mounted: boolean; intersecting?: boolean }
@@ -110,10 +130,12 @@ class ViewportController {
   private mounted = new Set<Element>();
   private pending = new Map<Element, boolean>();
   private frame = 0;
-  private intersection: IntersectionObserver;
-  private resize: ResizeObserver | null;
-  constructor(private view: EditorView) {
-    const owner = findScrollContainer(view.dom);
+  private intersection: IntersectionObserver | undefined;
+  private resize: ResizeObserver | undefined;
+  constructor(private view: EditorView) { this.resume(); }
+  resume() {
+    this.pause();
+    const owner = findScrollContainer(this.view.dom);
     this.intersection = new IntersectionObserver(entries => {
       for (const entry of entries) {
         const row = this.rows.get(entry.target); if (!row) continue;
@@ -124,15 +146,20 @@ class ViewportController {
         this.pending.set(entry.target, entry.isIntersecting);
       }
       if (!this.frame && this.pending.size) this.frame = requestAnimationFrame(() => this.flush());
-    }, { root: owner === view.dom.ownerDocument.documentElement ? null : owner, rootMargin: '800px 0px' });
-    this.resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
+    }, { root: owner === this.view.dom.ownerDocument.documentElement ? null : owner, rootMargin: '800px 0px' });
+    this.resize = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(entries => {
       for (const entry of entries) {
         const row = this.rows.get(entry.target);
         if (row?.mounted) { const height = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
           if (height > 0) heights.set(row.getNode(), height); }
       }
     });
+    for (const [element, row] of this.rows) {
+      this.intersection.observe(element);
+      if (row.mounted) this.resize?.observe(element);
+    }
   }
+  pause() { cancelAnimationFrame(this.frame); this.frame = 0; this.intersection?.disconnect(); this.resize?.disconnect(); this.intersection = undefined; this.resize = undefined; this.pending.clear(); }
   refresh() {
     // A whole-table replace may reset the initial window while retaining an
     // endpoint's DOM. Its intersection has not changed, so IO will not repeat
@@ -146,28 +173,53 @@ class ViewportController {
   private flush() {
     this.frame = 0;
     if (this.view.isDestroyed) return;
-    const state = tableViewportKey.getState(this.view.state), changes: Visibility[] = [];
+    const state = tableViewportKey.getState(this.view.state), changes: Visibility[] = [], visited = new Set<Element>();
     for (const [element, visible] of this.pending) {
       const row = this.rows.get(element);
       // getPos scans preceding view siblings. In particular, do not resolve the
       // initial observation of every already-hidden row in a large table.
       if (!row || row.isVisible() === visible) continue;
       const pos = row.getPos();
-      if (pos !== undefined && state?.rows.get(pos)?.visible !== visible) changes.push({ pos, visible });
+      const indexed = pos === undefined ? undefined : state?.rows.get(pos);
+      if (!indexed) continue;
+      const start = indexed.index - indexed.index % ROW_BATCH;
+      const first = element.parentElement?.children[start];
+      if (!first || visited.has(first)) continue;
+      visited.add(first);
+      // Change a small contiguous batch at once, with the existing 800px look-
+      // ahead. This avoids invalidating table styles for every crossed row while
+      // retaining at most two partial batches beyond the viewport window.
+      const batch: ObservedRow[] = [];
+      for (let next: Element | null = first; next && batch.length < ROW_BATCH; next = next.nextElementSibling) {
+        const member = this.rows.get(next); if (!member) break;
+        batch.push(member);
+      }
+      const wanted = batch.some(member => member.intersecting);
+      for (const member of batch) {
+        if (member.isVisible() === wanted) continue;
+        const at = member.getPos();
+        if (at !== undefined && state?.rows.get(at)?.visible !== wanted) changes.push({ pos: at, visible: wanted });
+      }
     }
     this.pending.clear();
     if (changes.length) this.view.dispatch(this.view.state.tr.setMeta(tableViewportKey, changes).setMeta('addToHistory', false));
   }
   observe(element: Element, row: ObservedRow) {
-    this.rows.set(element, row); this.intersection.observe(element); if (row.mounted) this.resize?.observe(element);
+    this.rows.set(element, row); this.intersection?.observe(element); if (row.mounted) this.resize?.observe(element);
     if (row.mounted) this.mounted.add(element);
-    return () => { this.rows.delete(element); this.mounted.delete(element); this.pending.delete(element); this.intersection.unobserve(element); this.resize?.unobserve(element); };
+    return { update: (mounted: boolean) => {
+      row.mounted = mounted;
+      if (mounted) { this.mounted.add(element); this.resize?.observe(element); }
+      else { this.mounted.delete(element); this.resize?.unobserve(element); }
+    }, destroy: () => {
+      this.rows.delete(element); this.mounted.delete(element); this.pending.delete(element); this.intersection?.unobserve(element); this.resize?.unobserve(element);
+      if (!this.rows.size) { this.pause(); controllers.delete(this.view); }
+    } };
   }
-  destroy() { cancelAnimationFrame(this.frame); this.intersection.disconnect(); this.resize?.disconnect(); this.rows.clear(); this.mounted.clear(); this.pending.clear(); }
 }
 const controllers = new WeakMap<EditorView, ViewportController>();
 export function observeTableRow(view: EditorView, element: Element, row: ObservedRow) {
-  if (typeof IntersectionObserver === 'undefined') return () => {};
+  if (typeof IntersectionObserver === 'undefined') return undefined;
   let controller = controllers.get(view);
   if (!controller) { controller = new ViewportController(view); controllers.set(view, controller); }
   return controller.observe(element, row);

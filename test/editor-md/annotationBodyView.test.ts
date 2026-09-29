@@ -79,7 +79,7 @@ it('uses the shared worker and chunked import for large Office HTML and keeps ta
   worker.respond(normalized.content);
   await vi.waitFor(() => expect(view.state.doc.textContent).toContain('解释 599'), { timeout: 5000 });
   expect(view.dom.querySelectorAll('tr')).toHaveLength(600);
-  expect(view.dom.querySelectorAll('td').length).toBeLessThanOrEqual(74);
+  expect(view.dom.querySelectorAll('td > p').length).toBeLessThanOrEqual(74);
   expect(view.dom.querySelectorAll('.nb-row-placeholder').length).toBeGreaterThan(500);
   expect(undoDepth(view.state)).toBe(1);
   undo(view.state, view.dispatch); expect(view.state.doc.eq(before)).toBe(true);
@@ -129,14 +129,14 @@ it('cancels a pending paste with Escape without changing draft content or histor
 it('virtualizes read panels and preserves table viewport support after parent body updates', () => {
   const view = create([table(1000)], false);
   expect(view.dom.querySelectorAll('tr')).toHaveLength(1000);
-  expect(view.dom.querySelectorAll('td')).toHaveLength(72);
+  expect(view.dom.querySelectorAll('td > p')).toHaveLength(72);
   const rows: number[] = []; view.state.doc.firstChild!.forEach((_node, offset) => rows.push(offset + 1));
   view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, rows[700] + 4)));
   expect(view.nodeDOM(rows[700])?.textContent).toBe('700:0700:1');
-  expect(view.dom.querySelectorAll('td').length).toBeLessThanOrEqual(74);
+  expect(view.dom.querySelectorAll('td > p').length).toBeLessThanOrEqual(74);
   updateAnnotationBodyView(view, body([table(120)]));
   expect(tableViewportKey.getState(view.state)?.rows.size).toBe(120);
-  expect(view.dom.querySelectorAll('td')).toHaveLength(72);
+  expect(view.dom.querySelectorAll('td > p')).toHaveLength(72);
   expect(view.state.doc.firstChild?.childCount).toBe(120);
 });
 

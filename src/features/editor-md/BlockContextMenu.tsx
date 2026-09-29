@@ -30,6 +30,8 @@ import { isEmptyParagraph } from './blockInteractionScope';
 import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
 import { RemoveFormatting } from 'lucide-react';
 import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting, clearCaptionTextFormatting } from './textFormatting';
+import { ArrowRightLeft, WrapText, Square, Check } from 'lucide-react';
+import { blockReadingMode, setBlockReadingMode } from './blockReadingView';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -81,6 +83,15 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {styled && <BlockColorControl {...colors} onChange={patch => setBlockColors(editor, pos, patch)}/>}
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
+    {(type === 'table' || type === 'mathBlock') && <>
+      <div className="nb-block-reading-label">阅读视图</div>
+      {([{ mode: 'expand', label: '自然展开', Icon: ArrowRightLeft },
+        ...(type === 'mathBlock' ? [{ mode: 'wrap' as const, label: '自动换行', Icon: WrapText }] : []),
+        { mode: 'scroll', label: '滚动块', Icon: Square }] as const).map(({ mode, label, Icon }) =>
+        <button key={mode} type="button" role="menuitemradio" aria-checked={blockReadingMode(editor.state, pos) === mode}
+          onClick={() => action(() => setBlockReadingMode(editor, pos, mode))}><Icon size={16}/>{label}{blockReadingMode(editor.state, pos) === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
+      <hr/>
+    </>}
     {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}
     {native && hasCaptionTextFormatting(range.node) && <button role="menuitem" type="button" onClick={() => action(() => clearCaptionTextFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'table' ? '清除表注文字格式' : '清除图注文字格式'}</button>}
     {native && type === 'imageCollection' && <>

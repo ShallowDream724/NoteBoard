@@ -1110,7 +1110,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   cursor: col-resize;
 }
 .ProseMirror .tableWrapper {
-  overflow-x: auto;
+  overflow: visible;
   margin: 16px 0;
 }
 

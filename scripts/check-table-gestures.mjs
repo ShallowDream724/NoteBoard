@@ -1,3 +1,4 @@
+/* global window, document, requestAnimationFrame, performance, PointerEvent */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -17,10 +18,11 @@ import React from 'react'; import {createRoot} from 'react-dom/client';
 import {Editor,EditorContent} from '@tiptap/react';
 import {buildExtensions} from './src/features/editor-md/extensions';
 import {parseMarkdown,serializeMarkdown} from './src/features/editor-md/serialize';
+import {initializeEditorDocument,serializeNativeNode} from './src/features/editor-md/editorDocumentCodec';
 import {TooltipProvider} from './src/components/Tooltip';
 import './src/styles/globals.css'; import 'katex/dist/katex.min.css';
 const host=document.querySelector('#root'); host.style.cssText='width:1000px;height:850px;overflow:auto;padding:24px;margin:0';host.dataset.editorScroll='true';
-let editor,root; window.tableCheck={async mount(md){root?.unmount();editor?.destroy();editor=new Editor({extensions:buildExtensions(),content:'',editorProps:{attributes:{class:'nb-prose'}}});parseMarkdown(editor,md);root=createRoot(host);root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>);window.ed=editor;window.changes=[];editor.on('transaction',({transaction})=>{if(transaction.docChanged)window.changes.push(transaction.steps.length)});},source:()=>serializeMarkdown(editor),undo:()=>editor.commands.undo()};
+let editor,root; window.tableCheck={async mount(md){root?.unmount();editor?.destroy();editor=new Editor({extensions:buildExtensions(),content:'',editorProps:{attributes:{class:'nb-prose'}}});parseMarkdown(editor,md);initializeEditorDocument(editor,serializeNativeNode(editor.state.doc),'noteboard');root=createRoot(host);root.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>);window.ed=editor;window.changes=[];editor.on('transaction',({transaction})=>{if(transaction.docChanged)window.changes.push(transaction.steps.length)});},source:()=>serializeMarkdown(editor),undo:()=>editor.commands.undo()};
 `);
 if (!process.argv.includes('--reuse-build')) await build({ configFile: false, root: dir, base: './', worker: { format: 'es' }, plugins: [react(), tailwindcss()], build: { outDir: path.join(dir, 'dist'), emptyOutDir: false, minify: true }, logLevel: 'warn' });
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };

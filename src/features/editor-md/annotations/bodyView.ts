@@ -57,7 +57,8 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
       ...(tables ? {
         table: (node, view) => new EfficientTableView(node, 40, view, { class: 'nb-table' }),
         tableRow: (node, view, getPos, decorations) => createTableRowView(node, view, getPos, decorations),
-        tableCell: node => new TableCellView(node), tableHeader: node => new TableCellView(node),
+        tableCell: (node, view, getPos, decorations) => new TableCellView(node, decorations, { view, getPos }),
+        tableHeader: (node, view, getPos, decorations) => new TableCellView(node, decorations, { view, getPos }),
       } satisfies NonNullable<ConstructorParameters<typeof EditorView>[1]['nodeViews']> : {}),
       image(node) {
         const figure = document.createElement('figure'); figure.className = 'nb-annotation-image'; figure.contentEditable = 'false';

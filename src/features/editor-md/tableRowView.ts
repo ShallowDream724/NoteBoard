@@ -7,9 +7,12 @@ export function createTableRowView(node: Node, view: EditorView, getPos: () => n
   const row = document.createElement('tr');
   // The constructor position is supplied directly by ProseMirror.
   const virtual = isViewportRow(view, getPos(), viewportEnabled);
-  const mode = virtual ? rowViewportMode(decorations) ?? 'hidden' : undefined;
-  const mounted = mode !== 'hidden';
-  if (!mounted) { row.className = 'nb-row-placeholder'; row.setAttribute('aria-hidden', 'true'); }
+  let mounted = !virtual || rowViewportMode(decorations) === 'visible';
+  const show = () => {
+    row.classList.toggle('nb-row-placeholder', !mounted);
+    if (mounted) row.removeAttribute('aria-hidden'); else row.setAttribute('aria-hidden', 'true');
+  };
+  show();
   let shown: unknown;
   const showHeight = (height: unknown) => {
     if (height === shown) return;
@@ -17,16 +20,20 @@ export function createTableRowView(node: Node, view: EditorView, getPos: () => n
     row.style.height = row.style.minHeight = typeof height === 'number' ? `${height}px` : '';
   };
   showHeight(mounted ? node.attrs.height : tableRowHeight(node));
-  const unobserve = mode ? observeTableRow(view, row, { getPos, getNode: () => node, isVisible: () => rowInViewport(decorations), mounted }) : undefined;
+  const observer = virtual ? observeTableRow(view, row, { getPos, getNode: () => node, isVisible: () => rowInViewport(decorations), mounted }) : undefined;
   return {
-    dom: row, contentDOM: mounted ? row : undefined,
+    // Keep the row shell stable: replacing a tr invalidates sibling styles for
+    // the entire tbody. Cell views virtualize only their editable descendants.
+    dom: row, contentDOM: row,
     update(next, nextDecorations) {
-      if (next.type !== node.type || (virtual ? rowViewportMode(nextDecorations) ?? 'hidden' : undefined) !== mode) return false;
+      if (next.type !== node.type || isViewportRow(view, getPos(), viewportEnabled) !== virtual) return false;
       node = next; decorations = nextDecorations;
+      const nextMounted = !virtual || rowViewportMode(decorations) === 'visible';
+      if (nextMounted !== mounted) { mounted = nextMounted; show(); observer?.update(mounted); }
       showHeight(mounted ? node.attrs.height : tableRowHeight(node));
       return true;
     },
     ignoreMutation: mutation => mutation.type === 'attributes' && mutation.target === row,
-    destroy: unobserve,
+    destroy: observer?.destroy,
   };
 }

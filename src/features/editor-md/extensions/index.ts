@@ -154,6 +154,7 @@ import { InteractiveImageCollection, InteractiveImageSlot, InteractiveDisclosure
 import { withRichPresentation } from '../rich-content/presentedView';
 import { AnnotationBehavior } from '../annotations/extension';
 import { TableViewport } from '../tableViewport';
+import { BlockReadingView } from '../blockReadingView';
 import { NativeErrorView } from '../nativeErrorView';
 import { DocumentCapabilityGuard } from '../../document-format/capabilityGuard';
 
@@ -180,7 +181,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
-    CharacterCount, TableClipboard, TableViewport, TableSizing, TableSelectionHandles, TableMarginSelection, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
+    CharacterCount, TableClipboard, TableViewport, BlockReadingView, TableSizing, TableSelectionHandles, TableMarginSelection, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
     Extension.create({
       name: 'slashCommand',
       addOptions() { return { suggestion: slashSuggestion }; },

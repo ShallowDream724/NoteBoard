@@ -10,6 +10,10 @@
   min-height: 0;
   box-sizing: border-box;
   background: var(--editor-bg);
+  padding:10px;
+  border:1px solid var(--editor-border);
+  border-radius:10px;
+  box-shadow:var(--shadow-md,0 6px 20px #00000014);
 }
 .nb-outline-toggle { align-self:flex-end; display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; margin-bottom:12px; }
 .nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }

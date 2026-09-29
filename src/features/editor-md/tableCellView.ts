@@ -1,20 +1,28 @@
 import { DOMSerializer, type Node } from '@tiptap/pm/model';
-import type { ViewMutationRecord } from '@tiptap/pm/view';
+import type { Decoration, EditorView, ViewMutationRecord } from '@tiptap/pm/view';
 import { PresentedTableCell, PresentedTableHeader } from './tableCellPresentation';
+import { cellInViewport, isViewportCell } from './tableViewport';
+type CellViewport = { view: EditorView; getPos: () => number | undefined };
 
 /** Attribute edits retain the cell and its editable subtree. The default
  * view replaces a td/th wrapper whenever colwidth or presentation changes. */
 export class TableCellView {
   dom: HTMLElement;
-  contentDOM: HTMLElement;
+  contentDOM?: HTMLElement;
+  private mounted: boolean;
   private attributes: Record<string, string>;
-  constructor(private node: Node) {
+  constructor(private node: Node, decorations: readonly Decoration[] = [], private viewport?: CellViewport) {
+    this.mounted = this.shouldMount(decorations);
     const rendered = DOMSerializer.renderSpec(document, node.type.spec.toDOM!(node));
-    this.dom = rendered.dom as HTMLElement; this.contentDOM = rendered.contentDOM as HTMLElement;
+    this.dom = rendered.dom as HTMLElement; this.contentDOM = this.mounted ? rendered.contentDOM as HTMLElement : undefined;
     this.attributes = Object.fromEntries([...this.dom.attributes].map(attr => [attr.name, attr.value]));
   }
-  update(node: Node) {
+  private shouldMount(decorations: readonly Decoration[]) {
+    return !this.viewport || !isViewportCell(this.viewport.view, this.viewport.getPos(), true) || cellInViewport(decorations);
+  }
+  update(node: Node, decorations: readonly Decoration[]) {
     if (node.type !== this.node.type) return false;
+    if (this.shouldMount(decorations) !== this.mounted) return false;
     if (node.attrs !== this.node.attrs) {
       const spec = node.type.spec.toDOM!(node) as [string, Record<string, unknown>, number];
       const next: Record<string, string> = {};
@@ -27,5 +35,8 @@ export class TableCellView {
   }
   ignoreMutation(mutation: ViewMutationRecord) { return mutation.type === 'attributes' && mutation.target === this.dom; }
 }
-export const EditableTableCell = PresentedTableCell.extend({ addNodeView() { return ({ node }) => new TableCellView(node); } });
-export const EditableTableHeader = PresentedTableHeader.extend({ addNodeView() { return ({ node }) => new TableCellView(node); } });
+function cellView(enabled: boolean) {
+  return ({ node, view, getPos, decorations }: { node: Node; view: EditorView; getPos: () => number | undefined; decorations: readonly Decoration[] }) => new TableCellView(node, decorations, enabled ? { view, getPos } : undefined);
+}
+export const EditableTableCell = PresentedTableCell.extend({ addNodeView() { return cellView(this.editor.extensionManager.extensions.some(extension => extension.name === 'tableViewport')); } });
+export const EditableTableHeader = PresentedTableHeader.extend({ addNodeView() { return cellView(this.editor.extensionManager.extensions.some(extension => extension.name === 'tableViewport')); } });

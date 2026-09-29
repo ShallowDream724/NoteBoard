@@ -2,7 +2,7 @@ import { TableView } from '@tiptap/extension-table';
 import type { Node } from '@tiptap/pm/model';
 import type { EditorView, ViewMutationRecord } from '@tiptap/pm/view';
 import './tableView.css';
-import { TableRowLayout, isLargeTable, hasSimpleTableRows } from './tableRowLayout';
+import { TableRowLayout, isLargeTable, hasSimpleTableRows, tableColumnWidths, tableMinimumWidth } from './tableRowLayout';
 import { tableAlignment, tableAlignmentMargins } from './tableAlignment';
 import { TableAccessories } from './tableAccessories';
 
@@ -22,6 +22,7 @@ export class EfficientTableView extends TableView {
     let fixed = !!node.firstChild;
     node.firstChild?.forEach(cell => { if (!cell.attrs.colwidth?.every((width: number) => width > 0)) fixed = false; });
     this.table.style.tableLayout = fixed ? 'fixed' : '';
+    this.table.style.minWidth = tableMinimumWidth(tableColumnWidths(node));
     this.dom.classList.toggle('nb-fixed-columns', fixed);
     this.rows.update(node, large);
     this.applyAlignment(node);

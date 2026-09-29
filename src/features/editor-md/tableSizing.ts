@@ -10,6 +10,7 @@ import { tableGesturePreview } from './tableGesturePreview';
 import { createTableRowView } from './tableRowView';
 import { runWithDocumentCapability } from '../document-format/featureGate';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { tableReadingBounds } from './tableReadingViewport';
 
 export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
@@ -77,13 +78,12 @@ export const TableSizing = Extension.create({
     const showGuide = (edge: Edge) => {
       if (!guide || !view) return;
       const bounds = edge.axis === 'row' ? edge.row.getBoundingClientRect() : edge.cell.getBoundingClientRect();
-      const viewport = findScrollContainer(view.dom).getBoundingClientRect();
-      const wrapper = edge.table.parentElement!.getBoundingClientRect();
+      const viewport = tableReadingBounds(edge.table, findScrollContainer(view.dom));
       const table = edge.table.getBoundingClientRect();
       const horizontal = edge.axis === 'row';
       const boundary = horizontal ? bounds.bottom : edge.side === 'left' ? bounds.left : bounds.right;
-      const from = horizontal ? Math.max(bounds.left, viewport.left, wrapper.left) : Math.max(table.top, viewport.top, wrapper.top);
-      const to = horizontal ? Math.min(bounds.right, viewport.right, wrapper.right) : Math.min(table.bottom, viewport.bottom, wrapper.bottom);
+      const from = horizontal ? Math.max(bounds.left, viewport.left) : Math.max(table.top, viewport.top);
+      const to = horizontal ? Math.min(bounds.right, viewport.right) : Math.min(table.bottom, viewport.bottom);
       if (to <= from) { hideGuide(); return; }
       shown = edge; guide.hidden = false;
       guide.style.cssText = horizontal

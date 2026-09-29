@@ -3,6 +3,7 @@ import type { Node } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import type { EditorView } from '@tiptap/pm/view';
+import { tableReadingBounds } from './tableReadingViewport';
 
 function cellBounds(view: EditorView, position: number) {
   const cell = view.nodeDOM(position);
@@ -54,7 +55,9 @@ export function withTableSelectionView(plugin: Plugin): Plugin {
       if (!host.clientHeight) { overlay.hidden = true; return; }
       const a = cellBounds(view, selection.$anchorCell.pos), b = cellBounds(view, selection.$headCell.pos);
       if (!a || !b) { overlay.hidden = true; return; }
-      const clip = host.getBoundingClientRect();
+      const row = view.nodeDOM(selection.$anchorCell.before());
+      const table = row instanceof Element ? row.closest('table') : null;
+      const clip = table ? tableReadingBounds(table, host) : host.getBoundingClientRect();
       const left = Math.max(0, clip.left, Math.min(a.left, b.left)), right = Math.min(innerWidth, clip.right, Math.max(a.right, b.right));
       const top = Math.max(0, clip.top, Math.min(a.top, b.top)), bottom = Math.min(innerHeight, clip.bottom, Math.max(a.bottom, b.bottom));
       overlay.hidden = right <= left || bottom <= top;

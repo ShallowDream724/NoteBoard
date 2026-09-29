@@ -6,6 +6,7 @@ import './tableSelectionHandles.css';
 import { moveTableAxis, safeTableBoundary, tableAxisRange } from './tableStructure';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
+import { tableReadingBounds, tableReadingScroll } from './tableReadingViewport';
 
 type Axis = 'row' | 'column';
 interface Handle { button: HTMLButtonElement; axis: Axis; index: number }
@@ -53,7 +54,7 @@ export const TableSelectionHandles = Extension.create({
     function paintGesture() {
       const active = gesture; if (!active?.started) return;
       if (view.state.doc.nodeAt(active.pos) !== active.node) { finishGesture(false); return; }
-      const viewport = scroll.getBoundingClientRect();
+      const viewport = tableReadingBounds(active.table, scroll);
       const items = active.axis === 'row' ? active.table.rows : active.table.querySelector(':scope > colgroup')?.children;
       if (!items?.length) return;
       const point = active.axis === 'row' ? active.y : active.x;
@@ -76,16 +77,17 @@ export const TableSelectionHandles = Extension.create({
       }
     }
     function startDragScroll(active: NonNullable<typeof gesture>) {
+      const owner = tableReadingScroll(active.table, scroll);
       const axes: Parameters<typeof createDragEdgeScroller>[0] = [{
-        element: scroll, direction: 'y', edge: 40, maxSpeed: 880,
-        bounds: () => { const rect = scroll.getBoundingClientRect();
+        element: owner, direction: 'y', edge: 40, maxSpeed: 880,
+        bounds: () => { const rect = tableReadingBounds(active.table, scroll);
           return { start: Math.max(0, rect.top), end: Math.min(window.innerHeight, rect.bottom) }; },
       }];
       if (active.axis === 'column') {
-        const horizontal = active.table.parentElement!;
+        const horizontal = owner;
         axes.push({ element: horizontal, direction: 'x', edge: 40, maxSpeed: 880,
-          bounds: () => { const outer = scroll.getBoundingClientRect(), inner = horizontal.getBoundingClientRect();
-            return { start: Math.max(0, outer.left, inner.left), end: Math.min(window.innerWidth, outer.right, inner.right) }; },
+          bounds: () => { const rect = tableReadingBounds(active.table, scroll);
+            return { start: rect.left, end: rect.right }; },
         });
       }
       dragScroller = createDragEdgeScroller(axes, paintGesture);
@@ -152,15 +154,14 @@ export const TableSelectionHandles = Extension.create({
     function paint() {
       frame = 0;
       if (!visible || !table || !cell || !view.editable || !view.dom.contains(cell)) { hide(); return; }
-      const t = table.getBoundingClientRect(), viewport = scroll.getBoundingClientRect();
+      const t = table.getBoundingClientRect(), viewport = tableReadingBounds(table, scroll);
       const rows = table.rows;
       if (!rows.length) { hide(); return; }
       // A table's border box includes its caption. Selection belongs to the
       // cell grid, including the reserved heights of virtualized rows.
       const gridTop = rows[0].getBoundingClientRect().top;
       const gridBottom = rows[rows.length - 1].getBoundingClientRect().bottom;
-      const wrapper = table.parentElement!.getBoundingClientRect();
-      const left = Math.max(t.left, wrapper.left, viewport.left), right = Math.min(t.right, wrapper.right, viewport.right);
+      const left = Math.max(t.left, viewport.left), right = Math.min(t.right, viewport.right);
       const top = Math.max(gridTop, viewport.top), bottom = Math.min(gridBottom, viewport.bottom);
       if (right <= left || bottom <= top) { hide(); return; }
       paintedBounds = { left, right, top, bottom };

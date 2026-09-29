@@ -6,6 +6,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { tableAxisRange, tableGrid } from './tableStructure';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
+import { tableReadingBounds, tableReadingScroll } from './tableReadingViewport';
 
 interface TableTarget { table: HTMLTableElement; pos: number; node: PMNode }
 interface Gesture extends TableTarget {
@@ -164,22 +165,23 @@ export const TableMarginSelection = Extension.create({
       };
       const startDragScroll = (active: Gesture) => {
         const axes: Parameters<typeof createDragEdgeScroller>[0] = [];
+        const owner = tableReadingScroll(active.table, scroll);
         if (active.axis === 'row') axes.push({
-          element: scroll, direction: 'y', edge: 40, maxSpeed: 880,
-          bounds: () => { const rect = scroll.getBoundingClientRect();
+          element: owner, direction: 'y', edge: 40, maxSpeed: 880,
+          bounds: () => { const rect = tableReadingBounds(active.table, scroll);
             return { start: Math.max(0, rect.top), end: Math.min(innerHeight, rect.bottom) }; },
           // Stop when the table's first or last row reaches the visible edge.
-          limitDelta: delta => { const rect = scroll.getBoundingClientRect();
+          limitDelta: delta => { const rect = tableReadingBounds(active.table, scroll);
             const top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
             return delta < 0
               ? Math.max(delta, Math.min(0, active.table.rows[0].getBoundingClientRect().top - top))
               : Math.min(delta, Math.max(0, active.table.rows[active.table.rows.length - 1].getBoundingClientRect().bottom - bottom)); },
         });
         else {
-          const horizontal = active.table.parentElement!;
+          const horizontal = owner;
           axes.push({ element: horizontal, direction: 'x', edge: 40, maxSpeed: 880,
-            bounds: () => { const outer = scroll.getBoundingClientRect(), inner = horizontal.getBoundingClientRect();
-              return { start: Math.max(0, outer.left, inner.left), end: Math.min(innerWidth, outer.right, inner.right) }; },
+            bounds: () => { const rect = tableReadingBounds(active.table, scroll);
+              return { start: rect.left, end: rect.right }; },
           });
         }
         dragScroller = createDragEdgeScroller(axes, selectAxis);

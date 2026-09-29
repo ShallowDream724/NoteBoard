@@ -27,7 +27,7 @@
   border-radius: 0;
 }
 
-/* Content reserves navigation space; the actual editor scrollers span the pane. */
+/* Navigation overlays the document; opening it must not reflow wide content. */
 .nb-editor-area {
   container: document-pane / inline-size;
 }
@@ -42,13 +42,9 @@
   --document-reading-width: min(100%, calc(var(--content-max-width) + 64px));
   min-height: 0;
 }
-.nb-document-stage[data-outline] {
-  --document-outline-space: calc(var(--document-outline-width) + var(--document-outline-inset) + 24px);
-  --document-reading-width: var(--content-max-width);
-}
 .nb-document-content {
   container: document-content / inline-size;
-  width: calc(100% - var(--document-outline-space, 0px));
+  width: 100%;
 }
 .nb-markdown-source .cm-scroller {
   box-sizing: border-box;
@@ -63,7 +59,7 @@
 /* The control lane is already part of the document width. Do not add a second
  * centering margin in a compact pane when the outline is closed. */
 @container document-pane (max-width: 960px) {
-  .nb-document-stage:not([data-outline]) { --document-reading-width: 100%; }
+  .nb-document-stage { --document-reading-width: 100%; }
 }
 @container document-content (max-width: 640px) {
   .nb-document-content > .ProseMirror {

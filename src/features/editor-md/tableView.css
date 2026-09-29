@@ -10,13 +10,14 @@
 .nb-table-caption:focus-visible { outline:1px solid var(--editor-accent); border-radius:4px; }
 table.nb-isolated-rows > .nb-table-accessories { display:block; }
 .nb-table-selection-overlay { position:fixed; z-index:1; pointer-events:none; background:var(--editor-selection, #3b82f626); }
-.nb-large-table.nb-fixed-columns > table > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
+.nb-large-table.nb-fixed-columns > table:not(.nb-isolated-rows) > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }
 table.nb-isolated-rows { display:block; position:relative; }
 table.nb-isolated-rows>colgroup { display:flex; position:absolute; top:0; left:0; width:100%; height:0; pointer-events:none; }
 table.nb-isolated-rows>colgroup>col { display:block; flex:none; }
 table.nb-isolated-rows>tbody { display:block; }
 table.nb-isolated-rows>tbody>tr { display:flex; height:auto !important; }
 table.nb-isolated-rows>tbody>tr.nb-row-placeholder { display:block; contain:strict; pointer-events:none; }
+table.nb-isolated-rows>tbody>tr.nb-row-placeholder>:is(td,th) { display:none; }
 table.nb-isolated-rows>tbody>tr+tr>:is(td,th) { border-top-width:0; }
 table.nb-isolated-rows>tbody>tr>:is(td,th) { display:block; flex:none; min-width:0; box-sizing:border-box; align-content:start; }
 table.nb-isolated-rows>tbody>tr>:is(td,th)[style*="vertical-align: middle"],
@@ -28,6 +29,7 @@ table.nb-isolated-rows>tbody>tr>:is(td,th)+:is(td,th) { border-left-width:0; }
 .nb-prose .math-node-display { contain: style; }
 .nb-row-resize-guide { position: fixed; left: 0; top: 0; height: 4px; background: var(--accent-500, #3b82f6); pointer-events: none; z-index: 20; }
 .nb-prose :is(td, th) { --math-white-space: normal; }
+.nb-prose .math-node-display { --math-white-space: nowrap; }
 .nb-prose :is(td, th) :is(p, a) { word-break: normal; overflow-wrap: break-word; }
 .nb-prose :is(td, th) .math-node > span { max-width: 100%; }
 .nb-prose :is(td, th) .math-preview { width: auto !important; min-width: 0 !important; max-width: 100%; }

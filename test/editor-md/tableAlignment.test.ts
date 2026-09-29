@@ -14,6 +14,7 @@ import { nativeTestEditor } from './nativeTestEditor';
 import { TableRowLayout } from '../../src/features/editor-md/tableRowLayout';
 import { ResizableTableRow } from '../../src/features/editor-md/tableSizing';
 import { TableViewport } from '../../src/features/editor-md/tableViewport';
+import { EditableTableCell, EditableTableHeader } from '../../src/features/editor-md/tableCellView';
 import { CellSelection } from '@tiptap/pm/tables';
 
 const content = '<table><tr><th colwidth="80">A</th><th colwidth="120">B</th></tr><tr><td colwidth="80" style="text-align:right">C</td><td colwidth="120">D</td></tr></table><p>tail</p>';
@@ -117,7 +118,7 @@ describe('whole-table alignment', () => {
   it('reuses row layout during a real 10k-row editor transaction and preserves cell selection', () => {
     const row = { type: 'tableRow', content: ['A', 'B'].map(text => ({ type: 'tableCell', attrs: { colwidth: [80] },
       content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })) };
-    const editor = nativeTestEditor(new Editor({ extensions: [...buildDocumentExtensions({ tableRow: ResizableTableRow,
+    const editor = nativeTestEditor(new Editor({ extensions: [...buildDocumentExtensions({ tableRow: ResizableTableRow, tableCell: EditableTableCell, tableHeader: EditableTableHeader,
       table: MarkdownTable.configure({ resizable: false, View: EfficientTableView }) }), TableViewport, DocumentCapabilityGuard],
     content: { type: 'doc', content: [{ type: 'table', content: Array.from({ length: 10_000 }, () => row) }, { type: 'paragraph' }] } }));
     const layout = vi.spyOn(TableRowLayout.prototype, 'update');
@@ -132,7 +133,7 @@ describe('whole-table alignment', () => {
       expect(editor.state.selection.eq(selection)).toBe(true);
       expect(editor.view.dom.querySelector('table')).toBe(dom);
       expect(layout).not.toHaveBeenCalled();
-      expect(editor.view.dom.querySelectorAll('td').length).toBeLessThan(100);
+      expect(editor.view.dom.querySelectorAll('td > p').length).toBeLessThan(100);
       console.info(`10k-row table alignment transaction: ${elapsed.toFixed(1)} ms`);
     } finally { layout.mockRestore(); editor.destroy(); }
   });
