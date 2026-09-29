@@ -9,7 +9,6 @@ import { parseEditorDocument, serializeEditorDocument } from '../../src/features
 import { tableViewportKey } from '../../src/features/editor-md/tableViewport';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { BlockContextMenu } from '../../src/features/editor-md/BlockContextMenu';
-import { blockReadingMode, setBlockReadingMode, type BlockReadingMode } from '../../src/features/editor-md/blockReadingView';
 import { applyTheme, applyTypography } from '../../src/core/theme/applyTheme';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import '../../src/styles/globals.css';
@@ -37,8 +36,6 @@ const qa = {
   tablePositions: () => { const values: number[] = []; getMdTipTapEditor(key)!.state.doc.descendants((node, pos) => { if (node.type.name === 'table') values.push(pos); }); return values; },
   visibleState: () => [...tableViewportKey.getState(getMdTipTapEditor(key)!.state)!.rows.values()].filter(row => row.visible).length,
   reconfigure: () => { const editor = getMdTipTapEditor(key)!; editor.unregisterPlugin(cycleKey); editor.registerPlugin(new Plugin({ key: cycleKey })); },
-  mode: (pos: number, mode: BlockReadingMode) => setBlockReadingMode(getMdTipTapEditor(key)!, pos, mode),
-  getMode: (pos: number) => blockReadingMode(getMdTipTapEditor(key)!.state, pos),
   showMenu: (pos: number) => menuRoot.render(<TooltipProvider><BlockContextMenu editor={getMdTipTapEditor(key)!} pos={pos} close={() => menuRoot.render(null)}/></TooltipProvider>),
   outline: (shown: boolean) => { document.querySelector('.nb-document-stage')?.toggleAttribute('data-outline', shown); (document.querySelector('.nb-document-outline') as HTMLElement).style.display = shown ? '' : 'none'; },
 };

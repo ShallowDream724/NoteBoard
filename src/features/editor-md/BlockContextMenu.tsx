@@ -31,7 +31,7 @@ import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
 import { RemoveFormatting } from 'lucide-react';
 import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting, clearCaptionTextFormatting } from './textFormatting';
 import { ArrowRightLeft, WrapText, Square, Check } from 'lucide-react';
-import { blockReadingMode, setBlockReadingMode } from './blockReadingView';
+import { documentFormulaReadingMode, setDocumentFormulaReadingMode, tableReadingMode, setTableReadingMode } from './documentReadingView';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -45,6 +45,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   const colors = blockColors(range.node);
   if (isEmptyParagraph(range.node) && !colors.color && !colors.background) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem'].includes(type);
+  const readingMode = type === 'mathBlock' ? documentFormulaReadingMode(editor.state) : tableReadingMode(editor.state, pos);
   const styled = supportsBlockColors(type);
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
@@ -84,12 +85,12 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {type === 'table' && <><TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/><TableAppearanceMenu editor={editor}/></>}
     </div>}
     {(type === 'table' || type === 'mathBlock') && <>
-      <div className="nb-block-reading-label">阅读视图</div>
+      <div className="nb-block-reading-label">{type === 'mathBlock' ? '阅读视图 · 全文公式' : '阅读视图'}</div>
       {([{ mode: 'expand', label: '自然展开', Icon: ArrowRightLeft },
         ...(type === 'mathBlock' ? [{ mode: 'wrap' as const, label: '自动换行', Icon: WrapText }] : []),
         { mode: 'scroll', label: '滚动块', Icon: Square }] as const).map(({ mode, label, Icon }) =>
-        <button key={mode} type="button" role="menuitemradio" aria-checked={blockReadingMode(editor.state, pos) === mode}
-          onClick={() => action(() => setBlockReadingMode(editor, pos, mode))}><Icon size={16}/>{label}{blockReadingMode(editor.state, pos) === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
+        <button key={mode} type="button" role="menuitemradio" aria-checked={readingMode === mode}
+          onClick={() => action(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setTableReadingMode(editor, pos, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
       <hr/>
     </>}
     {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}

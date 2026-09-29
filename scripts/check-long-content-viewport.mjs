@@ -12,6 +12,7 @@ const server = await preview({ configFile: false, build: { outDir }, preview: { 
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const source = process.env.NOTEBOARD_STRESS_DOCUMENT ? await fs.readFile(process.env.NOTEBOARD_STRESS_DOCUMENT, 'utf8') : [
   '# 长内容阅读', '$$\nF(x)=' + Array.from({ length: 24 }, (_, i) => `\\frac{a_{${i}}x^{${i}}}{1+b_{${i}}}`).join('+') + '\n$$',
+  '$$\nG(x)=' + Array.from({ length: 24 }, (_, i) => `\\frac{c_{${i}}x^{${i}}}{1+d_{${i}}}`).join('+') + '\n$$',
   '## 千行观测表', '| 编号 | 数值 | 说明 |', '| --- | --- | --- |',
   ...Array.from({ length: 1000 }, (_, i) => `| R${String(i + 1).padStart(6, '0')} | ${((i + 1) / 8).toFixed(3)} | 第 ${i + 1} 次观测，边界记录 CONT |`),
   '\n## 30 列宽表', '| 样本 |' + Array.from({ length: 29 }, (_, i) => ` 变量 ${i + 1} |`).join(''),
@@ -83,13 +84,24 @@ try {
   const formulaPos = await page.evaluate(() => { let result; window.longContentQA.editor().state.doc.descendants((node, pos) => { if (result === undefined && node.type.name === 'mathBlock') result = pos; }); return result; });
   await formula.evaluate(node => node.scrollIntoView({ block: 'center' }));
   await formula.locator('.katex').first().waitFor();
+  const renderedIdentity = await formula.locator('.katex').first().evaluateHandle(node => node);
   const natural = await formula.locator('.math-preview').evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));
   await page.evaluate(pos => window.longContentQA.showMenu(pos), formulaPos);
   await page.getByRole('menuitemradio', { name: '自动换行' }).click();
   const wrapped = await formula.locator('.math-preview').evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height, whiteSpace: getComputedStyle(node.querySelector('.katex-html')).whiteSpace }));
   assert.equal(wrapped.whiteSpace, 'normal');
+  assert(await formula.locator('.katex').first().evaluate((node, before) => node === before, renderedIdentity), 'Global presentation must retain rendered KaTeX DOM');
   assert(wrapped.width <= 1500 && wrapped.height > natural.height, 'Wrap view should wrap at KaTeX boundaries');
   await page.screenshot({ path: '.tmp/long-content-formula-wrap.png' });
+  const secondFormula = page.locator('.math-node-display').nth(1);
+  await secondFormula.evaluate(node => node.scrollIntoView({ block: 'center' }));
+  await secondFormula.locator('.katex').first().waitFor();
+  assert.equal(await secondFormula.locator('.katex-html').first().evaluate(node => getComputedStyle(node).whiteSpace), 'normal', 'Other formulas must inherit the document policy when mounted');
+  const secondFormulaPos = await page.evaluate(() => { const positions = []; window.longContentQA.editor().state.doc.descendants((node, pos) => { if (node.type.name === 'mathBlock') positions.push(pos); }); return positions[1]; });
+  await page.evaluate(pos => window.longContentQA.showMenu(pos), secondFormulaPos);
+  assert.equal(await page.getByRole('menuitemradio', { name: '自动换行' }).getAttribute('aria-checked'), 'true');
+  await page.getByRole('menuitemradio', { name: '滚动块' }).click();
+  assert.equal(await formula.locator('.math-node-preview').evaluate(node => getComputedStyle(node).overflowX), 'auto', 'Changing another formula menu must also affect the first formula');
   await page.evaluate(pos => window.longContentQA.showMenu(pos), formulaPos);
   await page.getByRole('menuitemradio', { name: '自然展开' }).click();
   const restored = await formula.locator('.math-preview').evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));

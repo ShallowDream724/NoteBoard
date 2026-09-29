@@ -1,8 +1,8 @@
 /* One document scroller by default. Local scrolling is an explicit reading choice. */
 .ProseMirror .tableWrapper { overflow:visible; }
 .ProseMirror .tableWrapper[data-block-reading="scroll"] { overflow:auto; max-height:min(65vh,640px); overscroll-behavior:auto; }
-.ProseMirror [data-block-reading="scroll"] .math-node-preview { overflow:auto; max-height:min(65vh,640px); }
-.ProseMirror [data-block-reading="wrap"] .math-node-preview { --math-white-space:normal; }
-.ProseMirror [data-block-reading="wrap"] .math-preview { width:100%!important; min-width:0!important; }
+.ProseMirror[data-formula-reading="scroll"] .math-node-display .math-node-preview { overflow:auto; max-height:min(65vh,640px); }
+.ProseMirror[data-formula-reading="wrap"] .math-node-display .math-node-preview { --math-white-space:normal; }
+.ProseMirror[data-formula-reading="wrap"] .math-node-display .math-preview { width:100%!important; min-width:0!important; }
 .nb-block-reading-label { padding:5px 10px 2px; font-size:11px; color:var(--editor-text-muted); }
 .nb-block-context-menu > button[role="menuitemradio"][aria-checked="true"] { color:var(--editor-accent); background:var(--toolbar-active); }
