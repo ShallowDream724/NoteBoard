@@ -1,7 +1,8 @@
+@import '../../core/math/scrolling.css';
 /* One document scroller by default. Local scrolling is an explicit reading choice. */
 .ProseMirror .tableWrapper { overflow:visible; }
 .ProseMirror[data-table-reading="scroll"] .tableWrapper { overflow:auto; max-height:min(65vh,640px); overscroll-behavior:auto; }
-.ProseMirror[data-formula-reading="scroll"] .math-node-display .math-node-preview { overflow:auto; max-height:min(65vh,640px); }
+.ProseMirror[data-formula-reading="scroll"] .math-node-display .math-node-preview { overflow:auto; max-height:min(65vh,640px); padding-inline-end:var(--math-scroll-inline-end,0px); }
 .ProseMirror[data-formula-reading="wrap"] .math-node:not(.math-node-editing) .math-node-preview,
 .ProseMirror[data-formula-reading="scroll"] .math-node:not(.math-node-display):not(.math-node-editing) .math-node-preview { --math-white-space:normal; max-width:100%; }
 .ProseMirror[data-formula-reading="wrap"] .math-node:not(.math-node-editing) .math-preview:not(.nb-matrix-view),

@@ -1,3 +1,4 @@
+@import '../../core/math/scrolling.css';
 :root { --export-font:16px; --export-line:1.8; --export-width:100%; }
 html { background:#f5f6f8; }
 body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:transparent; }
@@ -8,10 +9,7 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-reader { padding:clamp(24px,5vw,58px); background:#fff; border:1px solid #e6e9ef; border-radius:16px; box-shadow:0 3px 16px #1e293b05; }
 .export-reader #document { overflow-x:clip; }
 .export-reader .export-table-scroll { max-width:100%; overflow-x:auto; }
-.export-reader .export-math.display { max-width:100%; overflow-x:auto; }
-/* KaTeX's .vlist-s is a fixed 2px table-cell past the visible right edge.
- * Reserve that space inside right-aligned formulas; genuinely wide bases still scroll. */
-.export-reader .export-math.display[data-math-align="right"] { padding-inline-end:2px; }
+.export-reader .export-math.display { max-width:100%; overflow-x:auto; padding-inline-end:var(--math-scroll-inline-end,0px); }
 .export-reader #document > :first-child { margin-top:0; }
 .export-reader h1 { font-size:2em; line-height:1.25; letter-spacing:-.015em; }
 .export-reader h2 { padding-bottom:.3em; border-bottom:1px solid #e8ebf0; }
@@ -40,4 +38,4 @@ body { max-width:1000px; margin:0 auto; padding:24px 24px 48px; background:trans
 .export-image-dialog img { display:block; max-width:88vw; max-height:78vh; width:auto; height:auto; object-fit:contain; }
 .export-image-dialog button { display:block; margin:0 0 10px auto; padding:6px 10px; border:0; border-radius:8px; background:#f1f5f9; color:#334155; font:14px/1.4 system-ui,sans-serif; cursor:pointer; }
 @media (max-width:600px) { body { padding:10px 10px 20px; } .export-reader { padding:24px 18px; border-radius:12px; } }
-@media print { html,body { background:#fff; } body { max-width:none; margin:0; padding:0; } .export-page-actions,.export-image-dialog { display:none; } .export-reader { border:0; padding:0; border-radius:0; box-shadow:none; } .export-reader #document,.export-reader .export-table-scroll,.export-reader .export-math.display { overflow:visible; } details::details-content { content-visibility:visible!important; } }
+@media print { html,body { background:#fff; } body { max-width:none; margin:0; padding:0; } .export-page-actions,.export-image-dialog { display:none; } .export-reader { border:0; padding:0; border-radius:0; box-shadow:none; } .export-reader #document,.export-reader .export-table-scroll,.export-reader .export-math.display { overflow:visible; } .export-reader .export-math.display { padding-inline-end:0; } details::details-content { content-visibility:visible!important; } }

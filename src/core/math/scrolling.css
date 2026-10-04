@@ -1,0 +1,8 @@
+/* A scrolling consumer reserves this space inside its border-box viewport.
+ * KaTeX's .vlist-s table cell extends 2px beyond a right-aligned visible base;
+ * keeping that cell inside the viewport avoids a scrollbar for fitting math.
+ * The consumer owns overflow and applies padding-inline-end only while scrolling.
+ * Wide bases keep their natural width and therefore remain scrollable. */
+[data-math-align="right"] { --math-scroll-inline-end:2px; }
+[data-math-align="left"],
+[data-math-align="center"] { --math-scroll-inline-end:0px; }
