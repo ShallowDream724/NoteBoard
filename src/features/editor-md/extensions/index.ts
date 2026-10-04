@@ -156,7 +156,8 @@ import { AnnotationBehavior } from '../annotations/extension';
 import { TableViewport } from '../tableViewport';
 import { DocumentReadingView } from '../documentReadingView';
 import { NativeErrorView } from '../nativeErrorView';
-import { DocumentCapabilityGuard } from '../../document-format/capabilityGuard';
+import { DocumentCapabilityGuard, supportsAutomaticMarks } from '../../document-format/capabilityGuard';
+import { InlineFormattingInput } from '../inlineFormattingInput';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -171,7 +172,7 @@ const InteractiveTable = MarkdownTable.extend({
 /** Document grammar stays independent from UI and session state. */
 export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): Extensions {
   return [
-    ...buildDocumentExtensions({ image: withRichPresentation(EnhancedImageBlock.configure({ docKey })), codeBlock: withRichPresentation(CodeBlockView),
+    ...buildDocumentExtensions({ inlineFormattingInput: InlineFormattingInput.configure({ canApply: supportsAutomaticMarks }), image: withRichPresentation(EnhancedImageBlock.configure({ docKey })), codeBlock: withRichPresentation(CodeBlockView),
       mathInline: MathInline, mathBlock: withRichPresentation(MathBlock), mermaidBlock: withRichPresentation(MermaidBlock), plantumlBlock: withRichPresentation(PlantUmlBlock),
       infographicBlock: withRichPresentation(InfographicBlock), githubAlert: withRichPresentation(GitHubAlert), tableRow: ResizableTableRow,
       tableCell: EditableTableCell, tableHeader: EditableTableHeader, nativeError: NativeErrorView,

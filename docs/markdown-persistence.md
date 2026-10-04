@@ -33,3 +33,38 @@ introducing a separate Markdown representation.
   assembles fragments once. Its existing single semantic parse still decides
   whether the complete cleanup can be accepted. It never repeatedly copies the
   whole document for individual candidates.
+
+## CJK formatting boundaries
+
+`markdownBoundary.ts` classifies Han, Hiragana, Katakana and Hangul letters as
+word boundaries for paired formatting. `markdownLexer.ts` adapts the owning
+Marked tokenizer's Unicode classes while retaining its delimiter-run algorithm,
+nesting, escapes and Latin intraword-underscore rules. It never mutates global
+Marked rules or adds whitespace/hidden characters to source. Equal-length,
+temporary masks protect opaque code and math payloads; `==` and `++` use the
+same opaque-region handling rather than a first-closing-pair regex.
+
+`inlineFormatting.ts` reads tokens from the document manager's registered lexer,
+including its extensions. Visual typing/paste removes only recognized delimiters
+and applies marks in one transaction, preserving existing text and marks.
+Typing does not run during IME preedit and explicitly caps matching at 4096
+characters, even when Tiptap's node window returns a whole long text node.
+Longer spans remain literal during typing and remain available to full parsing.
+The UI adapter checks `supportsAutomaticMarks` before consuming input, so a
+format requiring NB cannot swallow a closing keystroke in Markdown. Commands
+and the final capability guard retain their existing conversion behavior.
+The existing `++underline++` extension remains supported in Markdown; this
+change does not redefine format capabilities or turn it into an NB-only mark.
+
+CodeMirror keeps incremental block/code/link parsing. Its inline adapter uses
+the same registered lexer and retains only numeric formatting ranges in a weak
+cache for each live inline context. It creates no second editor/document model,
+and there is no document-sized cache keyed by source strings.
+
+Regression coverage: `markdownBoundaries.test.ts` checks parsing, source syntax,
+typing, paste, real undo/redo transitions, nested opaque content and long input.
+`scripts/check-cjk-formatting.mjs` runs full editor views in Chromium, including
+IME composition, mode roundtrips, format restrictions and repeated 1000-paragraph
+mode switches with GC/DOM measurements. Cross-editor Markdown rendering still
+depends on the receiving application's grammar; exported HTML/PDF use NoteBoard's
+parsed document.

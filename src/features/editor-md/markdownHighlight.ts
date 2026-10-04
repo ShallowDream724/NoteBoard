@@ -1,4 +1,5 @@
 import Highlight from '@tiptap/extension-highlight';
+import { pairedFormattingTokenizer } from './inlineFormattingMask';
 
 // Fixed markup and a restricted CSS color value keep Markdown roundtrips independent
 // of browser HTML parsing without accepting arbitrary attributes, styles or URLs.
@@ -6,6 +7,7 @@ const safeColor = (value: unknown): value is string => typeof value === 'string'
   && /^(?:#[\da-f]{3,8}|[a-z]+|(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\([a-z\d.,%+\-/\s]+\))$/i.test(value);
 export { safeColor as isSafeHighlightColor };
 const tokenizer = Highlight.config.markdownTokenizer!;
+const paired = pairedFormattingTokenizer('highlight', '==');
 
 function closingMark(source: string, start: number): number {
   for (let cursor = start; cursor < source.length; cursor++) {
@@ -40,7 +42,7 @@ export const MarkdownHighlight = Highlight.extend({
           tokens: helpers.inlineTokens(source.slice(opening[0].length, closing)),
         };
       }
-      return tokenizer.tokenize(source, tokens, helpers);
+      return paired.tokenize(source, tokens, helpers);
     },
   },
   parseMarkdown(token, helpers) {

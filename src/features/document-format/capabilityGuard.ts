@@ -1,10 +1,11 @@
-import { Extension } from '@tiptap/core';
+import { Extension, type Editor } from '@tiptap/core';
 import type { Mark, Node, Fragment } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, type Transaction } from '@tiptap/pm/state';
 import { ReplaceStep, ReplaceAroundStep, AddMarkStep } from '@tiptap/pm/transform';
 import { editorDocumentFormat } from '../editor-md/editorDocumentCodec';
 import { runWithDocumentCapability } from './featureGate';
 import type { DocumentCapabilityId } from './capabilities';
+import { formatSupportsCapability } from './capabilities';
 import { showToast } from '../../stores/toastStore';
 import { CellTextStyleStep } from '../document-style/cellTextStyle';
 
@@ -14,6 +15,13 @@ const markCapabilities: Record<string, DocumentCapabilityId> = {
   textColor: 'textColor', highlight: 'highlight', textStyle: 'fontSize', fontSize: 'fontSize',
   conceal: 'conceal', annotationReference: 'annotation',
 };
+/** Automatic syntax conversion must decline before consuming input if the
+ * target format requires a user-mediated conversion. The literal input then
+ * proceeds normally; the final transaction guard remains authoritative. */
+export function supportsAutomaticMarks(editor: Editor, names: readonly string[]): boolean {
+  const format = editorDocumentFormat(editor);
+  return names.every(name => !markCapabilities[name] || formatSupportsCapability(format, markCapabilities[name]));
+}
 function markFeature(mark: Mark): Feature | null {
   const capability = markCapabilities[mark.type.name];
   return capability ? { capability, signature: `mark:${mark.type.name}:${JSON.stringify(mark.attrs)}` } : null;

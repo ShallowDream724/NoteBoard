@@ -21,6 +21,13 @@ import { NativeError } from './nativeError';
 import { BlockAppearance } from '../document-style/blockAppearanceSchema';
 import { inlineCodeComposition, inlineCodeInputRule, mapInlineCodeComposition } from './inlineCodeInput';
 import { Plugin } from '@tiptap/pm/state';
+import { InlineFormattingInput, withoutFormattingRules } from './inlineFormattingInput';
+import { pairedFormattingTokenizer } from './inlineFormattingMask';
+
+const ConsistentStarterKit = StarterKit.extend({
+  addExtensions() { return (this.parent?.() ?? []).map(extension => withoutFormattingRules(extension.name === 'underline'
+    ? extension.extend({ markdownTokenizer: pairedFormattingTokenizer('underline', '++') }) : extension)); },
+});
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
 const MarkdownCode = Code.extend({
@@ -46,7 +53,7 @@ const PresentedMarkdown = Markdown.extend({ onBeforeCreate(event) {
 /** One document grammar for editing, worker conversion and external formats. */
 export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}): Extensions {
   return [
-    StarterKit.configure({
+    ConsistentStarterKit.configure({
       code: false, codeBlock: false, blockquote: false, orderedList: false,
       undoRedo: { depth: 200, newGroupDelay: 300 },
       link: { openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: null, title: 'Ctrl + 单击以访问链接' } },
@@ -54,7 +61,7 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     }),
     // Highlight must wrap inline code; serializing its markup inside backticks
     // would turn the mark into literal code and discard the highlight on reload.
-    MarkdownHighlight.configure({ multicolor: true }), TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,
+    withoutFormattingRules(MarkdownHighlight.configure({ multicolor: true })), InlineFormattingInput, TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,
     MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
     MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, NativeError, ...richContentGrammar, ...annotationSchemaExtensions,

@@ -20,6 +20,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
 import { undoDepth as codeMirrorUndoDepth } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
+import { sourceFormattingGrammar } from './sourceFormattingGrammar';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
 import { TextSelection } from '@tiptap/pm/state';
 
@@ -442,7 +443,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         ])),
         ...createBaseExtensions(useSettingsStore.getState().settings.editor),
         liveEditorSettings,
-        ...(nativeDocument ? [] : [markdown(), sourceTypingAssist, sourceStylesField]),
+        ...(nativeDocument ? [] : [markdown({ extensions: sourceFormattingGrammar }), sourceTypingAssist, sourceStylesField]),
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
         ...(nativeDocument ? [] : [markdownPlainBracketExtension]),
         nbSyntaxHighlighting,
