@@ -270,7 +270,7 @@ export default defineConfig({
         //   导致入口静态闭包含整个 1.1 MiB 画板库。
         //   规则：
         //   1. React client runtime → vendor-react；server renderer 保持按需加载
-        //   2. Excalidraw/KaTeX 独立；Mermaid 保留其按图种的原生动态模块边界
+        //   2. KaTeX 独立；Excalidraw/Mermaid 保留原生模块边界
         //   3. 其余 node_modules 不归组（避免所有重库变成共有前置依赖）
         manualChunks(id) {
           // 🔴 Vite 的动态 import 预载辅助（__vite__preloadHelper）默认会被放进
@@ -282,7 +282,9 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             if (isReactServerModule(id)) return 'vendor-react-server';
             const packageName = nodePackage(id);
-            if (packageName === '@excalidraw/excalidraw') return 'excalidraw';
+            // Excalidraw's entry chunks import shared dependencies that also
+            // depend on its exports. Aggregating the whole package creates a
+            // cross-chunk initialization cycle; let Rollup preserve its graph.
             if (packageName === 'katex') return 'katex';
             if (['react', 'react-dom', 'scheduler'].includes(packageName ?? '')) return 'vendor-react';
           }

@@ -11,6 +11,7 @@
 // 用法：
 //   node scripts/check-budget.mjs           # 报告模式
 //   node scripts/check-budget.mjs --check   # 门禁模式
+//   node scripts/check-budget.mjs --check --dist .tmp/board-loading-dist
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +19,9 @@ import { fileURLToPath } from 'node:url';
 import { init, parse } from 'es-module-lexer';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
-const distDir = path.join(rootDir, 'dist');
+const distArgument = process.argv.indexOf('--dist');
+if (distArgument !== -1 && !process.argv[distArgument + 1]) throw new Error('--dist requires a build directory');
+const distDir = path.resolve(rootDir, distArgument === -1 ? 'dist' : process.argv[distArgument + 1]);
 const reportPath = path.join(rootDir, 'test-results', 'performance', 'budget-report.json');
 
 // ── 预算规则 ──

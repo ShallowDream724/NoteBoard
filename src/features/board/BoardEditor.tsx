@@ -4,6 +4,9 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+// BoardEditor is the host's lazy entry: engine import failures must reject that
+// same resource, so the host owns loading, errors and explicit retry together.
+import { Excalidraw } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { parseScene, serializeScene, createEmptyScene, cleanAppState, isVersionSupported, getElementCount, getBoardHistorySignature, type ExcalidrawScene, type ExcalidrawFileData } from './sceneIo';
 import { mapTheme } from './excalidrawTheme';
@@ -49,23 +52,6 @@ const activeBoardScenes = new Map<string, () => ExcalidrawScene | null>();
 
 /** 画板实例代际序号：同一 docKey 重挂载时递增，用于注册表删除保护 */
 let nextBoardInstanceId = 0;
-
-/** Excalidraw 组件（延迟加载） */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let ExcalidrawComponent: React.ComponentType<any> | null = null;
-let loadingPromise: Promise<typeof import('@excalidraw/excalidraw')> | null = null;
-
-async function loadExcalidraw() {
-  if (ExcalidrawComponent) return ExcalidrawComponent;
-  if (!loadingPromise) {
-    loadingPromise = import('@excalidraw/excalidraw').then((mod) => {
-      ExcalidrawComponent = mod.Excalidraw;
-      return mod;
-    });
-  }
-  const mod = await loadingPromise;
-  return mod.Excalidraw;
-}
 
 export function BoardEditor({ docKey }: BoardEditorProps) {
   return (
@@ -149,7 +135,6 @@ const ExcalidrawCanvas = React.memo(
 );
 
 function BoardEditorInner({ docKey }: BoardEditorProps) {
-  const [Component, setComponent] = useState<typeof ExcalidrawComponent>(null);
   const [initialData, setInitialData] = useState<ExcalidrawScene | null>(null);
   const [readOnly, setReadOnly] = useState(false);
   const [elementCount, setElementCount] = useState(0);
@@ -281,17 +266,6 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
     storeTimerRef.current = null;
     return materializerRef.current?.materialize() ?? null;
-  }, []);
-
-  // 加载 Excalidraw 组件
-  useEffect(() => {
-    loadExcalidraw()
-      .then((comp) => {
-        setComponent(() => comp);
-      })
-      .catch((err) => {
-        console.error('加载 Excalidraw 组件失败:', err);
-      });
   }, []);
 
   // 初始化场景（仅在 docKey 改变时执行一次）
@@ -517,7 +491,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
       attributeFilter: ['disabled', 'aria-disabled'],
     });
     return () => observer.disconnect();
-  }, [historyAvailability, Component, initialData]);
+  }, [historyAvailability, initialData]);
 
   /** 最高优先级接管画板撤销快捷键，避开 Excalidraw 会记录点击选中态的原生历史 */
   const handleBoardKeyDownCapture = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -662,7 +636,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     };
   }, [initialData]);
 
-  if (!Component || !stableInitialData) {
+  if (!stableInitialData) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--editor-text-muted)' }}>
         加载画板组件
@@ -690,8 +664,8 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
           key="readonly-board-canvas"
           style={{ flex: 1, overflow: 'hidden', position: 'relative' }}
         >
-          <Component
-            initialData={stableInitialData as unknown as Record<string, unknown>}
+          <Excalidraw
+            initialData={stableInitialData as unknown as React.ComponentProps<typeof Excalidraw>['initialData']}
             viewModeEnabled={true}
             zenModeEnabled={boardPresentationMode}
             theme={theme}
@@ -717,7 +691,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
       {/* 画板区域 */}
       <div style={{ flex: 1, height: '100%', width: '100%', overflow: 'hidden', position: 'relative' }}>
         <ExcalidrawCanvas
-          Component={Component}
+          Component={Excalidraw}
           initialData={stableInitialData as unknown as Record<string, unknown>}
           theme={theme}
           onChange={handleChange}

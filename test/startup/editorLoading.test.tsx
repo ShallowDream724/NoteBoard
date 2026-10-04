@@ -22,6 +22,10 @@ import {
 
 // 用 spy 拦截动态 import：动态 import 表达式无法直接 mock，改为验证公开函数行为
 vi.mock('@codemirror/view', () => ({}));
+// Excalidraw's browser ESM imports JSON without Node import attributes. The
+// resource behavior belongs here; real engine evaluation is checked on the
+// production bundle by scripts/check-board-loading.mjs.
+vi.mock('@excalidraw/excalidraw', () => ({ Excalidraw: () => null }));
 
 describe('编辑器入口映射（resolveEditorKind）', () => {
   it('code 基础类型映射到 code 入口', () => {
