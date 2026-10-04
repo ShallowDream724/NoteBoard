@@ -9,6 +9,8 @@ import { insertAtEmptyParagraph } from './emptyBlockInsertion';
 import { insertEmptyParagraphImage, insertEmptyParagraphLink } from './emptyBlockDialogs';
 import { calloutContent, diagramContent, mathContent } from './insertContentRecipes';
 import { IMAGE_TEMPLATES, imageCollectionTemplate } from './rich-content/commands';
+import { Tooltip } from '../../components/Tooltip';
+import type { ContextualHelpKey } from '../../components/contextualHelp';
 
 const paragraph = (): JSONContent => ({ type: 'paragraph' });
 function tableContent(size: number): JSONContent {
@@ -30,29 +32,30 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
   const native = useNativeFeatureVisibility();
   const action = (run: () => unknown) => { close(); run(); };
   const insert = (content: JSONContent, capability?: DocumentCapabilityId) => action(() => insertAtEmptyParagraph(editor, pos, content, capability));
-  const item = (label: string, icon: ReactNode, run: () => unknown) => <button key={label} type="button" role="menuitem" onClick={() => action(run)}>{icon}<span>{label}</span></button>;
-  const block = (label: string, icon: ReactNode, content: JSONContent, capability?: DocumentCapabilityId) => item(label, icon, () => insertAtEmptyParagraph(editor, pos, content, capability));
+  type Help = { helpKey?: ContextualHelpKey; shortcut?: string };
+  const item = (label: string, icon: ReactNode, run: () => unknown, help: Help = {}) => <Tooltip key={label} content={label} {...help} side="right" disabled={!help.helpKey && !help.shortcut}><button type="button" role="menuitem" onClick={() => action(run)}>{icon}<span>{label}</span></button></Tooltip>;
+  const block = (label: string, icon: ReactNode, content: JSONContent, capability?: DocumentCapabilityId, help?: Help) => item(label, icon, () => insertAtEmptyParagraph(editor, pos, content, capability), help);
   return <div className="nb-block-context-menu nb-empty-block-menu" role="menu" aria-label="插入内容" onKeyDown={navigateMenu} onPointerDown={event => event.preventDefault()}>
     <div className="nb-empty-block-group" role="group" aria-label="文字与列表">
       <div className="nb-empty-block-label">文字与列表</div>
       <div className="nb-empty-block-headings">
-        <button type="button" role="menuitem" aria-label="正文" title="正文" onClick={() => insert(paragraph())}><Type size={16}/></button>
-        {([1, 2, 3, 4, 5, 6] as const).map(level => <button key={level} type="button" role="menuitem" aria-label={'标题 ' + level} title={'标题 ' + level} onClick={() => insert({ type: 'heading', attrs: { level } })}>H{level}</button>)}
+        <Tooltip content="正文" shortcut="Ctrl+0"><button type="button" role="menuitem" aria-label="正文" onClick={() => insert(paragraph())}><Type size={16}/></button></Tooltip>
+        {([1, 2, 3, 4, 5, 6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} shortcut={`Ctrl+${level}`}><button type="button" role="menuitem" aria-label={'标题 ' + level} onClick={() => insert({ type: 'heading', attrs: { level } })}>H{level}</button></Tooltip>)}
       </div>
       <div className="nb-empty-block-grid">
-        {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] })}
-        {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] })}
-        {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] })}
+        {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+8' })}
+        {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+7' })}
+        {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+9' })}
         {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos))}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="内容块">
       <div className="nb-empty-block-label">内容块</div>
       <div className="nb-empty-block-grid">
-        {block('代码块', <Braces size={16}/>, { type: 'codeBlock' })}
+        {block('代码块', <Braces size={16}/>, { type: 'codeBlock' }, undefined, { shortcut: 'Ctrl+Alt+C' })}
         {block('引用', <Quote size={16}/>, { type: 'blockquote', content: [paragraph()] })}
-        {block('提示块', <PanelTop size={16}/>, calloutContent(), native ? 'callout' : undefined)}
-        {native && block('折叠块', <PanelTopClose size={16}/>, { type: 'disclosure', content: [paragraph()] }, 'disclosure')}
+        {block('提示块', <PanelTop size={16}/>, calloutContent(), native ? 'callout' : undefined, { helpKey: 'block.callout' })}
+        {native && block('折叠块', <PanelTopClose size={16}/>, { type: 'disclosure', content: [paragraph()] }, 'disclosure', { helpKey: 'block.disclosure' })}
         {block('分割线', <Minus size={16}/>, { type: 'horizontalRule' })}
       </div>
       <div className="nb-empty-block-table" role="group" aria-label="表格尺寸"><span><Table2 size={16}/>表格</span>{[2, 3, 4].map(size =>
@@ -69,8 +72,8 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
     <div className="nb-empty-block-group" role="group" aria-label="公式与图表">
       <div className="nb-empty-block-label">公式与图表</div>
       <div className="nb-empty-block-grid">
-        {block('行内公式', <InlineFormulaIcon size={16}/>, { type: 'paragraph', content: [mathContent('inline')] })}
-        {block('公式块', <BlockFormulaIcon size={16}/>, mathContent('block'))}
+        {block('行内公式', <InlineFormulaIcon size={16}/>, { type: 'paragraph', content: [mathContent('inline')] }, undefined, { helpKey: 'formula.inline' })}
+        {block('公式块', <BlockFormulaIcon size={16}/>, mathContent('block'), undefined, { helpKey: 'formula.block' })}
         {block('Mermaid', <Workflow size={16}/>, diagramContent('mermaid'))}
         {block('信息图', <BarChart3 size={16}/>, diagramContent('infographic'))}
       </div>

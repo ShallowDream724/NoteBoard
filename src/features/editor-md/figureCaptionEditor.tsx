@@ -14,6 +14,8 @@ import { initializeEditorDocument, serializeNativeNode } from './editorDocumentC
 import './imageCaption.css';
 import { TooltipProvider } from '../../components/Tooltip';
 import { dispatchEditorShortcut } from './dispatchEditorShortcut';
+import { getEditingScope, isEditingScopeInteraction, registerEditingScope, type EditingScope } from './editingScope';
+import { LinkModal } from './LinkModal';
 
 const active = new WeakMap<EditorView, () => void>();
 let nextHistoryGroup = -1;
@@ -46,9 +48,10 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
       if (event.isComposing) return false;
       if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
         event.preventDefault(); event.stopPropagation();
-        dispatchEditorShortcut(view, event.shiftKey || event.key.toLowerCase() === 'y' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
-        historyGroup = nextHistoryGroup--; lastEdit = 0;
-        sync(); return true;
+        navigateHistory(event.shiftKey || event.key.toLowerCase() === 'y' ? 'redo' : 'undo'); return true;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault(); event.stopPropagation(); openLink(); return true;
       }
       if (event.key === 'Escape' || (event.key === 'Enter' && (event.ctrlKey || event.metaKey))) {
         event.preventDefault(); options.close(); view.dom.focus({ preventScroll: true }); return true;
@@ -73,7 +76,45 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
     try { validateFigureCaptionContent(tr.doc.firstChild?.toJSON().content ?? []); return true; } catch { return false; }
   } }));
   const root = createRoot(menuHost);
-  root.render(<TooltipProvider><EditorBubbleMenu editor={editor} inlineOnly/></TooltipProvider>);
+  type LinkState = { from: number; to: number; initialText: string; initialUrl: string; isEditing: boolean };
+  let linkState: LinkState | null = null;
+  const scope: EditingScope = { kind: 'tiptap', editor, inlineOnly: true, openLink, history: navigateHistory };
+  active.get(view)?.(); active.set(view, options.close);
+  const releaseScope = registerEditingScope(view, scope);
+  function ownsScope() { return !destroyed && !editor.isDestroyed && getEditingScope(view) === scope; }
+  function focusSelection() { if (ownsScope()) editor.view.dom.focus({ preventScroll: true }); }
+  function navigateHistory(direction: 'undo' | 'redo') {
+    if (!ownsScope() || editor.view.composing) return;
+    dispatchEditorShortcut(view, direction === 'redo' ? 'Ctrl+Shift+Z' : 'Ctrl+Z');
+    historyGroup = nextHistoryGroup--; lastEdit = 0;
+    sync(); focusSelection();
+  }
+  function closeLink() { linkState = null; renderControls(); focusSelection(); }
+  function applyLink(text: string, url: string) {
+    if (!ownsScope() || !linkState) return;
+    const { from, to } = linkState;
+    const chain = editor.chain().setTextSelection({ from, to });
+    if (!url) chain.unsetLink().run();
+    else if (editor.state.doc.textBetween(from, to) === text && text) chain.setLink({ href: url }).run();
+    else chain.insertContent({ type: 'text', text: text || url, marks: [{ type: 'link', attrs: { href: url } }] }).run();
+    closeLink();
+  }
+  function openLink() {
+    if (!ownsScope() || editor.view.composing) return;
+    const isEditing = editor.isActive('link');
+    if (isEditing) editor.commands.extendMarkRange('link');
+    const { from, to } = editor.state.selection;
+    linkState = { from, to, initialText: editor.state.doc.textBetween(from, to), initialUrl: editor.getAttributes('link').href ?? '', isEditing };
+    renderControls();
+  }
+  function renderControls() {
+    if (destroyed) return;
+    root.render(<TooltipProvider><EditorBubbleMenu editor={editor} inlineOnly onOpenLinkModal={openLink}/>
+      {linkState && <LinkModal isOpen {...linkState} onClose={closeLink}
+        onConfirm={({ text, url }) => applyLink(text, url)} onRemove={() => applyLink('', '')}/>}
+    </TooltipProvider>);
+  }
+  renderControls();
   function sync() {
     if (destroyed || publishing) return;
     const node = current();
@@ -87,11 +128,11 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
   }
   const outside = (event: Event) => {
     const target = event.target;
-    if (!(target instanceof Element) || host.contains(target) || target.closest('[data-caption-toolbar],.nb-highlight-menu')) return;
+    if (!(target instanceof Element) || host.contains(target) || isEditingScopeInteraction(target)) return;
+    if (editor.view.composing) return;
     options.close();
   };
   const stopKey = (event: Event) => event.stopPropagation();
-  active.get(view)?.(); active.set(view, options.close);
   host.addEventListener('keydown', stopKey);
   document.addEventListener('pointerdown', outside, true);
   document.addEventListener('focusin', outside);
@@ -101,6 +142,7 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
     editor.view.dom.focus({ preventScroll: true });
   }, destroy() {
     if (destroyed) return; destroyed = true;
+    releaseScope();
     if (active.get(view) === options.close) active.delete(view);
     document.removeEventListener('pointerdown', outside, true); document.removeEventListener('focusin', outside);
     host.removeEventListener('keydown', stopKey);

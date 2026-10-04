@@ -61,7 +61,7 @@ function seedUntitled(n: number): string {
 }
 
 describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
-  it('原生源码直接编辑原生记录，切换与撤销保留文字样式', async () => {
+  it('NB ignores restored source mode; explicit record repair preserves styles, position and undo', async () => {
     const key = 'untitled:native';
     useDocumentStore.getState().upsertFromPayload({
       key, displayName: '未命名.nbdoc', dirPath: '', kind: 'noteboard', language: 'plaintext',
@@ -74,7 +74,12 @@ describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
     try {
       await act(async () => { root.render(<TipTapEditor docKey={key} />); });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
-      expect(getMdTipTapEditor(key)).toBeFalsy();
+      expect(getMdTipTapEditor(key)?.isEditable).toBe(true);
+      expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
+      expect(getMdSourceView(key)).toBeFalsy();
+      await act(async () => { emit('toggle-md-view-mode', { key, mode: 'source' }); });
+      expect(getMdSourceView(key)).toBeFalsy();
+      await act(async () => { emit('toggle-md-view-mode', { key, mode: 'source', reason: 'repair-native-record' }); });
       const source = getMdSourceView(key)!;
       expect(source.state.doc.toString()).toContain('#!noteboard 1');
       expect(source.state.field(sourceStylesField, false)).toBeUndefined();
@@ -86,7 +91,7 @@ describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
       expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
       expect(editor.getJSON().content![0].content![0]).toMatchObject({ text: '红色源文字', marks: [{ type: 'bold' }] });
       expect(editor.state.selection.anchor).toBe(4);
-      await act(async () => { editor.commands.setTextSelection(2); emit('toggle-md-view-mode', { key, mode: 'source' }); });
+      await act(async () => { editor.commands.setTextSelection(2); emit('toggle-md-view-mode', { key, mode: 'source', reason: 'repair-native-record' }); });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)); });
       expect(source.state.selection.main.anchor).toBe(source.state.doc.toString().indexOf('红色源文字') + 1);
       await act(async () => { emit('toggle-md-view-mode', { key, mode: 'visual' }); });

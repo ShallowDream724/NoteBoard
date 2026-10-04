@@ -3,8 +3,8 @@
 // 详见 docs/07-UI布局与交互规范.md §2
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useRef } from 'react';
-import { Settings as SettingsIcon, FileOutput, Home } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Settings as SettingsIcon, FileOutput, Home, BookOpen } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
 import { NewDocumentMenu } from './NewDocumentMenu';
@@ -16,6 +16,8 @@ import { SidebarToggle } from '../SidebarToggle';
 import { useWindowStore } from '../../stores/windowStore';
 import { useExportStore } from '../../features/export/exportStore';
 import { UpdateNotice } from '../UpdateNotice';
+import { usePracticeStore } from '../../features/learning/practiceStore';
+import { showToast } from '../../stores/toastStore';
 import './titlebar.css';
 
 export function TitleBar() {
@@ -29,6 +31,8 @@ export function TitleBar() {
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
 
   const hasUpdate = useUpdateStore(s => s.hasUpdate);
+  const practiceSessionKey = usePracticeStore(s => s.sessionKey);
+  const [openingPractice, setOpeningPractice] = useState(false);
 
   const titleBarStyle: React.CSSProperties = {
     height: 36,
@@ -81,6 +85,19 @@ export function TitleBar() {
 
       {/* 文档导出 */}
       <div className="titlebar-utility-actions">
+      <Tooltip content={practiceSessionKey ? '继续交互练习' : '交互练习'} side="bottom">
+        <button type="button" className="titlebar-action" aria-label={practiceSessionKey ? '继续交互练习' : '交互练习'} disabled={openingPractice} aria-busy={openingPractice}
+          onClick={async () => {
+            setOpeningPractice(true);
+            try {
+              emit('close-titlebar-menus', undefined);
+              const { startInteractivePractice } = await import('../../features/learning/startInteractivePractice');
+              await startInteractivePractice();
+            } catch (error) {
+              showToast(`无法打开交互练习：${error instanceof Error ? error.message : String(error)}`, 'error');
+            } finally { setOpeningPractice(false); }
+          }}><BookOpen size={16}/></button>
+      </Tooltip>
       {canExportDocument && <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
         <button type="button" className="titlebar-action" aria-label="导出"
           onClick={() => useExportStore.getState().open()}><FileOutput size={16}/></button>

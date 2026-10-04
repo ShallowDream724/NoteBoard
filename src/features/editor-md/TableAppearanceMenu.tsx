@@ -5,8 +5,9 @@ import { ChevronDown, Grid3X3, RotateCcw } from 'lucide-react';
 import { tableStyle, documentTableStyle, type TableStyle } from './documentPresentation';
 import { setDocumentTableStyle } from './documentPresentationCommands';
 import './tableControls.css';
-import { useHoverMenu } from '../../components/useHoverMenu';
+import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
+import { Tooltip } from '../../components/Tooltip';
 
 function ThreeLineIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 4h18M3 10h18M3 20h18"/></svg>;
@@ -47,14 +48,16 @@ export function TableAppearanceMenu({ editor }: { editor: Editor }) {
     </Popover.Trigger>
     <Popover.Portal><Popover.Content role="menu" className="nb-table-style-menu" sideOffset={6} align="end" collisionPadding={10}
       {...hover.contentProps} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
+      <HoverMenuContext.Provider value={hover}>
       <div className="nb-table-style-label">全文表格样式</div>
       <div role="group">
-        {styles.map(option => <button type="button" title={option.label} role="menuitemradio" aria-checked={style === option.value} data-state={style === option.value ? 'checked' : 'unchecked'} key={option.value} onClick={() => choose(option.value)}>
+        {styles.map(option => <Tooltip key={option.value} content={option.label} helpKey={option.value === 'standard' ? 'table.style.standard' : 'table.style.three-line'} side="right"><button type="button" role="menuitemradio" aria-checked={style === option.value} data-state={style === option.value ? 'checked' : 'unchecked'} onClick={() => choose(option.value)}>
           {option.value === 'standard' ? <Grid3X3 size={16}/> : <ThreeLineIcon/>}{option.label}
-        </button>)}
+        </button></Tooltip>)}
       </div>
       <div role="separator" style={{ height: 1, margin: '5px 4px', background: 'var(--editor-border)' }}/>
       <button type="button" title="重置当前表尺寸" role="menuitem" onClick={() => { resetTableDimensions(editor); setOpen(false); }}><RotateCcw size={16}/>重置当前表尺寸</button>
+      </HoverMenuContext.Provider>
     </Popover.Content></Popover.Portal>
   </Popover.Root>;
 }

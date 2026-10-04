@@ -11,7 +11,7 @@ export function TableAlignmentMenu({ editor, pos, value, close }: { editor: Edit
     <span>整表位置</span>
     {([{ value: 'left', label: '整张表格居左', Icon: AlignLeft }, { value: 'center', label: '整张表格居中', Icon: AlignCenter },
       { value: 'right', label: '整张表格居右', Icon: AlignRight }] as const).map(({ value, label, Icon }) =>
-      <Tooltip key={value} content={label}><button type="button" aria-label={label} aria-pressed={current === value}
+      <Tooltip key={value} content={label} helpKey="table.position" side="right"><button type="button" aria-label={label} aria-pressed={current === value}
         onClick={() => { setTableAlignment(editor, pos, value); close(); }}><Icon size={16}/></button></Tooltip>)}
   </div>;
 }

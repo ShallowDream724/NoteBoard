@@ -1,6 +1,7 @@
 import type { EditorView } from '@tiptap/pm/view';
 import { showToast } from '../../stores/toastStore';
 import type { mountFigureCaptionEditor } from './figureCaptionEditor';
+import { isEditingScopeInteraction, registerExternalEditingScope } from './editingScope';
 
 type CaptionEditorModule = typeof import('./figureCaptionEditor');
 const preparing = new WeakMap<EditorView, FigureCaptionTransition>();
@@ -10,6 +11,7 @@ const preparing = new WeakMap<EditorView, FigureCaptionTransition>();
 export class FigureCaptionTransition {
   private session: ReturnType<typeof mountFigureCaptionEditor> | null = null;
   private pending: object | null = null;
+  private releasePendingScope: (() => void) | null = null;
   private destroyed = false;
 
   constructor(private preview: HTMLElement, private host: HTMLElement, private options: {
@@ -21,6 +23,7 @@ export class FigureCaptionTransition {
     if (this.destroyed || this.pending || this.session || view.isDestroyed || !view.editable) return;
     preparing.get(view)?.cancelPending();
     const request = this.pending = {};
+    this.releasePendingScope = registerExternalEditingScope(view);
     preparing.set(view, this);
     document.addEventListener('pointerdown', this.leave, true);
     document.addEventListener('focusin', this.leave, true);
@@ -45,6 +48,7 @@ export class FigureCaptionTransition {
 
   private leave = (event: Event) => {
     const target = event.target;
+    if (isEditingScopeInteraction(target)) return;
     if (!(target instanceof globalThis.Node) || (!this.preview.contains(target) && !this.host.contains(target))) this.cancelPending();
   };
   private key = (event: KeyboardEvent) => {
@@ -53,6 +57,7 @@ export class FigureCaptionTransition {
   };
   private cancelPending = () => {
     this.pending = null;
+    this.releasePendingScope?.(); this.releasePendingScope = null;
     if (preparing.get(this.options.view) === this) preparing.delete(this.options.view);
     document.removeEventListener('pointerdown', this.leave, true);
     document.removeEventListener('focusin', this.leave, true);

@@ -47,6 +47,14 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   if (isEmptyParagraph(range.node) && !colors.color && !colors.background) return <EmptyBlockInsertMenu editor={editor} pos={pos} close={close}/>;
   const type = range.node.type.name, text = ['paragraph','heading','blockquote','bulletList','orderedList','taskList','listItem','taskItem'].includes(type);
   const readingMode = type === 'mathBlock' ? documentFormulaReadingMode(editor.state) : documentTableReadingMode(editor.state);
+  const readingOptions = type === 'mathBlock' ? [
+    { mode: 'expand', label: '自然展开', Icon: ArrowRightLeft, helpKey: 'formula.reading.expand' },
+    { mode: 'wrap', label: '自动换行', Icon: WrapText, helpKey: 'formula.reading.wrap' },
+    { mode: 'scroll', label: '滚动块', Icon: Square, helpKey: 'formula.reading.scroll' },
+  ] as const : [
+    { mode: 'expand', label: '自然展开', Icon: ArrowRightLeft, helpKey: 'table.reading.expand' },
+    { mode: 'scroll', label: '滚动块', Icon: Square, helpKey: 'table.reading.scroll' },
+  ] as const;
   const styled = supportsBlockColors(type);
   const canWrapCallout = canWrapBlockInCallout(editor, pos);
   const showAnnotation = canAnnotateBlock(range.node) || !!range.node.attrs.annotationId;
@@ -70,14 +78,14 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   return <div className="nb-block-context-menu" role="menu" aria-label="内容块操作" onPointerDown={event => event.preventDefault()}>
     {type === 'codeBlock' && <><button role="menuitem" type="button" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={16}/>转为正文</button><hr/></>}
     {text && <div className="nb-block-format-grid">
-      <Tooltip content="正文"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
-      {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level}><button type="button" aria-label={'标题 ' + level}
+      <Tooltip content="正文" shortcut="Ctrl+0"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
+      {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} shortcut={`Ctrl+${level}`}><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
-      {([{ label:'无序列表', Icon:List, command:'toggleBulletList' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList' },
-        { label:'待办', Icon:CheckSquare, command:'toggleTaskList' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock' },
-        { label:'引用', Icon:Quote, command:'toggleBlockquote' }] as const).map(({ label, Icon, command }) =>
-        <Tooltip key={command} content={label}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
-      {native && canWrapCallout && <Tooltip content="设为提示块"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
+      {([{ label:'无序列表', Icon:List, command:'toggleBulletList', shortcut: 'Ctrl+Shift+8' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList', shortcut: 'Ctrl+Shift+7' },
+        { label:'待办', Icon:CheckSquare, command:'toggleTaskList', shortcut: 'Ctrl+Shift+9' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock', shortcut: 'Ctrl+Alt+C' },
+        { label:'引用', Icon:Quote, command:'toggleBlockquote', shortcut: undefined }] as const).map(({ label, Icon, command, shortcut }) =>
+        <Tooltip key={command} content={label} shortcut={shortcut}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
+      {native && canWrapCallout && <Tooltip content="设为提示块" helpKey="block.callout" side="right"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
     </div>}
     {native && type === 'image' && <div className="nb-block-style-row nb-block-position-row" role="group" aria-label="图片位置">
       <span>图片位置</span>
@@ -93,11 +101,9 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     </div>}
     {(type === 'table' || type === 'mathBlock') && <>
       <div className="nb-block-reading-label">{type === 'mathBlock' ? '阅读视图 · 全文公式' : '阅读视图 · 全文表格'}</div>
-      {([{ mode: 'expand', label: '自然展开', Icon: ArrowRightLeft },
-        ...(type === 'mathBlock' ? [{ mode: 'wrap' as const, label: '自动换行', Icon: WrapText }] : []),
-        { mode: 'scroll', label: '滚动块', Icon: Square }] as const).map(({ mode, label, Icon }) =>
-        <button key={mode} type="button" role="menuitemradio" aria-checked={readingMode === mode}
-          onClick={() => readingAction(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setDocumentTableReadingMode(editor, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button>)}
+      {readingOptions.map(({ mode, label, Icon, helpKey }) =>
+        <Tooltip key={mode} content={label} helpKey={helpKey} side="right"><button type="button" role="menuitemradio" aria-checked={readingMode === mode}
+          onClick={() => readingAction(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setDocumentTableReadingMode(editor, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button></Tooltip>)}
       <hr/>
     </>}
     {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}
@@ -108,16 +114,16 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
         <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
       <hr/>
     </>}
-    {native && (type === 'table' || type === 'image') && <button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button>}
-    {native && showAnnotation && <button role="menuitem" type="button" onClick={() => action(() => { const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button>}
+    {native && (type === 'table' || type === 'image') && <Tooltip content={`${range.node.attrs.caption ? '编辑' : '添加'}${type === 'table' ? '表注' : '图注'}`} helpKey={type === 'table' ? 'table.caption' : 'figure.caption'} side="right"><button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button></Tooltip>}
+    {native && showAnnotation && <Tooltip content={range.node.attrs.annotationId ? '编辑说明' : '添加说明'} helpKey="block.annotation" side="right"><button role="menuitem" type="button" onClick={() => action(() => { const id = range.node.attrs.annotationId; if (id) openAnnotation(editor, id, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{range.node.attrs.annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {range.node.attrs.annotationId ? '编辑说明' : '添加说明'}</button></Tooltip>}
     {native && Object.hasOwn(range.node.attrs, 'concealed') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); toggleConceal(editor); })}><EyeOff size={16}/>{range.node.attrs.concealed ? '取消模糊' : '模糊内容'}</button>}
     {native && (showAnnotation || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
     <button role="menuitem" type="button" onClick={() => action(() => copy(true))}><Scissors size={16}/>剪切</button>
     <button role="menuitem" type="button" onClick={() => action(() => copy(false))}><Copy size={16}/>复制</button>
     <button role="menuitem" type="button" onClick={() => action(() => deleteBlock(editor, pos))}><Trash2 size={16}/>删除</button>
     {type === 'table' && <><hr/>
-      <button role="menuitem" type="button" disabled={headerRow?.some(cell => cell.node.attrs.rowspan > 1)} onClick={() => action(() => header('row'))}><Rows3 size={16}/>{headerRow?.every(cell => cell.node.type.name === 'tableHeader') ? '取消表头行' : '设置表头行'}</button>
-      {native && <><button role="menuitem" type="button" disabled={headerColumn?.some(cell => cell.node.attrs.colspan > 1)} onClick={() => action(() => header('column'))}><Columns3 size={16}/>{headerColumn?.every(cell => cell.node.type.name === 'tableHeader') ? '取消首列表头' : '设置首列表头'}</button>
+      <Tooltip content={headerRow?.every(cell => cell.node.type.name === 'tableHeader') ? '取消表头行' : '设置表头行'} helpKey="table.header.row" disabled={headerRow?.some(cell => cell.node.attrs.rowspan > 1)} side="right"><button role="menuitem" type="button" disabled={headerRow?.some(cell => cell.node.attrs.rowspan > 1)} onClick={() => action(() => header('row'))}><Rows3 size={16}/>{headerRow?.every(cell => cell.node.type.name === 'tableHeader') ? '取消表头行' : '设置表头行'}</button></Tooltip>
+      {native && <><Tooltip content={headerColumn?.every(cell => cell.node.type.name === 'tableHeader') ? '取消首列表头' : '设置首列表头'} helpKey="table.header.column" disabled={headerColumn?.some(cell => cell.node.attrs.colspan > 1)} side="right"><button role="menuitem" type="button" disabled={headerColumn?.some(cell => cell.node.attrs.colspan > 1)} onClick={() => action(() => header('column'))}><Columns3 size={16}/>{headerColumn?.every(cell => cell.node.type.name === 'tableHeader') ? '取消首列表头' : '设置首列表头'}</button></Tooltip>
       <button role="menuitem" type="button" onClick={() => action(() => distributeTableColumns(editor))}><Columns3 size={16}/>平均分布列宽</button>
       <button role="menuitem" type="button" onClick={() => action(() => distributeTableRows(editor))}><Rows3 size={16}/>平均分布行高</button></>}
     </>}

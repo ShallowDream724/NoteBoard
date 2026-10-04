@@ -1,12 +1,14 @@
 // NoteBoard 统一 Tooltip 悬浮提示组件
 // 基于 @radix-ui/react-tooltip 封装，自适应晨光/琥珀/墨夜主题，支持自定义延迟与微动效
-// 详见 docs/07-UI布局与交互规范.md
+// 详见 docs/contextual-help.md
 
 import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
 import { useResolvedShortcutLabel } from '../core/useShortcutBindings';
+import { ContextualHelpContent, type ContextualHelpKey } from './contextualHelp';
+import { HoverMenuContext } from './useHoverMenu';
 
 const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
 const TooltipInput = createContext<React.RefObject<'pointer' | 'keyboard' | null> | null>(null);
@@ -37,6 +39,8 @@ export interface TooltipProps {
   content: React.ReactNode;
   /** 可选：快捷键文本，以微型按键徽标形式在右侧展示 */
   shortcut?: string;
+  /** Explicit operation identity for a delayed explanation and compact illustration. */
+  helpKey?: ContextualHelpKey;
   /** 触发元素 */
   children: React.ReactNode;
   /** 弹出方向，默认 'bottom' */
@@ -49,7 +53,7 @@ export interface TooltipProps {
   asChild?: boolean;
   /** 是否禁用 Tooltip */
   disabled?: boolean;
-  /** 显式指定延迟时间（毫秒），默认 100ms */
+  /** 显式指定延迟时间（毫秒），普通提示默认 100ms，helpKey 默认 650ms */
   delayDuration?: number;
   /**
    * 跟随鼠标指针显示
@@ -217,27 +221,31 @@ function FollowCursorTooltip({
 export function Tooltip({
   content,
   shortcut: defaultShortcut,
+  helpKey,
   children,
   side = 'bottom',
   align = 'center',
   sideOffset = 6,
   asChild = true,
   disabled = false,
-  delayDuration = 100,
+  delayDuration,
   followCursor = false,
 }: TooltipProps) {
   const shortcut = useResolvedShortcutLabel(defaultShortcut);
   const input = useContext(TooltipInput);
+  const menu = useContext(HoverMenuContext);
   const [open, setOpen] = useState(false);
+  const delay = delayDuration ?? (helpKey ? 650 : 100);
   const blocked = disabled || (!content && !shortcut);
   useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
   // 跟随指针模式必须始终使用同一组件形态，否则 disabled 切换会重建子元素 DOM
-  if (followCursor) {
+  // A rich explanation keeps a stable anchor so the pointer can enter the card.
+  if (followCursor && !helpKey) {
     return (
       <FollowCursorTooltip
         content={content}
         shortcut={shortcut}
-        delayDuration={delayDuration}
+        delayDuration={delay}
         disabled={disabled}
         side={side}
         align={align}
@@ -248,8 +256,8 @@ export function Tooltip({
     );
   }
 
-  return (
-    <RadixTooltip.Root delayDuration={delayDuration} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
+  const tooltip = (
+    <RadixTooltip.Root delayDuration={delay} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
       <RadixTooltip.Trigger asChild={asChild} onFocus={event => {
         if (input ? input.current !== 'keyboard' : !event.currentTarget.matches(':focus-visible')) event.preventDefault();
       }}>
@@ -257,15 +265,19 @@ export function Tooltip({
       </RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content
+          data-nb-editor-menu={helpKey ? true : undefined}
+          onPointerEnter={helpKey ? () => menu?.cancel() : undefined}
+          onPointerLeave={helpKey ? () => menu?.leave() : undefined}
+          onPointerDown={helpKey ? event => { event.preventDefault(); setOpen(false); } : undefined}
           side={side}
           align={align}
           sideOffset={sideOffset}
           collisionPadding={8}
-          style={boundedContent}
-          className="nb-tooltip-content"
+          style={{ ...boundedContent, ...(helpKey ? { pointerEvents: 'auto' as const } : {}) }}
+          className={`nb-tooltip-content${helpKey ? ' nb-contextual-help-content' : ''}`}
         >
-          {typeof content === 'string' ? <span>{content}</span> : content}
-          {shortcut && (
+          {helpKey ? open && <ContextualHelpContent helpKey={helpKey} title={content} shortcut={shortcut}/> : typeof content === 'string' ? <span>{content}</span> : content}
+          {!helpKey && shortcut && (
             <kbd className="nb-tooltip-kbd">
               {shortcut}
             </kbd>
@@ -275,4 +287,6 @@ export function Tooltip({
       </RadixTooltip.Portal>
     </RadixTooltip.Root>
   );
+  // Rich help always waits, including when moving from a nearby open tooltip.
+  return helpKey ? <RadixTooltip.Provider delayDuration={delay} skipDelayDuration={0} disableHoverableContent={false}>{tooltip}</RadixTooltip.Provider> : tooltip;
 }

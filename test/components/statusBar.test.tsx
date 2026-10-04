@@ -42,25 +42,24 @@ afterEach(() => {
 });
 
 describe('document status information', () => {
-  it('offers native encoding, EOL and mode switching without counting serialized frames as prose', () => {
+  it('offers native file metadata without a raw source switch or counting serialized frames as prose', () => {
     openText('noteboard', nativeSource);
     act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
     expect(container.textContent).toContain('UTF-8');
     expect(container.textContent).toContain('CRLF');
-    expect(container.textContent).toContain('NoteBoard 文档 (可视化)');
+    expect(container.textContent).toContain('NoteBoard 文档');
     expect(container.textContent).not.toContain('字');
     expect(container.textContent).not.toContain(' 行');
     const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="切换为源码模式"]');
-    expect(toggle).not.toBeNull();
-    act(() => toggle!.click());
-    expect(emit).toHaveBeenCalledWith('toggle-md-view-mode', { key: 'untitled:status-test' });
+    expect(toggle).toBeNull();
+    expect(emit).not.toHaveBeenCalledWith('toggle-md-view-mode', expect.anything());
   });
 
   it('labels native source statistics explicitly and removes them when returning to visual mode', () => {
     openText('noteboard', nativeSource, 'source');
     act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
-    expect(container.textContent).toContain(`源码 ${nativeSource.length} 字符 · 2 行`);
-    expect(container.textContent).toContain('NoteBoard 文档 (源码)');
+    expect(container.textContent).toContain(`原始记录 ${nativeSource.length} 字符 · 2 行`);
+    expect(container.textContent).toContain('NoteBoard 文档');
     act(() => useWindowStore.getState().setTabViewMode('untitled:status-test', 'visual'));
     expect(container.textContent).not.toContain('字符');
     expect(container.textContent).toContain('UTF-8');

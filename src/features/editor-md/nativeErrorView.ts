@@ -10,8 +10,8 @@ export const NativeErrorView = NativeError.extend({
       const title = document.createElement('strong'); title.textContent = `此内容需要修复${node.attrs.line ? ` · 第 ${node.attrs.line} 行` : ''}`;
       const message = document.createElement('p'); message.textContent = node.attrs.message;
       const raw = document.createElement('pre'); raw.textContent = node.attrs.raw;
-      const button = document.createElement('button'); button.type = 'button'; button.textContent = '在源码中修复';
-      button.onclick = () => emit('toggle-md-view-mode', { key: editorDocumentKey(editor), mode: 'source', line: node.attrs.line ?? undefined });
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = '修复原始记录';
+      button.onclick = () => emit('toggle-md-view-mode', { key: editorDocumentKey(editor), mode: 'source', line: node.attrs.line ?? undefined, reason: 'repair-native-record' });
       dom.append(title, message, raw, button);
       return { dom };
     };

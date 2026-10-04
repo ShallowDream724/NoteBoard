@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/Tooltip';
 import { TipTapEditor } from '@/features/editor-md/TipTapEditor';
 import { getMdTipTapEditor } from '@/features/editor-md/editorInstances';
 import { DEFAULT_MERMAID_CODE } from '@/features/editor-md/insertContentRecipes';
+import { markMermaidCreation } from '@/features/editor-md/mermaidCreation';
 import { encodeNativeDocument, type NativeNode } from '@/core/nativeDocument';
 import { clearAllDocumentHistories } from '@/features/history/documentHistory';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -80,7 +81,7 @@ it('autoopens a new Mermaid template and steps through source, edit mode, creati
     const initial = editor.state.doc;
     await act(async () => { editor.commands.insertContent(' text'); });
     const textOnly = editor.state.doc;
-    await act(async () => { editor.chain().focus('end').insertContent({ type: 'mermaidBlock', attrs: { code: DEFAULT_MERMAID_CODE } }).run(); });
+    await act(async () => { editor.chain().focus('end').command(({ tr }) => { markMermaidCreation(tr); return true; }).insertContent({ type: 'mermaidBlock', attrs: { code: DEFAULT_MERMAID_CODE } }).run(); });
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 40)); });
     const created = editor.state.doc;
     const source = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Mermaid 图表源码"]')!;

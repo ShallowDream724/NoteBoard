@@ -5,8 +5,9 @@
 import React, { useState, useEffect, useRef, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
+import type { ContextualHelpKey } from '../../components/contextualHelp';
 import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
-import { useHoverMenu } from '../../components/useHoverMenu';
+import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 
 // ── 基础工具栏按钮 ──
 
@@ -15,6 +16,7 @@ export interface ToolbarButtonProps {
   label?: string;
   title?: string;
   shortcut?: string;
+  helpKey?: ContextualHelpKey;
   active?: boolean;
   disabled?: boolean;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -37,6 +39,7 @@ export function ToolbarButton({
   label,
   title,
   shortcut,
+  helpKey,
   active,
   disabled,
   onClick,
@@ -72,7 +75,7 @@ export function ToolbarButton({
   }
 
   return (
-    <Tooltip content={title} shortcut={shortcut} disabled={disabled || !title || hasDropdown} side="bottom" sideOffset={6}>
+    <Tooltip content={title} shortcut={shortcut} helpKey={helpKey} disabled={disabled || !title || hasDropdown} side="bottom" sideOffset={6}>
       <button
         type="button"
         aria-label={title || label}
@@ -216,7 +219,10 @@ export function ToolbarDropdown({
 
       {isOpen && (
         <div
-          {...hover.contentProps}
+          data-nb-editor-menu={hover.contentProps['data-nb-editor-menu']}
+          onPointerEnter={hover.contentProps.onPointerEnter}
+          onPointerLeave={hover.contentProps.onPointerLeave}
+          onKeyDown={hover.contentProps.onKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
           style={{
             position: 'absolute',
@@ -237,7 +243,7 @@ export function ToolbarDropdown({
             ...style,
           }}
         >
-          {children}
+          <HoverMenuContext.Provider value={hover}>{children}</HoverMenuContext.Provider>
         </div>
       )}
     </div>
@@ -250,6 +256,7 @@ export interface ToolbarDropdownItemProps {
   icon?: ReactNode;
   label: string;
   shortcut?: string;
+  helpKey?: ContextualHelpKey;
   active?: boolean;
   disabled?: boolean;
   danger?: boolean;
@@ -264,6 +271,7 @@ export function ToolbarDropdownItem({
   icon,
   label,
   shortcut: defaultShortcut,
+  helpKey,
   active,
   disabled,
   danger,
@@ -337,10 +345,10 @@ export function ToolbarDropdownItem({
     }
   };
 
-  return (
+  const item = (
     <div
       ref={itemRef}
-      title={shortcut ? `${label} (${shortcut})` : label}
+      aria-label={label}
       role="menuitem" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
       aria-haspopup={hasSubmenu ? 'menu' : undefined} aria-expanded={hasSubmenu ? submenuOpen : undefined}
       onKeyDown={event => {
@@ -399,7 +407,10 @@ export function ToolbarDropdownItem({
       {/* 二级 / 三级悬浮子菜单 */}
       {hasSubmenu && submenuOpen && (
         <div
-          {...hover.contentProps}
+          data-nb-editor-menu={hover.contentProps['data-nb-editor-menu']}
+          onPointerEnter={hover.contentProps.onPointerEnter}
+          onPointerLeave={hover.contentProps.onPointerLeave}
+          onKeyDown={hover.contentProps.onKeyDown}
           onMouseEnter={hover.cancel}
           onMouseLeave={handleMouseLeave}
           style={{
@@ -432,9 +443,10 @@ export function ToolbarDropdownItem({
               pointerEvents: 'auto',
             }}
           />
-          {submenu}
+          <HoverMenuContext.Provider value={hover}>{submenu}</HoverMenuContext.Provider>
         </div>
       )}
     </div>
   );
+  return <Tooltip content={label} shortcut={defaultShortcut} helpKey={helpKey} disabled={disabled || hasSubmenu || (!helpKey && !defaultShortcut)} side="right" sideOffset={10}>{item}</Tooltip>;
 }

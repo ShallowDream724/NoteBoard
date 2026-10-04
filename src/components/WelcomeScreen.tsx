@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
 import { useSettingsStore } from '../stores/settingsStore';
+import { showToast } from '../stores/toastStore';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
 //    意图信号；空闲时机发起（不占首帧），点击新建/打开文件时资源已 ready，
 //    渲染同步命中 fulfilled lazy（零 fallback、远低于 1s 目标）。
@@ -77,6 +78,7 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
   const [showMoreFormats, setShowMoreFormats] = useState(false);
   const [openingShowcase, setOpeningShowcase] = useState(false);
+  const [openingPractice, setOpeningPractice] = useState(false);
   const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
 
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
@@ -312,11 +314,26 @@ export function WelcomeScreen({
         <span style={{ fontSize: 13, color: 'var(--editor-text-muted)' }}>
           轻量双模笔记、思维导图与专业图表工作台
         </span>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button type="button" className="nb-btn-primary" style={{ padding: '6px 12px', minWidth: '8em', fontSize: 'var(--ui-font-size,13px)' }}
+          disabled={openingPractice} aria-busy={openingPractice}
+          onClick={async () => {
+            setOpeningPractice(true);
+            try {
+              const { startInteractivePractice } = await import('../features/learning/startInteractivePractice');
+              await startInteractivePractice();
+            } catch (error) {
+              showToast(`无法打开交互练习：${error instanceof Error ? error.message : String(error)}`, 'error');
+            } finally { setOpeningPractice(false); }
+          }}>
+          {openingPractice ? '正在打开…' : '动手试一试'}
+        </button>
         <button type="button" className="nb-btn-secondary" style={{ padding: '6px 12px', minWidth: '8em', fontSize: 'var(--ui-font-size,13px)' }}
           disabled={openingShowcase} aria-busy={openingShowcase}
           onClick={async () => { setOpeningShowcase(true); try { await openShowcase(); } finally { setOpeningShowcase(false); } }}>
           {openingShowcase ? '正在打开…' : '浏览功能示例'}
         </button>
+        </div>
       </div>
 
       {/* 第一部分：常用新建核心卡片区（3 列网格） */}

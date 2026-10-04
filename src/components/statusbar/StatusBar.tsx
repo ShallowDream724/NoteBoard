@@ -5,11 +5,11 @@
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useMemo } from 'react';
-import { isRichDocument } from '../../core/docKind';
 import { saveDocument } from '../../features/editor-code/orchestration/saveDocument';
 import { emit } from '../../core/emitter';
 import { Eye, Code } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { getCodeLanguage } from '../../core/codeLanguages';
 
 export function StatusBar() {
   const activeKey = useWindowStore((s) => s.activeKey);
@@ -97,7 +97,7 @@ export function StatusBar() {
                 : doc.language === 'html' ? 'HTML'
                 : doc.language === 'markdown'
                   ? 'Markdown'
-                  : '纯文本';
+                  : getCodeLanguage(doc.language)?.label ?? '纯文本';
 
   return (
     <div
@@ -119,7 +119,7 @@ export function StatusBar() {
       {textStatistics && <>
         <div style={sectionStyle}>
           <span>
-            {doc.kind === 'noteboard' ? '源码 ' : ''}{textStatistics.characters.toLocaleString()} {doc.kind === 'noteboard' ? '字符' : '字'} · {textStatistics.lines.toLocaleString()} 行
+            {doc.kind === 'noteboard' ? '原始记录 ' : ''}{textStatistics.characters.toLocaleString()} {doc.kind === 'noteboard' ? '字符' : '字'} · {textStatistics.lines.toLocaleString()} 行
           </span>
         </div>
         <div style={dividerStyle} />
@@ -140,7 +140,7 @@ export function StatusBar() {
 
       </>}
       {/* 类型 / 富文档模式切换 */}
-      {isRichDocument(doc.kind) ? (
+      {doc.kind === 'markdown' ? (
         <Tooltip
           content={`当前：${typeLabel} (${activeTab?.viewMode === 'source' ? '源码模式' : '可视化模式'}) · 点击切换`}
           shortcut="Ctrl+/"

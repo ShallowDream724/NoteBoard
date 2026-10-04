@@ -201,6 +201,21 @@ type HistoryChangeListener = (
 ) => void;
 
 const historyListeners = new Set<HistoryChangeListener>();
+type HistoryNavigationListener = (docKey: string, direction: DocumentHistoryNavigation['direction']) => void;
+const navigationListeners = new Set<HistoryNavigationListener>();
+
+/** Successful navigation only; no document snapshots are broadcast or retained. */
+export function subscribeDocumentHistoryNavigation(listener: HistoryNavigationListener): () => void {
+  navigationListeners.add(listener);
+  return () => { navigationListeners.delete(listener); };
+}
+
+function notifyHistoryNavigation(docKey: string, direction: DocumentHistoryNavigation['direction']): void {
+  for (const listener of navigationListeners) {
+    try { listener(docKey, direction); }
+    catch (error) { console.error('历史导航监听器执行异常:', error); }
+  }
+}
 
 /** 订阅文档历史可用性变更 */
 export function subscribeDocumentHistory(listener: HistoryChangeListener): () => void {
@@ -547,7 +562,6 @@ function moveHistory(docKey: string, offset: -1 | 1): boolean {
     state.forceNextGroup = true;
     state.lastEditMode = null;
     notifyHistoryChange(docKey);
-    return true;
   } catch (error) {
     state.index = previousIndex;
     console.error('应用文档撤销/重做快照失败:', error);
@@ -555,6 +569,9 @@ function moveHistory(docKey: string, offset: -1 | 1): boolean {
   } finally {
     state.isApplying = false;
   }
+  // Observer errors must never roll back a successfully applied history entry.
+  notifyHistoryNavigation(docKey, navigation.direction);
+  return true;
 }
 
 /** 沿文件统一时间线撤销一个编辑分组 */

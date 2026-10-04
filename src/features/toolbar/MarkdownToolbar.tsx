@@ -84,6 +84,7 @@ import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent } from '../editor-md/insertContentRecipes';
 import { insertMath } from '../editor-md/insertMath';
 import { markMermaidCreation } from '../editor-md/mermaidCreation';
+import { getEditingScope, useEditingScope } from '../editor-md/editingScope';
 
 interface MarkdownToolbarProps {
   docKey: string;
@@ -93,8 +94,13 @@ interface MarkdownToolbarProps {
 
 export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: MarkdownToolbarProps) {
   // 保证获取到最新的 TipTap editor 实例
-  const editor = propEditor || getActiveTipTapEditor(docKey) || null;
+  const parentEditor = propEditor || getActiveTipTapEditor(docKey) || null;
   const isSourceMode = viewMode === 'source';
+  const scope = useEditingScope(!isSourceMode ? parentEditor?.view : undefined);
+  const editor = scope?.kind === 'tiptap' ? scope.editor : scope ? null : parentEditor;
+  const isCurrentTarget = () => isSourceMode || (!!parentEditor && !parentEditor.isDestroyed
+    && getEditingScope(parentEditor.view) === scope && !editor?.isDestroyed && !editor?.view.composing);
+  const allowsStructure = !scope;
   const nativeFeaturesVisible = useNativeFeatureVisibility() && !isSourceMode;
   const document = useDocumentStore(state => state.documents.get(docKey));
   const hasMarkdownLink = useMemo(() => document?.kind === 'noteboard' && !!nativeMarkdownLink(docKey, document.content), [docKey, document?.kind, document?.content]);
@@ -108,7 +114,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const selectionScope = editor && !isSourceMode ? selectionPresentation(editor.state) : null;
   const canInline = isSourceMode ? !!sourceView : !!selectionScope?.inline;
   const selectedCells = !isSourceMode && editor?.state.selection instanceof CellSelection;
-  const canBlocks = isSourceMode ? !!sourceView : !!selectionScope?.blockText && !selectedCells;
+  const canBlocks = allowsStructure && (isSourceMode ? !!sourceView : !!selectionScope?.blockText && !selectedCells);
   const canLists = canBlocks && !selectedCells;
   const canTextStyle = canInline || !!selectionScope?.mathBlocks.length;
 
@@ -140,12 +146,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
   // ── 标题与段落设置 ──
   const handleSetHeading = (level: number | 'paragraph') => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setHeadingDropdownOpen(false);
     if (isSourceMode) {
       executeSourceAction(view => setSourceHeading(view, level === 'paragraph' ? 0 : level));
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     if (level === 'paragraph') {
       editor.chain().focus().setParagraph().run();
     } else {
@@ -159,7 +166,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       executeSourceAction(view => { runSourceFormatCommand(view, `markdown.${mark}`); });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     if (toggleSelectedCellMark(editor, mark) !== null) return;
     switch (mark) {
       case 'bold':
@@ -182,11 +189,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
   // ── 列表切换 ──
   const toggleList = (type: 'bullet' | 'ordered' | 'task') => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     if (isSourceMode) {
       executeSourceAction(view => { runSourceFormatCommand(view, `markdown.${type}List`); });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     if (type === 'bullet') editor.chain().focus().toggleBulletList().run();
     if (type === 'ordered') editor.chain().focus().toggleOrderedList().run();
     if (type === 'task') editor.chain().focus().toggleTaskList().run();
@@ -198,18 +206,19 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       executeSourceAction(view => formatSourceMark(view, 'highlight', color));
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     setHighlightColor(editor, color);
   };
 
   const handleRemoveHighlight = () => {
     if (isSourceMode) { executeSourceAction(view => formatSourceMark(view, 'highlight', undefined, true)); return; }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     setHighlightColor(editor, null);
   };
 
   // ── 插入元素处理 ──
   const handleInsertTable = (rows: number, cols: number) => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       const row = (value: (index: number) => string) => `| ${Array.from({ length: cols }, (_, index) => value(index)).join(' | ')} |`;
@@ -220,11 +229,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     insertDocumentTable(editor, rows, cols);
   };
 
   const handleInsertMath = (type: 'inline' | 'block') => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       const mathSnippet = type === 'inline' ? '$$' : '\n$$\n\n$$\n';
@@ -234,11 +244,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     insertMath(editor, type);
   };
 
   const handleInsertMermaid = () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       const mermaidCode = `\n\`\`\`mermaid\n${DEFAULT_MERMAID_CODE}\n\`\`\`\n`;
@@ -248,12 +259,13 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().command(({ tr }) => { markMermaidCreation(tr); return true; }).insertContent(diagramContent('mermaid')).run();
   };
 
   // 插入 Infographic 现代化信息图
   const handleInsertInfographic = () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     const tmpl = DEFAULT_INFOGRAPHIC_CODE;
     if (isSourceMode) {
@@ -264,11 +276,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().insertContent(diagramContent('infographic')).run();
   };
 
   const handleInsertAlert = (kind?: 'note' | 'tip' | 'important' | 'warning' | 'caution') => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       const alertSnippet = `\n> [!${(kind ?? 'note').toUpperCase()}]\n> 提示内容\n\n`;
@@ -278,7 +291,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     if (!kind) { insertCallout(editor); return; }
     editor.chain().focus().insertContent({
       type: 'githubAlert',
@@ -288,16 +301,18 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   };
 
   const handleInsertCodeBlock = () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       executeSourceAction(view => { runSourceFormatCommand(view, 'markdown.codeBlock'); });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().toggleCodeBlock().run();
   };
 
   const handleInsertQuote = () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       executeSourceAction((view) => {
@@ -307,11 +322,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().toggleBlockquote().run();
   };
 
   const handleInsertDivider = () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       executeSourceAction((view) => {
@@ -320,17 +336,21 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().setHorizontalRule().run();
   };
 
   // ── 超链接与图片处理 ──
   const handleOpenLink = () => {
     setInsertDropdownOpen(false);
+    if (!isCurrentTarget()) return;
+    if (scope?.kind === 'tiptap') { scope.openLink(); return; }
+    if (scope) return;
     emit('open-link-modal', { key: docKey });
   };
 
   const handleInsertLocalImage = async () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     if (isSourceMode) {
       const view = getActiveSourceView(docKey);
@@ -343,6 +363,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   };
 
   const handleInsertNetworkImage = async () => {
+    if (!allowsStructure || !isCurrentTarget()) return;
     setInsertDropdownOpen(false);
     const source = isSourceMode ? getActiveSourceView(docKey) : null;
     const lease = source ? captureSourceImageInsertion(source, docKey) : editor ? captureVisualImageInsertion(editor, docKey) : null;
@@ -370,7 +391,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       });
       return;
     }
-    if (!editor) return;
+    if (!editor || !isCurrentTarget()) return;
     editor.chain().focus().insertContent(textToInsert).run();
   };
 
@@ -408,10 +429,11 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       return;
     }
 
-    const currentEditor = editor || getActiveTipTapEditor(docKey);
-    if (!currentEditor) return;
+    const currentEditor = editor;
+    if (!currentEditor || !isCurrentTarget()) return;
 
     clearSelectionTextFormatting(currentEditor);
+    if (scope?.kind === 'tiptap') currentEditor.view.dom.focus({ preventScroll: true });
   };
 
   if (isSourceMode && document?.kind === 'noteboard') return null;
@@ -427,16 +449,16 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         title="撤销"
         collapsePriority={130}
         shortcut="Ctrl+Z"
-        disabled={!canUndo}
-        onClick={() => undoDocumentHistory(docKey)}
+        disabled={!canUndo || scope?.kind === 'external'}
+        onClick={() => { if (!isCurrentTarget()) return; if (scope?.kind === 'tiptap') scope.history('undo'); else undoDocumentHistory(docKey); }}
       />
       <ToolbarButton
         icon={<Redo2 size={15} strokeWidth={2.2} />}
         title="重做"
         collapsePriority={120}
         shortcut="Ctrl+Y"
-        disabled={!canRedo}
-        onClick={() => redoDocumentHistory(docKey)}
+        disabled={!canRedo || scope?.kind === 'external'}
+        onClick={() => { if (!isCurrentTarget()) return; if (scope?.kind === 'tiptap') scope.history('redo'); else redoDocumentHistory(docKey); }}
       />
 
       <ToolbarDivider />
@@ -565,18 +587,18 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       />
 
       {nativeFeaturesVisible && canTextStyle && <HighlightControl
-        onApplyStyle={pair => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
+        onApplyStyle={pair => { if (!isCurrentTarget()) return; if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
         textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('mathBlock').textColor ?? editor?.getAttributes('textColor').color}
-        onTextColor={color => { if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
+        onTextColor={color => { if (!isCurrentTarget()) return; if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}
         collapsePriority={40}
         open={highlightDropdownOpen}
         onOpenChange={open => { if (open && sourceView) sourceTextStyle(sourceView, true); setHighlightDropdownOpen(open); }}
         active={isSourceMode ? !!sourceStyle?.background || sourceHighlight !== null : Boolean(editor?.isActive('highlight') || editor?.getAttributes('mathBlock').background)}
         currentColor={isSourceMode ? sourceStyle?.background ?? sourceHighlight?.color : editor?.getAttributes('mathBlock').background ?? editor?.getAttributes('highlight').color}
         onApply={handleSelectHighlightColor} onRemove={handleRemoveHighlight}
-        onReturnToEditor={() => { if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.commands.focus(); }}
+        onReturnToEditor={() => { if (!isCurrentTarget()) return; if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.view.dom.focus({ preventScroll: true }); }}
       />}
-      {!isSourceMode && editor && <AlignmentMenu editor={editor}/>}
+      {!isSourceMode && editor && allowsStructure && <AlignmentMenu editor={editor}/>}
 
       <ToolbarDivider />
 
@@ -623,6 +645,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
             compactLabel
             hasDropdown
             title="插入超链接、图片、表格、公式、图表、提示块、日期时间等"
+            disabled={scope?.kind === 'external'}
           />
         }
       >
@@ -630,6 +653,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Code2 size={14} />}
           label="代码块"
+          disabled={!allowsStructure}
           onClick={handleInsertCodeBlock}
         />
 
@@ -637,6 +661,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Info size={14} color="#3b82f6" />}
           label="提示块"
+          helpKey="block.callout"
+          disabled={!allowsStructure}
           submenu={
             <>
               {(nativeFeaturesVisible || isSourceMode) && <ToolbarDropdownItem
@@ -677,15 +703,17 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Quote size={14} />}
           label="引用块 (Quote)"
+          disabled={!allowsStructure}
           onClick={handleInsertQuote}
         />
-        {nativeFeaturesVisible && editor && <ToolbarDropdownItem icon={<PanelTopClose size={14}/>} label="折叠块"
-          onClick={() => { setInsertDropdownOpen(false); insertDisclosure(editor); }}/>}
+        {nativeFeaturesVisible && editor && allowsStructure && <ToolbarDropdownItem icon={<PanelTopClose size={14}/>} label="折叠块" helpKey="block.disclosure"
+          onClick={() => { if (!isCurrentTarget()) return; setInsertDropdownOpen(false); insertDisclosure(editor); }}/>}
 
         {/* 4. 表格二级菜单 */}
         <ToolbarDropdownItem
           icon={<TableIcon size={14} />}
           label="表格"
+          disabled={!allowsStructure}
           submenu={
             <>
               <ToolbarDropdownItem
@@ -708,16 +736,19 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Sigma size={14} />}
           label="公式与图表"
+          disabled={!allowsStructure}
           submenu={
             <>
               <ToolbarDropdownItem
                 icon={<InlineFormulaIcon size={16} />}
                 label="行内公式 ($...$)"
+                helpKey="formula.inline"
                 onClick={() => handleInsertMath('inline')}
               />
               <ToolbarDropdownItem
                 icon={<BlockFormulaIcon size={16} />}
                 label="独立公式块 ($$...$$)"
+                helpKey="formula.block"
                 onClick={() => handleInsertMath('block')}
               />
               <ToolbarDropdownItem
@@ -738,6 +769,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarOverflowItem id="image"><ToolbarDropdownItem
           icon={<ImageIcon size={14} />}
           label="图片"
+          disabled={!allowsStructure}
           submenu={
             <ImageInsertItems editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} onDone={() => setInsertDropdownOpen(false)}/>
           }
@@ -756,6 +788,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Calendar size={14} />}
           label="日期时间"
+          disabled={!canInline}
           submenu={
             <>
               <ToolbarDropdownItem
@@ -781,6 +814,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Minus size={14} />}
           label="水平分割线"
+          disabled={!allowsStructure}
           onClick={handleInsertDivider}
         />
       </ToolbarDropdown>}
@@ -796,9 +830,9 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
       />
-      {!selectedCells && <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70} overflowId="image"/>}
-      {!isSourceMode && editor && canInline && !selectedCells && <AnnotationButton editor={editor} collapsePriority={100}/>}
-      {!isSourceMode && editor && canInline && !selectedCells && <RichSelectionMenu editor={editor}/>}
+      {!selectedCells && allowsStructure && <ImageInsertMenu editor={isSourceMode ? null : editor} onLocal={handleInsertLocalImage} onNetwork={handleInsertNetworkImage} collapsePriority={70} overflowId="image"/>}
+      {!isSourceMode && editor && allowsStructure && canInline && !selectedCells && <AnnotationButton editor={editor} collapsePriority={100}/>}
+      {!isSourceMode && editor && allowsStructure && canInline && !selectedCells && <RichSelectionMenu editor={editor}/>}
 
       <ToolbarDivider />
 
@@ -808,7 +842,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<RemoveFormatting size={15} color="#ef4444" />}
         title="清除选中文本格式"
-        disabled={!canBlocks}
+        disabled={scope ? !canInline : !canBlocks}
         collapsePriority={60}
         onClick={handleClearFormat}
       />

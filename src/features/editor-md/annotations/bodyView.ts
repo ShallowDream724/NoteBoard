@@ -21,7 +21,8 @@ import { normalizeFigureCaption, renderFigureCaption } from '../figureCaption';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
-export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body: ProseMirrorNode, editable: boolean): EditorView {
+export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body: ProseMirrorNode, editable: boolean,
+  onStateChange?: (state: EditorState) => void): EditorView {
   const schema = editor.schema;
   const bindings = { ...baseKeymap,
     ...(schema.nodes.hardBreak ? { 'Shift-Enter': (state: EditorState, dispatch?: (tr: import('@tiptap/pm/state').Transaction) => void) => {
@@ -32,6 +33,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
     'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo,
     ...(schema.marks.bold ? { 'Mod-b': toggleMark(schema.marks.bold) } : {}),
     ...(schema.marks.italic ? { 'Mod-i': toggleMark(schema.marks.italic) } : {}),
+    ...(schema.marks.underline ? { 'Mod-u': toggleMark(schema.marks.underline) } : {}),
     ...(schema.nodes.listItem ? { Enter: splitListItem(schema.nodes.listItem) } : {}),
   };
   const docKey = String(editor.extensionManager.extensions.find(extension => extension.name === 'image')?.options.docKey ?? '');
@@ -52,7 +54,10 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
     state: EditorState.create({ schema, doc: normalizeImageSlots(schema.nodes.doc.create(null, body.content)), plugins }),
     editable: () => editable,
     attributes: { class: 'nb-annotation-richtext nb-embedded-prose', 'aria-label': editable ? '说明正文' : '补充说明正文', ...(editable ? { role: 'textbox', 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' } : {}) },
-    dispatchTransaction(tr) { bodyView.updateState(bodyView.state.apply(tr)); },
+    dispatchTransaction(tr) {
+      bodyView.updateState(bodyView.state.apply(tr));
+      onStateChange?.(bodyView.state);
+    },
     nodeViews: {
       ...(tables ? {
         table: (node, view) => new EfficientTableView(node, 40, view, { class: 'nb-table' }),

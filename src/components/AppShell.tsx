@@ -69,9 +69,12 @@ import {
 } from '../features/session/closedWindowSession';
 import { MissingFileDialog } from '../features/external/MissingFileDialog';
 import { checkActiveDocumentStillExists } from '../features/external/missingFileGuard';
+import { usePracticeStore } from '../features/learning/practiceStore';
+import { trackPracticeTab } from '../features/learning/practiceLifecycle';
 
 // ── AppShell ──
 const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
+const InteractivePracticePanel = lazy(() => import('../features/learning/InteractivePracticePanel'));
 
 export function AppShell(_props: { children?: React.ReactNode }) {
   useEffect(() => {
@@ -84,6 +87,9 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   }, []);
   const tabs = useWindowStore((s) => s.tabs);
   const activeKey = useWindowStore((s) => s.activeKey);
+  const practiceSessionKey = usePracticeStore((s) => s.sessionKey);
+  // Session ownership survives hidden panels, including board presentation mode.
+  useEffect(() => practiceSessionKey ? trackPracticeTab() : undefined, [practiceSessionKey]);
   // 🔴 迁移保护中的文档：阻断编辑输入（pointerEvents），避免迁移期间新修改无法同步到目标
   const transferringKeys = useWindowStore((s) => s.transferringKeys);
   const {
@@ -640,6 +646,11 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                           onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
                       </Tooltip>
                     ))}
+                    {!isBoardPresentationMode && practiceSessionKey && (
+                      <Suspense fallback={null}>
+                        <InteractivePracticePanel activeEditor={activeEditor} activeKey={activeKey} />
+                      </Suspense>
+                    )}
                   </div>
                 ) : null}
 

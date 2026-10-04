@@ -4,6 +4,7 @@ import type { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import { FigureCaptionTransition } from '../../src/features/editor-md/figureCaptionTransition';
 import { showToast } from '../../src/stores/toastStore';
+import { getEditingScope } from '../../src/features/editor-md/editingScope';
 
 vi.mock('../../src/stores/toastStore', () => ({ showToast: vi.fn() }));
 type CaptionEditorModule = typeof import('../../src/features/editor-md/figureCaptionEditor');
@@ -13,7 +14,7 @@ function deferred() {
   return { promise, resolve, reject };
 }
 const transitions: FigureCaptionTransition[] = [];
-function setup(view = { editable: true, isDestroyed: false } as EditorView) {
+function setup(view = { editable: true, isDestroyed: false, dom: document.createElement('div') } as unknown as EditorView) {
   const preview = document.createElement('span'), host = document.createElement('div'), outside = document.createElement('button');
   preview.textContent = 'Results\nSecond line'; preview.tabIndex = 0; host.hidden = true;
   document.body.append(preview, host, outside); preview.focus();
@@ -48,6 +49,22 @@ describe('caption editing transitions', () => {
     expect(current.onEditingChange).toHaveBeenLastCalledWith(true);
   });
 
+  it('blocks body commands during lazy loading and keeps the request through toolbar or portal interaction', async () => {
+    const current = setup(); current.transition.begin();
+    expect(getEditingScope(current.view)?.kind).toBe('external');
+    for (const className of ['responsive-toolbar', 'nb-highlight-menu']) {
+      const control = document.body.appendChild(document.createElement('button')); control.className = className;
+      control.dispatchEvent(new Event('pointerdown', { bubbles: true })); control.focus();
+      expect(getEditingScope(current.view)?.kind).toBe('external');
+    }
+    current.pending.resolve(current.module); await settle();
+    expect(current.mountFigureCaptionEditor).toHaveBeenCalledTimes(1);
+    expect(current.host.hidden).toBe(false);
+    // The real mounted caption replaces this temporary scope. This fixture has
+    // no editor registration, so settling also proves the loading guard releases.
+    expect(getEditingScope(current.view)).toBeNull();
+  });
+
   it.each(['pointer', 'focus', 'Escape', 'Tab', 'blur', 'destroy'] as const)('does not steal focus when loading finishes after %s cancellation', async action => {
     const current = setup(); current.transition.begin();
     if (action === 'pointer') current.outside.dispatchEvent(new Event('pointerdown', { bubbles: true }));
@@ -58,6 +75,7 @@ describe('caption editing transitions', () => {
     const active = document.activeElement;
     current.pending.resolve(current.module); await settle();
     expect(current.mountFigureCaptionEditor).not.toHaveBeenCalled();
+    expect(getEditingScope(current.view)).toBeNull();
     expect(current.preview.hidden).toBe(false); expect(current.host.hidden).toBe(true);
     expect(document.activeElement).toBe(active);
   });

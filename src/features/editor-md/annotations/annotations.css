@@ -52,7 +52,17 @@
 .nb-annotation-richtext table { border-collapse: collapse; max-width: 100%; }
 .nb-annotation-richtext td, .nb-annotation-richtext th { border: 1px solid var(--editor-border); padding: 4px 6px; }
 .nb-annotation-richtext aside[data-annotation-store] { display: none; }
-.nb-annotation-format { display: flex; align-items: center; gap: 2px; padding: 5px 8px; border-bottom: 1px solid var(--editor-border); }
+.nb-annotation-format-area { position:sticky; top:0; z-index:2; background:var(--editor-surface); border-bottom:1px solid var(--editor-border); }
+.nb-annotation-format { display: flex; flex-wrap:wrap; align-items: center; gap: 2px; padding: 5px 8px; }
+.nb-annotation-format button[aria-pressed=true],.nb-annotation-format button[aria-pressed=mixed] { color:var(--editor-accent); background:var(--editor-active,var(--editor-hover)); }
+.nb-annotation-format button[aria-pressed=mixed] { box-shadow:inset 0 -2px var(--editor-accent); }
+.nb-annotation-panel button:disabled,.nb-annotation-panel select:disabled { opacity:.4; cursor:default; background:transparent; }
+.nb-annotation-format-separator { height:16px; width:1px; margin:0 3px; background:var(--editor-border); }
+.nb-annotation-color-preview { padding:1px 3px; font-weight:600; line-height:1.15; border-radius:2px; }
+.nb-annotation-color-panel { display:flex; flex-direction:column; gap:5px; padding:7px 10px 10px; border-top:1px solid var(--editor-border); }
+.nb-annotation-color-panel > span { font-size:11px; color:var(--editor-text-muted); }
+.nb-annotation-color-panel .nb-color-swatch { width:25px; height:25px; min-width:25px; min-height:25px; }
+.nb-annotation-link-input { border-top:1px solid var(--editor-border); border-bottom:0!important; }
 .nb-annotation-image-input { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--editor-border); }
 .nb-annotation-image-input > div { display: flex; gap: 6px; }
 .nb-annotation-image-input input { min-width: 0; flex: 1; border: 1px solid var(--editor-border); border-radius: var(--radius-sm); background: var(--editor-bg); color: var(--editor-text); padding: 6px 8px; font: inherit; }

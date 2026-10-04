@@ -12,6 +12,7 @@ import { annotationAnchors, collectAnnotations } from '@/features/editor-md/anno
 import { undoDepth } from '@tiptap/pm/history';
 import { EditorView } from '@tiptap/pm/view';
 import { nativeTestEditor } from './nativeTestEditor';
+import { getEditingScope } from '@/features/editor-md/editingScope';
 
 let editor: Editor, root: Root;
 beforeEach(async () => {
@@ -95,6 +96,14 @@ it.each(['取消', 'Escape'])('discards a new draft with %s without creating an 
   expect(panel()).toBeNull();
   expect(editor.getJSON()).toEqual(original);
   expect(undoDepth(editor.state)).toBe(depth);
+});
+
+it('owns an external editing scope only while the annotation draft is active', async () => {
+  await act(async () => { editor.commands.setTextSelection(targetRange()); beginAnnotation(editor); });
+  expect(getEditingScope(editor.view)?.kind).toBe('external');
+  expect(panel()?.querySelector('[role="toolbar"][aria-label="说明格式"]')).not.toBeNull();
+  await act(async () => Array.from(panel()!.querySelectorAll<HTMLButtonElement>('button')).find(item => item.textContent === '取消')!.click());
+  expect(getEditingScope(editor.view)).toBeNull();
 });
 
 it('saves a new rich draft and anchor as one undoable parent-document action', async () => {

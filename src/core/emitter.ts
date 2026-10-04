@@ -19,7 +19,7 @@ export type AppEvents = {
   'view-mode-changed': { key: string; mode: 'visual' | 'source' };
   'md-source-selection-changed': { key: string };
   // 请求切换 Markdown 编辑器模式（可视化 / 源码）
-  'toggle-md-view-mode': { key?: string; mode?: 'visual' | 'source'; line?: number };
+  'toggle-md-view-mode': { key?: string; mode?: 'visual' | 'source'; line?: number; reason?: 'repair-native-record' };
   // 请求唤起超链接插入/编辑弹窗
   'open-link-modal': { key?: string };
   // 请求关闭标题栏所有弹出菜单（新建菜单、保存菜单、主题菜单及标签页右键菜单）

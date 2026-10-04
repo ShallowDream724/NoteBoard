@@ -1,0 +1,25 @@
+.nb-tooltip-content.nb-contextual-help-content { display: block; padding: 11px; width: min(286px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: hidden; }
+.nb-contextual-help { min-width: 0; font-size: 12px; line-height: 1.5; font-weight: 400; }
+.nb-contextual-help-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
+.nb-contextual-help-scope { margin-top: 2px; color: var(--editor-text-muted); font-size: 10.5px; }
+.nb-contextual-help p { margin: 7px 0 0; color: var(--editor-text-secondary, var(--editor-text)); }
+.nb-contextual-help-illustration { display: block; width: 100%; height: auto; max-height: min(104px, 20vh); margin-top: 9px; border-radius: 5px; background: var(--toolbar-hover); overflow: hidden; }
+.nb-help-page { fill: var(--editor-surface); stroke: var(--editor-border); stroke-width: 1; }
+.nb-help-table { fill: var(--editor-surface); stroke: var(--editor-text-muted); stroke-width: 1; }
+.nb-help-table-surface { fill: var(--editor-surface); stroke: none; }
+.nb-help-grid { fill: none; stroke: var(--editor-border); stroke-width: 1; }
+.nb-help-text-line { fill: none; stroke: var(--editor-text-secondary, var(--editor-text)); stroke-width: 2; stroke-linecap: round; opacity: .65; }
+.nb-help-ink { fill: none; stroke: var(--editor-text); stroke-width: 2; }
+.nb-help-highlight { fill: var(--editor-selection-background); stroke: var(--accent-500); stroke-width: 1; }
+.nb-help-accent-line { fill: none; stroke: var(--accent-500); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.nb-help-formula { fill: var(--editor-text); font-family: Georgia, serif; font-size: 17px; }
+.nb-help-small-text { fill: var(--editor-text-secondary, var(--editor-text)); font-family: var(--ui-font-family); font-size: 10px; }
+.nb-help-table-move { animation: nb-help-table-move 4s ease-in-out 1; }
+.nb-help-formula-pan { animation: nb-help-formula-pan 4s ease-in-out 1; }
+.nb-help-scroll-thumb { animation: nb-help-thumb-pan 4s ease-in-out 1; }
+.nb-help-disclosure-body { transform-origin: center 42px; animation: nb-help-disclosure 4s ease-in-out 1; }
+@keyframes nb-help-table-move { 0%, 100% { transform: translateX(24px); } 35%, 60% { transform: translateX(65px); } }
+@keyframes nb-help-formula-pan { 0%, 100% { transform: translateX(0); } 35%, 60% { transform: translateX(-35px); } }
+@keyframes nb-help-thumb-pan { 0%, 100% { transform: translateX(0); } 35%, 60% { transform: translateX(75px); } }
+@keyframes nb-help-disclosure { 0%, 100% { opacity: 1; transform: scaleY(1); } 35%, 60% { opacity: 0; transform: scaleY(.1); } }
+@media (prefers-reduced-motion: reduce) { .nb-contextual-help-illustration * { animation: none !important; } .nb-contextual-help-content { animation: none !important; } }

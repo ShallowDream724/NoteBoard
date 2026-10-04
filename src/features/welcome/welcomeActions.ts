@@ -221,6 +221,11 @@ export function newNativeDocument(): void {
   createUntitledDocument('noteboard');
 }
 
+/** Open an editable, unsaved copy without changing the supplied template. */
+export function openNativeTemplate(title: string, content: string): string {
+  return createUntitledDocument('noteboard', { title, content });
+}
+
 export function newDefaultDocument(): void {
   createUntitledDocument(useSettingsStore.getState().settings.editor.pureMarkdown ? 'markdown' : 'noteboard');
 }
