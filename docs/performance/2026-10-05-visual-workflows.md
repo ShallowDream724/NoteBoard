@@ -51,3 +51,9 @@
 - `test-results/performance/budget-report.json`：构建预算。
 
 本任务涉及的 52 个源文件、测试和脚本通过 ESLint。全仓 lint 仍有未修改文件的历史问题（包括旧测试中的 `any`/`@ts-nocheck` 等）；不把定向检查表述为全仓 lint 全绿。未进行公开发布或推送。
+
+## 本地安装
+
+代码提交 `820d843`。2026-10-05 03:39 已将验收版覆盖安装到 `C:/Users/dell/AppData/Local/NoteBoard/noteboard.exe`，安装器返回 0；核对实际文件句柄路径与构建二进制，仅存在 Tauri 的安装来源标记差异。上一安装包及回执已保留。
+
+安装包为工作区 `outputs/NoteBoard_1.0.2_visual-workflow-820d843_x64-setup.exe`，SHA-256 `e21ce87c09c2f7413465f1154928f76bb9bc861e1706844b9e9aa222b22148de`。同目录提供 `NoteBoard-visual-workflow-check.nb/.html/.pdf`、原生内存记录及安装回执，可直接手动验收。
