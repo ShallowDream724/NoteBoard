@@ -104,6 +104,59 @@ it('does not let pending advancement from an old generation move a restarted gui
   await settle(1000);
   expect(usePracticeStore.getState().stepId).toBe('read-note'); expect(usePracticeStore.getState().completed).toEqual([]);
 });
+it('reopens selection when the full phrase is shortened during its completion delay', async () => {
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
+  await act(async () => editor.commands.setTextSelection(range)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('selection'); await settle(150);
+  await act(async () => editor.commands.setTextSelection({ from: range.from, to: range.to - 1 })); await tick();
+  expect(usePracticeStore.getState().completed).not.toContain('selection');
+  expect(document.querySelector('[aria-label="上手引导"]')).not.toBeNull();
+  await settle(450); expect(usePracticeStore.getState().stepId).toBe('selection');
+  await act(async () => editor.commands.setTextSelection(range)); await tick(); await settle();
+  expect(usePracticeStore.getState().stepId).toBe('highlight');
+});
+it('reopens highlight when its mark is removed before automatic advancement', async () => {
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  await act(async () => { usePracticeStore.getState().selectStep('highlight'); editor.commands.setTextSelection(range); }); await tick();
+  await act(async () => editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.highlight.create()))); await tick();
+  expect(usePracticeStore.getState().completed).toContain('highlight'); await settle(150);
+  await act(async () => editor.view.dispatch(editor.state.tr.removeMark(range.from, range.to, editor.schema.marks.highlight))); await tick();
+  expect(usePracticeStore.getState().completed).not.toContain('highlight');
+  await settle(450); expect(usePracticeStore.getState().stepId).toBe('highlight');
+  await act(async () => editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.highlight.create()))); await tick(); await settle();
+  expect(usePracticeStore.getState().stepId).toBe('annotation-open');
+});
+it('keeps annotation-open active when its draft is cancelled during the completion delay', async () => {
+  let opened = false; targets.complete.mockImplementation((_editor, step: string) => step === 'annotation-open' && opened);
+  await act(async () => usePracticeStore.getState().selectStep('annotation-open')); await tick();
+  opened = true; await act(async () => window.dispatchEvent(new Event('resize'))); await tick();
+  expect(usePracticeStore.getState().completed).toContain('annotation-open'); await settle(150);
+  opened = false; await act(async () => window.dispatchEvent(new Event('resize'))); await tick();
+  expect(usePracticeStore.getState().completed).not.toContain('annotation-open');
+  await settle(450); expect(usePracticeStore.getState().stepId).toBe('annotation-open');
+});
+it('rechecks an opened draft at the advancement boundary even before another geometry frame', async () => {
+  let opened = false; targets.complete.mockImplementation((_editor, step: string) => step === 'annotation-open' && opened);
+  await act(async () => usePracticeStore.getState().selectStep('annotation-open')); await tick();
+  opened = true; await act(async () => window.dispatchEvent(new Event('resize'))); await tick();
+  expect(usePracticeStore.getState().completed).toContain('annotation-open');
+  opened = false; await settle(350);
+  expect(usePracticeStore.getState().stepId).toBe('annotation-open');
+  expect(usePracticeStore.getState().completed).not.toContain('annotation-open');
+});
+it('reopens annotation-save when the saved reference is undone during its completion delay', async () => {
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  await act(async () => usePracticeStore.getState().selectStep('annotation-save')); await tick();
+  await act(async () => {
+    editor.commands.insertContentAt(editor.state.doc.content.size, { type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'saved-note' }, content: [{ type: 'paragraph' }] }] });
+    editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'saved-note' })));
+  }); await tick();
+  expect(usePracticeStore.getState().completed).toContain('annotation-save'); await settle(150);
+  await act(async () => editor.view.dispatch(editor.state.tr.removeMark(range.from, range.to, editor.schema.marks.annotationReference))); await tick();
+  expect(usePracticeStore.getState().completed).not.toContain('annotation-save');
+  await settle(450); expect(usePracticeStore.getState().stepId).toBe('annotation-save');
+});
 it('pauses pending advancement while the sample tab is inactive', async () => {
   const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
   await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
@@ -133,6 +186,15 @@ it('does not count an existing sample callout and waits for a new insertion', as
   expect(usePracticeStore.getState().completed).toEqual([]);
   await act(async () => editor.commands.insertContentAt(editor.state.doc.content.size, alert)); await tick();
   expect(usePracticeStore.getState().completed).toEqual(['insert-callout']);
+});
+it('offers Skip without a dead locate action when the original example phrase is gone', async () => {
+  targets.resolve.mockReturnValue({ element: null, rects: [], fallback: 'missing-text' });
+  await act(async () => { editor.commands.setContent('<p>已经改写的正文</p>'); usePracticeStore.getState().selectStep('highlight'); }); await tick();
+  expect(document.querySelectorAll('[data-guide-spotlight]')).toHaveLength(0);
+  expect(document.querySelector('.nb-onboarding-locate')).toBeNull();
+  expect(document.querySelector('.nb-onboarding-copy')?.textContent).toContain('这段示例文字已经改动');
+  expect(document.querySelector('.nb-onboarding-skip')).not.toBeNull();
+  await settle(450); expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(usePracticeStore.getState().completed).toEqual([]);
 });
 it('exits on Escape while preserving the document and tab identity', async () => {
   const doc = editor.state.doc, tabs = useWindowStore.getState().tabs, off = vi.spyOn(editor, 'off');

@@ -261,8 +261,12 @@ export function Tooltip({
 
   const tooltip = (
     <RadixTooltip.Root delayDuration={delay} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
-      <RadixTooltip.Trigger asChild={asChild} onFocus={event => {
-        if (input ? input.current !== 'keyboard' : !event.currentTarget.matches(':focus-visible')) event.preventDefault();
+      <RadixTooltip.Trigger asChild={asChild} onPointerMove={event => {
+        // A blocked Radix root still announces an attempted open globally.
+        // Suppress that attempt so an empty parent cannot dismiss child help.
+        if (blocked) event.preventDefault();
+      }} onFocus={event => {
+        if (blocked || (input ? input.current !== 'keyboard' : !event.currentTarget.matches(':focus-visible'))) event.preventDefault();
       }}>
         {children}
       </RadixTooltip.Trigger>

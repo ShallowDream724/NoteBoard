@@ -12,6 +12,7 @@ interface PracticeStore extends PracticeSession {
   exit: () => void;
   selectStep: (id: string) => void;
   complete: (key: string, id: string) => void;
+  reopen: (key: string, id: string) => void;
   skip: (id: string) => void;
   migrateKey: (from: string, to: string) => void;
 }
@@ -26,6 +27,8 @@ export const usePracticeStore = create<PracticeStore>((set) => ({
   selectStep: stepId => set(state => state.sessionKey ? { stepId } : {}),
   complete: (key, id) => set(state => state.sessionKey !== key || state.stepId !== id || state.completed.includes(id)
     ? {} : { completed: [...state.completed, id], skipped: state.skipped.filter(item => item !== id) }),
+  reopen: (key, id) => set(state => state.sessionKey === key && state.stepId === id && state.completed.includes(id)
+    ? { completed: state.completed.filter(item => item !== id) } : {}),
   skip: id => set(state => !state.sessionKey || state.completed.includes(id) || state.skipped.includes(id)
     ? {} : { skipped: [...state.skipped, id] }),
 }));

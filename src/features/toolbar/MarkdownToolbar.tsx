@@ -483,6 +483,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Pilcrow size={14} />}
           label="正文段落"
+          helpKey="block.paragraph"
           disabled={!canBlocks}
           shortcut="Ctrl+0"
           active={currentHeadingLabel === '正文'}
@@ -491,6 +492,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading1 size={14} />}
           label="一级标题 (H1)"
+          helpKey="block.heading.1"
           disabled={!canBlocks}
           shortcut="Ctrl+1"
           active={currentHeadingLabel === 'H1'}
@@ -499,6 +501,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading2 size={14} />}
           label="二级标题 (H2)"
+          helpKey="block.heading.2"
           disabled={!canBlocks}
           shortcut="Ctrl+2"
           active={currentHeadingLabel === 'H2'}
@@ -507,6 +510,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading3 size={14} />}
           label="三级标题 (H3)"
+          helpKey="block.heading.3"
           disabled={!canBlocks}
           shortcut="Ctrl+3"
           active={currentHeadingLabel === 'H3'}
@@ -515,6 +519,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading4 size={14} />}
           label="四级标题 (H4)"
+          helpKey="block.heading.4"
           disabled={!canBlocks}
           shortcut="Ctrl+4"
           active={currentHeadingLabel === 'H4'}
@@ -523,6 +528,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading5 size={14} />}
           label="五级标题 (H5)"
+          helpKey="block.heading.5"
           disabled={!canBlocks}
           shortcut="Ctrl+5"
           active={currentHeadingLabel === 'H5'}
@@ -531,6 +537,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Heading6 size={14} />}
           label="六级标题 (H6)"
+          helpKey="block.heading.6"
           disabled={!canBlocks}
           shortcut="Ctrl+6"
           active={currentHeadingLabel === 'H6'}
@@ -606,6 +613,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<List size={15} strokeWidth={2.2} />}
         title="无序列表"
+        helpKey="list.bullet"
         disabled={!canLists || !isSourceMode && !editor?.can().toggleBulletList()}
         collapsePriority={10}
         shortcut="Ctrl+Shift+8"
@@ -615,6 +623,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<ListOrdered size={18} />}
         title="有序列表"
+        helpKey="list.ordered"
         disabled={!canLists || !isSourceMode && !editor?.can().toggleOrderedList()}
         collapsePriority={20}
         shortcut="Ctrl+Shift+7"
@@ -624,6 +633,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<CheckSquare size={15} strokeWidth={2.2} />}
         title="待办"
+        helpKey="list.task"
         disabled={!canLists || !isSourceMode && !editor?.can().toggleTaskList()}
         collapsePriority={80}
         shortcut="Ctrl+Shift+9"
@@ -653,6 +663,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Code2 size={14} />}
           label="代码块"
+          helpKey="block.code"
+          shortcut="Ctrl+Alt+C"
           disabled={!allowsStructure}
           onClick={handleInsertCodeBlock}
         />
@@ -708,6 +720,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Quote size={14} />}
           label="引用块 (Quote)"
+          helpKey="block.quote"
           disabled={!allowsStructure}
           onClick={handleInsertQuote}
         />
@@ -819,6 +832,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Minus size={14} />}
           label="水平分割线"
+          helpKey="block.divider"
           disabled={!allowsStructure}
           onClick={handleInsertDivider}
         />

@@ -14,3 +14,13 @@ it('restarting uses a new key and resets task progress; identity migration prese
   expect(usePracticeStore.getState().sessionKey).toBe('saved.nb'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
   store.start('second'); expect(usePracticeStore.getState().sessionKey).toBe('second'); expect(usePracticeStore.getState().completed).toEqual([]);
 });
+it('reopens only the current owned completion after its outcome is undone', () => {
+  const store = usePracticeStore.getState(); store.start('practice'); store.selectStep('selection'); store.complete('practice', 'selection');
+  store.reopen('other', 'selection'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
+  store.reopen('practice', 'highlight'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
+  store.reopen('practice', 'selection'); expect(usePracticeStore.getState().completed).toEqual([]);
+  expect(usePracticeStore.getState().stepId).toBe('selection');
+  store.complete('practice', 'selection'); store.selectStep('highlight'); store.complete('practice', 'highlight');
+  store.reopen('practice', 'selection'); expect(usePracticeStore.getState().completed).toEqual(['selection', 'highlight']);
+  store.reopen('practice', 'highlight'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
+});

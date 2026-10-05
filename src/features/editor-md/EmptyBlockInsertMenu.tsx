@@ -11,6 +11,7 @@ import { calloutContent, diagramContent, mathContent } from './insertContentReci
 import { IMAGE_TEMPLATES, imageCollectionTemplate } from './rich-content/commands';
 import { Tooltip } from '../../components/Tooltip';
 import type { ContextualHelpKey } from '../../components/contextualHelp';
+import { HEADING_HELP_KEYS, IMAGE_TEMPLATE_HELP_KEYS } from '../../components/contextualHelpKeys';
 
 const paragraph = (): JSONContent => ({ type: 'paragraph' });
 function tableContent(size: number): JSONContent {
@@ -39,24 +40,24 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
     <div className="nb-empty-block-group" role="group" aria-label="文字与列表">
       <div className="nb-empty-block-label">文字与列表</div>
       <div className="nb-empty-block-headings">
-        <Tooltip content="正文" shortcut="Ctrl+0"><button type="button" role="menuitem" aria-label="正文" onClick={() => insert(paragraph())}><Type size={16}/></button></Tooltip>
-        {([1, 2, 3, 4, 5, 6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} shortcut={`Ctrl+${level}`}><button type="button" role="menuitem" aria-label={'标题 ' + level} onClick={() => insert({ type: 'heading', attrs: { level } })}>H{level}</button></Tooltip>)}
+        <Tooltip content="正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button type="button" role="menuitem" aria-label="正文" onClick={() => insert(paragraph())}><Type size={16}/></button></Tooltip>
+        {([1, 2, 3, 4, 5, 6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} helpKey={HEADING_HELP_KEYS[level]} shortcut={`Ctrl+${level}`} side="right"><button type="button" role="menuitem" aria-label={'标题 ' + level} onClick={() => insert({ type: 'heading', attrs: { level } })}>H{level}</button></Tooltip>)}
       </div>
       <div className="nb-empty-block-grid">
-        {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+8' })}
-        {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+7' })}
-        {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] }, undefined, { shortcut: 'Ctrl+Shift+9' })}
+        {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { helpKey: 'list.bullet', shortcut: 'Ctrl+Shift+8' })}
+        {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { helpKey: 'list.ordered', shortcut: 'Ctrl+Shift+7' })}
+        {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] }, undefined, { helpKey: 'list.task', shortcut: 'Ctrl+Shift+9' })}
         {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos))}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="内容块">
       <div className="nb-empty-block-label">内容块</div>
       <div className="nb-empty-block-grid">
-        {block('代码块', <Braces size={16}/>, { type: 'codeBlock' }, undefined, { shortcut: 'Ctrl+Alt+C' })}
-        {block('引用', <Quote size={16}/>, { type: 'blockquote', content: [paragraph()] })}
+        {block('代码块', <Braces size={16}/>, { type: 'codeBlock' }, undefined, { helpKey: 'block.code', shortcut: 'Ctrl+Alt+C' })}
+        {block('引用', <Quote size={16}/>, { type: 'blockquote', content: [paragraph()] }, undefined, { helpKey: 'block.quote' })}
         {block('提示块', <PanelTop size={16}/>, calloutContent(), native ? 'callout' : undefined, { helpKey: 'block.callout' })}
         {native && block('折叠块', <PanelTopClose size={16}/>, { type: 'disclosure', content: [paragraph()] }, 'disclosure', { helpKey: 'block.disclosure' })}
-        {block('分割线', <Minus size={16}/>, { type: 'horizontalRule' })}
+        {block('分割线', <Minus size={16}/>, { type: 'horizontalRule' }, undefined, { helpKey: 'block.divider' })}
       </div>
       <div className="nb-empty-block-table" role="group" aria-label="表格尺寸"><span><Table2 size={16}/>表格</span>{[2, 3, 4].map(size =>
         <button key={size} type="button" role="menuitem" aria-label={`插入 ${size} × ${size} 表格`} onClick={() => insert(tableContent(size))}>{size} × {size}</button>)}</div>
@@ -66,7 +67,7 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
       <div className="nb-empty-block-grid">
         {item('本地图片', <Image size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'local'))}
         {item('图片链接', <Link2 size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'url'))}
-        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, template === 'carousel' ? <GalleryHorizontalEnd size={16}/> : <Grid2X2 size={16}/>, imageCollectionTemplate(template), 'gallery'))}
+        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, template === 'carousel' ? <GalleryHorizontalEnd size={16}/> : <Grid2X2 size={16}/>, imageCollectionTemplate(template), 'gallery', { helpKey: IMAGE_TEMPLATE_HELP_KEYS[template] }))}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="公式与图表">

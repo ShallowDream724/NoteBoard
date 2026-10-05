@@ -1,4 +1,4 @@
-.nb-tooltip-content.nb-contextual-help-content { display:block; box-sizing:border-box; padding:11px; width:min(286px,var(--radix-tooltip-content-available-width,286px),calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:hidden; }
+.nb-tooltip-content.nb-contextual-help-content { display:block; box-sizing:border-box; padding:11px; width:min(286px,calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:hidden; }
 .nb-contextual-help { min-width:0; font-size:12px; line-height:1.5; font-weight:400; }
 .nb-contextual-help-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:600; }
 .nb-contextual-help-scope { margin-top:2px; color:var(--editor-text-muted); font-size:10.5px; }
@@ -31,4 +31,18 @@
 .nb-help-document[data-formula-reading=wrap] .math-node-preview { --math-white-space:normal; }
 .nb-help-document[data-formula-reading=scroll] .math-node-preview { padding-bottom:10px; }
 .nb-help-document[data-table-reading=scroll] .tableWrapper { padding-bottom:10px; }
+.nb-help-preview-label { margin-bottom:7px; color:var(--editor-text-muted); font-size:10px; line-height:1.4; }
+.nb-help-document .nb-image-collection { margin-block:0; }
+.nb-help-document .nb-image-slot .nb-image { display:flex; justify-content:center; }
+.nb-help-document .nb-image-slot [data-image-frame] { overflow:hidden; border-radius:6px; }
+.nb-help-document .nb-image-slot img { display:block; width:100%; height:auto; }
+.nb-help-document .nb-image-collection[data-layout=carousel] .nb-image-slot [data-image-frame] { width:100%; }
+.nb-help-document .nb-image-collection[data-layout=carousel] .nb-image-viewport { overflow:hidden; }
+.nb-help-document .nb-image-collection[data-layout=carousel] .nb-image-slots { transition:transform 180ms ease; }
+.nb-help-document :is(ul,ol,blockquote) { margin-block:0; }
+.nb-help-document blockquote > p { margin:0; }
+.nb-help-document :is(h1,h2,h3,h4,h5,h6) { margin-top:0; margin-bottom:8px; }
+.nb-help-document :is(h1,h2,h3,h4,h5,h6)::before { display:none; }
+.nb-help-code-copy { display:flex; align-items:center; gap:4px; padding:2px 6px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--editor-text-muted); font:inherit; }
+.nb-help-document .nb-code-block-content > code { font-family:var(--mono-font-family); color:var(--code-block-text); }
 @media(prefers-reduced-motion:reduce) { .nb-contextual-help-illustration *, .nb-contextual-help-content { animation:none!important; transition:none!important; } }

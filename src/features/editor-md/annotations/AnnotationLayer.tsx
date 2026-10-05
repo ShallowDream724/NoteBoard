@@ -12,6 +12,7 @@ import { collectAnnotations, type AnnotationRecord } from './model';
 import { AnnotationBodyEditor, type AnnotationDraftHandle } from './bodyEditor';
 import { constrainAnnotationGeometry, type AnnotationBoundary, type AnnotationGeometry } from './geometry';
 import { captureAnnotationTarget, mapAnnotationTarget, resolveAnnotationTarget, type AnnotationDraftTarget } from './draftTarget';
+import { editorDocumentKey } from '../editorDocumentCodec';
 import './annotations.css';
 
 interface PanelState { id: string; pinned: boolean; editing: boolean; geometry: AnnotationGeometry; trigger: HTMLElement | null; creation?: AnnotationDraftTarget }
@@ -190,6 +191,7 @@ function AnnotationPanel({ editor, record, panel, boundary, onChange, onClose, o
   };
   const visibleError = error || (panel.creation?.invalid ? '原选区已删除，请重新选择正文。说明草稿已保留。' : '');
   return <div ref={element} role="dialog" aria-label="补充说明" aria-modal="false" className="nb-annotation-panel" data-annotation-panel={record.id} data-shortcuts-suspended={panel.editing || undefined}
+    data-annotation-editor-key={editorDocumentKey(editor)} data-annotation-target-from={panel.creation?.from} data-annotation-target-to={panel.creation?.to} data-annotation-target-invalid={panel.creation?.invalid || undefined}
     data-pinned={panel.pinned || undefined} style={{ left: panel.geometry.x, top: panel.geometry.y, width: panel.geometry.width, height: panel.geometry.height }}
     onPointerEnter={onEnter} onPointerLeave={() => { if (!element.current?.contains(document.activeElement)) onLeave(); }} onFocus={onEnter}
     onKeyDownCapture={event => {

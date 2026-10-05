@@ -33,6 +33,7 @@ import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormat
 import { ArrowRightLeft, WrapText, Square, Check } from 'lucide-react';
 import { documentFormulaReadingMode, setDocumentFormulaReadingMode, documentTableReadingMode, setDocumentTableReadingMode } from './documentReadingView';
 import { preserveReadingAnchor } from '../../core/dom/readingAnchor';
+import { HEADING_HELP_KEYS } from '../../components/contextualHelpKeys';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -76,15 +77,15 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     selectTableScope(editor, axis); setSelectedTableHeader(editor, axis);
   };
   return <div className="nb-block-context-menu" role="menu" aria-label="内容块操作" onPointerDown={event => event.preventDefault()}>
-    {type === 'codeBlock' && <><button role="menuitem" type="button" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={16}/>转为正文</button><hr/></>}
+    {type === 'codeBlock' && <><Tooltip content="转为正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button role="menuitem" type="button" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={16}/>转为正文</button></Tooltip><hr/></>}
     {text && <div className="nb-block-format-grid">
-      <Tooltip content="正文" shortcut="Ctrl+0"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
-      {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} shortcut={`Ctrl+${level}`}><button type="button" aria-label={'标题 ' + level}
+      <Tooltip content="正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
+      {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} helpKey={HEADING_HELP_KEYS[level]} shortcut={`Ctrl+${level}`} side="right"><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
-      {([{ label:'无序列表', Icon:List, command:'toggleBulletList', shortcut: 'Ctrl+Shift+8' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList', shortcut: 'Ctrl+Shift+7' },
-        { label:'待办', Icon:CheckSquare, command:'toggleTaskList', shortcut: 'Ctrl+Shift+9' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock', shortcut: 'Ctrl+Alt+C' },
-        { label:'引用', Icon:Quote, command:'toggleBlockquote', shortcut: undefined }] as const).map(({ label, Icon, command, shortcut }) =>
-        <Tooltip key={command} content={label} shortcut={shortcut}><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
+      {([{ label:'无序列表', Icon:List, command:'toggleBulletList', shortcut: 'Ctrl+Shift+8', helpKey: 'list.bullet' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList', shortcut: 'Ctrl+Shift+7', helpKey: 'list.ordered' },
+        { label:'待办', Icon:CheckSquare, command:'toggleTaskList', shortcut: 'Ctrl+Shift+9', helpKey: 'list.task' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock', shortcut: 'Ctrl+Alt+C', helpKey: 'block.code' },
+        { label:'引用', Icon:Quote, command:'toggleBlockquote', shortcut: undefined, helpKey: 'block.quote' }] as const).map(({ label, Icon, command, shortcut, helpKey }) =>
+        <Tooltip key={command} content={label} shortcut={shortcut} helpKey={helpKey} side="right"><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
       {native && canWrapCallout && <Tooltip content="设为提示块" helpKey="block.callout.wrap" side="right"><button type="button" aria-label="设为提示块" onClick={() => action(() => wrapBlockInCallout(editor, pos))}><PanelTop size={17}/></button></Tooltip>}
     </div>}
     {native && type === 'image' && <div className="nb-block-style-row nb-block-position-row" role="group" aria-label="图片位置">
@@ -110,8 +111,8 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     {native && hasCaptionTextFormatting(range.node) && <button role="menuitem" type="button" onClick={() => action(() => clearCaptionTextFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'table' ? '清除表注文字格式' : '清除图注文字格式'}</button>}
     {native && type === 'imageCollection' && <>
       <ImageCollectionMenu editor={editor} node={range.node} pos={pos}/>
-      {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2 }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2 }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd }] as const).map(({ layout, columns, label, Icon }) =>
-        <button key={label} role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button>)}
+      {([{ layout: 'grid', columns: 2, label: '两列拼图', Icon: Grid2X2, helpKey: 'image.collection.columns.2' }, { layout: 'grid', columns: 3, label: '三列拼图', Icon: Grid2X2, helpKey: 'image.collection.columns.3' }, { layout: 'carousel', columns: range.node.attrs.columns, label: '图片轮播', Icon: GalleryHorizontalEnd, helpKey: 'image.collection.layout.carousel' }] as const).map(({ layout, columns, label, Icon, helpKey }) =>
+        <Tooltip key={label} content={label} helpKey={helpKey} side="right"><button role="menuitemradio" aria-checked={range.node.attrs.layout === layout && range.node.attrs.columns === columns} type="button" onClick={() => action(() => runDiscreteEdit(editor, chain => chain.updateAttributes('imageCollection', { layout, columns })))}><Icon size={16}/>{label}</button></Tooltip>)}
       <hr/>
     </>}
     {native && (type === 'table' || type === 'image') && <Tooltip content={`${range.node.attrs.caption ? '编辑' : '添加'}${type === 'table' ? '表注' : '图注'}`} helpKey={type === 'table' ? 'table.caption' : 'figure.caption'} side="right"><button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button></Tooltip>}

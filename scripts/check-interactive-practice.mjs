@@ -13,7 +13,7 @@ const smallViewport = { width: minimum ? 680 : 960, height: 540 };
 const server = await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = cdpUrl ? await chromium.connectOverCDP(cdpUrl) : await chromium.launch({ channel: 'msedge', headless: true });
-const report = { steps: [], completions: [], layouts: [], errors: [] }; let page;
+const report = { steps: [], completions: [], recoveries: [], layouts: [], errors: [] }; let page;
 const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 try {
   page = cdpUrl ? browser.contexts()[0].pages()[0] : await browser.newPage(compact
@@ -62,6 +62,8 @@ try {
         beaks: document.querySelectorAll('[data-guide-beak]').length,
       };
     }, id, { timeout: 5000 });
+    // Keep an action failure visible even if cleanup rejects the pending wait.
+    void completion.catch(() => {});
     await action();
     const state = await (await completion).jsonValue();
     assert.deepEqual(state, { step: id, cards: 0, rings: 0, beaks: 0 }, 'Completion immediately clears the card, circle, and beak');
@@ -98,6 +100,59 @@ try {
   assert.equal(await page.getByRole('button', { name: '动手试一试', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '交互练习', exact: true }).count(), 0);
   const editor = page.locator('.nb-prose.ProseMirror').last();
+  const words = editor.locator('p').filter({ hasText: '把想法写下来' }).first();
+  const wordBox = async (text = '把想法写下来') => {
+    const box = await words.evaluate((element, text) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT), nodes = [];
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!node.parentElement?.closest('[contenteditable="false"],.ProseMirror-widget,.nb-annotation-inline-marker')) nodes.push(node);
+      }
+      const start = nodes.map(node => node.textContent).join('').indexOf(text);
+      if (start < 0) return null;
+      let offset = 0, from, to;
+      for (const node of nodes) {
+        const end = offset + node.textContent.length;
+        if (!from && start < end) from = { node, offset: start - offset };
+        if (start + text.length <= end) { to = { node, offset: start + text.length - offset }; break; }
+        offset = end;
+      }
+      if (!from || !to) return null;
+      const range = document.createRange(); range.setStart(from.node, from.offset); range.setEnd(to.node, to.offset);
+      const box = range.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height };
+    }, text);
+    assert(box, 'The original text is available for actual mouse selection'); return box;
+  };
+  const selectWords = async (text = '把想法写下来') => {
+    const full = await wordBox();
+    // Collapse the previous range before dragging. Starting inside an existing
+    // selection invokes the browser's text drag-and-drop instead of reselecting.
+    await page.mouse.click(full.x + 1, full.y + full.height / 2);
+    // ArrowLeft also collapses a browser word-selection from rapid clicks.
+    // The guide may point at a toolbar above the phrase, so avoid clicking a
+    // distant location that is covered by its instruction card.
+    await page.keyboard.press('ArrowLeft'); await frames();
+    // Let the native double-click interval expire before the new drag starts.
+    await page.waitForTimeout(550);
+    const box = await wordBox(text);
+    await page.mouse.move(box.x, box.y + box.height / 2); await page.mouse.down();
+    await page.mouse.move(box.x + box.width, box.y + box.height / 2, { steps: 12 }); await page.mouse.up();
+    assert.equal(await page.evaluate(() => String(window.getSelection())), text);
+  };
+  const checkTextTarget = async () => {
+    await frames(); const box = await wordBox();
+    await page.waitForFunction(expected => {
+      const rings = document.querySelectorAll('[data-guide-spotlight]'), ring = rings[0]?.getBoundingClientRect();
+      return rings.length === 1 && ring && Math.abs(expected.x - ring.x - 4) < 2 && Math.abs(expected.y - ring.y - 4) < 2
+        && Math.abs(expected.width + 8 - ring.width) < 2 && Math.abs(expected.height + 8 - ring.height) < 2;
+    }, box, { timeout: 3000 });
+  };
+  const remainsPending = async (id, message) => {
+    await page.waitForTimeout(450);
+    const layer = page.locator('.nb-onboarding-layer');
+    assert.equal(await layer.getAttribute('data-guide-step'), id, message);
+    assert.equal(await layer.getAttribute('data-guide-completed'), null, message); await card.waitFor();
+  };
   const noteMarker = editor.locator('.nb-annotation-indicator[data-annotation-id="showcase-welcome"]');
   await checkTarget(noteMarker); const beforeHover = await card.boundingBox();
   await page.screenshot({ path: `${directory}/01-note-before-hover.png` });
@@ -115,13 +170,13 @@ try {
   await step('selection');
   assert.equal(await page.locator('[data-guide-spotlight]').count(), 1, 'The one-line text target has one merged circle');
   await page.screenshot({ path: `${directory}/02-selection.png` });
-  const range = await page.locator('[data-guide-spotlight]').first().boundingBox();
-  await complete('selection', async () => {
-    await page.mouse.move(range.x + 4, range.y + range.height / 2); await page.mouse.down();
-    await page.mouse.move(range.x + range.width - 4, range.y + range.height / 2, { steps: 12 }); await page.mouse.up();
-  });
-  assert.equal(await page.evaluate(() => String(window.getSelection())), '把想法写下来');
+  await selectWords('把想法'); await remainsPending('selection', 'A partial phrase cannot advance the selection step'); await checkTextTarget();
+  await page.screenshot({ path: `${directory}/02-selection-partial.png` }); report.recoveries.push('selection-partial');
+  await complete('selection', () => selectWords());
   await step('highlight');
+  await selectWords('把想法'); await remainsPending('highlight', 'Shortening the selection keeps highlight active'); await checkTextTarget();
+  await page.screenshot({ path: `${directory}/03-highlight-partial.png` }); report.recoveries.push('highlight-partial');
+  await selectWords(); await frames();
   const topHighlight = page.locator('.responsive-toolbar').first().getByRole('button', { name: '应用文字颜色与高亮', exact: true });
   if (minimum) assert.equal(await topHighlight.isVisible(), false, 'The minimum-width run must exercise the collapsed top control');
   const highlight = await topHighlight.isVisible() ? topHighlight : page.getByRole('toolbar', { name: '文字工具栏', exact: true }).getByRole('button', { name: '应用文字颜色与高亮', exact: true });
@@ -145,21 +200,13 @@ try {
   assert.equal(await page.locator('.nb-onboarding-layer').getAttribute('data-guide-step'), 'annotation-save');
   assert.equal(await page.locator('.nb-onboarding-layer').getAttribute('data-guide-completed'), null, 'Cancelling a draft is not completion');
   await page.screenshot({ path: `${directory}/05-annotation-cancelled.png` });
-  const words = editor.locator('p').filter({ hasText: '把想法写下来' }).first();
-  const textBox = await words.evaluate((element, text) => {
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      const node = walker.currentNode, offset = node.textContent.indexOf(text);
-      if (offset < 0) continue;
-      const range = document.createRange(); range.setStart(node, offset); range.setEnd(node, offset + text.length);
-      const box = range.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height };
-    }
-    return null;
-  }, '把想法写下来');
-  assert(textBox, 'The original text is still available for reselection');
-  await page.mouse.move(textBox.x, textBox.y + textBox.height / 2); await page.mouse.down();
-  await page.mouse.move(textBox.x + textBox.width, textBox.y + textBox.height / 2, { steps: 12 }); await page.mouse.up();
-  assert.equal(await page.evaluate(() => String(window.getSelection())), '把想法写下来');
+  await selectWords('把想法'); await frames(); await checkTextTarget();
+  const wrongAdd = await bubbleAdd.isVisible() ? bubbleAdd : topAdd;
+  await wrongAdd.click(); await panel.waitFor(); await frames();
+  await remainsPending('annotation-save', 'A draft captured for only part of the phrase cannot complete the annotation step');
+  const wrongCancel = panel.getByRole('button', { name: '取消编辑', exact: true }); await checkTarget(wrongCancel);
+  await page.screenshot({ path: `${directory}/05-annotation-wrong-range.png` }); report.recoveries.push('annotation-wrong-range');
+  await wrongCancel.click(); await panel.waitFor({ state: 'hidden' }); await selectWords();
   const reopen = await bubbleAdd.isVisible() ? bubbleAdd : topAdd;
   await reopen.click(); await panel.waitFor(); await frames(); await checkTarget(panel);
   await body.click(); await page.keyboard.insertText('   ');
@@ -185,6 +232,7 @@ try {
   assert.equal(await card.count(), 0); assert.equal(await page.locator('[data-guide-step="summary"]').count(), 0);
   await page.screenshot({ path: `${directory}/09-complete.png` });
   assert.deepEqual(report.steps, ['read-note', 'selection', 'highlight', 'annotation-open', 'annotation-save', 'insert-menu', 'insert-callout', 'disclosure']);
+  assert.deepEqual(report.recoveries, ['selection-partial', 'highlight-partial', 'annotation-wrong-range']);
   assert(await editor.innerText().then(text => text.includes('这是我写下的第一条笔记。')));
   // Open help from a real editor menu, including its first lazy-load boundary.
   // Use an unannotated paragraph at its exposed left edge. The saved note's

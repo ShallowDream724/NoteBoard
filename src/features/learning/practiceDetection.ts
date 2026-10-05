@@ -32,9 +32,13 @@ export function guideCalloutCount(doc: Node): number {
   doc.descendants(node => { if (node.type.name === 'annotationStore') return false; if (node.type.name === 'githubAlert') count++; });
   return count;
 }
+export function guideSelectionMatches(state: EditorState): boolean {
+  const range = findPracticeText(state.doc, GUIDE_WORD), { selection } = state;
+  return !!range && selection.from === range.from && selection.to === range.to && !selection.empty;
+}
 export function guideTaskSatisfied(id: string, state: EditorState, initialCallouts: number): boolean {
-  const { doc, selection } = state, range = findPracticeText(doc, GUIDE_WORD);
-  if (id === 'selection') return !!range && selection.from === range.from && selection.to === range.to && !selection.empty;
+  const { doc } = state, range = findPracticeText(doc, GUIDE_WORD);
+  if (id === 'selection') return guideSelectionMatches(state);
   if (id === 'highlight' && range) {
     let covered = 0;
     doc.nodesBetween(range.from, range.to, (node, pos) => {
