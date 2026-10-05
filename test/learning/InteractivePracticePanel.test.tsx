@@ -14,7 +14,7 @@ import { useWindowStore, type Tab } from '../../src/stores/windowStore';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { encodeNativeDocument } from '../../src/core/nativeDocument';
 import { initializeEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
-import { GUIDE_WORD } from '../../src/features/learning/practiceCourse';
+import { GUIDE_DISCLOSURE, GUIDE_WORD } from '../../src/features/learning/practiceCourse';
 import { findPracticeText } from '../../src/features/learning/practiceDetection';
 import { usePracticeStore } from '../../src/features/learning/practiceStore';
 import { InteractivePracticePanel } from '../../src/features/learning/InteractivePracticePanel';
@@ -23,13 +23,14 @@ let root: Root, editor: Editor;
 const mutationDisconnect = vi.fn(), resizeDisconnect = vi.fn();
 const render = (activeEditor: Editor | null = editor, activeKey = 'showcase') => root.render(<InteractivePracticePanel activeEditor={activeEditor} activeKey={activeKey}/>);
 const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(20); });
+const settle = (milliseconds = 350) => act(async () => { await vi.advanceTimersByTimeAsync(milliseconds); });
 const alert: JSONContent = { type: 'githubAlert', content: [{ type: 'paragraph', content: [{ type: 'text', text: '已有提示' }] }] };
 beforeEach(async () => {
   vi.useFakeTimers(); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 1));
   vi.stubGlobal('cancelAnimationFrame', (timer: number) => clearTimeout(timer));
   vi.stubGlobal('MutationObserver', class { observe() {} takeRecords() { return []; } disconnect = mutationDisconnect; });
-  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect = resizeDisconnect; });
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect = resizeDisconnect; });
   mutationDisconnect.mockClear(); resizeDisconnect.mockClear(); targets.complete.mockReturnValue(false);
   targets.resolve.mockReturnValue({ element: null, rects: [{ left: 100, top: 120, width: 100, height: 20 }, { left: 100, top: 144, width: 60, height: 20 }] });
   const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: GUIDE_WORD }] }, alert] };
@@ -44,13 +45,74 @@ afterEach(async () => {
 });
 
 it('renders a portal with separate multiline rings and completes exact selection without moving the caret', async () => {
-  expect(document.querySelectorAll('[data-guide-spotlight]')).toHaveLength(2); expect(document.querySelector('[data-guide-arrow]')).not.toBeNull();
+  expect(document.querySelectorAll('[data-guide-spotlight]')).toHaveLength(2); expect(document.querySelector('[data-guide-arrow]')).toBeNull();
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  editor.view.setProps({ handleScrollToSelection: () => true });
+  await act(async () => editor.view.dom.focus());
+  await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
+  expect(document.activeElement).toBe(editor.view.dom);
+  await act(async () => editor.commands.setTextSelection(range)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('selection'); expect(editor.state.selection.from).toBe(range.from);
+  expect(document.querySelectorAll('[data-guide-spotlight]')).toHaveLength(0);
+  expect(document.querySelector('[aria-label="上手引导"]')).toBeNull();
+  expect(document.activeElement).toBe(editor.view.dom);
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(editor.state.selection.from).toBe(range.from);
+});
+it('automatically advances through all eight real outcomes and exits after the last one', async () => {
+  const uiOutcomes = new Set<string>(); targets.complete.mockImplementation((_editor, step: string) => uiOutcomes.has(step));
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!, tabs = useWindowStore.getState().tabs;
+  const expectStep = (step: string) => {
+    expect(usePracticeStore.getState().stepId).toBe(step);
+    expect(document.querySelector('.nb-onboarding-next')).toBeNull();
+    expect(document.querySelector('[data-guide-step="summary"]')).toBeNull();
+  };
+  const showUI = async (step: string) => {
+    uiOutcomes.add(step); await act(async () => window.dispatchEvent(new Event('resize'))); await tick();
+  };
+  expectStep('read-note'); await showUI('read-note');
+  expect(usePracticeStore.getState().completed).toContain('read-note');
+  await settle(800); expectStep('read-note'); await settle(100); expectStep('selection');
+
+  await act(async () => editor.commands.setTextSelection(range)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('selection'); await settle(); expectStep('highlight');
+  await act(async () => editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.highlight.create()))); await tick();
+  expect(usePracticeStore.getState().completed).toContain('highlight'); await settle(); expectStep('annotation-open');
+  await showUI('annotation-open'); await settle(); expectStep('annotation-save');
+  await act(async () => {
+    editor.commands.insertContentAt(editor.state.doc.content.size, { type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'saved-note' }, content: [{ type: 'paragraph' }] }] });
+    editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'saved-note' })));
+  }); await tick();
+  expect(usePracticeStore.getState().completed).toContain('annotation-save'); await settle(); expectStep('insert-menu');
+  await showUI('insert-menu'); await settle(); expectStep('insert-callout');
+  await act(async () => editor.commands.insertContentAt(editor.state.doc.content.size, alert)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('insert-callout'); await settle(); expectStep('disclosure');
+  await act(async () => editor.commands.insertContentAt(editor.state.doc.content.size, { type: 'disclosure', attrs: { title: GUIDE_DISCLOSURE, open: true }, content: [{ type: 'paragraph', content: [{ type: 'text', text: '水壶' }] }] })); await tick();
+  expect(usePracticeStore.getState().completed).toContain('disclosure');
+  const doc = editor.state.doc; await settle();
+  expect(usePracticeStore.getState().sessionKey).toBeNull(); expect(document.querySelector('.nb-onboarding-layer')).toBeNull();
+  expect(editor.state.doc).toBe(doc); expect(useWindowStore.getState().tabs).toBe(tabs);
+});
+it('does not let pending advancement from an old generation move a restarted guide', async () => {
   const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
   await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
   await act(async () => editor.commands.setTextSelection(range)); await tick();
-  expect(usePracticeStore.getState().completed).toContain('selection'); expect(editor.state.selection.from).toBe(range.from);
-  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
-  expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(editor.state.selection.from).toBe(range.from);
+  expect(usePracticeStore.getState().completed).toContain('selection'); await settle(200);
+  const generation = usePracticeStore.getState().generation;
+  await act(async () => { usePracticeStore.getState().exit(); usePracticeStore.getState().start('showcase'); }); await tick();
+  expect(usePracticeStore.getState().generation).toBeGreaterThan(generation);
+  await settle(1000);
+  expect(usePracticeStore.getState().stepId).toBe('read-note'); expect(usePracticeStore.getState().completed).toEqual([]);
+});
+it('pauses pending advancement while the sample tab is inactive', async () => {
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
+  await act(async () => editor.commands.setTextSelection(range)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('selection');
+  await act(async () => { useWindowStore.setState({ activeKey: 'other' }); render(editor, 'other'); });
+  await settle(500); expect(usePracticeStore.getState().stepId).toBe('selection');
+  await act(async () => { useWindowStore.setState({ activeKey: 'showcase' }); render(); });
+  await settle(); expect(usePracticeStore.getState().stepId).toBe('highlight');
 });
 it('pauses on another tab, refuses a foreign editor and releases its observers', async () => {
   const range = findPracticeText(editor.state.doc, GUIDE_WORD)!, off = vi.spyOn(editor, 'off');

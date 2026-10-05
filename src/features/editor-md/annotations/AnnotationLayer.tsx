@@ -6,7 +6,7 @@ import { Check, GripHorizontal, Pencil, Pin, PinOff, Trash2, X } from 'lucide-re
 import { Tooltip } from '../../../components/Tooltip';
 import { useHoverMenu } from '../../../components/useHoverMenu';
 import { findScrollContainer } from '../../../core/dom/scrollContainer';
-import { ANNOTATION_BEGIN_EVENT, ANNOTATION_OPEN_EVENT, addAnnotation, canAddAnnotation, removeAnnotation, updateAnnotation, type AnnotationBeginRequest } from './commands';
+import { ANNOTATION_BEGIN_EVENT, ANNOTATION_OPEN_EVENT, ANNOTATION_DISMISS_TRANSIENT_EVENT, addAnnotation, canAddAnnotation, removeAnnotation, updateAnnotation, type AnnotationBeginRequest } from './commands';
 import { annotationIndexKey } from './extension';
 import { collectAnnotations, type AnnotationRecord } from './model';
 import { AnnotationBodyEditor, type AnnotationDraftHandle } from './bodyEditor';
@@ -94,6 +94,7 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
       latest.current.hover.cancel(); latest.current.open(detail.id, element, detail.edit);
     };
     const beginRequest = (event: Event) => { latest.current.hover.cancel(); latest.current.begin((event as CustomEvent<AnnotationBeginRequest>).detail); };
+    const dismissTransient = () => { latest.current.hover.cancel(); closeTransient(); };
     const update = ({ transaction }: { transaction: Transaction }) => {
       if (!transaction.docChanged || !latest.current.hasPanels) return;
       const available = annotationIndexKey.getState(editor.state)?.records ?? collectAnnotations(editor.state.doc);
@@ -108,11 +109,13 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
     dom.addEventListener('pointerover', enter); dom.addEventListener('pointerout', leave);
     dom.addEventListener('click', click); dom.addEventListener('focusin', focus); dom.addEventListener('keydown', keyboard, true);
     dom.addEventListener(ANNOTATION_OPEN_EVENT, request); dom.addEventListener(ANNOTATION_BEGIN_EVENT, beginRequest); document.addEventListener('pointerdown', outside, true);
+    dom.addEventListener(ANNOTATION_DISMISS_TRANSIENT_EVENT, dismissTransient);
     editor.on('transaction', update);
     return () => {
       dom.removeEventListener('pointerover', enter); dom.removeEventListener('pointerout', leave);
       dom.removeEventListener('click', click); dom.removeEventListener('focusin', focus); dom.removeEventListener('keydown', keyboard, true);
       dom.removeEventListener(ANNOTATION_OPEN_EVENT, request); dom.removeEventListener(ANNOTATION_BEGIN_EVENT, beginRequest); document.removeEventListener('pointerdown', outside, true);
+      dom.removeEventListener(ANNOTATION_DISMISS_TRANSIENT_EVENT, dismissTransient);
       editor.off('transaction', update); setPanels([]);
     };
   }, [editor, container]);

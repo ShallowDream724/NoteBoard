@@ -10,6 +10,11 @@ import { annotationIndexKey } from './extension';
 
 export const ANNOTATION_OPEN_EVENT = 'nb-open-annotation';
 export const ANNOTATION_BEGIN_EVENT = 'nb-begin-annotation';
+export const ANNOTATION_DISMISS_TRANSIENT_EVENT = 'nb-dismiss-transient-annotations';
+/** Retire reading popovers when moving to another task; keep drafts and pins. */
+export function dismissTransientAnnotations(editor: Editor) {
+  if (!editor.isDestroyed) editor.view.dom.dispatchEvent(new Event(ANNOTATION_DISMISS_TRANSIENT_EVENT));
+}
 export interface AnnotationBeginRequest { id: string; target: AnnotationDraftTarget }
 /** UI creation starts with a local draft. Only its explicit Save changes the document. */
 export function beginAnnotation(editor: Editor): string | null {

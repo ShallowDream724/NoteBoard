@@ -1,9 +1,9 @@
 import type { Editor } from '@tiptap/core';
 import { GUIDE_DISCLOSURE, GUIDE_NOTE, GUIDE_WORD } from './practiceCourse';
 import { findPracticeText, guideBlankPosition } from './practiceDetection';
-import type { GuideRect } from './guideGeometry';
+import { mergeTextRects, type GuideRect } from './guideGeometry';
 
-export interface GuideTarget { element: HTMLElement | null; rects: GuideRect[]; fallback?: 'selection' | 'command' }
+export interface GuideTarget { element: HTMLElement | null; rects: GuideRect[]; fallback?: 'selection' | 'command' | 'annotation' }
 const noteCommand = 'button[aria-label="Note，快捷触发词 /note"]';
 const rect = (r: DOMRect): GuideRect => ({ left: r.left, top: r.top, width: r.width, height: r.height });
 export function visibleGuideElement(selector: string, root: ParentNode = document): HTMLElement | null {
@@ -30,8 +30,20 @@ export function guideTextTarget(editor: Editor): GuideTarget {
     const from = editor.view.domAtPos(positions.from, 1), to = editor.view.domAtPos(positions.to, -1);
     const range = editor.view.dom.ownerDocument.createRange();
     range.setStart(from.node, from.offset); range.setEnd(to.node, to.offset);
-    const rects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0).map(rect);
-    return { element: from.node instanceof HTMLElement ? from.node : from.node.parentElement, rects };
+    // Whole DOM ranges also return enclosing spans and decoration widgets.
+    // Measure only text belonging to the model range, then merge each line.
+    const rects: GuideRect[] = [], root = range.commonAncestorContainer;
+    const walker = editor.view.dom.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const measureText = (node: Node) => {
+      if (!range.intersectsNode(node) || node.parentElement?.closest('[contenteditable="false"],.ProseMirror-widget,.nb-annotation-inline-marker')) return;
+      const segment = editor.view.dom.ownerDocument.createRange();
+      segment.setStart(node, node === range.startContainer ? range.startOffset : 0);
+      segment.setEnd(node, node === range.endContainer ? range.endOffset : node.textContent?.length ?? 0);
+      rects.push(...Array.from(segment.getClientRects()).map(rect));
+    };
+    if (root.nodeType === Node.TEXT_NODE) measureText(root);
+    else while (walker.nextNode()) measureText(walker.currentNode);
+    return { element: from.node instanceof HTMLElement ? from.node : from.node.parentElement, rects: mergeTextRects(rects) };
   } catch { return { element: null, rects: [] }; }
 }
 export function guideDisclosure(editor: Editor): HTMLElement | null {
@@ -48,13 +60,9 @@ export function resolveGuideTarget(editor: Editor, step: string): GuideTarget {
   }
   if (step === 'annotation-save') {
     const panel = visibleGuideElement('.nb-annotation-panel[data-shortcuts-suspended="true"]');
-    const body = panel?.querySelector<HTMLElement>('.nb-annotation-richtext[contenteditable="true"]');
-    if (body) {
-      const target = fromElement(body), save = panel?.querySelector<HTMLElement>('.nb-annotation-save');
-      if (save) target.rects.push(rect(save.getBoundingClientRect()));
-      return target;
-    }
-    return guideTextTarget(editor);
+    if (panel) return fromElement(panel);
+    const entry = resolveGuideTarget(editor, 'annotation-open');
+    return { ...entry, fallback: entry.fallback ?? 'annotation' };
   }
   if (step === 'insert-menu') return blankTarget(editor);
   if (step === 'insert-callout') {

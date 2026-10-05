@@ -27,6 +27,23 @@ it('keeps the individual rectangles of a phrase wrapped over two lines', () => {
   expect(target.rects).toEqual([{ left: 100, top: 120, width: 100, height: 20 }, { left: 100, top: 144, width: 50, height: 20 }]);
   expect(target.element).toBe(value.view.dom.querySelector('p'));
 });
+it('measures only the selected text fragments and merges split marks without including annotation widgets', () => {
+  const value = editor(); value.commands.setContent(`<p>前<strong>${GUIDE_WORD.slice(0, 3)}</strong>${GUIDE_WORD.slice(3)}后</p>`);
+  const strong = value.view.dom.querySelector('strong')!;
+  const indicator = document.createElement('span'); indicator.setAttribute('contenteditable', 'false'); indicator.textContent = '?';
+  strong.append(indicator);
+  const widget = document.createElement('span'); widget.className = 'ProseMirror-widget'; widget.textContent = '?'; strong.append(widget);
+  const measured: string[] = [];
+  Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: function(this: Range) {
+    const text = this.toString(); measured.push(text);
+    if (this.startContainer !== this.endContainer || this.startContainer.nodeType !== Node.TEXT_NODE) return [new DOMRect(0, 0, 1000, 500)];
+    if (text === GUIDE_WORD.slice(0, 3)) return [new DOMRect(100, 120, 60, 20), new DOMRect(100, 120, 60, 20)];
+    if (text === GUIDE_WORD.slice(3)) return [new DOMRect(160, 120, 60, 20)];
+    return [new DOMRect(300, 100, 80, 40)];
+  } });
+  expect(guideTextTarget(value).rects).toEqual([{ left: 100, top: 120, width: 120, height: 20 }]);
+  expect(measured.join('')).toBe(GUIDE_WORD);
+});
 it('targets only the note indicator inside the owned editor and ignores hidden UI', () => {
   const value = editor(), outside = visible(document.createElement('button'));
   outside.className = 'nb-annotation-indicator'; outside.dataset.annotationId = GUIDE_NOTE; document.body.append(outside);
@@ -48,12 +65,28 @@ it('requires visible opened note, annotation editor and slash results for UI ste
   note.style.display = ''; note.setAttribute('aria-label', 'Note');
   expect(guideUICompleted(value, 'insert-menu')).toBe(false);
 });
-it('combines the actual explanation editor and Save button as the target', () => {
-  const value = editor(), panel = visible(document.createElement('div')); panel.className = 'nb-annotation-panel'; panel.dataset.shortcutsSuspended = 'true';
+it('outlines the explanation panel once, including its editor and Save action', () => {
+  const value = editor(), panel = visible(document.createElement('div'), 90, 110, 240, 110); panel.className = 'nb-annotation-panel'; panel.dataset.shortcutsSuspended = 'true';
   const body = visible(document.createElement('div')); body.className = 'nb-annotation-richtext'; body.setAttribute('contenteditable', 'true');
   const save = visible(document.createElement('button'), 220, 170, 60, 30); save.className = 'nb-annotation-save'; panel.append(body, save); document.body.append(panel);
-  expect(resolveGuideTarget(value, 'annotation-save').rects).toHaveLength(2);
-  expect(resolveGuideTarget(value, 'annotation-save').element).toBe(body);
+  expect(resolveGuideTarget(value, 'annotation-save').rects).toEqual([{ left: 90, top: 110, width: 240, height: 110 }]);
+  expect(resolveGuideTarget(value, 'annotation-save').element).toBe(panel);
+});
+it('returns to the real Add explanation control after a draft is cancelled', () => {
+  const value = editor(), toolbar = document.createElement('div'); toolbar.setAttribute('role', 'toolbar'); toolbar.setAttribute('aria-label', '文字工具栏');
+  const add = visible(document.createElement('button')); add.setAttribute('aria-label', '添加说明'); toolbar.append(add); document.body.append(toolbar);
+  const indicator = visible(document.createElement('button')); indicator.className = 'nb-annotation-indicator'; value.view.dom.append(indicator);
+  const target = resolveGuideTarget(value, 'annotation-save');
+  expect(target.element).toBe(add);
+  expect(target.rects).toEqual([{ left: 100, top: 120, width: 120, height: 30 }]);
+});
+it('asks for a fresh selection after cancellation when no Add explanation control is visible', () => {
+  const value = editor(), toolbar = document.createElement('div'); toolbar.className = 'responsive-toolbar';
+  const add = visible(document.createElement('button')); add.setAttribute('aria-label', '添加说明'); add.style.visibility = 'hidden'; toolbar.append(add); document.body.append(toolbar);
+  Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [new DOMRect(100, 120, 100, 20)] });
+  const target = resolveGuideTarget(value, 'annotation-save');
+  expect(target.element).toBe(value.view.dom.querySelector('p')); expect(target.fallback).toBe('selection');
+  expect(target.rects).toEqual([{ left: 100, top: 120, width: 100, height: 20 }]);
 });
 it('points to the floating highlight control when the responsive toolbar hides it', () => {
   const value = editor(), top = document.createElement('div'), bubble = document.createElement('div');

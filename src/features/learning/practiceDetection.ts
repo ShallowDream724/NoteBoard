@@ -42,7 +42,7 @@ export function guideTaskSatisfied(id: string, state: EditorState, initialCallou
     });
     return covered === GUIDE_WORD.length;
   }
-  if (id === 'annotation-save' && range) {
+  if ((id === 'annotation-save' || id === 'annotation-open') && range) {
     const ids = new Set<string>(), coverage = new Map<string, number>();
     doc.nodesBetween(range.from, range.to, (node, pos) => {
       if (typeof node.attrs.annotationId === 'string') ids.add(node.attrs.annotationId);
@@ -53,10 +53,12 @@ export function guideTaskSatisfied(id: string, state: EditorState, initialCallou
     });
     for (const [id, length] of coverage) if (length === GUIDE_WORD.length) ids.add(id);
     let saved = false;
-    doc.descendants(node => { if (node.type.name === 'annotationBody' && ids.has(node.attrs.id) && node.textContent.trim()) saved = true; return !saved; });
+    // Drafts live in a separate editor. A linked body in the owned document is
+    // the Save result, including an intentionally empty or whitespace-only body.
+    doc.descendants(node => { if (node.type.name === 'annotationBody' && ids.has(node.attrs.id)) saved = true; return !saved; });
     return saved;
   }
-  if (id === 'insert-callout') return guideCalloutCount(doc) > initialCallouts;
+  if (id === 'insert-menu' || id === 'insert-callout') return guideCalloutCount(doc) > initialCallouts;
   if (id === 'disclosure') {
     let open = false;
     doc.descendants(node => { if (node.type.name === 'disclosure' && node.attrs.title === GUIDE_DISCLOSURE && node.attrs.open) open = true; return !open; });

@@ -1,57 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { bottom, guideArrow, intersectionArea, nearestGuideTarget, placeGuideCard, right, unionRects, type GuideRect } from '../../src/features/learning/guideGeometry';
+import { mergeTextRects, unionRects } from '../../src/features/learning/guideGeometry';
 
-describe('guide placement around editable targets', () => {
-  it.each([
-    { left: 4, top: 100, width: 80, height: 24 },
-    { left: 850, top: 620, width: 90, height: 24 },
-    { left: 420, top: 320, width: 160, height: 50 },
-  ])('keeps the card visible and away from target at $left, $top', target => {
-    const card = placeGuideCard(target, { width: 290, height: 210 }, { width: 1000, height: 700 });
-    expect(card.left).toBeGreaterThanOrEqual(12); expect(card.top).toBeGreaterThanOrEqual(12);
-    expect(right(card)).toBeLessThanOrEqual(988); expect(bottom(card)).toBeLessThanOrEqual(688);
-    expect(intersectionArea(card, target)).toBe(0);
-  });
-  it('chooses another free side when an annotation popover occupies the preferred side', () => {
-    const target = { left: 420, top: 300, width: 120, height: 40 };
-    const obstacle = { left: 564, top: 260, width: 320, height: 300 };
-    const card = placeGuideCard(target, { width: 290, height: 210 }, { width: 1000, height: 700 }, [obstacle]);
-    expect(intersectionArea(card, target)).toBe(0); expect(intersectionArea(card, obstacle)).toBe(0);
-  });
-  it('shrinks the card to fit a narrow viewport', () => {
-    const card = placeGuideCard({ left: 140, top: 90, width: 30, height: 20 }, { width: 290, height: 210 }, { width: 240, height: 180 });
-    expect(card.width).toBe(216); expect(card.height).toBe(156);
-    expect(right(card)).toBeLessThanOrEqual(228); expect(bottom(card)).toBeLessThanOrEqual(168);
-  });
+describe('guide text bounds', () => {
   it('unites multiline phrase bounds and returns no target for an empty range', () => {
     expect(unionRects([])).toBeNull();
     expect(unionRects([{ left: 100, top: 100, width: 150, height: 20 }, { left: 60, top: 125, width: 80, height: 20 }])).toEqual({ left: 60, top: 100, width: 190, height: 45 });
   });
-  it('points from below to the nearest actual text line without crossing the other line', () => {
-    const card = { left: 100, top: 300, width: 290, height: 160 };
-    const lines = [{ left: 100, top: 100, width: 200, height: 20 }, { left: 100, top: 150, width: 100, height: 20 }];
-    expect(nearestGuideTarget(card, lines)).toEqual(lines[1]);
-    expect(nearestGuideTarget(card, [])).toBeNull();
-    expect(guideArrow(card, nearestGuideTarget(card, lines)!).end.y).toBe(176);
+  it('merges overlapping and adjacent fragments from formatted text on the same line', () => {
+    expect(mergeTextRects([
+      { left: 150, top: 100, width: 50, height: 20 },
+      { left: 100, top: 100, width: 60, height: 20 },
+      { left: 200, top: 100, width: 30, height: 20 },
+      { left: 100, top: 100, width: 60, height: 20 },
+    ])).toEqual([{ left: 100, top: 100, width: 130, height: 20 }]);
   });
-  it.each([
-    { left: 10, top: 100, width: 200, height: 120 },
-    { left: 600, top: 100, width: 200, height: 120 },
-    { left: 280, top: 10, width: 200, height: 120 },
-    { left: 280, top: 400, width: 200, height: 120 },
-  ])('anchors the arrow on the card edge and outside target text', (card: GuideRect) => {
-    const target = { left: 320, top: 260, width: 120, height: 40 }, arrow = guideArrow(card, target);
-    expect([card.left, right(card)].includes(arrow.start.x) || [card.top, bottom(card)].includes(arrow.start.y)).toBe(true);
-    expect(arrow.end.x < target.left || arrow.end.x > right(target) || arrow.end.y < target.top || arrow.end.y > bottom(target)).toBe(true);
-    expect(arrow.path).not.toContain('NaN');
-    expect(arrow.path).toBe(`M ${arrow.start.x} ${arrow.start.y} L ${arrow.end.x} ${arrow.end.y}`);
+  it('keeps wrapped lines and separated text regions distinct', () => {
+    expect(mergeTextRects([
+      { left: 100, top: 100, width: 80, height: 20 },
+      { left: 100, top: 124, width: 50, height: 20 },
+      { left: 240, top: 100, width: 30, height: 20 },
+    ])).toEqual([
+      { left: 100, top: 100, width: 80, height: 20 },
+      { left: 240, top: 100, width: 30, height: 20 },
+      { left: 100, top: 124, width: 50, height: 20 },
+    ]);
   });
-  it.each([680, 1440])('leaves a readable straight arrow beside the Note indicator at width %s', width => {
-    const target = { left: width - 80, top: 240, width: 18, height: 18 };
-    const card = placeGuideCard(target, { width: 290, height: 160 }, { width, height: 540 });
-    const arrow = guideArrow(card, target);
-    expect(arrow.start.y).toBe(arrow.end.y);
-    expect(Math.abs(arrow.end.x - arrow.start.x)).toBeGreaterThanOrEqual(40);
-    expect(intersectionArea(card, target)).toBe(0);
+  it('discards empty fragments instead of stretching the spotlight to the origin', () => {
+    expect(mergeTextRects([
+      { left: 0, top: 0, width: 0, height: 0 },
+      { left: 0, top: 0, width: 10, height: 0 },
+      { left: 0, top: 0, width: 0, height: 10 },
+      { left: 100, top: 100, width: 60, height: 20 },
+    ])).toEqual([{ left: 100, top: 100, width: 60, height: 20 }]);
+    expect(mergeTextRects([])).toEqual([]);
   });
 });

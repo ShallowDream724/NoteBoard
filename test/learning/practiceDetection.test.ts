@@ -37,7 +37,7 @@ describe('showcase guide semantic outcomes', () => {
     editor.view.dispatch(editor.state.tr.addMark(range.to - 1, range.to, editor.schema.marks.highlight.create({ color: '#ff0000' })));
     expect(guideTaskSatisfied('highlight', editor.state, 0)).toBe(true);
   });
-  it('requires a saved nonempty body linked to all target letters', () => {
+  it('requires a saved body linked to all target letters, rather than an unrelated body or draft reference', () => {
     const editor = make({ type: 'doc', content: [p(GUIDE_WORD), body('note', '说明')] });
     expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
     const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
@@ -45,11 +45,18 @@ describe('showcase guide semantic outcomes', () => {
     expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
     editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'draft' })));
     expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+  });
+  it.each(['记下这个想法', '   ', ''])('accepts a saved explanation with body %j and also recognizes a fast save during the opening step', text => {
     const linked: JSONContent = { ...p(GUIDE_WORD), content: [{ type: 'text', text: GUIDE_WORD, marks: [{ type: 'annotationReference', attrs: { id: 'note' } }] }] };
-    editor.commands.setContent({ type: 'doc', content: [linked, body('note', '   ')] });
-    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
-    editor.commands.setContent({ type: 'doc', content: [linked, body('note', '记下这个想法')] });
+    const editor = make({ type: 'doc', content: [linked, body('note', text)] });
     expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(true);
+    expect(guideTaskSatisfied('annotation-open', editor.state, 0)).toBe(true);
+  });
+  it('does not count an unsaved draft as an opened or saved explanation', () => {
+    const linked: JSONContent = { ...p(GUIDE_WORD), content: [{ type: 'text', text: GUIDE_WORD, marks: [{ type: 'annotationReference', attrs: { id: 'draft' } }] }] };
+    const editor = make({ type: 'doc', content: [linked] });
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+    expect(guideTaskSatisfied('annotation-open', editor.state, 0)).toBe(false);
   });
   it('also accepts a saved explanation on the target block', () => {
     const editor = make({ type: 'doc', content: [{ ...p(GUIDE_WORD), attrs: { annotationId: 'block' } }, body('block', '说明')] });

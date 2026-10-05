@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/Tooltip';
 import { annotationSchemaExtensions } from '@/features/editor-md/annotations/schema';
 import { AnnotationBehavior } from '@/features/editor-md/annotations/extension';
 import { AnnotationLayer } from '@/features/editor-md/annotations/AnnotationLayer';
-import { beginAnnotation, addAnnotation } from '@/features/editor-md/annotations/commands';
+import { beginAnnotation, addAnnotation, dismissTransientAnnotations } from '@/features/editor-md/annotations/commands';
 import { annotationAnchors, collectAnnotations } from '@/features/editor-md/annotations/model';
 import { undoDepth } from '@tiptap/pm/history';
 import { EditorView } from '@tiptap/pm/view';
@@ -72,6 +72,23 @@ it('pins a window without changing document content, and supports keyboard closi
   await act(async () => panel()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
   expect(panel()).toBeNull();
   expect(document.activeElement).toBe(anchor());
+});
+
+it('retires reading popovers for a task transition without closing pins or unsaved drafts', async () => {
+  const original = editor.state.doc;
+  await act(async () => anchor().click());
+  await act(async () => dismissTransientAnnotations(editor));
+  expect(panel()).toBeNull();
+  await act(async () => anchor().click());
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('button[aria-label="固定说明"]')!.click());
+  await act(async () => { editor.commands.setTextSelection(targetRange()); beginAnnotation(editor); });
+  const draft = document.querySelector('[data-shortcuts-suspended="true"].nb-annotation-panel');
+  expect(draft).not.toBeNull();
+  await act(async () => dismissTransientAnnotations(editor));
+  expect(document.querySelectorAll('.nb-annotation-panel')).toHaveLength(2);
+  expect(document.querySelector('[data-shortcuts-suspended="true"].nb-annotation-panel')).toBe(draft);
+  expect(document.querySelector('.nb-annotation-panel[data-pinned="true"]')).not.toBeNull();
+  expect(editor.state.doc).toBe(original);
 });
 
 it('opens a keyboard anchor without letting Enter insert document content', async () => {
