@@ -53,6 +53,10 @@ try {
     assert(intersection < 1, 'The instruction card must not cover its target');
   };
   await step('read-note');
+  // A live native resize may move the current target offscreen after the
+  // initial one-time scroll. Exercise the visible recovery action as a user.
+  const locate = card.getByRole('button', { name: '定位到这一步', exact: true });
+  if (await locate.isVisible()) { await locate.click(); await frames(); }
   assert.equal(await page.getByRole('button', { name: '动手试一试', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '交互练习', exact: true }).count(), 0);
   const editor = page.locator('.nb-prose.ProseMirror').last();
