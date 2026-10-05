@@ -15,11 +15,11 @@ use super::write;
 
 /// 读取文档
 #[tauri::command]
-pub async fn read_document(path: String) -> Result<DocumentPayload, String> {
-    tauri::async_runtime::spawn_blocking(move || read_document_on_worker(path)).await.map_err(|error| error.to_string())?
+pub async fn read_document(path: String, max_read_bytes: Option<u64>) -> Result<DocumentPayload, String> {
+    tauri::async_runtime::spawn_blocking(move || read_document_on_worker(path, max_read_bytes)).await.map_err(|error| error.to_string())?
 }
 
-fn read_document_on_worker(path: String) -> Result<DocumentPayload, String> {
+fn read_document_on_worker(path: String, max_read_bytes: Option<u64>) -> Result<DocumentPayload, String> {
     super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(&path);
 
@@ -27,7 +27,7 @@ fn read_document_on_worker(path: String) -> Result<DocumentPayload, String> {
         return Err(format!("文件不存在: {}", path));
     }
 
-    let result = read::read_file(p).map_err(|e| e.to_string())?;
+    let result = read::read_file_with_limit(p, max_read_bytes).map_err(|e| e.to_string())?;
 
     let (kind, language) = crate::dto::kind_from_path(&path);
     let key = nbpath::normalize_key(&path);
@@ -71,7 +71,7 @@ pub fn probe_document(path: String) -> Result<ProbeResult, String> {
 
     let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
     let (kind, _lang) = crate::dto::kind_from_path(&path);
-    let is_text = read::is_text_file(p).unwrap_or(false);
+    let is_text = kind != crate::dto::DocumentKind::Unsupported && read::is_text_file(p).unwrap_or(false);
 
     Ok(ProbeResult {
         size: metadata.len(),

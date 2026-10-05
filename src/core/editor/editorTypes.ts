@@ -78,6 +78,7 @@ export interface CodeOpsCapabilities {
   validateJson(scope?: 'all' | 'selection'): void;
   transformCase(mode: 'upper' | 'lower' | 'title'): void;
   formatXml(scope?: 'all' | 'selection'): void;
+  validateSyntax?(scope?: 'all' | 'selection'): void;
 }
 
 /** Lightweight viewing commands, implemented by the mounted code editor. */

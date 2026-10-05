@@ -400,7 +400,7 @@
   },
   {
     "id": "json.format",
-    "label": "JSON 展开或格式化",
+    "label": "JSON / XML 格式化",
     "group": "JSON 与代码",
     "contexts": [
       "source",
@@ -427,7 +427,7 @@
   },
   {
     "id": "json.validate",
-    "label": "JSON 校验",
+    "label": "JSON / YAML / XML 语法校验",
     "group": "JSON 与代码",
     "contexts": [
       "source",

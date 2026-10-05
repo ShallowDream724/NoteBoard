@@ -400,21 +400,23 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     const handleValidateAction = () => {
       const currentTab = useWindowStore.getState().activeTab();
       if (!currentTab) return;
-      getEditorCapabilities(currentTab.key)?.codeOps?.validateJson();
+      const tools = getEditorCapabilities(currentTab.key)?.codeOps;
+      if (tools?.validateSyntax) tools.validateSyntax();
+      else tools?.validateJson();
     };
 
     const unregValidateShiftAltV = registerShortcut({
       key: 'Shift+Alt+V',
       action: handleValidateAction,
       scope: 'global',
-      description: 'JSON 格式校验',
+      description: '语法校验',
     });
 
     const unregValidateCtrlAltV = registerShortcut({
       key: 'Ctrl+Alt+V',
       action: handleValidateAction,
       scope: 'global',
-      description: 'JSON 格式校验',
+      description: '语法校验',
     });
 
     return () => {

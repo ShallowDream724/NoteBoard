@@ -25,7 +25,9 @@ import {
   handleMinifyJson,
   handleValidateJson,
   handleFormatXml,
+  validateTextLanguage,
 } from './jsonOps';
+import { useDocumentStore } from '../../stores/documentStore';
 import { handleTransformCase } from '../toolbar/textOps';
 import type { LanguageId } from '../../core/ipc/types';
 import { getDocumentRevision } from '../../core/editor/editorRegistry';
@@ -43,6 +45,7 @@ export function createCodeEditorCapabilities(
   instanceId: string,
   view: EditorView,
   lang: LanguageId,
+  snapshots?: { materialize: () => string | null; hasPending: () => boolean },
 ): EditorCapabilities {
   // 🔴 N04：捕获能力创建（编辑器挂载）时的会话代际——flush 迟到返回时
   //    同路径会话已换代（关闭重开）则提交被丢弃
@@ -60,11 +63,12 @@ export function createCodeEditorCapabilities(
 
   // 代码操作能力：JSON/XML/大小写转换，内部持有内核视图
   const codeOps: CodeOpsCapabilities = {
-    expandJson: (options) => handleExpandJson(view, { ...options, lang }),
-    minifyJson: (scope) => handleMinifyJson(view, { scope, lang }),
-    validateJson: (scope) => handleValidateJson(view, { scope, lang }),
+    expandJson: (options) => handleExpandJson(view, { ...options, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
+    minifyJson: (scope) => handleMinifyJson(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
+    validateJson: (scope) => handleValidateJson(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
     transformCase: (mode) => handleTransformCase(view, mode),
-    formatXml: (scope) => handleFormatXml(view, { scope, lang }),
+    formatXml: (scope) => handleFormatXml(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
+    validateSyntax: (scope) => validateTextLanguage(view, useDocumentStore.getState().getDocument(docKey)?.language ?? lang, { scope }),
   };
 
   return {
@@ -75,7 +79,7 @@ export function createCodeEditorCapabilities(
       // CodeMirror 的 doc 是不可变结构，toString 即为权威快照；
       // 🔴 R03：镜像写入经统一提交屏障（旧实例/旧 revision 快照不得覆盖新内容）
       // 🔴 N04：提交携带会话代际（同路径已重开的旧会话迟到 flush 丢弃）
-      const content = view.state.doc.toString();
+      const content = snapshots?.materialize() ?? view.state.doc.toString();
       submitCapturedContent(docKey, { instanceId, revision: getDocumentRevision(docKey), content }, sessionGeneration);
       return { docKey, instanceId, revision: getDocumentRevision(docKey), content };
     },
@@ -88,26 +92,30 @@ export function createCodeEditorCapabilities(
     //    documentHistory 模块，内容经 flush 进 store——重挂载不清历史）
     //    🔴 R05：IME composition 进行中不可回收（光标/组合文本状态无法可靠恢复）
     canSuspend: () => !view.composing,
-    captureViewState: () => ({
-      kind: 'code' as const,
-      selection: {
-        anchor: view.state.selection.main.anchor,
-        head: view.state.selection.main.head,
-      },
-      scrollTop: view.scrollDOM?.scrollTop ?? 0,
-      // CodeMirror 折叠区间（folded 装饰位置对；iter 遍历为 from/to 列表）
-      foldedRanges: (() => {
-        const folded = view.state.field(foldState, false);
-        if (!folded) return [] as Array<{ from: number; to: number }>;
-        const ranges: Array<{ from: number; to: number }> = [];
-        for (const iter = folded.iter(); iter.value !== null; iter.next()) {
-          if (iter.from !== undefined && iter.to !== undefined) {
-            ranges.push({ from: iter.from, to: iter.to });
+    hasUnconfirmedInput: () => snapshots?.hasPending() ?? true,
+    captureViewState: () => {
+      snapshots?.materialize();
+      return {
+        kind: 'code' as const,
+        selection: {
+          anchor: view.state.selection.main.anchor,
+          head: view.state.selection.main.head,
+        },
+        scrollTop: view.scrollDOM?.scrollTop ?? 0,
+        // CodeMirror 折叠区间（folded 装饰位置对；iter 遍历为 from/to 列表）
+        foldedRanges: (() => {
+          const folded = view.state.field(foldState, false);
+          if (!folded) return [] as Array<{ from: number; to: number }>;
+          const ranges: Array<{ from: number; to: number }> = [];
+          for (const iter = folded.iter(); iter.value !== null; iter.next()) {
+            if (iter.from !== undefined && iter.to !== undefined) {
+              ranges.push({ from: iter.from, to: iter.to });
+            }
           }
-        }
-        return ranges;
-      })(),
-    }),
+          return ranges;
+        })(),
+      };
+    },
     search,
     codeOps,
     codeView: {

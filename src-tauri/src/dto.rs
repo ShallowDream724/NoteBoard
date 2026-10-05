@@ -389,28 +389,15 @@ pub struct FontPackStatus {
 // ── 扩展名映射（单一真相源）──
 
 pub fn kind_by_ext(ext: &str) -> (DocumentKind, LanguageId) {
-    use std::{collections::HashMap, sync::OnceLock};
-    static KINDS: OnceLock<HashMap<String, DocumentKind>> = OnceLock::new();
-    static LANGUAGES: OnceLock<HashMap<String, LanguageId>> = OnceLock::new();
-    let kinds = KINDS.get_or_init(|| serde_json::from_str(include_str!("../../src/core/docKind.json")).expect("valid shared document kinds"));
-    let languages = LANGUAGES.get_or_init(|| serde_json::from_str(include_str!("../../src/core/languageByExt.json")).expect("valid shared languages"));
-    let ext = ext.to_lowercase();
-    (*kinds.get(&ext).unwrap_or(&DocumentKind::Code), *languages.get(&ext).unwrap_or(&LanguageId::Plaintext))
+    crate::file_formats::kind_by_extension(ext)
 }
 
 pub fn ext_from_path(path: &str) -> String {
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
-    name.rsplit_once('.').map(|(_, ext)| ext.to_lowercase()).unwrap_or_default()
+    crate::file_formats::extension_from_path(path)
 }
 
 pub fn kind_from_path(path: &str) -> (DocumentKind, LanguageId) {
-    use std::{collections::HashMap, sync::OnceLock};
-    static FILENAMES: OnceLock<HashMap<String, LanguageId>> = OnceLock::new();
-    let filenames = FILENAMES.get_or_init(|| serde_json::from_str(include_str!("../../src/core/languageByFilename.json")).expect("valid shared language filenames"));
-    let ext = ext_from_path(path);
-    let (kind, language) = kind_by_ext(&ext);
-    let name = path.rsplit(['/', '\\']).next().unwrap_or(path).to_lowercase();
-    (kind, filenames.get(&name).copied().unwrap_or(language))
+    crate::file_formats::kind_from_path(path)
 }
 
 pub fn save_policy_of(kind: DocumentKind) -> SavePolicy {
@@ -426,14 +413,6 @@ mod code_language_mapping_tests {
 
     #[test]
     fn shared_file_language_metadata_round_trips_in_native_classifier() {
-        let extensions: std::collections::HashMap<String, LanguageId> = serde_json::from_str(include_str!("../../src/core/languageByExt.json")).unwrap();
-        for (ext, language) in extensions {
-            assert_eq!(kind_from_path(&format!("C:\\code\\sample.{}", ext.to_uppercase())).1, language, "{ext}");
-        }
-        let filenames: std::collections::HashMap<String, LanguageId> = serde_json::from_str(include_str!("../../src/core/languageByFilename.json")).unwrap();
-        for (filename, language) in filenames {
-            assert_eq!(kind_from_path(&format!("/code/{}", filename.to_uppercase())).1, language, "{filename}");
-        }
         assert_eq!(kind_from_path("main.py"), (DocumentKind::Code, LanguageId::Python));
         assert_eq!(kind_from_path("main.c"), (DocumentKind::Code, LanguageId::C));
         assert_eq!(kind_from_path("script.m").1, LanguageId::Matlab);

@@ -3,6 +3,7 @@
 // 分层见 docs/04-技术架构设计.md §1.1
 
 pub mod dto;
+mod file_formats;
 pub mod state;
 pub mod path;
 pub mod fsio;

@@ -1,0 +1,634 @@
+[
+  {
+    "id": "noteboard-plaintext",
+    "kind": "noteboard",
+    "language": "plaintext",
+    "extensions": [
+      "nb",
+      "nbdoc"
+    ]
+  },
+  {
+    "id": "markdown-markdown",
+    "kind": "markdown",
+    "language": "markdown",
+    "extensions": [
+      "md",
+      "markdown"
+    ]
+  },
+  {
+    "id": "code-plaintext",
+    "kind": "code",
+    "language": "plaintext",
+    "extensions": [
+      "txt",
+      "log",
+      "text",
+      "out",
+      "err",
+      "gitignore",
+      "gitattributes",
+      "ignore",
+      "obj",
+      "mtl",
+      "srt",
+      "vtt",
+      "ass",
+      "ssa"
+    ],
+    "filenames": [
+      "license",
+      "licence",
+      "copying",
+      "authors",
+      ".gitignore",
+      ".gitattributes",
+      ".dockerignore",
+      ".ignore"
+    ]
+  },
+  {
+    "id": "code-sql",
+    "kind": "code",
+    "language": "sql",
+    "extensions": [
+      "sql"
+    ]
+  },
+  {
+    "id": "code-json",
+    "kind": "code",
+    "language": "json",
+    "extensions": [
+      "json",
+      "ipynb",
+      "geojson",
+      "gltf",
+      "webmanifest"
+    ],
+    "filenames": [
+      ".babelrc",
+      ".prettierrc"
+    ]
+  },
+  {
+    "id": "code-yaml",
+    "kind": "code",
+    "language": "yaml",
+    "extensions": [
+      "yaml",
+      "yml"
+    ]
+  },
+  {
+    "id": "code-xml",
+    "kind": "code",
+    "language": "xml",
+    "extensions": [
+      "xml",
+      "xsd",
+      "xsl",
+      "xslt",
+      "xaml",
+      "plist",
+      "csproj",
+      "vbproj",
+      "fsproj",
+      "props",
+      "targets",
+      "resx",
+      "ui"
+    ]
+  },
+  {
+    "id": "code-html",
+    "kind": "code",
+    "language": "html",
+    "extensions": [
+      "html",
+      "htm",
+      "xhtml"
+    ],
+    "preview": "html"
+  },
+  {
+    "id": "board-plaintext",
+    "kind": "board",
+    "language": "plaintext",
+    "extensions": [
+      "excalidraw",
+      "board",
+      "canvas"
+    ]
+  },
+  {
+    "id": "image-plaintext",
+    "kind": "image",
+    "language": "plaintext",
+    "extensions": [
+      "png",
+      "jpg",
+      "jpeg",
+      "jpe",
+      "jfif",
+      "gif",
+      "webp",
+      "ico",
+      "cur",
+      "bmp",
+      "dib",
+      "avif",
+      "apng",
+      "tif",
+      "tiff"
+    ]
+  },
+  {
+    "id": "image-xml",
+    "kind": "image",
+    "language": "xml",
+    "extensions": [
+      "svg"
+    ],
+    "preview": "svg"
+  },
+  {
+    "id": "mindmap-json",
+    "kind": "mindmap",
+    "language": "json",
+    "extensions": [
+      "mindmap"
+    ]
+  },
+  {
+    "id": "mindmap-plaintext",
+    "kind": "mindmap",
+    "language": "plaintext",
+    "extensions": [
+      "xmind",
+      "mm"
+    ]
+  },
+  {
+    "id": "drawio-xml",
+    "kind": "drawio",
+    "language": "xml",
+    "extensions": [
+      "drawio",
+      "dio"
+    ]
+  },
+  {
+    "id": "code-mermaid",
+    "kind": "code",
+    "language": "mermaid",
+    "extensions": [
+      "mmd",
+      "mermaid"
+    ]
+  },
+  {
+    "id": "code-plantuml",
+    "kind": "code",
+    "language": "plantuml",
+    "extensions": [
+      "puml",
+      "plantuml",
+      "iuml",
+      "uml"
+    ]
+  },
+  {
+    "id": "bitable-json",
+    "kind": "bitable",
+    "language": "json",
+    "extensions": [
+      "bitable",
+      "table"
+    ]
+  },
+  {
+    "id": "code-infographic",
+    "kind": "code",
+    "language": "infographic",
+    "extensions": [
+      "infographic",
+      "ig"
+    ]
+  },
+  {
+    "id": "unsupported-plaintext",
+    "kind": "unsupported",
+    "language": "plaintext",
+    "extensions": [
+      "pdf",
+      "doc",
+      "docx",
+      "docm",
+      "dotx",
+      "rtf",
+      "odt",
+      "xls",
+      "xlsx",
+      "xlsm",
+      "xlsb",
+      "ods",
+      "ppt",
+      "pptx",
+      "pptm",
+      "pps",
+      "ppsx",
+      "odp",
+      "epub",
+      "mobi",
+      "zip",
+      "7z",
+      "rar",
+      "gz",
+      "bz2",
+      "xz",
+      "tar",
+      "exe",
+      "dll",
+      "msi",
+      "lnk",
+      "iso",
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "m4a",
+      "mp4",
+      "mkv",
+      "avi",
+      "mov",
+      "webm",
+      "ttf",
+      "otf",
+      "woff",
+      "woff2",
+      "psd",
+      "psb",
+      "ai",
+      "eps",
+      "sketch",
+      "fig",
+      "xd",
+      "afdesign",
+      "afphoto",
+      "afpub",
+      "procreate",
+      "kra",
+      "ora",
+      "xcf",
+      "aseprite",
+      "ase",
+      "blend",
+      "fbx",
+      "glb",
+      "3ds",
+      "c4d",
+      "max",
+      "mb",
+      "dwg",
+      "dcm",
+      "dicom",
+      "sqlite",
+      "sqlite3",
+      "db",
+      "mdb",
+      "accdb",
+      "h5",
+      "hdf5",
+      "npy",
+      "npz",
+      "parquet",
+      "arrow",
+      "feather",
+      "bin",
+      "pak",
+      "dmg",
+      "apk",
+      "aab",
+      "deb",
+      "rpm",
+      "vmdk",
+      "vhd",
+      "vhdx",
+      "img",
+      "icns",
+      "heic",
+      "heif",
+      "raw",
+      "cr2",
+      "nef",
+      "dng",
+      "m4v",
+      "wmv",
+      "mpeg",
+      "mpg",
+      "flv",
+      "aac",
+      "aiff",
+      "wma",
+      "opus"
+    ]
+  },
+  {
+    "id": "code-javascript",
+    "kind": "code",
+    "language": "javascript",
+    "extensions": [
+      "js",
+      "jsx",
+      "mjs",
+      "cjs"
+    ]
+  },
+  {
+    "id": "code-typescript",
+    "kind": "code",
+    "language": "typescript",
+    "extensions": [
+      "ts",
+      "tsx",
+      "mts",
+      "cts"
+    ]
+  },
+  {
+    "id": "code-python",
+    "kind": "code",
+    "language": "python",
+    "extensions": [
+      "py",
+      "pyw",
+      "pyi"
+    ]
+  },
+  {
+    "id": "code-java",
+    "kind": "code",
+    "language": "java",
+    "extensions": [
+      "java"
+    ]
+  },
+  {
+    "id": "code-c",
+    "kind": "code",
+    "language": "c",
+    "extensions": [
+      "c",
+      "h"
+    ]
+  },
+  {
+    "id": "code-cpp",
+    "kind": "code",
+    "language": "cpp",
+    "extensions": [
+      "cpp",
+      "cc",
+      "cxx",
+      "hpp",
+      "hh",
+      "hxx",
+      "ipp",
+      "tpp"
+    ]
+  },
+  {
+    "id": "code-csharp",
+    "kind": "code",
+    "language": "csharp",
+    "extensions": [
+      "cs"
+    ]
+  },
+  {
+    "id": "code-go",
+    "kind": "code",
+    "language": "go",
+    "extensions": [
+      "go"
+    ]
+  },
+  {
+    "id": "code-rust",
+    "kind": "code",
+    "language": "rust",
+    "extensions": [
+      "rs"
+    ]
+  },
+  {
+    "id": "code-php",
+    "kind": "code",
+    "language": "php",
+    "extensions": [
+      "php",
+      "phtml"
+    ]
+  },
+  {
+    "id": "code-ruby",
+    "kind": "code",
+    "language": "ruby",
+    "extensions": [
+      "rb",
+      "rake",
+      "gemspec"
+    ],
+    "filenames": [
+      "gemfile",
+      "rakefile",
+      "guardfile"
+    ]
+  },
+  {
+    "id": "code-swift",
+    "kind": "code",
+    "language": "swift",
+    "extensions": [
+      "swift"
+    ]
+  },
+  {
+    "id": "code-kotlin",
+    "kind": "code",
+    "language": "kotlin",
+    "extensions": [
+      "kt",
+      "kts"
+    ]
+  },
+  {
+    "id": "code-dart",
+    "kind": "code",
+    "language": "dart",
+    "extensions": [
+      "dart"
+    ]
+  },
+  {
+    "id": "code-lua",
+    "kind": "code",
+    "language": "lua",
+    "extensions": [
+      "lua"
+    ]
+  },
+  {
+    "id": "code-r",
+    "kind": "code",
+    "language": "r",
+    "extensions": [
+      "r",
+      "rscript"
+    ]
+  },
+  {
+    "id": "code-matlab",
+    "kind": "code",
+    "language": "matlab",
+    "extensions": [
+      "m"
+    ]
+  },
+  {
+    "id": "code-toml",
+    "kind": "code",
+    "language": "toml",
+    "extensions": [
+      "toml"
+    ]
+  },
+  {
+    "id": "code-ini",
+    "kind": "code",
+    "language": "ini",
+    "extensions": [
+      "ini",
+      "cfg",
+      "conf",
+      "properties",
+      "env",
+      "cnf",
+      "desktop",
+      "service",
+      "socket",
+      "timer"
+    ],
+    "filenames": [
+      ".editorconfig",
+      ".gitconfig",
+      ".npmrc",
+      ".yarnrc",
+      ".env"
+    ],
+    "prefixes": [
+      ".env."
+    ]
+  },
+  {
+    "id": "code-latex",
+    "kind": "code",
+    "language": "latex",
+    "extensions": [
+      "tex",
+      "latex",
+      "sty",
+      "cls"
+    ]
+  },
+  {
+    "id": "code-bash",
+    "kind": "code",
+    "language": "bash",
+    "extensions": [
+      "sh",
+      "bash",
+      "zsh",
+      "ksh",
+      "fish"
+    ],
+    "filenames": [
+      ".bashrc",
+      ".bash_profile",
+      ".bash_login",
+      ".profile",
+      ".zshrc",
+      ".zprofile",
+      ".bash_logout"
+    ]
+  },
+  {
+    "id": "code-powershell",
+    "kind": "code",
+    "language": "powershell",
+    "extensions": [
+      "ps1",
+      "psm1",
+      "psd1"
+    ]
+  },
+  {
+    "id": "code-dockerfile",
+    "kind": "code",
+    "language": "dockerfile",
+    "extensions": [
+      "dockerfile"
+    ],
+    "filenames": [
+      "dockerfile",
+      "containerfile"
+    ],
+    "prefixes": [
+      "dockerfile.",
+      "containerfile."
+    ]
+  },
+  {
+    "id": "code-css",
+    "kind": "code",
+    "language": "css",
+    "extensions": [
+      "css",
+      "scss",
+      "less"
+    ]
+  },
+  {
+    "id": "web-component",
+    "kind": "code",
+    "language": "html",
+    "extensions": [
+      "vue",
+      "svelte",
+      "astro"
+    ]
+  },
+  {
+    "id": "csv",
+    "kind": "code",
+    "language": "plaintext",
+    "extensions": [
+      "csv"
+    ],
+    "preview": "delimited",
+    "delimiter": ","
+  },
+  {
+    "id": "tsv",
+    "kind": "code",
+    "language": "plaintext",
+    "extensions": [
+      "tsv",
+      "tab"
+    ],
+    "preview": "delimited",
+    "delimiter": "\t"
+  }
+]

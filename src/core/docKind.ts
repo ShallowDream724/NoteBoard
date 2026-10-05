@@ -1,39 +1,25 @@
-// NoteBoard 扩展名 → DocumentKind 单一真相源
-// Rust dto.rs include_str! 读取同一份类型与语言映射
+// NoteBoard 文件格式兼容接口（元数据来自 fileFormats.json）
+// Rust file_formats.rs 读取同一份清单；图标与编辑器实现各自封装。
 // 详见 docs/08-数据契约与持久化.md §5.2
 
-import kindByExtJson from './docKind.json' with { type: 'json' };
-import languageByExtJson from './languageByExt.json' with { type: 'json' };
-import languageByFilenameJson from './languageByFilename.json' with { type: 'json' };
+import { fileExtension, getFileFormat } from './fileFormats';
+export { KIND_BY_EXT, LANGUAGE_BY_EXT, LANGUAGE_BY_FILENAME } from './fileFormats';
 import type { DocumentKind, LanguageId, SavePolicy } from './ipc/types';
 
-/** 扩展名 → kind 的映射表（小写键） */
-export const KIND_BY_EXT: Record<string, DocumentKind> = kindByExtJson as Record<string, DocumentKind>;
-
-/** 扩展名 → LanguageId */
-export const LANGUAGE_BY_EXT: Record<string, LanguageId> = languageByExtJson as Record<string, LanguageId>;
-export const LANGUAGE_BY_FILENAME: Record<string, LanguageId> = languageByFilenameJson as Record<string, LanguageId>;
 
 /** 从路径提取扩展名（小写，无点） */
 export function extFromPath(path: string): string {
-  const name = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
-  const idx = name.lastIndexOf('.');
-  if (idx < 0 || idx === name.length - 1) return '';
-  return name.slice(idx + 1).toLowerCase();
+  return fileExtension(path);
 }
 
 /** 从路径推断 DocumentKind */
 export function kindFromPath(path: string): DocumentKind {
-  const ext = extFromPath(path);
-  if (!ext) return 'code';
-  return KIND_BY_EXT[ext] ?? 'code';
+  return getFileFormat(path).kind;
 }
 
 /** 从路径推断 LanguageId */
 export function languageFromPath(path: string): LanguageId {
-  const filename = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1).toLowerCase();
-  const ext = extFromPath(path);
-  return LANGUAGE_BY_FILENAME[filename] ?? LANGUAGE_BY_EXT[ext] ?? 'plaintext';
+  return getFileFormat(path).language;
 }
 
 /** 从 kind 推导保存策略 */

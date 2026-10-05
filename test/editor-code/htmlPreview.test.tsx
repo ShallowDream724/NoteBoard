@@ -13,6 +13,9 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
+  // jsdom supplies no text layout; real geometry is covered by browser QA.
+  Object.defineProperty(Range.prototype, 'getClientRects', { configurable: true, value: () => [] });
+  Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() });
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
   useDocumentStore.setState({ documents: new Map() });
   useDocumentStore.getState().upsertFromPayload({ key: path, displayName: 'page.html', dirPath: 'C:\\notes', kind: 'code', language: 'html', content: '<h1>原文</h1>', encoding: 'utf8', eol: 'lf', size: 12, mtime: 1, readonly: false });

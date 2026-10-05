@@ -156,7 +156,8 @@ export interface TransferStatusDto {
 
 // ── S07 统一文件准备判别结果（G 节） ──
 
-/** already-open 在读盘前返回；text 携带已读入的完整 payload；其余分支不读正文 */
+/** already-open precedes reads; known external files carry metadata only.
+ * Text candidates are bounded and validated; rejected content becomes unsupported. */
 export type PreparedDocument =
   | { type: 'confirmation-required'; key: string; displayName: string; size: number }
   | { type: 'directory'; path: string }

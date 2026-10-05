@@ -40,6 +40,10 @@ import type { LanguageId } from '../../core/ipc/types';
 import { ResponsiveToolbar } from './ResponsiveToolbar';
 import { HtmlFileActions } from './HtmlFileActions';
 import { getCodeLanguage } from '../../core/codeLanguages';
+import { TEXT_LANGUAGE_CHOICES, textLanguageTools } from '../../core/textLanguageTools';
+import { useDocumentStore } from '../../stores/documentStore';
+import { languageFromPath } from '../../core/docKind';
+import { getFileFormat } from '../../core/fileFormats';
 
 interface CodeToolbarProps {
   docKey: string;
@@ -47,9 +51,11 @@ interface CodeToolbarProps {
 }
 
 export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
-  const lang = (language ?? 'plaintext') as LanguageId;
-  const isJson = lang === 'json';
-  const isHtml = lang === 'html';
+  const selectedLanguage = useDocumentStore(state => state.documents.get(docKey)?.language);
+  const lang = (selectedLanguage ?? language ?? 'plaintext') as LanguageId;
+  const tools = textLanguageTools(lang);
+  const isJson = tools.json;
+  const isHtml = getFileFormat(docKey).preview === 'html';
   const languageLabel = lang === 'html' ? 'HTML' : lang === 'xml' ? 'XML' : getCodeLanguage(lang)?.label ?? lang.toUpperCase();
   const { canUndo, canRedo } = useDocumentHistory(docKey);
 
@@ -97,11 +103,17 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
   return (
     <ResponsiveToolbar onLayoutChange={() => { setJsonDropdownOpen(false); setTextDropdownOpen(false); setViewDropdownOpen(false); }}>
       {isHtml && <HtmlFileActions docKey={docKey} />}
-      {!isHtml && <ToolbarDropdown collapsePriority={120} isOpen={viewDropdownOpen} onOpenChange={setViewDropdownOpen}
+      {<ToolbarDropdown collapsePriority={120} isOpen={viewDropdownOpen} onOpenChange={setViewDropdownOpen}
         trigger={<ToolbarButton icon={<ListTree size={15} />} label={languageLabel} hasDropdown title={`${languageLabel} · 代码查看`} />}>
+        <ToolbarDropdownItem label="语法高亮" submenu={<div style={{ maxHeight: 320, overflowY: 'auto' }}>
+          <ToolbarDropdownItem label="按文件名自动识别" onClick={() => { useDocumentStore.getState().setLanguage(docKey, languageFromPath(docKey)); setViewDropdownOpen(false); }} />
+          {TEXT_LANGUAGE_CHOICES.map(choice => <ToolbarDropdownItem key={choice.value} label={choice.label}
+            shortcut={choice.value === lang ? '✓' : undefined}
+            onClick={() => { useDocumentStore.getState().setLanguage(docKey, choice.value); setViewDropdownOpen(false); }} />)}
+        </div>} />
         <ToolbarDropdownItem icon={<CornerDownRight size={14} />} label="跳转到行" shortcut="Ctrl+Alt+G"
           onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.goToLine(); }} />
-        <ToolbarDropdownItem label="折叠 / 展开当前代码段" shortcut="Ctrl+Alt+F"
+        <ToolbarDropdownItem label="折叠 / 展开当前代码段"
           onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.toggleFold(); }} />
         <ToolbarDropdownItem label="展开全部代码段"
           onClick={() => { setViewDropdownOpen(false); getEditorCapabilities(docKey)?.codeView?.unfoldAll(); }} />
@@ -242,7 +254,7 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
         />
 
         {/* XML 格式化 */}
-        <ToolbarDropdownItem
+        {tools.xml && <ToolbarDropdownItem
           icon={<CodeXml size={14} />}
           label="XML 格式化"
           submenu={
@@ -257,8 +269,12 @@ export function CodeToolbar({ docKey, language }: CodeToolbarProps) {
               />
             </>
           }
-        />
+        />}
       </ToolbarDropdown>}
+
+      {!isJson && tools.validate && <ToolbarButton collapsePriority={70} icon={<CheckCircle2 size={15} />}
+        title={`${languageLabel} 语法校验`} shortcut="Shift+Alt+V"
+        onClick={() => getCodeOps()?.validateSyntax?.('all')} />}
 
       <ToolbarDivider />
 

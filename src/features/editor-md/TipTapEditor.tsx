@@ -34,6 +34,7 @@ import { judgeLargeDoc } from './largeDoc';
 import { nbEditorTheme } from '../editor-code/theme';
 import { nbSyntaxHighlighting } from '../editor-code/highlightStyle';
 import { createBaseExtensions, typographyCompartment } from '../editor-code/setup';
+import { textAnalysisLifecycle } from '../editor-code/jsonOps';
 import { sourceTypingAssist } from './sourceTypingAssist';
 import { readStyledSource, readSourceStyles, resetSourceStyles, sourceStylesField } from '../document-style/sourceStyleTracking';
 import { liveEditorSettings } from '../editor-code/editorSettingsBinding';
@@ -442,6 +443,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           },
         ])),
         ...createBaseExtensions(useSettingsStore.getState().settings.editor),
+        textAnalysisLifecycle,
         liveEditorSettings,
         ...(nativeDocument ? [] : [markdown({ extensions: sourceFormattingGrammar }), sourceTypingAssist, sourceStylesField]),
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。

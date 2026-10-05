@@ -1,0 +1,54 @@
+.svg-source-viewer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: var(--editor-text);
+  background: var(--editor-bg);
+  user-select: text;
+}
+
+.svg-source-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--editor-border);
+  background: var(--editor-surface);
+  font-size: 12px;
+}
+
+.svg-source-title { font-weight: 500; }
+.svg-source-readonly { color: var(--editor-text-muted); }
+.svg-source-actions { display: flex; gap: 4px; margin-left: auto; }
+
+.svg-source-viewer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.svg-source-viewer button:hover,
+.svg-source-viewer button[aria-pressed="true"] { background: var(--toolbar-hover); }
+.svg-source-viewer button:disabled { opacity: .45; cursor: default; }
+.svg-source-viewer button:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 2px; }
+
+.svg-source-editor { flex: 1; min-height: 0; overflow: hidden; }
+.svg-source-editor[hidden] { display: none; }
+.svg-source-editor .cm-editor { height: 100%; }
+.svg-source-viewer .svg-source-editor .cm-panel.cm-search { display: block !important; }
+.svg-source-editor .cm-panel.cm-search { padding: 6px 12px; font-size: 12px; }
+.svg-source-editor .cm-panel.cm-search input { color: var(--editor-text); background: var(--editor-bg); border: 1px solid var(--editor-border); }
+.svg-source-editor .cm-panel.cm-search label { white-space: nowrap; }
+.svg-source-message { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; color: var(--editor-text-muted); text-align: center; font-size: 13px; }
+.svg-source-message p { margin: 0; }
+.svg-source-message button { border-color: var(--editor-border); color: var(--editor-text); background: var(--editor-surface); }

@@ -64,6 +64,8 @@ interface DocumentStore {
   upsertFromPayload: (payload: DocumentPayload) => Document;
   /** 更新内容镜像（防抖后调用） */
   setContent: (key: string, content: string) => void;
+  /** Session-only syntax choice; never changes content, file kind or dirty state. */
+  setLanguage: (key: string, language: DocumentPayload['language']) => void;
   /** 标记为脏/干净 */
   setDirty: (key: string, isDirty: boolean) => void;
   /** 设置基准内容并对齐脏态 */
@@ -162,6 +164,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     });
   },
 
+  setLanguage: (key, language) => {
+    set(state => {
+      const doc = state.documents.get(key);
+      if (!doc || doc.kind !== 'code' || doc.language === language) return state;
+      const documents = new Map(state.documents);
+      documents.set(key, { ...doc, language });
+      return { documents };
+    });
+  },
+
   setDirty: (key, isDirty) => {
     set((state) => {
       const doc = state.documents.get(key);
@@ -244,12 +256,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (!doc) return {};
       const newMap = new Map(state.documents);
       newMap.delete(oldKey);
-      const changedExtension = extFromPath(oldKey) !== extFromPath(newKey);
-      const kind = changedExtension ? kindFromPath(newKey) : doc.kind;
+      const changedFormat = extFromPath(oldKey) !== extFromPath(newKey)
+        || languageFromPath(oldKey) !== languageFromPath(newKey) || kindFromPath(oldKey) !== kindFromPath(newKey);
+      const candidateKind = changedFormat ? kindFromPath(newKey) : doc.kind;
+      // A filename change cannot manufacture editable text for a binary handoff.
+      const kind = doc.kind === 'unsupported' && doc.content === null && candidateKind === 'code' ? 'unsupported' : candidateKind;
       newMap.set(newKey, {
         ...doc,
         kind,
-        language: changedExtension ? languageFromPath(newKey) : doc.language,
+        language: changedFormat ? languageFromPath(newKey) : doc.language,
         savePolicy: resolveSavePolicy(kind),
         key: newKey,
         displayName: newDisplayName,

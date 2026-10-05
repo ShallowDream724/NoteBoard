@@ -1,6 +1,0 @@
-{
-  "dockerfile": "dockerfile", "containerfile": "dockerfile",
-  "gemfile": "ruby", "rakefile": "ruby", "guardfile": "ruby",
-  ".bashrc": "bash", ".bash_profile": "bash", ".bash_login": "bash", ".profile": "bash", ".zshrc": "bash", ".zprofile": "bash",
-  ".editorconfig": "ini", ".gitconfig": "ini", ".npmrc": "ini", ".yarnrc": "ini"
-}

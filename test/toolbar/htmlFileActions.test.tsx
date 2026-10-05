@@ -54,3 +54,22 @@ it('copies the latest editor snapshot rather than the delayed store mirror', asy
     expect(writeText).toHaveBeenCalledExactlyOnceWith('<p>new typing</p>');
   } finally { await act(async () => root.unmount()); }
 });
+
+it('keeps HTML file actions when its highlighting language changes', async () => {
+  const host = document.createElement('div'), root = createRoot(host);
+  try {
+    await act(async () => root.render(<CodeToolbar docKey={path} language="html" />));
+    await act(async () => useDocumentStore.getState().setLanguage(path, 'plaintext'));
+    expect(host.querySelector('button[title="复制 HTML 源码"]')).not.toBeNull();
+    expect(host.querySelector('button[title="纯文本 · 代码查看"]')).not.toBeNull();
+  } finally { await act(async () => root.unmount()); }
+});
+
+it('does not offer browser file actions just because a Vue source uses HTML highlighting', async () => {
+  const host = document.createElement('div'), root = createRoot(host);
+  try {
+    await act(async () => root.render(<CodeToolbar docKey="C:/notes/component.vue" language="html" />));
+    expect(host.querySelector('button[title^="用系统默认应用"]')).toBeNull();
+    expect(host.textContent).toContain('文本工具');
+  } finally { await act(async () => root.unmount()); }
+});

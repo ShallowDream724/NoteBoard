@@ -45,7 +45,7 @@ export interface Tab {
   isDirty: boolean;
   /** 是否预览态（单击树节点打开时为 true） */
   isPreview: boolean;
-  /** 视图模式（Markdown 用） */
+  /** Source/visual choice for rich documents and previewable text files. */
   viewMode: 'visual' | 'source' | null;
   /** 外部变更状态 */
   externalStatus: 'clean' | 'modified' | 'deleted' | 'renamed' | null;

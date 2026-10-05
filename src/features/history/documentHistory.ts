@@ -201,6 +201,27 @@ type HistoryChangeListener = (
 ) => void;
 
 const historyListeners = new Set<HistoryChangeListener>();
+// Editors may defer a current group without allocating a second timeline. These
+// owner-scoped predicates only expose availability; navigation still materializes
+// through the existing hooks before touching history nodes.
+const pendingInputs = new Map<string, Set<{ hasPending: () => boolean }>>();
+
+export function registerDocumentHistoryPendingInput(docKey: string, hasPending: () => boolean): () => void {
+  const owners = pendingInputs.get(docKey) ?? new Set<{ hasPending: () => boolean }>();
+  const owner = { hasPending };
+  owners.add(owner);
+  pendingInputs.set(docKey, owners);
+  return () => {
+    owners.delete(owner);
+    if (pendingInputs.get(docKey) === owners && owners.size === 0) pendingInputs.delete(docKey);
+    notifyHistoryChange(docKey);
+  };
+}
+
+/** Notify once when the presence of an unfinished group changes, without reading text. */
+export function notifyDocumentHistoryPendingInput(docKey: string): void {
+  notifyHistoryChange(docKey);
+}
 type HistoryNavigationListener = (docKey: string, direction: DocumentHistoryNavigation['direction']) => void;
 const navigationListeners = new Set<HistoryNavigationListener>();
 
@@ -364,9 +385,13 @@ export function getDocumentHistoryAvailability(docKey: string): {
 } {
   const state = histories.get(docKey);
   if (!state) return { canUndo: false, canRedo: false };
+  let hasPending = false;
+  for (const owner of pendingInputs.get(docKey) ?? []) {
+    if (owner.hasPending()) { hasPending = true; break; }
+  }
   return {
-    canUndo: state.index > 0,
-    canRedo: state.index < state.entries.length - 1,
+    canUndo: hasPending || state.index > 0,
+    canRedo: !hasPending && state.index < state.entries.length - 1,
   };
 }
 
@@ -648,6 +673,7 @@ export function restoreDocumentHistory(docKey: string, data: SerializableHistory
 export function clearDocumentHistory(docKey: string): void {
   histories.delete(docKey);
   adapters.delete(docKey);
+  pendingInputs.delete(docKey);
   notifyHistoryChange(docKey);
 }
 
@@ -655,6 +681,7 @@ export function clearDocumentHistory(docKey: string): void {
 export function clearAllDocumentHistories(): void {
   histories.clear();
   adapters.clear();
+  pendingInputs.clear();
   for (const listener of historyListeners) {
     try {
       listener('', { canUndo: false, canRedo: false });

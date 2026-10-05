@@ -185,8 +185,8 @@ export function findDocumentOwner(key: string): Promise<string | null> {
 
 // ── 文件 I/O ──
 
-export function readDocument(path: string): Promise<DocumentPayload> {
-  return invoke<DocumentPayload>('read_document', { path });
+export function readDocument(path: string, maxReadBytes?: number): Promise<DocumentPayload> {
+  return invoke<DocumentPayload>('read_document', maxReadBytes === undefined ? { path } : { path, maxReadBytes });
 }
 
 export function probeDocument(path: string): Promise<ProbeResult> {

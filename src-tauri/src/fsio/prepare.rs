@@ -10,7 +10,7 @@
 // 🔴 约束：全局 Mutex 只保护短状态操作，不跨 await 或读盘持有；
 //    readDir/probe/exists 的工作不在 registry 锁内执行。
 
-use crate::dto::{DocumentPayload, DocumentKind, PreparedDocument};
+use crate::dto::{DocumentKind, DocumentPayload, PreparedDocument};
 use crate::path as nbpath;
 use crate::state::AppState;
 use std::path::Path;
@@ -134,7 +134,11 @@ pub async fn prepare_document(
 }
 
 /// 工作线程判别与读取（无锁；复用既有 read::read_file 的编码检测与解码）
-fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Result<PreparedDocument, String> {
+fn prepare_on_worker(
+    path: &str,
+    key: &str,
+    max_read_bytes: Option<u64>,
+) -> Result<PreparedDocument, String> {
     super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(path);
 
@@ -159,13 +163,6 @@ fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Resu
     let display_name = nbpath::basename(path);
     let dir_path = nbpath::parent_dir(path).unwrap_or_default();
     let size = metadata.len();
-    // Return before text probing/reading or image decoding. This result does not
-    // retain a registration reservation; cancelling needs no cleanup IPC.
-    if max_read_bytes.is_some_and(|limit| size > limit) {
-        return Ok(PreparedDocument::ConfirmationRequired {
-            key: key.to_string(), display_name, size,
-        });
-    }
     let mtime = metadata
         .modified()
         .map(|t| {
@@ -177,21 +174,43 @@ fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Resu
 
     match kind {
         DocumentKind::Unsupported => Ok(PreparedDocument::Unsupported {
-            key: key.to_string(), display_name, dir_path, language: "plaintext".to_string(), size,
-        }),
-        // 图片走资源协议按路径解码，不读正文
-        DocumentKind::Image => Ok(PreparedDocument::Image {
             key: key.to_string(),
             display_name,
             dir_path,
             language: "plaintext".to_string(),
             size,
-            mtime,
         }),
+        // Images will be decoded through the asset protocol, so they also need
+        // confirmation. Known external formats return from metadata alone.
+        DocumentKind::Image => {
+            if max_read_bytes.is_some_and(|limit| size > limit) {
+                return Ok(PreparedDocument::ConfirmationRequired {
+                    key: key.to_string(),
+                    display_name,
+                    size,
+                });
+            }
+            Ok(PreparedDocument::Image {
+                key: key.to_string(),
+                display_name,
+                dir_path,
+                language: "plaintext".to_string(),
+                size,
+                mtime,
+            })
+        }
         // 专有二进制（XMind/Excalidraw 场景文件等）走原 kind 映射：
         // board/drawio/bitable/mindmap 本身是文本或专有格式的按现有规则回退 unsupported
         _ => {
-            let is_text = read::is_text_file(p).unwrap_or(false);
+            let is_text = match read::is_text_file(p) {
+                Ok(is_text) => is_text,
+                Err(message) => {
+                    return Ok(PreparedDocument::Failed {
+                        message,
+                        missing: false,
+                    })
+                }
+            };
             if !is_text {
                 return Ok(PreparedDocument::Unsupported {
                     key: key.to_string(),
@@ -201,8 +220,17 @@ fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Resu
                     size,
                 });
             }
+            // Prefix sniffing is bounded even for large files. Confirm only
+            // candidates whose body is needed, before reading that body.
+            if max_read_bytes.is_some_and(|limit| size > limit) {
+                return Ok(PreparedDocument::ConfirmationRequired {
+                    key: key.to_string(),
+                    display_name,
+                    size,
+                });
+            }
             // 文本：读入并解码（编码检测/只读判定在 read_file 内完成）
-            match read::read_file(p) {
+            match read::read_file_with_limit(p, max_read_bytes) {
                 Ok(result) => Ok(PreparedDocument::Text {
                     payload: DocumentPayload {
                         key: key.to_string(),
@@ -218,8 +246,22 @@ fn prepare_on_worker(path: &str, key: &str, max_read_bytes: Option<u64>) -> Resu
                         readonly: result.readonly,
                     },
                 }),
-                Err(message) => Ok(PreparedDocument::Failed {
-                    message,
+                Err(read::FileReadError::UnsupportedText) => Ok(PreparedDocument::Unsupported {
+                    key: key.to_string(),
+                    display_name,
+                    dir_path,
+                    language: "plaintext".to_string(),
+                    size,
+                }),
+                Err(read::FileReadError::SizeLimitExceeded { size }) => {
+                    Ok(PreparedDocument::ConfirmationRequired {
+                        key: key.to_string(),
+                        display_name,
+                        size,
+                    })
+                }
+                Err(error) => Ok(PreparedDocument::Failed {
+                    message: error.to_string(),
                     missing: false,
                 }),
             }
@@ -238,9 +280,16 @@ mod classification_tests {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
-            assert!(matches!(prepare_on_worker(path, path, None).unwrap(), PreparedDocument::Unsupported { .. }));
+            assert!(matches!(
+                prepare_on_worker(path, path, None).unwrap(),
+                PreparedDocument::Unsupported { .. }
+            ));
         }
-        for (extension, expected) in [("md", DocumentKind::Markdown), ("txt", DocumentKind::Code), ("dot", DocumentKind::Code)] {
+        for (extension, expected) in [
+            ("md", DocumentKind::Markdown),
+            ("txt", DocumentKind::Code),
+            ("dot", DocumentKind::Code),
+        ] {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
@@ -259,8 +308,75 @@ mod classification_tests {
             std::fs::write(&path, "content larger than limit").unwrap();
             let path = path.to_str().unwrap();
             let size = std::fs::metadata(path).unwrap().len();
-            assert!(matches!(prepare_on_worker(path, path, Some(size - 1)).unwrap(), PreparedDocument::ConfirmationRequired { size: actual, .. } if actual == size));
-            assert!(!matches!(prepare_on_worker(path, path, Some(size)).unwrap(), PreparedDocument::ConfirmationRequired { .. }));
+            assert!(
+                matches!(prepare_on_worker(path, path, Some(size - 1)).unwrap(), PreparedDocument::ConfirmationRequired { size: actual, .. } if actual == size)
+            );
+            assert!(!matches!(
+                prepare_on_worker(path, path, Some(size)).unwrap(),
+                PreparedDocument::ConfirmationRequired { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn known_external_and_sniffed_binary_files_do_not_require_size_confirmation() {
+        let directory = tempfile::tempdir().unwrap();
+        for (name, content) in [
+            ("large.psd", b"plain bytes".as_slice()),
+            ("large.ai", b"plain bytes".as_slice()),
+            ("renamed.unknown", b"%PDF-1.7\nremaining data".as_slice()),
+        ] {
+            let path = directory.path().join(name);
+            std::fs::write(&path, content).unwrap();
+            let path = path.to_str().unwrap();
+            assert!(
+                matches!(
+                    prepare_on_worker(path, path, Some(1)).unwrap(),
+                    PreparedDocument::Unsupported { .. }
+                ),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn full_content_or_encoding_rejection_falls_back_to_external_opening() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut later_binary = vec![b'x'; 8192 + 32];
+        later_binary.push(0x01);
+        for (name, content) in [
+            ("later-binary.txt", later_binary.as_slice()),
+            ("utf16.txt", &[0xff, 0xfe, 0x2d, 0x4e]),
+            ("other-encoding.txt", b"caf\xe9"),
+        ] {
+            let path = directory.path().join(name);
+            std::fs::write(&path, content).unwrap();
+            let path = path.to_str().unwrap();
+            assert!(
+                matches!(
+                    prepare_on_worker(path, path, None).unwrap(),
+                    PreparedDocument::Unsupported { .. }
+                ),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_extensions_can_still_open_as_supported_text() {
+        let directory = tempfile::tempdir().unwrap();
+        for (name, content) in [("notes.unknown", "中文🙂\t文本\r\n"), ("empty.unknown", "")]
+        {
+            let path = directory.path().join(name);
+            std::fs::write(&path, content).unwrap();
+            let path = path.to_str().unwrap();
+            match prepare_on_worker(path, path, None).unwrap() {
+                PreparedDocument::Text { payload } => {
+                    assert_eq!(payload.kind, DocumentKind::Code);
+                    assert_eq!(payload.content.as_deref(), Some(content));
+                }
+                other => panic!("unexpected classification: {other:?}"),
+            }
         }
     }
 }

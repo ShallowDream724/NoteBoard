@@ -2,7 +2,7 @@
 // 支持常见及特殊图片格式：PNG, JPG, JPEG, SVG, BMP, GIF, WEBP, ICO 等
 // 功能：平移拖拽、无级缩放（自适应/1:1/自定义）、旋转/翻转、棋盘网格背景切换、元数据展示及快捷操作
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 // 🔴 S11：回收视图状态存取与能力注册
 import { takeViewState } from '../session/editorSuspension';
 import { registerEditorCapabilities } from '../../core/editor/editorRegistry';
@@ -21,6 +21,8 @@ import {
   Sparkles,
   Grid,
   Pencil,
+  Code2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import * as ipc from '../../core/ipc/commands';
@@ -33,6 +35,10 @@ import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
 import { applyImageTransform, imageTransformCss, type ImageTransform } from '../image/sharedTransform';
 import { copyImageSource } from '../image/imageClipboard';
+import { getFileFormat } from '../../core/fileFormats';
+import type { SvgSourceViewerHandle } from './SvgSourceViewer';
+
+const SvgSourceViewer = lazy(() => import('./SvgSourceViewer').then(module => ({ default: module.SvgSourceViewer })));
 
 interface ImageViewerProps {
   docKey: string;
@@ -60,6 +66,11 @@ function getAspectRatio(w: number, h: number): string {
 export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewerProps) {
   const name = fileName || filePath.split(/[\\/]/).pop() || filePath;
   const ext = extFromPath(filePath).toUpperCase() || 'IMAGE';
+  const isSvg = getFileFormat(filePath).preview === 'svg';
+  const [sourceFilePath, setSourceFilePath] = useState<string | null>(null);
+  const showSource = isSvg && sourceFilePath === filePath;
+  const sourceViewerRef = useRef<SvgSourceViewerHandle | null>(null);
+  useEffect(() => { setSourceFilePath(null); }, [docKey, filePath]);
   const editorOpenEpoch = useRef(0);
   useEffect(() => { editorOpenEpoch.current++; return () => { editorOpenEpoch.current++; }; }, [docKey, filePath]);
 
@@ -132,8 +143,8 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       instanceId,
       getRevision: () => 0,
       flush: async () => ({ docKey, instanceId, revision: 0, content: null, readonly: true }),
-      focus: () => {},
-      getSelectedText: () => '',
+      focus: () => sourceViewerRef.current?.focus(),
+      getSelectedText: () => sourceViewerRef.current?.getSelectedText() ?? '',
       canSuspend: () => true,
       captureViewState: () => ({
         kind: 'image' as const,
@@ -329,6 +340,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           color: 'var(--editor-text)',
         }}
       >
+        {!showSource && <>
         {/* 缩小 */}
         <Tooltip content="缩小 (滚轮下滑)" side="bottom" sideOffset={6}>
           <button
@@ -482,6 +494,21 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
             {copied ? <Check size={15} color="var(--success-600)" /> : <Copy size={15} />}
           </button>
         </Tooltip>
+        </>}
+
+        {isSvg && (
+          <Tooltip content={showSource ? '返回图片预览' : '查看 SVG 源码'} side="bottom" sideOffset={6}>
+            <button
+              type="button"
+              onClick={() => { setIsDragging(false); setSourceFilePath(showSource ? null : filePath); }}
+              style={btnStyle}
+              aria-label={showSource ? '查看图片' : '查看 SVG 源码'}
+              aria-pressed={showSource}
+            >
+              {showSource ? <ImageIcon size={15} /> : <Code2 size={15} />}
+            </button>
+          </Tooltip>
+        )}
 
         {/* 在文件管理器中定位 */}
         <Tooltip content="在文件管理器中定位" side="bottom" sideOffset={6}>
@@ -521,6 +548,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           overflow: 'hidden',
           cursor: isDragging ? 'grabbing' : 'grab',
           position: 'relative',
+          visibility: showSource ? 'hidden' : 'visible',
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -584,6 +612,14 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
           />
         )}
       </div>
+
+      {showSource && (
+        <div style={{ position: 'absolute', inset: '0 0 28px', paddingTop: 56, background: 'var(--editor-bg)', zIndex: 15 }}>
+          <Suspense fallback={<div role="status" style={{ padding: 20, color: 'var(--editor-text-muted)' }}>正在加载 SVG 源码…</div>}>
+            <SvgSourceViewer filePath={filePath} viewerRef={sourceViewerRef} />
+          </Suspense>
+        </div>
+      )}
 
       {/* 底部优雅信息条 */}
       <div

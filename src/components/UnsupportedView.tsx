@@ -31,7 +31,7 @@ export function UnsupportedView({ filePath, fileName, exportNotice }: Props) {
     <div className="nb-file-icon">{getFileIcon(filePath, { size: 32 })}</div>
     <div className="nb-file-identity"><h2>{name}</h2><div className="nb-file-meta"><span>{ext}</span>{fileSize !== undefined && <span>{formatFileSize(fileSize)}</span>}</div></div>
     <div className="nb-file-description">
-      {exportNotice ? <><p>文件已保存。</p><p>可以用系统默认程序查看，或打开所在文件夹。</p></> : <><p>NoteBoard 专为 Markdown 笔记、自由画板及轻量纯文本设计。</p><p>当前文件格式暂不支持直接在软件内查看或编辑。</p></>}
+      {exportNotice ? <><p>文件已保存。</p><p>可以用系统默认程序查看，或打开所在文件夹。</p></> : <><p>此格式使用系统默认程序打开。</p><p>也可以定位到文件所在位置。</p></>}
       {exportNotice?.warnings && <p className="nb-file-warning">{exportNotice.warnings}</p>}
     </div>
     <div className="nb-file-actions">
