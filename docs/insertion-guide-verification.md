@@ -24,3 +24,9 @@
 79 项 `test/learning` 测试通过，新增覆盖实际插入点、当前输入行优先、嵌套/原子节点排除、居中/居右和极窄输入区。相关 ESLint、TypeScript、Vite、Rust release 与 NSIS 打包通过。首屏预算仍为 JS 1036.1KiB、CSS 96.4KiB，未增加入口重依赖。此次没有重复全应用压力或内存测试；资源清理回归通过，原有观察与帧合并机制保持不变。
 
 复现命令为 `node scripts/check-interactive-practice.mjs` 与 `--minimum`；设置 `NOTEBOARD_TEST_SCOPE` 可以隔离截图和 JSON，设置 `NOTEBOARD_TEST_CDP` 可以连接通过 `scripts/launch-native-qa.py` 创建的独立原生窗口。生产浏览器、原生截图、原始几何记录及构建日志随本次本地安装包归档。
+
+## 本地交付
+
+修复提交 `cb7d99f` 已打包为 `NoteBoard_1.0.2_insertion-guide-cb7d99f_x64-setup.exe` 并覆盖本机真实安装目录 `C:/Users/dell/AppData/Local/NoteBoard`。安装器返回 0，校验了真实文件句柄路径；安装后二进制与验收构建一致，仅 Tauri 的三字节安装标记不同。安装包 SHA-256 为 `b4a4b35dca6c396355f8a95addf0c24ef3e351cf8f99cc7a269141ac0f50ed82`，安装后程序 SHA-256 为 `da16badc0c68d095585bf3342f0c9e1072cc425c7f1297eab79a21045cc537c0`。
+
+证据保存在工作区上层 `outputs/insertion-guide-cb7d99f/`，包括 `package.json`、`installation.json`、浏览器与原生截图、原始结果及日志。原生截图保留了光标，避免截图工具默认隐藏 caret 造成视觉误解。本地覆盖完成，没有推送或公开发布。
