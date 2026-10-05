@@ -31,12 +31,15 @@ Markdown 文件仍保留源码与可视化模式的切换。
 npm run build
 node scripts/check-budget.mjs --check
 node scripts/check-interactive-practice.mjs
+node scripts/check-interactive-practice.mjs --compact
+node scripts/check-interactive-practice.mjs --minimum
 node scripts/measure-practice-memory.mjs
 node scripts/check-visual-workflow.mjs
 node scripts/check-board-loading.mjs --dist dist
 ```
 
 - `check-interactive-practice`：生产构建内实际完成 8 步示例引导，以鼠标拖选真实文本、操作真实工具栏及命令菜单，检查目标圈和箭头、卡片避让、三套主题及窄窗口。产物在 `.tmp/guided-showcase/`。`NOTEBOARD_TEST_CDP` 可连接隔离原生实例；此模式不注入模拟 IPC。
+- `--compact` 在 960×540 CSS 视口完整执行同一流程；`--minimum` 在应用最小宽度 680 的窗口完整执行。两者使用 2 倍像素密度，分别输出到 `compact/` 和 `minimum/`，保留常规截图。最小窗口应自动指向可见的浮动高亮按钮。
 - `measure-practice-memory`：连续 8 次打开及关闭功能示例，检查编辑器和引导 DOM 释放、GC 后 JS 堆与监听器数量。产物为 `.tmp/guided-showcase/memory.json`；浏览器模式仅模拟原生接口，不代表整个 Windows 进程的内存。
 - `check-visual-workflow`：实际图注/说明工具栏、父子编辑作用范围、中文组合输入、撤销重做、原始记录修复、跨块复制粘贴、序列化重开及 HTML 导出。产物位于 `.tmp/visual-workflow/`，包含混合内容 NB、HTML、截图与原生 PDF 输入。
 - `check-board-loading`：生产构建中自由画板创建、绘制、撤销重做、关闭回收，以及思维导图、多维表格和加载失败处理。

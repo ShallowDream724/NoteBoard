@@ -55,6 +55,14 @@ it('combines the actual explanation editor and Save button as the target', () =>
   expect(resolveGuideTarget(value, 'annotation-save').rects).toHaveLength(2);
   expect(resolveGuideTarget(value, 'annotation-save').element).toBe(body);
 });
+it('points to the floating highlight control when the responsive toolbar hides it', () => {
+  const value = editor(), top = document.createElement('div'), bubble = document.createElement('div');
+  top.className = 'responsive-toolbar'; bubble.setAttribute('role', 'toolbar'); bubble.setAttribute('aria-label', '文字工具栏');
+  const hidden = visible(document.createElement('button')), shown = visible(document.createElement('button'));
+  for (const button of [hidden, shown]) button.setAttribute('aria-label', '应用文字颜色与高亮');
+  hidden.style.visibility = 'hidden'; top.append(hidden); bubble.append(shown); document.body.append(top, bubble);
+  expect(resolveGuideTarget(value, 'highlight').element).toBe(shown);
+});
 it('reads the intended disclosure NodeView open state', () => {
   const value = editor(), disclosure = document.createElement('section'); disclosure.className = 'nb-disclosure';
   const title = document.createElement('input'); title.className = 'nb-disclosure-title'; title.value = GUIDE_DISCLOSURE;

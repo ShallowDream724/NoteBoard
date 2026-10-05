@@ -39,7 +39,8 @@ export function guideDisclosure(editor: Editor): HTMLElement | null {
 }
 export function resolveGuideTarget(editor: Editor, step: string): GuideTarget {
   if (step === 'read-note') return fromElement(visibleGuideElement(`[data-annotation-id="${GUIDE_NOTE}"].nb-annotation-indicator`, editor.view.dom));
-  if (step === 'highlight') return fromElement(visibleGuideElement('.responsive-toolbar button[aria-label="应用文字颜色与高亮"]'));
+  if (step === 'highlight') return fromElement(visibleGuideElement('.responsive-toolbar button[aria-label="应用文字颜色与高亮"]')
+    ?? visibleGuideElement('[role="toolbar"][aria-label="文字工具栏"] button[aria-label="应用文字颜色与高亮"]'));
   if (step === 'annotation-open') {
     const button = visibleGuideElement('[role="toolbar"][aria-label="文字工具栏"] button[aria-label="添加说明"]')
       ?? visibleGuideElement('.responsive-toolbar button[aria-label="添加说明"]');

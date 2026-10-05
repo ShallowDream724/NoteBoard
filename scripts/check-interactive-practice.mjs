@@ -6,14 +6,18 @@ import { preview } from 'vite';
 import { installBrowserNativeShell } from './browser-native-shell.mjs';
 const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const cdpUrl = process.env.NOTEBOARD_TEST_CDP;
-const directory = `.tmp/guided-showcase${cdpUrl ? '/native' : ''}`; await fs.mkdir(directory, { recursive: true });
+const minimum = process.argv.includes('--minimum');
+const compact = minimum || process.argv.includes('--compact');
+const directory = `.tmp/guided-showcase${cdpUrl ? '/native' : minimum ? '/minimum' : compact ? '/compact' : ''}`; await fs.mkdir(directory, { recursive: true });
 const server = await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = cdpUrl ? await chromium.connectOverCDP(cdpUrl) : await chromium.launch({ channel: 'msedge', headless: true });
 const report = { steps: [], layouts: [], errors: [] }; let page;
 const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 try {
-  page = cdpUrl ? browser.contexts()[0].pages()[0] : await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  page = cdpUrl ? browser.contexts()[0].pages()[0] : await browser.newPage(compact
+    ? { viewport: { width: minimum ? 680 : 960, height: 540 }, deviceScaleFactor: 2 }
+    : { viewport: { width: 1440, height: 1000 } });
   page.on('pageerror', error => report.errors.push(error.message));
   if (!cdpUrl) {
     await page.route('**/*', route => route.request().url().startsWith(origin) || route.request().url().startsWith('blob:') ? route.continue() : route.abort());
@@ -50,7 +54,8 @@ try {
   await page.mouse.move(range.x + range.width - 4, range.y + range.height / 2, { steps: 12 }); await page.mouse.up();
   assert.equal(await page.evaluate(() => String(window.getSelection())), '把想法写下来');
   await step('highlight');
-  const highlight = page.locator('.responsive-toolbar').first().getByRole('button', { name: '应用文字颜色与高亮', exact: true });
+  const topHighlight = page.locator('.responsive-toolbar').first().getByRole('button', { name: '应用文字颜色与高亮', exact: true });
+  const highlight = await topHighlight.isVisible() ? topHighlight : page.getByRole('toolbar', { name: '文字工具栏', exact: true }).getByRole('button', { name: '应用文字颜色与高亮', exact: true });
   await checkTarget(highlight); await page.screenshot({ path: `${directory}/02-highlight.png` }); await highlight.click();
   await step('annotation-open');
   const bubbleAdd = page.getByRole('toolbar', { name: '文字工具栏', exact: true }).getByRole('button', { name: '添加说明', exact: true });
@@ -86,7 +91,7 @@ try {
   await help.waitFor(); await help.locator('.github-alert-note .alert-title').getByText('Note', { exact: true }).waitFor();
   assert.equal(await help.locator('.alert-body').innerText(), '保留当前内容。');
   await page.screenshot({ path: `${directory}/06-menu-help.png` }); await page.keyboard.press('Escape');
-  for (const layout of cdpUrl ? [] : [
+  for (const layout of cdpUrl || compact ? [] : [
     { theme: 'hu-po', width: 1280, height: 900, scale: 1 },
     { theme: 'mo-ye', width: 960, height: 540, scale: 2 },
   ]) {
