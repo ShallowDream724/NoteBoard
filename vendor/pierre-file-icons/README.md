@@ -4,6 +4,8 @@ These SVG files are from [Pierre VSCode Icons](https://github.com/pierrecomputer
 
 `manifest.json` records the upstream URL, byte size and SHA256 of every unmodified source file. Its selection covers all 53 file-type tokens in Pierre Trees' `TOKEN_DEFS`: `c` and `cpp` share `lang-c`, giving 52 distinct source SVGs. Seven supplemental icons cover closed and open folders, code, code blocks, configuration, feeds and extensions, giving 59 distinct SVGs in total. The manifest keeps the token-to-source mapping for reference.
 
+The repository's `.gitattributes` preserves upstream SVG/license bytes and keeps generated sprite/license output in LF, so Windows checkout conversion does not invalidate fingerprints or regeneration checks.
+
 Generate the application's static sprite and public license with Node.js, without downloading files or installing packages:
 
 ```sh
