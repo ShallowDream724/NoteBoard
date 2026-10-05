@@ -228,7 +228,12 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
 
   return (
     <nav className="nb-document-outline" aria-label="文档大纲">
-      <Tooltip content="收起大纲" side="left"><button className="nb-outline-toggle" type="button" aria-label="收起大纲" onClick={toggleOutline}><ChevronsRight size={18}/></button></Tooltip>
+      <div className="nb-outline-header">
+        <Tooltip content="收起大纲" shortcut="Ctrl+Alt+B" side="left">
+          <button className="nb-outline-toggle" type="button" aria-label="收起大纲" onClick={toggleOutline}><ChevronsRight size={18}/></button>
+        </Tooltip>
+        <span className="nb-outline-title">大纲</span>
+      </div>
 
       {/* 标题列表 */}
       {headings.length === 0 ? (

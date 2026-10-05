@@ -642,7 +642,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                     {!isBoardPresentationMode && practiceSessionKey !== activeKey && showOutline && (outlineVisible ? (
                       <OutlinePanel editor={activeEditor} />
                     ) : (
-                      <Tooltip content="展开大纲" side="left">
+                      <Tooltip content="展开大纲" shortcut="Ctrl+Alt+B" side="left">
                         <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开大纲"
                           onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
                       </Tooltip>

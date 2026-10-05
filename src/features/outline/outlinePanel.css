@@ -11,11 +11,21 @@
   box-sizing: border-box;
   background: var(--editor-bg);
   padding:10px;
-  border:1px solid var(--editor-border);
-  border-radius:10px;
-  box-shadow:var(--shadow-md,0 6px 20px #00000014);
+  border:0;
+  border-radius:8px;
+  box-shadow:0 2px 12px rgb(15 23 42 / 5%);
 }
-.nb-outline-toggle { align-self:flex-end; display:grid; place-items:center; width:30px; height:30px; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; margin-bottom:12px; }
+/* One bounded, static backdrop; unsupported/reduced transparency stays solid. */
+@supports (backdrop-filter:blur(8px)) {
+  .nb-document-outline { background:color-mix(in srgb,var(--editor-bg) 94%,transparent); backdrop-filter:blur(8px); }
+}
+:root[data-theme="mo-ye"] .nb-document-outline { box-shadow:0 2px 12px rgb(0 0 0 / 18%); }
+@media(prefers-reduced-transparency:reduce) {
+  .nb-document-outline { background:var(--editor-bg); backdrop-filter:none; }
+}
+.nb-outline-header { display:flex; align-items:center; gap:4px; flex-shrink:0; margin-bottom:4px; }
+.nb-outline-title { color:var(--editor-text-secondary); font-size:12px; font-weight:500; line-height:1.4; }
+.nb-outline-toggle { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; }
 .nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }
 .nb-outline-toggle:active { background:var(--editor-selection-background); }
 .nb-outline-list { min-height:0; overflow:auto; padding:2px 0; scrollbar-width:thin; scrollbar-color:transparent transparent; }

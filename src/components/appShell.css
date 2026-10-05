@@ -84,10 +84,6 @@
   }
   .nb-document-stage .nb-document-outline {
     max-height: min(440px, calc(100% - 96px));
-    padding: 10px;
-    border: 1px solid var(--editor-border);
-    border-radius: 10px;
-    box-shadow: var(--shadow-md, 0 6px 20px #00000014);
   }
 }
 
