@@ -1,4 +1,4 @@
-/* global window, document, NodeFilter, requestAnimationFrame */
+/* global window, document, NodeFilter, HTMLElement, getComputedStyle, requestAnimationFrame */
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
@@ -8,12 +8,14 @@ const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODUL
 const cdpUrl = process.env.NOTEBOARD_TEST_CDP;
 const minimum = process.argv.includes('--minimum');
 const compact = minimum || process.argv.includes('--compact');
-const directory = `.tmp/guided-showcase${cdpUrl ? minimum ? '/native-minimum' : compact ? '/native-compact' : '/native' : minimum ? '/minimum' : compact ? '/compact' : ''}`; await fs.mkdir(directory, { recursive: true });
+const scope = process.env.NOTEBOARD_TEST_SCOPE || 'guided-showcase';
+assert(/^[a-z\d][a-z\d_-]*$/i.test(scope), 'The screenshot scope must be a directory name');
+const directory = `.tmp/${scope}${cdpUrl ? minimum ? '/native-minimum' : compact ? '/native-compact' : '/native' : minimum ? '/minimum' : compact ? '/compact' : ''}`; await fs.mkdir(directory, { recursive: true });
 const smallViewport = { width: minimum ? 680 : 960, height: 540 };
 const server = await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = cdpUrl ? await chromium.connectOverCDP(cdpUrl) : await chromium.launch({ channel: 'msedge', headless: true });
-const report = { steps: [], completions: [], recoveries: [], layouts: [], errors: [] }; let page;
+const report = { directory, steps: [], completions: [], recoveries: [], insertionTargets: [], layouts: [], errors: [] }; let page;
 const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 try {
   page = cdpUrl ? browser.contexts()[0].pages()[0] : await browser.newPage(compact
@@ -100,6 +102,84 @@ try {
   assert.equal(await page.getByRole('button', { name: '动手试一试', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: '交互练习', exact: true }).count(), 0);
   const editor = page.locator('.nb-prose.ProseMirror').last();
+  // Tiptap attaches its live editor to this DOM node. Geometry is observed
+  // through that real EditorView; this helper never dispatches a transaction.
+  const insertionGeometry = async () => editor.evaluate(element => {
+    const view = element.editor?.view;
+    if (!view) throw new Error('The sample must own a live EditorView');
+    const box = rect => ({ x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top });
+    const { doc, selection } = view.state, candidates = [];
+    doc.forEach((node, pos, index) => {
+      let plainText = true; node.forEach(child => { if (!child.isText) plainText = false; });
+      if (node.type.name !== 'paragraph' || node.content.size && (!plainText || !/^\/\w*$/.test(node.textContent))) return;
+      const paragraph = view.nodeDOM(pos);
+      if (!(paragraph instanceof HTMLElement)) return;
+      const current = selection.empty && selection.$head.depth === 1 && selection.$head.before(1) === pos;
+      const inputPosition = current ? selection.head : pos + 1;
+      const caret = box(view.coordsAtPos(inputPosition));
+      const line = box(paragraph.getBoundingClientRect());
+      const point = { x: Math.min(line.x + line.width - 2, Math.max(line.x + 2, caret.x + 12)), y: caret.y + caret.height / 2 };
+      candidates.push({ pos, index, text: node.textContent, current, inputPosition, caret, line, point,
+        fontSize: parseFloat(getComputedStyle(paragraph).fontSize), inputReachable: paragraph.contains(document.elementFromPoint(point.x, point.y)) });
+    });
+    const target = candidates.find(candidate => candidate.current) ?? candidates[0];
+    const ring = document.querySelector('[data-guide-spotlight]');
+    const panel = document.querySelector('[role="region"][aria-label="上手引导"]');
+    return { target, candidates, selection: { head: selection.head, from: selection.from, to: selection.to, empty: selection.empty, depth: selection.$head.depth },
+      focused: view.hasFocus(), ring: ring ? box(ring.getBoundingClientRect()) : null, panel: panel ? box(panel.getBoundingClientRect()) : null,
+      rings: document.querySelectorAll('[data-guide-spotlight]').length, beaks: document.querySelectorAll('[data-guide-beak]').length };
+  });
+  const intersection = (left, right) => Math.max(0, Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x))
+    * Math.max(0, Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y));
+  const checkInsertionTarget = async (label, { selected = false, expectedPosition } = {}) => {
+    await frames();
+    // Observe a settled ring after the real DOM selection or viewport changes.
+    await page.waitForFunction(element => {
+      const view = element.editor?.view, ring = document.querySelector('[data-guide-spotlight]')?.getBoundingClientRect();
+      if (!view || !ring) return false;
+      const selection = view.state.selection;
+      if (!selection.empty || selection.$head.depth !== 1 || selection.$head.parent.type.name !== 'paragraph') return true;
+      const caret = view.coordsAtPos(selection.head);
+      return caret.left >= ring.left - 1 && caret.right <= ring.right + 1 && caret.top >= ring.top - 1 && caret.bottom <= ring.bottom + 1;
+    }, await editor.elementHandle(), { timeout: 3000 });
+    const geometry = await insertionGeometry(), { target, ring, panel } = geometry;
+    assert(target && ring && panel, `${label}: the insertion line, spotlight, and card are visible`);
+    assert.equal(geometry.rings, 1, `${label}: one insertion point has one spotlight`);
+    assert.equal(geometry.beaks, 1, `${label}: the insertion point retains one popover beak`);
+    const { caret, line, fontSize } = target;
+    assert(caret.x >= ring.x - 1 && caret.x + caret.width <= ring.x + ring.width + 1
+      && caret.y >= ring.y - 1 && caret.y + caret.height <= ring.y + ring.height + 1, `${label}: the spotlight contains the complete real caret`);
+    assert(ring.width <= fontSize * 6 + 8 && ring.width >= Math.min(line.width, fontSize * 3), `${label}: the writing cue is a compact font-sized area`);
+    assert(ring.width < line.width * .5, `${label}: the cue does not grow with the document line width`);
+    assert(Math.abs(ring.height - caret.height - 8) < 2, `${label}: the cue follows the real caret line height`);
+    assert(ring.x >= line.x - 5 && ring.x + ring.width <= line.x + line.width + 5, `${label}: the cue stays within its paragraph`);
+    const overlaps = { inputLine: intersection(line, panel), caret: intersection({ ...caret, width: Math.max(1, caret.width) }, panel), spotlight: intersection(ring, panel) };
+    assert(overlaps.inputLine < 1 && overlaps.caret < 1 && overlaps.spotlight < 1, `${label}: the instruction card leaves the input line, caret, and cue uncovered`);
+    assert(target.inputReachable, `${label}: a real mouse click can reach the writing point`);
+    if (selected) {
+      assert(geometry.focused && geometry.selection.empty, `${label}: the guide preserves the editor focus and collapsed caret`);
+      assert.equal(geometry.selection.head, target.inputPosition, `${label}: geometry follows the actual selection head`);
+      assert.equal(geometry.selection.depth, 1, `${label}: typing uses a top-level paragraph`);
+    }
+    if (expectedPosition !== undefined) assert.equal(target.inputPosition, expectedPosition, `${label}: the clicked blank insertion position remains unchanged`);
+    report.insertionTargets.push({ label, ...geometry, cardOverlapArea: overlaps }); return geometry;
+  };
+  const checkBlankHandle = async target => {
+    await page.mouse.move(target.point.x, target.point.y); await frames();
+    const handle = page.getByRole('button', { name: '添加内容', exact: true });
+    await handle.waitFor({ state: 'visible' });
+    const reachable = await handle.evaluate(element => {
+      const box = element.getBoundingClientRect(), panel = document.querySelector('[role="region"][aria-label="上手引导"]')?.getBoundingClientRect();
+      const x = box.left + box.width / 2, y = box.top + box.height / 2;
+      return { x, y, hit: element.contains(document.elementFromPoint(x, y)), panelCovers: panel && x >= panel.left && x <= panel.right && y >= panel.top && y <= panel.bottom };
+    });
+    assert(reachable.hit && !reachable.panelCovers, 'The empty paragraph handle remains reachable beside the writing cue');
+    // Reach the handle with the real pointer, then return to the writing area
+    // before its deliberate hover-open delay starts a separate block menu.
+    await page.mouse.move(reachable.x, reachable.y); await frames();
+    await page.mouse.move(target.point.x, target.point.y); await frames();
+    report.blankHandle = reachable;
+  };
   const words = editor.locator('p').filter({ hasText: '把想法写下来' }).first();
   const wordBox = async (text = '把想法写下来') => {
     const box = await words.evaluate((element, text) => {
@@ -213,14 +293,41 @@ try {
   await page.screenshot({ path: `${directory}/05-annotation-save-spaces.png` });
   await complete('annotation-save', () => panel.getByRole('button', { name: '保存', exact: true }).click());
   await step('insert-menu');
+  const blankBefore = await checkInsertionTarget('step6-before-click');
+  assert.equal(blankBefore.target.text, '', 'Step 6 starts from an actual empty paragraph');
+  await checkBlankHandle(blankBefore.target);
   await page.screenshot({ path: `${directory}/06-insert-menu.png` });
-  const blank = await page.locator('[data-guide-spotlight]').first().boundingBox();
+  let insertionParagraph = blankBefore.target.pos;
   await complete('insert-menu', async () => {
-    await page.mouse.click(blank.x + 12, blank.y + blank.height / 2); await frames(); await page.keyboard.insertText('/note');
+    await page.mouse.click(blankBefore.target.point.x, blankBefore.target.point.y);
+    await checkInsertionTarget('step6-after-click', { selected: true, expectedPosition: blankBefore.target.inputPosition });
+    await page.screenshot({ path: `${directory}/06-insert-menu-caret.png`, caret: 'initial' });
+    // A genuine Enter creates a second eligible line. The writing cue must
+    // follow the user's new caret instead of remaining on the first empty one.
+    await page.keyboard.press('Enter');
+    const nextBlank = await checkInsertionTarget('step6-current-blank', { selected: true });
+    assert.equal(nextBlank.target.text, '', 'The new current paragraph is empty');
+    assert(nextBlank.candidates.some(candidate => candidate.pos === blankBefore.target.pos), 'The first empty paragraph remains available');
+    assert.notEqual(nextBlank.target.pos, blankBefore.target.pos, 'The cue follows the current empty paragraph even when an earlier blank exists');
+    insertionParagraph = nextBlank.target.pos;
+    await page.screenshot({ path: `${directory}/06-insert-menu-current-blank.png`, caret: 'initial' });
+    await page.keyboard.insertText('/note');
   });
   await step('insert-callout');
-  const noteCommand = page.getByRole('button', { name: /^Note(，快捷触发词.*)?$/ }).last();
+  const noteCommand = page.getByRole('button', { name: 'Note，快捷触发词 /note', exact: true });
   await checkTarget(noteCommand); await page.screenshot({ path: `${directory}/07-insert-callout.png` });
+  // Home places the real caret before the slash, which naturally ends the
+  // suggestion session. Escape also exits the guide and cannot test recovery.
+  await page.keyboard.press('Home'); await noteCommand.waitFor({ state: 'hidden' });
+  await remainsPending('insert-callout', 'Closing the slash menu keeps the insertion step active');
+  assert(await card.innerText().then(text => text.includes('可以再次找到 Note 提示块')), 'Step 7 renders the command recovery instruction');
+  const fallback = await checkInsertionTarget('step7-command-fallback', { selected: true });
+  assert.equal(fallback.target.text, '/note', 'The recovery cue follows the actual plain-text slash query');
+  assert.equal(fallback.target.pos, insertionParagraph, 'The recovery cue stays on the user’s insertion paragraph');
+  await page.screenshot({ path: `${directory}/07-insert-callout-fallback.png` });
+  report.recoveries.push('insert-command-closed');
+  await page.keyboard.press('End'); await noteCommand.waitFor({ state: 'visible' }); await frames();
+  await checkTarget(noteCommand); await page.screenshot({ path: `${directory}/07-insert-callout-restored.png` });
   await complete('insert-callout', () => noteCommand.click());
   await page.keyboard.insertText('这是我写下的第一条笔记。');
   await step('disclosure');
@@ -232,7 +339,7 @@ try {
   assert.equal(await card.count(), 0); assert.equal(await page.locator('[data-guide-step="summary"]').count(), 0);
   await page.screenshot({ path: `${directory}/09-complete.png` });
   assert.deepEqual(report.steps, ['read-note', 'selection', 'highlight', 'annotation-open', 'annotation-save', 'insert-menu', 'insert-callout', 'disclosure']);
-  assert.deepEqual(report.recoveries, ['selection-partial', 'highlight-partial', 'annotation-wrong-range']);
+  assert.deepEqual(report.recoveries, ['selection-partial', 'highlight-partial', 'annotation-wrong-range', 'insert-command-closed']);
   assert(await editor.innerText().then(text => text.includes('这是我写下的第一条笔记。')));
   // Open help from a real editor menu, including its first lazy-load boundary.
   // Use an unannotated paragraph at its exposed left edge. The saved note's

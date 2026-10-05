@@ -38,6 +38,34 @@ it('keeps the individual rectangles of a phrase wrapped over two lines', () => {
   expect(target.rects).toEqual([{ left: 100, top: 120, width: 100, height: 20 }, { left: 100, top: 144, width: 50, height: 20 }]);
   expect(target.element).toBe(value.view.dom.querySelector('p'));
 });
+it.each(['insert-menu', 'insert-callout'])('marks the real insertion position rather than the full paragraph for %s', step => {
+  const value = editor(); value.commands.setContent('<p>正文</p><p></p>');
+  const pos = value.state.doc.child(0).nodeSize, paragraph = value.view.nodeDOM(pos) as HTMLElement;
+  visible(paragraph, 100, 200, 1100, 32); paragraph.style.fontSize = '20px';
+  const coords = vi.spyOn(value.view, 'coordsAtPos').mockReturnValue({ left: 100, right: 100, top: 202, bottom: 230 });
+  const target = resolveGuideTarget(value, step);
+  expect(coords).toHaveBeenCalledWith(pos + 1);
+  expect(target.element).toBe(paragraph);
+  expect(target.rects).toEqual([{ left: 100, top: 202, width: 100, height: 28 }]);
+  expect(target.fallback).toBe(step === 'insert-callout' ? 'command' : undefined);
+});
+it('follows a slash query caret in another eligible line without moving the selection', () => {
+  const value = editor(); value.commands.setContent('<p></p><p>正文</p><p>/no</p>');
+  const pos = value.state.doc.child(0).nodeSize + value.state.doc.child(1).nodeSize;
+  const paragraph = value.view.nodeDOM(pos) as HTMLElement; visible(paragraph, 100, 300, 1100, 32); paragraph.style.fontSize = '18px';
+  value.commands.setTextSelection(pos + 4);
+  const selection = value.state.selection, coords = vi.spyOn(value.view, 'coordsAtPos').mockReturnValue({ left: 130, right: 130, top: 302, bottom: 328 });
+  const target = resolveGuideTarget(value, 'insert-menu');
+  expect(target.element).toBe(paragraph); expect(coords).toHaveBeenCalledWith(selection.head);
+  expect(target.rects).toEqual([{ left: 130, top: 302, width: 90, height: 26 }]);
+  expect(value.state.selection).toBe(selection);
+});
+it('keeps an unavailable caret unmarked instead of fabricating a full paragraph outline', () => {
+  const value = editor(); value.commands.setContent('<p></p>');
+  visible(value.view.dom.querySelector('p')!, 100, 200, 1100, 32);
+  vi.spyOn(value.view, 'coordsAtPos').mockImplementation(() => { throw Error('unmounted text'); });
+  expect(resolveGuideTarget(value, 'insert-menu').rects).toEqual([]);
+});
 it('measures only the selected text fragments and merges split marks without including annotation widgets', () => {
   const value = editor(); value.commands.setContent(`<p>前<strong>${GUIDE_WORD.slice(0, 3)}</strong>${GUIDE_WORD.slice(3)}后</p>`);
   const strong = value.view.dom.querySelector('strong')!;

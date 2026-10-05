@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipGuideRect, guideAnchor, guideControlAnchor, mergeTextRects, unionRects } from '../../src/features/learning/guideGeometry';
+import { clipGuideRect, guideAnchor, guideControlAnchor, guideInsertionRect, mergeTextRects, unionRects } from '../../src/features/learning/guideGeometry';
 
 describe('guide text bounds', () => {
   it('unites multiline phrase bounds and returns no target for an empty range', () => {
@@ -40,6 +40,20 @@ describe('guide text bounds', () => {
     expect(clipGuideRect({ left: 370, top: 420, width: 100, height: 60 }, bounds)).toEqual({ left: 370, top: 420, width: 30, height: 20 });
     expect(clipGuideRect({ left: 40, top: 100, width: 100, height: 20 }, bounds)).toBeNull();
     expect(clipGuideRect({ left: 400, top: 180, width: 100, height: 20 }, bounds)).toBeNull();
+  });
+  it.each([100, 600, 1100])('keeps a compact empty-line cue around a caret at %i, including centered and right-aligned lines', left => {
+    const caret = { left, top: 240, width: 0, height: 28 }, line = { left: 100, top: 238, width: 1000, height: 32 };
+    const cue = guideInsertionRect(caret, line, 20)!;
+    expect(cue.width).toBe(100); expect(cue.top).toBe(caret.top); expect(cue.height).toBe(caret.height);
+    expect(cue.left).toBeGreaterThanOrEqual(line.left); expect(cue.left + cue.width).toBeLessThanOrEqual(line.left + line.width);
+    expect(cue.left).toBeLessThanOrEqual(caret.left); expect(cue.left + cue.width).toBeGreaterThanOrEqual(caret.left);
+  });
+  it('uses the available width on a very short line and rejects unmeasurable insertion areas', () => {
+    const caret = { left: 100, top: 240, width: 0, height: 28 }, line = { left: 100, top: 238, width: 42, height: 32 };
+    expect(guideInsertionRect(caret, line, 20)).toEqual({ ...caret, width: 42 });
+    expect(guideInsertionRect({ ...caret, height: 0 }, line, 20)).toBeNull();
+    expect(guideInsertionRect(caret, { ...line, width: 0 }, 20)).toBeNull();
+    expect(guideInsertionRect(caret, line, NaN)).toBeNull();
   });
   it('anchors a multiline popover on the actual first line when there is room above', () => {
     const first = { left: 240, top: 250, width: 100, height: 20 }, last = { left: 100, top: 275, width: 80, height: 20 };

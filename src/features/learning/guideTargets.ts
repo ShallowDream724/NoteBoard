@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import { GUIDE_DISCLOSURE, GUIDE_NOTE, GUIDE_WORD } from './practiceCourse';
 import { findPracticeText, guideBlankPosition, guideSelectionMatches } from './practiceDetection';
-import { mergeTextRects, type GuideRect } from './guideGeometry';
+import { guideInsertionRect, mergeTextRects, type GuideRect } from './guideGeometry';
 import { editorDocumentKey } from '../editor-md/editorDocumentCodec';
 
 export interface GuideTarget { element: HTMLElement | null; rects: GuideRect[]; contextRects?: GuideRect[]; fallback?: 'selection' | 'command' | 'annotation' | 'annotation-target' | 'missing-text' }
@@ -22,12 +22,20 @@ function textControlTarget(editor: Editor, button: HTMLElement): GuideTarget {
   return { ...fromElement(button), contextRects: guideTextTarget(editor).rects };
 }
 function blankTarget(editor: Editor): GuideTarget {
-  const pos = guideBlankPosition(editor.state.doc);
-  const target = fromElement(pos === null ? null : editor.view.nodeDOM(pos) as HTMLElement | null);
-  // The drag handle can overlap the first few pixels of an empty paragraph.
-  // Point to its safe writing area, not the handle's hit area.
-  target.rects = target.rects.map(r => ({ ...r, left: r.left + 28, width: Math.max(1, r.width - 40) }));
-  return target;
+  const { selection, doc } = editor.state;
+  const pos = guideBlankPosition(doc, selection.empty ? selection.head : undefined);
+  if (pos === null) return { element: null, rects: [] };
+  const element = editor.view.nodeDOM(pos);
+  if (!(element instanceof HTMLElement)) return { element: null, rects: [] };
+  try {
+    const node = doc.nodeAt(pos)!;
+    const input = selection.empty && selection.head >= pos + 1 && selection.head <= pos + 1 + node.content.size
+      ? selection.head : pos + 1;
+    const caret = editor.view.coordsAtPos(input);
+    const area = guideInsertionRect({ left: caret.left, top: caret.top, width: caret.right - caret.left, height: caret.bottom - caret.top },
+      rect(element.getBoundingClientRect()), parseFloat(getComputedStyle(element).fontSize));
+    return { element, rects: area ? [area] : [] };
+  } catch { return { element, rects: [] }; }
 }
 export function guideTextTarget(editor: Editor): GuideTarget {
   const positions = findPracticeText(editor.state.doc, GUIDE_WORD);

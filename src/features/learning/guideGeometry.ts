@@ -26,6 +26,15 @@ export function clipGuideRect(rect: GuideRect, bounds: GuideRect): GuideRect | n
   return width > 0 && height > 0 ? { left, top, width, height } : null;
 }
 
+/** An empty line has no text range. Mark a short writing area at its real
+ * insertion position, preserving the caret at either aligned edge. */
+export function guideInsertionRect(caret: GuideRect, line: GuideRect, fontSize: number): GuideRect | null {
+  if (caret.height <= 0 || line.width <= 0 || !Number.isFinite(fontSize) || fontSize <= 0) return null;
+  const width = Math.min(line.width, fontSize * 5);
+  const left = Math.max(line.left, Math.min(caret.left, right(line) - width));
+  return { left, top: caret.top, width, height: caret.height };
+}
+
 /** Keep a multiline cue attached to a real edge line. If neither side fits,
  * the whole occupied range remains the collision boundary for Radix to flip. */
 export function guideAnchor(rects: GuideRect[], bounds: GuideRect, cardHeight = 160): { rect: GuideRect | null; side: 'top' | 'bottom' } {

@@ -90,6 +90,22 @@ describe('showcase guide semantic outcomes', () => {
     expect(guideBlankPosition(editor.state.doc)).toBe(position);
     expect(guideBlankPosition(make({ type: 'doc', content: [p('正文')] }).state.doc)).toBeNull();
   });
+  it('prefers the current eligible top-level line and falls back when the caret is elsewhere', () => {
+    const editor = make({ type: 'doc', content: [p(''), p('正文'), p('/no'), p('')] });
+    const query = editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize;
+    const last = query + editor.state.doc.child(2).nodeSize;
+    expect(guideBlankPosition(editor.state.doc, query + 4)).toBe(query);
+    expect(guideBlankPosition(editor.state.doc, last + 1)).toBe(last);
+    expect(guideBlankPosition(editor.state.doc, 4)).toBe(0);
+  });
+  it('does not treat nested paragraphs or slash text mixed with an inline atom as a command line', () => {
+    const editor = make({ type: 'doc', content: [{ type: 'githubAlert', content: [p('')] }, { type: 'paragraph', content: [
+      { type: 'text', text: '/no' }, { type: 'mathInline', attrs: { latex: 'x' } },
+    ] }, p('')] });
+    const blank = editor.state.doc.child(0).nodeSize + editor.state.doc.child(1).nodeSize;
+    expect(guideBlankPosition(editor.state.doc, 2)).toBe(blank);
+    expect(guideBlankPosition(editor.state.doc, blank - 2)).toBe(blank);
+  });
   it('rejects missing, destroyed and foreign editor identities without reading their content', () => {
     const foreign = { isDestroyed: false, get state() { throw Error('foreign document read'); } } as unknown as Editor;
     expect(ownsPracticeEditor(foreign, 'showcase')).toBe(false);

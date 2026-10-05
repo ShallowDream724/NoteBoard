@@ -20,12 +20,23 @@ export function findPracticeText(doc: Node, text: string): TextRange | null {
   });
   return range;
 }
-export function guideBlankPosition(doc: Node): number | null {
-  let found: number | null = null;
-  doc.forEach((node, pos) => {
-    if (found === null && node.type.name === 'paragraph' && (!node.content.size || /^\/\w*$/.test(node.textContent))) found = pos;
-  });
-  return found;
+function acceptsSlashInput(node: Node): boolean {
+  return node.type.name === 'paragraph' && (!node.content.size || /^\/\w*$/.test(node.textBetween(0, node.content.size, '', '\ufffc')));
+}
+export function guideBlankPosition(doc: Node, caret?: number): number | null {
+  // Keep the cue with the user's current eligible line. Nested paragraphs are
+  // not slash-command entry points; inline atoms are not an empty slash query.
+  if (caret !== undefined && caret >= 0 && caret <= doc.content.size) {
+    const position = doc.resolve(caret);
+    if (position.depth === 1 && acceptsSlashInput(position.parent)) return position.before(1);
+  }
+  let pos = 0;
+  for (let index = 0; index < doc.childCount; index++) {
+    const node = doc.child(index);
+    if (acceptsSlashInput(node)) return pos;
+    pos += node.nodeSize;
+  }
+  return null;
 }
 export function guideCalloutCount(doc: Node): number {
   let count = 0;
