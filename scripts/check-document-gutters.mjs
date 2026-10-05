@@ -73,6 +73,12 @@ async function openShowcase(current) {
   await current.locator('.nb-onboarding-layer').waitFor({ state: 'hidden' });
   await prose(current).waitFor();
   await frames(current);
+  const openOutline = current.getByRole('button', { name: '展开大纲', exact: true });
+  if (await openOutline.isVisible()) {
+    await openOutline.click();
+    await current.locator('.nb-document-outline').waitFor();
+    await frames(current);
+  }
   assert.equal(await current.getByRole('button', { name: '使用系统字体', exact: true }).count(), 0);
 }
 
@@ -331,6 +337,9 @@ try {
       await page.goto(origin);
     }
     await openShowcase(page);
+    if (cdpUrl && layout.explorer && (await geometry(page)).pane.x < 4) {
+      await page.keyboard.press('Control+Shift+b'); await frames(page);
+    }
     if (!layout.explorer) { await page.keyboard.press('Control+Shift+b'); await frames(page); }
     const screenshot = await imageScreenshot(page, layout.name);
     const initial = await geometry(page), entry = { requested: layout, initial, screenshot };
