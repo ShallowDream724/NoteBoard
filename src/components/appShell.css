@@ -35,11 +35,11 @@
   --document-outline-width: clamp(180px, 21cqi, 232px);
   --document-outline-inset: 28px;
   --document-outline-space: 0px;
-  --document-control-lane: 88px;
-  --document-end-gutter: 24px;
+  --document-gutter: 80px;
+  --document-block-handle-width: 50px;
   --document-top-space: 3.2em;
   --document-bottom-space: calc(4em * var(--content-line-height, 1.7));
-  --document-reading-width: min(100%, calc(var(--content-max-width) + 64px));
+  --document-reading-width: min(100%, calc(var(--content-max-width) + 2 * var(--document-gutter)));
   min-height: 0;
 }
 .nb-document-content {
@@ -56,24 +56,25 @@
   box-sizing: border-box;
 }
 
-/* The control lane is already part of the document width. Do not add a second
- * centering margin in a compact pane when the outline is closed. */
+/* Center the content lane, including equal space for its edge controls. */
 @container document-pane (max-width: 960px) {
   .nb-document-stage { --document-reading-width: 100%; }
 }
 @container document-content (max-width: 640px) {
   .nb-document-content > .ProseMirror {
     --document-reading-width: 100%;
-    --document-end-gutter: 16px;
   }
 }
 
 @container document-pane (max-width: 720px) {
   .nb-document-stage {
     --document-top-space: 2.8em;
+    --document-gutter: 64px;
+    --document-block-handle-width: 30px;
     --document-outline-width: 164px;
     --document-outline-inset: 20px;
   }
+  .nb-document-stage .nb-block-grip { display: none; }
 }
 
 /* At narrow pane sizes a bounded floating navigator leaves editing width intact. */

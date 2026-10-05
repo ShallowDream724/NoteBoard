@@ -271,7 +271,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       hoveredCollection = blockInfo.node.type.name === 'imageCollection' ? blockElement : null;
 
       const empty = isEmptyParagraph(blockInfo.node);
-      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, empty ? 30 : 50, handleRef.current?.offsetHeight || 30);
+      // Read the same container policy as CSS, including transitions between
+      // empty/nonempty blocks; the previous handle's measured width can be stale.
+      const width = empty ? 30 : parseFloat(getComputedStyle(editorDom).getPropertyValue('--document-block-handle-width')) || 50;
+      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, width, handleRef.current?.offsetHeight || 30);
 
       setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) && current.empty === empty ? current : ({
         visible: true,
@@ -570,7 +573,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
           }}
           aria-label={state.empty ? '添加内容' : `拖动${blockLabel}`}
         >
-          {state.empty ? <Plus size={18} aria-hidden="true"/> : <><BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span aria-hidden="true">⠿</span></>}
+          {state.empty ? <Plus size={18} aria-hidden="true"/> : <><BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span className="nb-block-grip" aria-hidden="true">⠿</span></>}
         </button>
       </Popover.Anchor>
       <Popover.Portal><Popover.Content {...menuHover.contentProps} className="nb-block-menu-popover" side="left" align="start" sideOffset={5} collisionPadding={10}

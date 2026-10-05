@@ -12,7 +12,7 @@
 .nb-block-style-row + .nb-block-style-row { border-top:0; }
 .nb-block-context-menu hr { border:0; border-top:1px solid var(--editor-border); margin:5px 0; }
 .nb-block-heading-icon { font:600 11px/1 var(--ui-font-family); color:var(--editor-accent); }
-.nb-block-drag-handle.nb-block-with-menu { box-sizing:border-box; width:50px; height:30px; display:flex; align-items:center; justify-content:center; gap:5px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); }
+.nb-block-drag-handle.nb-block-with-menu { box-sizing:border-box; width:var(--document-block-handle-width,50px); height:30px; display:flex; align-items:center; justify-content:center; gap:5px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-surface); }
 .nb-block-drag-handle.nb-block-with-menu:hover,.nb-block-drag-handle.nb-block-with-menu.is-hovered { transform:none; }
 .nb-block-drag-handle.nb-empty-block-handle { width:30px; }
 .nb-empty-block-menu { width:260px; max-height:min(480px,calc(100vh - 32px)); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
