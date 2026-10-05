@@ -1,63 +1,94 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Editor } from '@tiptap/core';
-const restart = vi.hoisted(() => ({ start: vi.fn() }));
-vi.mock('../../src/features/learning/startInteractivePractice', () => ({ startInteractivePractice: restart.start }));
+import { Editor, type JSONContent } from '@tiptap/core';
 vi.mock('../../src/stores/windowStore', async () => {
   const { create } = await import('zustand');
   return { useWindowStore: create(() => ({ tabs: [], activeKey: null })) };
 });
+const targets = vi.hoisted(() => ({ resolve: vi.fn(), complete: vi.fn() }));
+vi.mock('../../src/features/learning/guideTargets', () => ({
+  resolveGuideTarget: targets.resolve, guideUICompleted: targets.complete, visibleGuideElement: () => null,
+}));
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
-import { decodeNativeDocument } from '../../src/core/nativeDocument';
+import { encodeNativeDocument } from '../../src/core/nativeDocument';
 import { initializeEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
-import { createPracticeContent, PRACTICE_WORD } from '../../src/features/learning/practiceCourse';
+import { GUIDE_WORD } from '../../src/features/learning/practiceCourse';
 import { findPracticeText } from '../../src/features/learning/practiceDetection';
 import { usePracticeStore } from '../../src/features/learning/practiceStore';
 import { InteractivePracticePanel } from '../../src/features/learning/InteractivePracticePanel';
 
 let root: Root, editor: Editor;
-const click = (text: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('.nb-practice-panel button')).find(button => button.textContent === text)!.click();
-const render = (activeEditor: Editor | null = editor, activeKey = 'practice') => root.render(<InteractivePracticePanel activeEditor={activeEditor} activeKey={activeKey}/>);
+const mutationDisconnect = vi.fn(), resizeDisconnect = vi.fn();
+const render = (activeEditor: Editor | null = editor, activeKey = 'showcase') => root.render(<InteractivePracticePanel activeEditor={activeEditor} activeKey={activeKey}/>);
+const tick = () => act(async () => { await vi.advanceTimersByTimeAsync(20); });
+const alert: JSONContent = { type: 'githubAlert', content: [{ type: 'paragraph', content: [{ type: 'text', text: '已有提示' }] }] };
 beforeEach(async () => {
-  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  const content = createPracticeContent(); editor = new Editor({ extensions: buildDocumentExtensions(), content: decodeNativeDocument(content) });
-  initializeEditorDocument(editor, content, 'noteboard', '', 'practice');
+  vi.useFakeTimers(); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(0), 1));
+  vi.stubGlobal('cancelAnimationFrame', (timer: number) => clearTimeout(timer));
+  vi.stubGlobal('MutationObserver', class { observe() {} takeRecords() { return []; } disconnect = mutationDisconnect; });
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect = resizeDisconnect; });
+  mutationDisconnect.mockClear(); resizeDisconnect.mockClear(); targets.complete.mockReturnValue(false);
+  targets.resolve.mockReturnValue({ element: null, rects: [{ left: 100, top: 120, width: 100, height: 20 }, { left: 100, top: 144, width: 60, height: 20 }] });
+  const content: JSONContent = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: GUIDE_WORD }] }, alert] };
+  editor = new Editor({ extensions: buildDocumentExtensions(), content }); initializeEditorDocument(editor, encodeNativeDocument(content), 'noteboard', '', 'showcase');
   const host = document.createElement('div'); document.body.append(host, editor.view.dom); root = createRoot(host);
-  useWindowStore.setState({ tabs: [{ key: 'practice', kind: 'noteboard' } as Tab, { key: 'other', kind: 'noteboard' } as Tab], activeKey: 'practice' });
-  usePracticeStore.getState().start('practice'); await act(async () => render());
+  useWindowStore.setState({ tabs: [{ key: 'showcase', kind: 'noteboard' } as Tab, { key: 'other', kind: 'noteboard' } as Tab], activeKey: 'showcase' });
+  usePracticeStore.getState().start('showcase'); await act(async () => render()); await tick();
 });
-afterEach(async () => { await act(async () => root.unmount()); editor.destroy(); usePracticeStore.getState().exit(); document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); restart.start.mockReset(); });
+afterEach(async () => {
+  await act(async () => root.unmount()); editor.destroy(); usePracticeStore.getState().exit();
+  document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers();
+});
 
-it('marks actual selection complete and waits for explicit continuation without moving the caret', async () => {
-  const range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
-  await act(async () => editor.commands.setTextSelection(range));
-  expect(usePracticeStore.getState().completed).toEqual(['selection']); expect(usePracticeStore.getState().stepId).toBe('selection');
-  expect(document.querySelector('[role="status"]')?.textContent).toContain('已完成'); expect(editor.state.selection.from).toBe(range.from);
-  await act(async () => click('继续')); expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(editor.state.selection.from).toBe(range.from);
+it('renders a portal with separate multiline rings and completes exact selection without moving the caret', async () => {
+  expect(document.querySelectorAll('[data-guide-spotlight]')).toHaveLength(2); expect(document.querySelector('[data-guide-arrow]')).not.toBeNull();
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+  await act(async () => usePracticeStore.getState().selectStep('selection')); await tick();
+  await act(async () => editor.commands.setTextSelection(range)); await tick();
+  expect(usePracticeStore.getState().completed).toContain('selection'); expect(editor.state.selection.from).toBe(range.from);
+  await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+  expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(editor.state.selection.from).toBe(range.from);
 });
-it('supports skipping, revisiting and collapsing, and exits while preserving the document', async () => {
-  const doc = editor.state.doc, tabs = useWindowStore.getState().tabs;
-  await act(async () => click('跳过此项')); expect(usePracticeStore.getState().skipped).toEqual(['selection']);
-  await act(async () => document.querySelector<HTMLButtonElement>('.nb-practice-course li button')!.click()); expect(usePracticeStore.getState().stepId).toBe('selection');
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="收起练习任务"]')!.click()); expect(document.querySelector('.nb-practice-body')).toBeNull();
-  await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="退出练习"]')!.click());
-  expect(usePracticeStore.getState().sessionKey).toBeNull(); expect(editor.state.doc).toBe(doc); expect(useWindowStore.getState().tabs).toBe(tabs);
-});
-it('pauses on another tab and rejects an old editor during the return transition', async () => {
-  const range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
+it('pauses on another tab, refuses a foreign editor and releases its observers', async () => {
+  const range = findPracticeText(editor.state.doc, GUIDE_WORD)!, off = vi.spyOn(editor, 'off');
+  await act(async () => { usePracticeStore.getState().selectStep('selection'); }); await tick();
+  const mutationStops = mutationDisconnect.mock.calls.length, resizeStops = resizeDisconnect.mock.calls.length;
   await act(async () => { useWindowStore.setState({ activeKey: 'other' }); render(editor, 'other'); });
-  expect(document.querySelector('.nb-practice-panel')).toBeNull(); editor.commands.setTextSelection(range); expect(usePracticeStore.getState().completed).toEqual([]);
-  const foreign = new Editor({ extensions: buildDocumentExtensions(), content: '<p>观察与记录</p>' });
-  initializeEditorDocument(foreign, createPracticeContent(), 'noteboard', '', 'other');
-  foreign.commands.setTextSelection({ from: 1, to: 6 });
-  await act(async () => { useWindowStore.setState({ activeKey: 'practice' }); render(foreign); });
-  expect(usePracticeStore.getState().completed).toEqual([]); expect(document.querySelector('[role="status"]')?.textContent).toContain('切回可视化');
-  await act(async () => render()); expect(usePracticeStore.getState().completed).toEqual(['selection']); foreign.destroy();
+  expect(document.querySelector('.nb-onboarding-layer')).toBeNull();
+  expect(mutationDisconnect.mock.calls.length).toBeGreaterThan(mutationStops); expect(resizeDisconnect.mock.calls.length).toBeGreaterThan(resizeStops);
+  expect(off).toHaveBeenCalledWith('transaction', expect.any(Function));
+  const measurements = targets.resolve.mock.calls.length;
+  editor.commands.setTextSelection(range); await tick(); expect(usePracticeStore.getState().completed).toEqual([]); expect(targets.resolve).toHaveBeenCalledTimes(measurements);
+  const foreign = { isDestroyed: false, get state() { throw Error('foreign editor read'); } } as unknown as Editor;
+  await act(async () => { useWindowStore.setState({ activeKey: 'showcase' }); render(foreign); }); await tick();
+  expect(document.querySelector('.nb-onboarding-layer')).toBeNull(); expect(usePracticeStore.getState().completed).toEqual([]);
 });
-it('requests a fresh copy only through explicit restart', async () => {
-  restart.start.mockResolvedValue('new-practice'); const doc = editor.state.doc;
-  await act(async () => click('重新练习'));
-  expect(restart.start).toHaveBeenCalledWith({ fresh: true }); expect(editor.state.doc).toBe(doc);
+it('does not count an existing sample callout and waits for a new insertion', async () => {
+  await act(async () => usePracticeStore.getState().selectStep('insert-callout')); await tick();
+  expect(usePracticeStore.getState().completed).toEqual([]);
+  await act(async () => editor.commands.insertContentAt(editor.state.doc.content.size, alert)); await tick();
+  expect(usePracticeStore.getState().completed).toEqual(['insert-callout']);
+});
+it('exits on Escape while preserving the document and tab identity', async () => {
+  const doc = editor.state.doc, tabs = useWindowStore.getState().tabs, off = vi.spyOn(editor, 'off');
+  await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+  expect(usePracticeStore.getState().sessionKey).toBeNull(); expect(document.querySelector('.nb-onboarding-layer')).toBeNull();
+  expect(editor.state.doc).toBe(doc); expect(useWindowStore.getState().tabs).toBe(tabs);
+  expect(off).toHaveBeenCalledWith('transaction', expect.any(Function));
+  expect(mutationDisconnect).toHaveBeenCalled(); expect(resizeDisconnect).toHaveBeenCalled();
+});
+it.each([false, true])('takes a fresh baseline when restarting the same sample (batched: %s)', async batched => {
+  if (batched) {
+    await act(async () => { usePracticeStore.getState().exit(); editor.commands.insertContentAt(editor.state.doc.content.size, alert); usePracticeStore.getState().start('showcase'); });
+  } else {
+    await act(async () => usePracticeStore.getState().exit());
+    editor.commands.insertContentAt(editor.state.doc.content.size, alert);
+    await act(async () => usePracticeStore.getState().start('showcase'));
+  }
+  await tick();
+  await act(async () => usePracticeStore.getState().selectStep('insert-callout')); await tick();
+  expect(usePracticeStore.getState().completed).toEqual([]);
 });

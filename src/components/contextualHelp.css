@@ -1,25 +1,34 @@
-.nb-tooltip-content.nb-contextual-help-content { display: block; padding: 11px; width: min(286px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: hidden; }
-.nb-contextual-help { min-width: 0; font-size: 12px; line-height: 1.5; font-weight: 400; }
-.nb-contextual-help-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; }
-.nb-contextual-help-scope { margin-top: 2px; color: var(--editor-text-muted); font-size: 10.5px; }
-.nb-contextual-help p { margin: 7px 0 0; color: var(--editor-text-secondary, var(--editor-text)); }
-.nb-contextual-help-illustration { display: block; width: 100%; height: auto; max-height: min(104px, 20vh); margin-top: 9px; border-radius: 5px; background: var(--toolbar-hover); overflow: hidden; }
-.nb-help-page { fill: var(--editor-surface); stroke: var(--editor-border); stroke-width: 1; }
-.nb-help-table { fill: var(--editor-surface); stroke: var(--editor-text-muted); stroke-width: 1; }
-.nb-help-table-surface { fill: var(--editor-surface); stroke: none; }
-.nb-help-grid { fill: none; stroke: var(--editor-border); stroke-width: 1; }
-.nb-help-text-line { fill: none; stroke: var(--editor-text-secondary, var(--editor-text)); stroke-width: 2; stroke-linecap: round; opacity: .65; }
-.nb-help-ink { fill: none; stroke: var(--editor-text); stroke-width: 2; }
-.nb-help-highlight { fill: var(--editor-selection-background); stroke: var(--accent-500); stroke-width: 1; }
-.nb-help-accent-line { fill: none; stroke: var(--accent-500); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.nb-help-formula { fill: var(--editor-text); font-family: Georgia, serif; font-size: 17px; }
-.nb-help-small-text { fill: var(--editor-text-secondary, var(--editor-text)); font-family: var(--ui-font-family); font-size: 10px; }
-.nb-help-table-move { animation: nb-help-table-move 4s ease-in-out 1; }
-.nb-help-formula-pan { animation: nb-help-formula-pan 4s ease-in-out 1; }
-.nb-help-scroll-thumb { animation: nb-help-thumb-pan 4s ease-in-out 1; }
-.nb-help-disclosure-body { transform-origin: center 42px; animation: nb-help-disclosure 4s ease-in-out 1; }
-@keyframes nb-help-table-move { 0%, 100% { transform: translateX(24px); } 35%, 60% { transform: translateX(65px); } }
-@keyframes nb-help-formula-pan { 0%, 100% { transform: translateX(0); } 35%, 60% { transform: translateX(-35px); } }
-@keyframes nb-help-thumb-pan { 0%, 100% { transform: translateX(0); } 35%, 60% { transform: translateX(75px); } }
-@keyframes nb-help-disclosure { 0%, 100% { opacity: 1; transform: scaleY(1); } 35%, 60% { opacity: 0; transform: scaleY(.1); } }
-@media (prefers-reduced-motion: reduce) { .nb-contextual-help-illustration * { animation: none !important; } .nb-contextual-help-content { animation: none !important; } }
+.nb-tooltip-content.nb-contextual-help-content { display:block; box-sizing:border-box; padding:11px; width:min(286px,var(--radix-tooltip-content-available-width,286px),calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:hidden; }
+.nb-contextual-help { min-width:0; font-size:12px; line-height:1.5; font-weight:400; }
+.nb-contextual-help-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; font-weight:600; }
+.nb-contextual-help-scope { margin-top:2px; color:var(--editor-text-muted); font-size:10.5px; }
+.nb-contextual-help > p { margin:7px 0 0; color:var(--editor-text-secondary,var(--editor-text)); }
+.nb-contextual-help-illustration { display:block; margin-top:9px; padding:10px; border:1px solid var(--editor-border); border-radius:6px; background:var(--editor-bg); overflow:hidden; pointer-events:none; }
+/* Scale the viewport; node geometry and presentation stay in their shared CSS. */
+.nb-help-document { zoom:.75; font:16px/1.7 var(--content-font-family,var(--ui-font-family)); color:var(--editor-text); min-width:0; }
+.nb-help-document > :first-child { margin-top:0; }
+.nb-help-document > :last-child { margin-bottom:0; }
+.nb-help-document .tableWrapper, .nb-help-document table { margin-block:0; }
+.nb-help-document table { width:max-content; }
+.nb-help-document .nb-table-accessories { border:0; }
+.nb-help-document .nb-disclosure { margin:0; }
+.nb-help-document .nb-disclosure-body p { margin:0; }
+.nb-help-document .github-alert { margin:0; }
+.nb-help-document .formula-source-display { padding-top:0; }
+.nb-help-document .nb-help-inline-preview .math-node-preview { position:relative; visibility:visible; top:auto; left:auto; margin:5px 0 0 42px; width:max-content; }
+.nb-help-document:has(.nb-help-inline-preview) > p { margin:0; }
+.nb-help-empty-math { color:var(--editor-text-muted); text-align:center; }
+.nb-help-figure { margin:0; }
+.nb-help-image { height:68px; display:flex; align-items:center; justify-content:center; border:1px solid var(--editor-border); border-radius:6px; color:var(--editor-text-muted); background:var(--editor-surface); }
+.nb-help-annotation > p { margin:0 22px 12px 0; }
+.nb-help-annotation .nb-annotation-panel { position:relative; z-index:auto; width:100%; }
+.nb-help-document .math-node-display { display:block; padding:8px 10px; text-align:left; }
+.nb-help-document .math-node-preview { display:block; }
+.nb-help-document .math-preview { display:inline-block; width:max-content; }
+.nb-help-document .katex-display { margin:0; }
+.nb-help-document .katex-html { white-space:var(--math-white-space,nowrap); }
+.nb-contextual-help-illustration[data-preview-kind^=formula-] .nb-help-document { width:220px; max-width:100%; }
+.nb-help-document[data-formula-reading=wrap] .math-node-preview { --math-white-space:normal; }
+.nb-help-document[data-formula-reading=scroll] .math-node-preview { padding-bottom:10px; }
+.nb-help-document[data-table-reading=scroll] .tableWrapper { padding-bottom:10px; }
+@media(prefers-reduced-motion:reduce) { .nb-contextual-help-illustration *, .nb-contextual-help-content { animation:none!important; transition:none!important; } }

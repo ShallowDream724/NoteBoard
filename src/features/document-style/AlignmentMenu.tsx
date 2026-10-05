@@ -29,11 +29,11 @@ export function AlignmentMenu({ editor }: { editor: Editor }) {
     <Popover.Portal><Popover.Content className="nb-alignment-menu" sideOffset={6} collisionPadding={8}
       {...hover.contentProps} onMouseDown={event => event.preventDefault()} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
       <HoverMenuContext.Provider value={hover}>
-      {targets.length > 0 && horizontal.map(([value,label,Icon]) => <Tooltip key={value} content={label} helpKey={cells ? 'table.cell.horizontal' : undefined} side="right" disabled={!cells}><button type="button" onClick={() => apply(() => {
+      {targets.length > 0 && horizontal.map(([value,label,Icon]) => <Tooltip key={value} content={label} helpKey={cells ? `table.cell.horizontal.${value}` : undefined} side="right" disabled={!cells}><button type="button" onClick={() => apply(() => {
         setParagraphPresentation(editor, { textAlign: value });
       })}><Icon size={16}/><span>{label}</span>{textAlign === value && <Check size={14}/>}</button></Tooltip>)}
       {targets.length > 0 && <hr/>}
-      {cells ? vertical.map(([value,label,Icon]) => <Tooltip key={value} content={label} helpKey="table.cell.vertical" side="right"><button type="button" onClick={() => apply(() => { alignTableSelection(editor, { verticalAlign: value }); })}>
+      {cells ? vertical.map(([value,label,Icon]) => <Tooltip key={value} content={label} helpKey={`table.cell.vertical.${value}`} side="right"><button type="button" onClick={() => apply(() => { alignTableSelection(editor, { verticalAlign: value }); })}>
         <Icon size={16}/><span>{label}</span>{verticalAlign === value && <Check size={14}/>}</button></Tooltip>) : canIndent && <>
         <button type="button" title="减少缩进" disabled={scope.indentBlocks.every(({ node }) => !node.attrs.indent)} onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: -1 }); })}><IndentDecrease size={16}/><span>减少缩进</span></button>
         <button type="button" title="增加缩进" disabled={scope.indentBlocks.every(({ node }) => node.attrs.indent >= 8)} onClick={() => apply(() => { setParagraphPresentation(editor, { indentBy: 1 }); })}><IndentIncrease size={16}/><span>增加缩进</span></button>

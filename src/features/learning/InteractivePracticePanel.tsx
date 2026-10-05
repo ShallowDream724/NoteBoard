@@ -1,109 +1,108 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import { Check, ChevronDown, ChevronUp, ListChecks, RotateCcw, X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { usePracticeStore } from './practiceStore';
-import { PRACTICE_TASKS } from './practiceCourse';
-import { findPracticeText, observePracticeTask, ownsPracticeEditor } from './practiceDetection';
+import { GUIDE_STEPS } from './practiceCourse';
+import { guideCalloutCount, guideTaskSatisfied, ownsPracticeEditor } from './practiceDetection';
+import { guideArrow, placeGuideCard, unionRects, type GuideRect } from './guideGeometry';
+import { guideUICompleted, resolveGuideTarget, visibleGuideElement } from './guideTargets';
 import { useWindowStore } from '../../stores/windowStore';
 import './interactivePractice.css';
 
-export interface InteractivePracticePanelProps {
-  activeEditor: Editor | null;
-  activeKey: string | null;
-}
+export interface InteractivePracticePanelProps { activeEditor: Editor | null; activeKey: string | null }
+interface Placement { rects: GuideRect[]; card: GuideRect; target: GuideRect | null; fallback?: 'selection' | 'command'; blocked: boolean }
+const emptyPlacement: Placement = { rects: [], card: { left: 12, top: 100, width: 290, height: 200 }, target: null, blocked: true };
 
+/** One scoped observer for one active sample. All overlay pixels ignore pointer input. */
 export function InteractivePracticePanel({ activeEditor, activeKey }: InteractivePracticePanelProps) {
-  const session = usePracticeStore();
-  const [collapsed, setCollapsed] = useState(false);
-  const [left, setLeft] = useState(false);
-  const [historyUndone, setHistoryUndone] = useState(false);
-  const [restarting, setRestarting] = useState(false);
-  const [error, setError] = useState('');
-  const index = PRACTICE_TASKS.findIndex(task => task.id === session.stepId);
-  const task = PRACTICE_TASKS[index];
-  const finished = session.stepId === 'summary';
-  const completed = session.completed.includes(session.stepId);
-  const visible = !!session.sessionKey && activeKey === session.sessionKey;
-  const editorReady = ownsPracticeEditor(activeEditor, session.sessionKey);
+  const session = usePracticeStore(), card = useRef<HTMLDivElement>(null), id = useId().replace(/:/g, '');
+  const baseline = useRef<{ generation: number; callouts: number } | null>(null);
+  const [placement, setPlacement] = useState<Placement>(emptyPlacement);
+  const index = GUIDE_STEPS.findIndex(step => step.id === session.stepId), step = GUIDE_STEPS[index];
+  const summary = session.stepId === 'summary', completed = session.completed.includes(session.stepId);
+  const active = !!session.sessionKey && activeKey === session.sessionKey && ownsPracticeEditor(activeEditor, session.sessionKey);
+  const next = () => session.selectStep(GUIDE_STEPS[index + 1]?.id ?? 'summary');
 
-  useEffect(() => { setCollapsed(false); setError(''); }, [session.sessionKey]);
   useEffect(() => {
-    setHistoryUndone(false);
-    if (!session.sessionKey || completed || !task) return;
-    const key = session.sessionKey, id = task.id;
-    return observePracticeTask({ editor: activeEditor, activeKey, sessionKey: key, stepId: id,
-      current: () => {
-        const state = usePracticeStore.getState();
-        return state.sessionKey === key && state.stepId === id && useWindowStore.getState().activeKey === key;
-      },
-      onComplete: () => usePracticeStore.getState().complete(key, id),
-      onHistoryProgress: setHistoryUndone,
+    if (!active || !activeEditor || !session.sessionKey) return;
+    const editor = activeEditor, key = session.sessionKey, stepId = session.stepId, generation = session.generation;
+    if (baseline.current?.generation !== generation) baseline.current = { generation, callouts: guideCalloutCount(editor.state.doc) };
+    let alive = true, frame = 0, initialScroll = true, lastGeometry = '';
+    let checkedDocument: typeof editor.state.doc | null = null, checkedSelection: typeof editor.state.selection | null = null;
+    const current = () => alive && !editor.isDestroyed && usePracticeStore.getState().generation === generation && usePracticeStore.getState().sessionKey === key && usePracticeStore.getState().stepId === stepId && useWindowStore.getState().activeKey === key;
+    const measure = () => {
+      frame = 0; if (!current()) return;
+      const modal = visibleGuideElement('[aria-modal="true"]');
+      const target = resolveGuideTarget(editor, stepId), box = unionRects(target.rects);
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const contentTarget = !!target.element && editor.view.dom.contains(target.element), topBoundary = contentTarget ? 76 : 4;
+      if (!modal && initialScroll && contentTarget && target.element && box) {
+        initialScroll = false;
+        if (box.top < 90 || box.top + box.height > viewport.height - 32) {
+          target.element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+          schedule(); return;
+        }
+      }
+      const rects = target.rects.filter(r => r.width > 0 && r.height > 0 && r.top < viewport.height - 24 && r.top + r.height > topBoundary && r.left < viewport.width && r.left + r.width > 0)
+        .map(r => ({ left: Math.max(4, r.left), top: Math.max(topBoundary, r.top), width: Math.max(1, Math.min(viewport.width - 4, r.left + r.width) - Math.max(4, r.left)), height: Math.max(1, Math.min(viewport.height - 24, r.top + r.height) - Math.max(topBoundary, r.top)) }));
+      const anchor = unionRects(rects);
+      const obstacles = Array.from(document.querySelectorAll<HTMLElement>('.nb-annotation-panel,[role="toolbar"].nb-editor-selection-toolbar')).map(element => {
+        const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height };
+      });
+      const size = { width: Math.min(290, viewport.width - 24), height: card.current?.offsetHeight ?? 210 };
+      const nextPlacement: Placement = { rects, target: anchor, fallback: target.fallback, blocked: !!modal,
+        card: placeGuideCard(anchor ?? { left: viewport.width / 2, top: 90, width: 0, height: 0 }, size, viewport, obstacles) };
+      const signature = JSON.stringify(nextPlacement);
+      if (signature !== lastGeometry) { lastGeometry = signature; setPlacement(nextPlacement); }
+      if (!modal && !completed) {
+        const changed = checkedDocument !== editor.state.doc || stepId === 'selection' && checkedSelection !== editor.state.selection;
+        checkedDocument = editor.state.doc; checkedSelection = editor.state.selection;
+        if (guideUICompleted(editor, stepId) || changed && guideTaskSatisfied(stepId, editor.state, baseline.current!.callouts)) usePracticeStore.getState().complete(key, stepId);
+      }
+    };
+    const schedule = () => { if (current() && !frame) frame = requestAnimationFrame(measure); };
+    const mutations = new MutationObserver(records => {
+      if (records.some(record => !(record.target instanceof Element ? record.target : record.target.parentElement)?.closest('.nb-onboarding-layer'))) schedule();
     });
-  }, [activeEditor, activeKey, session.sessionKey, session.stepId, completed, task]);
+    // NodeViews and portals expose real visible state. Attribute filtering avoids
+    // reacting to animations; document edits are already coalesced by transaction.
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-open', 'data-shortcuts-suspended', 'aria-expanded'] });
+    const resize = new ResizeObserver(schedule); resize.observe(editor.view.dom); if (card.current) resize.observe(card.current);
+    window.addEventListener('scroll', schedule, true); window.addEventListener('resize', schedule);
+    editor.on('transaction', schedule); editor.on('destroy', schedule);
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !event.defaultPrevented && !event.isComposing) usePracticeStore.getState().exit(); };
+    window.addEventListener('keydown', escape);
+    void document.fonts?.ready.then(schedule); schedule();
+    return () => { alive = false; cancelAnimationFrame(frame); mutations.disconnect(); resize.disconnect(); window.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule); window.removeEventListener('keydown', escape); editor.off('transaction', schedule); editor.off('destroy', schedule); };
+  }, [activeEditor, activeKey, active, session.sessionKey, session.generation, session.stepId, completed]);
+  useEffect(() => {
+    if (!active || !completed || !step?.autoAdvance) return;
+    const timer = setTimeout(() => usePracticeStore.getState().selectStep(GUIDE_STEPS[index + 1]?.id ?? 'summary'), 350);
+    return () => clearTimeout(timer);
+  }, [active, completed, step, index, session.generation]);
 
-  if (!visible || (!task && !finished)) return null;
-  const next = () => session.selectStep(PRACTICE_TASKS[index + 1]?.id ?? 'summary');
-  const skip = () => { session.skip(session.stepId); next(); };
-  const locate = () => {
-    if (!editorReady || !task?.target) return;
-    const range = findPracticeText(activeEditor.state.doc, task.target);
-    if (!range) { setError('这段内容已被改动，可以在正文继续练习或跳过此项。'); return; }
-    const dom = activeEditor.view.domAtPos(range.from).node;
-    const element = dom instanceof Element ? dom : dom.parentElement;
-    element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
-    setError('');
-  };
-  const restart = async () => {
-    if (restarting) return;
-    setRestarting(true); setError('');
-    try { const { startInteractivePractice } = await import('./startInteractivePractice'); await startInteractivePractice({ fresh: true }); }
-    catch { setError('练习副本暂时无法创建，请稍后再试。'); }
-    finally { setRestarting(false); }
-  };
-
-  return <aside className={`nb-practice-panel${left ? ' nb-practice-panel--left' : ''}${collapsed ? ' nb-practice-panel--collapsed' : ''}`} aria-label="互动练习">
-    <header className="nb-practice-header">
-      <span className="nb-practice-label">互动练习</span>
-      <span className="nb-practice-counter">{finished ? '练习回顾' : `${index + 1} / ${PRACTICE_TASKS.length}`}</span>
-      <button type="button" className="nb-practice-icon" aria-label={collapsed ? '展开练习任务' : '收起练习任务'} aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>
-      <button type="button" className="nb-practice-icon" aria-label="退出练习" onClick={session.exit}><X size={16}/></button>
-    </header>
-    {!collapsed && <div className="nb-practice-body">
-      {finished ? <>
-        <h2>你的笔记已经有了新变化</h2>
-        <p>完成 {session.completed.length} 项，跳过 {session.skipped.length} 项。练习文档可以继续编辑，也可以保存。</p>
-        <p className="nb-practice-hint">接下来可以点击窗口上方的导出按钮（Ctrl + E），让这份笔记成为网页或 PDF。</p>
-      </> : <>
-        <span className="nb-practice-group">{task.group}</span>
-        <h2>{task.title}</h2>
-        <p className="nb-practice-instruction">{task.instruction}</p>
-        <p className="nb-practice-hint">{task.hint}</p>
-        <div className={`nb-practice-status${completed ? ' nb-practice-status--complete' : ''}`} role="status" aria-live="polite">
-          {completed ? <><Check size={15}/>已完成，准备好后继续</> : historyUndone ? '已撤销，现在重做让修改恢复' : !editorReady ? '切回可视化编辑即可继续' : '在正文中试一试'}
-        </div>
-        {task.target && <button type="button" className="nb-practice-link" disabled={!editorReady} onClick={locate}>定位练习内容</button>}
-      </>}
-      {error && <p className="nb-practice-error" role="alert">{error}</p>}
-      <details className="nb-practice-course">
-        <summary><ListChecks size={15}/>练习清单<span>{session.completed.length} 项完成</span></summary>
-        <ol>{PRACTICE_TASKS.map((item, at) => <li key={item.id}>
-          <button type="button" aria-current={item.id === session.stepId ? 'step' : undefined} onClick={() => session.selectStep(item.id)}>
-            <span className="nb-practice-task-number">{session.completed.includes(item.id) ? <Check size={13}/> : at + 1}</span>
-            <span>{item.title}</span><span className="nb-practice-task-state">{session.completed.includes(item.id) ? '完成' : session.skipped.includes(item.id) ? '跳过' : ''}</span>
-          </button>
-        </li>)}</ol>
-      </details>
-      <footer className="nb-practice-footer">
-        {finished ? <button type="button" className="nb-practice-primary" onClick={session.exit}>结束练习</button> : <>
-          <button type="button" className="nb-practice-secondary" onClick={skip}>跳过此项</button>
-          <button type="button" className="nb-practice-primary" disabled={!completed} onClick={next}>{index === PRACTICE_TASKS.length - 1 ? '查看回顾' : '继续'}</button>
-        </>}
+  if (!active || (!step && !summary)) return null;
+  const locate = () => { if (activeEditor) resolveGuideTarget(activeEditor, session.stepId).element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); };
+  const arrow = placement.target ? guideArrow(placement.card, placement.target) : null;
+  const instruction = !completed && placement.fallback === 'selection' ? '先拖选圈中的文字，再点击浮动工具栏里的“添加说明”。'
+    : !completed && placement.fallback === 'command' ? '点击圈出的空行，输入 /note，重新打开命令菜单。' : step?.instruction;
+  return createPortal(<div className="nb-onboarding-layer" data-guide-step={session.stepId} style={{ visibility: placement.blocked ? 'hidden' : 'visible' }}>
+    <svg className="nb-onboarding-map" aria-hidden="true" focusable="false">
+      <defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 1 1 L 8 5 L 1 9" fill="none" stroke="var(--editor-accent)" strokeWidth="1.8"/></marker></defs>
+      {placement.rects.map((r, index) => <rect key={index} data-guide-spotlight="" x={r.left - 4} y={r.top - 4} width={r.width + 8} height={r.height + 8} rx="5" className="nb-onboarding-ring"/>)}
+      {arrow && <path data-guide-arrow="" d={arrow.path} className="nb-onboarding-arrow" markerEnd={`url(#${id}-arrow)`}/>}
+    </svg>
+    <div ref={card} className="nb-onboarding-card" role="region" aria-label="上手引导" style={{ left: placement.card.left, top: placement.card.top, width: placement.card.width, maxHeight: 'calc(100vh - 24px)' }}>
+      <header><span>{summary ? '已经上手了' : `${index + 1} / ${GUIDE_STEPS.length}`}</span><button type="button" aria-label="退出引导" onClick={session.exit}><X size={16}/></button></header>
+      <div className="nb-onboarding-copy" aria-live="polite"><h2>{summary ? '继续写你自己的笔记' : step.title}</h2><p>{summary ? '这份示例可以继续修改、保存。往下看看图片、表格和公式，菜单上的讲解也可以随时查看。' : completed ? step.success : instruction}</p></div>
+      {!summary && !placement.target && <button type="button" className="nb-onboarding-locate" onClick={locate}>定位到这一步</button>}
+      <footer>{!summary && <button type="button" className="nb-onboarding-skip" onClick={() => { session.skip(session.stepId); next(); }}>跳过这步</button>}
+        {summary ? <button type="button" className="nb-onboarding-next" onClick={session.exit}>开始使用</button>
+          : completed && !step.autoAdvance ? <button type="button" className="nb-onboarding-next" onClick={next}><Check size={14}/>{index === GUIDE_STEPS.length - 1 ? '完成' : '继续'}</button>
+          : <span className="nb-onboarding-state">{completed ? '完成' : '试着操作圈出的内容'}</span>}
       </footer>
-      <div className="nb-practice-options">
-        <button type="button" onClick={() => setLeft(value => !value)}>{left ? '移到右侧' : '移到左侧'}</button>
-        <button type="button" disabled={restarting} onClick={() => void restart()}><RotateCcw size={12}/>{restarting ? '正在创建…' : '重新练习'}</button>
-      </div>
-    </div>}
-  </aside>;
+    </div>
+  </div>, document.body);
 }
 export default InteractivePracticePanel;

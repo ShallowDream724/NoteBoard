@@ -1,31 +1,21 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const factory = vi.hoisted(() => ({ create: vi.fn() }));
-vi.mock('../../src/features/welcome/welcomeActions', () => ({ openNativeTemplate: factory.create }));
 vi.mock('../../src/stores/windowStore', async () => {
   const { create } = await import('zustand');
-  const store = create(() => ({ tabs: [], activeKey: null, activateTab: (key: string) => store.setState({ activeKey: key } as never) }));
-  return { useWindowStore: store };
+  return { useWindowStore: create(() => ({ tabs: [], activeKey: null })) };
 });
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
 import { usePracticeStore } from '../../src/features/learning/practiceStore';
-import { startInteractivePractice } from '../../src/features/learning/startInteractivePractice';
-afterEach(() => { usePracticeStore.getState().exit(); factory.create.mockReset(); useWindowStore.setState({ tabs: [], activeKey: null }); });
-it('resumes an existing owned practice without recreating content or resetting progress', async () => {
-  useWindowStore.setState({ tabs: [{ key: 'practice', kind: 'noteboard' } as Tab], activeKey: 'other' });
-  usePracticeStore.getState().start('practice'); usePracticeStore.getState().complete('practice', 'selection');
-  expect(await startInteractivePractice()).toBe('practice'); expect(factory.create).not.toHaveBeenCalled();
-  expect(useWindowStore.getState().activeKey).toBe('practice'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
+import { startShowcaseGuide } from '../../src/features/learning/startInteractivePractice';
+const tab = (key: string, kind: Tab['kind']): Tab => ({ key, kind, displayName: `${key}.nb`, path: null, language: '', isDirty: true, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
+afterEach(() => { usePracticeStore.getState().exit(); useWindowStore.setState({ tabs: [], activeKey: null }); });
+it('attaches to the existing NB sample without replacing tabs or resetting unsaved state', () => {
+  const tabs = [tab('showcase', 'noteboard')];
+  useWindowStore.setState({ tabs, activeKey: 'showcase' }); startShowcaseGuide('showcase');
+  expect(usePracticeStore.getState().sessionKey).toBe('showcase'); expect(usePracticeStore.getState().stepId).toBe('read-note');
+  expect(useWindowStore.getState().tabs).toBe(tabs); expect(tabs[0].isDirty).toBe(true);
 });
-it('explicit restart creates a new NB copy and leaves the old tab intact', async () => {
-  const tabs = [{ key: 'old', kind: 'noteboard' } as Tab]; useWindowStore.setState({ tabs }); usePracticeStore.getState().start('old');
-  factory.create.mockReturnValue('new'); expect(await startInteractivePractice({ fresh: true })).toBe('new');
-  expect(factory.create).toHaveBeenCalledWith('公园观察练习.nb', expect.stringContaining('#!noteboard 1'));
-  expect(useWindowStore.getState().tabs).toBe(tabs); expect(usePracticeStore.getState().sessionKey).toBe('new');
-});
-it('coalesces repeated start clicks into one copy and cancels restart if the user exits during loading', async () => {
-  factory.create.mockReturnValue('first');
-  expect(await Promise.all([startInteractivePractice(), startInteractivePractice()])).toEqual(['first', 'first']);
-  expect(factory.create).toHaveBeenCalledTimes(1);
-  const pending = startInteractivePractice({ fresh: true }); usePracticeStore.getState().exit();
-  await expect(pending).rejects.toThrow('已退出或切换'); expect(factory.create).toHaveBeenCalledTimes(1);
+it('rejects a missing tab or a tab with the wrong document format', () => {
+  useWindowStore.setState({ tabs: [tab('markdown', 'markdown')] });
+  startShowcaseGuide('missing'); expect(usePracticeStore.getState().sessionKey).toBeNull();
+  startShowcaseGuide('markdown'); expect(usePracticeStore.getState().sessionKey).toBeNull();
 });

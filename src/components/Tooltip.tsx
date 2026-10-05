@@ -7,8 +7,11 @@ import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
 import { useResolvedShortcutLabel } from '../core/useShortcutBindings';
-import { ContextualHelpContent, type ContextualHelpKey } from './contextualHelp';
+import type { ContextualHelpKey } from './contextualHelp';
 import { HoverMenuContext } from './useHoverMenu';
+
+// Load the shared document presentation only when a rich explanation opens.
+const ContextualHelpContent = React.lazy(() => import('./contextualHelp').then(module => ({ default: module.ContextualHelpContent })));
 
 const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
 const TooltipInput = createContext<React.RefObject<'pointer' | 'keyboard' | null> | null>(null);
@@ -276,7 +279,7 @@ export function Tooltip({
           style={{ ...boundedContent, ...(helpKey ? { pointerEvents: 'auto' as const } : {}) }}
           className={`nb-tooltip-content${helpKey ? ' nb-contextual-help-content' : ''}`}
         >
-          {helpKey ? open && <ContextualHelpContent helpKey={helpKey} title={content} shortcut={shortcut}/> : typeof content === 'string' ? <span>{content}</span> : content}
+          {helpKey ? open && <React.Suspense fallback={<span>{content}</span>}><ContextualHelpContent helpKey={helpKey} title={content} shortcut={shortcut}/></React.Suspense> : typeof content === 'string' ? <span>{content}</span> : content}
           {!helpKey && shortcut && (
             <kbd className="nb-tooltip-kbd">
               {shortcut}

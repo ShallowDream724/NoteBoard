@@ -13,6 +13,7 @@ import { newNativeDocument, openShowcase } from '@/features/welcome/welcomeActio
 import { INTRODUCTION_SEEN_KEY, openFirstRunShowcase } from '@/features/welcome/firstRun';
 import { storeImageAsset } from '@/core/ipc/commands';
 import { showToast } from '@/stores/toastStore';
+import { usePracticeStore } from '@/features/learning/practiceStore';
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'showcase-test' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   }));
   useWindowStore.setState({ tabs: [], activeKey: null });
   useDocumentStore.setState({ documents: new Map() });
+  usePracticeStore.getState().exit();
   localStorage.removeItem(INTRODUCTION_SEEN_KEY);
   useSettingsStore.setState(state => ({ settings: { ...state.settings, revision: 0 } }));
 });
@@ -56,9 +58,12 @@ describe('bundled native feature showcase', () => {
     expect(await openFirstRunShowcase('empty')).toBeUndefined();
     expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBeNull();
     expect(useWindowStore.getState().tabs).toHaveLength(0);
+    expect(usePracticeStore.getState().sessionKey).toBeNull();
 
     const key = await openFirstRunShowcase('empty');
     expect(key).toBe(useWindowStore.getState().activeKey);
+    expect(usePracticeStore.getState()).toMatchObject({ sessionKey: key, stepId: 'read-note' });
+    expect(useWindowStore.getState().tabs).toHaveLength(1);
     expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBe('1');
     useWindowStore.setState({ tabs: [], activeKey: null });
     expect(await openFirstRunShowcase('empty')).toBeUndefined();
@@ -77,6 +82,7 @@ describe('bundled native feature showcase', () => {
     expect(useWindowStore.getState().activeKey).toBe(activeKey);
     expect(useWindowStore.getState().tabs).toHaveLength(1);
     expect(storeImageAsset).not.toHaveBeenCalled();
+    expect(usePracticeStore.getState().sessionKey).toBeNull();
     expect(localStorage.getItem(INTRODUCTION_SEEN_KEY)).toBeNull();
   });
 
@@ -118,6 +124,7 @@ describe('bundled native feature showcase', () => {
     await openShowcase();
     expect(useWindowStore.getState().tabs).toHaveLength(2);
     expect(useWindowStore.getState().activeKey).not.toBe(tab.key);
+    expect(usePracticeStore.getState().sessionKey).toBe(useWindowStore.getState().activeKey);
   });
 
   it('opens and saves the complete example with the strict native grammar', () => {

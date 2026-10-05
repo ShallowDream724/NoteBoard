@@ -16,18 +16,18 @@ await page.route('**/*', route => route.request().url().startsWith(origin) ? rou
 await installBrowserNativeShell(page);
 try {
   await page.goto(origin);
-  const home = page.getByRole('button', { name: '动手试一试', exact: true });
+  const home = page.getByRole('button', { name: '浏览功能示例', exact: true });
   for (let cycle = 0; cycle < 8; cycle++) {
     await home.click();
-    await page.getByRole('complementary', { name: '互动练习', exact: true }).waitFor();
+    await page.getByRole('region', { name: '上手引导', exact: true }).waitFor();
     await page.locator('.nb-prose.ProseMirror:visible').waitFor();
-    await page.getByRole('button', { name: '关闭 公园观察练习.nb', exact: true }).click();
+    await page.getByRole('button', { name: '关闭 欢迎使用 NoteBoard.nb', exact: true }).click();
     const discard = page.getByRole('button', { name: '不保存', exact: true });
     await home.or(discard).first().waitFor();
     if (await discard.isVisible()) await discard.click();
     await home.waitFor();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await page.locator('.ProseMirror,.nb-practice-panel').count(), 0, 'Closing the tab releases the editor and practice panel');
+    assert.equal(await page.locator('.ProseMirror,.nb-onboarding-layer').count(), 0, 'Closing the tab releases the editor and guide observers');
     await cdp.send('HeapProfiler.collectGarbage');
     const heap = await cdp.send('Runtime.getHeapUsage');
     report.cycles.push({ cycle, heapMiB: heap.usedSize / 1048576, ...await cdp.send('Memory.getDOMCounters') });
@@ -39,7 +39,7 @@ try {
   assert.deepEqual(report.errors, []);
   console.log(JSON.stringify(report));
 } finally {
-  await fs.mkdir('.tmp/interactive-practice', { recursive: true });
-  await fs.writeFile('.tmp/interactive-practice/memory.json', JSON.stringify(report, null, 2));
+  await fs.mkdir('.tmp/guided-showcase', { recursive: true });
+  await fs.writeFile('.tmp/guided-showcase/memory.json', JSON.stringify(report, null, 2));
   await browser.close(); await server.close();
 }

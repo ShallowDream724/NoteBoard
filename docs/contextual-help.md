@@ -1,8 +1,12 @@
 # 操作提示与上下文帮助
 
-`Tooltip` 保留简单操作的文字与快捷键提示；复杂叶子操作通过显式 `helpKey` 使用紧凑的用途说明和本地 SVG 示意。`ToolbarButton`、`ToolbarDropdownItem` 透传相同 API。目录在 `src/components/contextualHelp.tsx`，根据操作语义和作用范围选 key，不根据按钮中文名称推断行为。
+`Tooltip` 保留简单操作的文字与快捷键提示；复杂叶子操作通过显式 `helpKey` 使用紧凑的用途说明和只读 DOM 预览。`ToolbarButton`、`ToolbarDropdownItem` 透传相同 API。目录在 `src/components/contextualHelp.tsx`，根据操作语义和作用范围选 key，不根据按钮中文名称推断行为。
 
-普通提示默认延迟 100ms；带示意的帮助默认延迟 650ms，而且不会因为邻近提示刚打开而跳过等待。示意仅在提示打开时挂载，关闭即释放，不加载远程资源。少数示意播放一次短动画；`prefers-reduced-motion` 下静态显示。
+普通提示默认延迟 100ms；带示意的帮助默认延迟 650ms，而且不会因为邻近提示刚打开而跳过等待。预览模块及共享展示 CSS 仅在首次打开复杂帮助时加载，避免进入首屏闭包；预览 DOM 仅在提示打开时挂载，关闭即释放，不加载远程资源、编辑器实例或公式渲染器。预览复用真实内容的类名、纯展示样式和语义元数据，容器整体缩小至 75%，不重画另一套控件。
+
+提示块的五种类型分别使用 `block.callout.note/tip/important/warning/caution`，其图标、标题与颜色来自 `calloutPresentation`。通用提示块展示实际默认 Note 空块。折叠块展示真实默认标题“更多内容”和空正文；新增公式展示空源码状态，块公式带真实完成快捷键。表注与图注分别预览表格和图片，不共用图片示意。阅读视图公式使用预生成的固定 KaTeX DOM，复用编辑器已加载的公式样式，不在帮助路径导入 KaTeX 运行时。
+
+整表位置和单元格对齐的叶子操作使用各自的方向键，预览展示该操作的结果。取消表头另用 `.clear` 键，预览恢复普通单元格；将既有内容包成提示块使用 `block.callout.wrap`，展示保留正文的结果。卡片宽度同时受 Radix 提供的侧面可用宽度限制，窄窗口下仍可完整阅读。
 
 快捷键传已有命令的默认绑定标识，由 `useResolvedShortcutLabel` 解析当前自定义设置。未设置的绑定不显示。没有对应键盘命令的动作不虚构快捷键。
 
@@ -10,4 +14,4 @@
 
 已接入左侧块菜单的整表位置、单元格文字对齐、表头行/首列、全文表格样式、全文公式/表格阅读视图、补充说明与图注/表注；空块插入菜单接入提示块、折叠块及行内/块公式。菜单结构、顺序与原操作回调保持一致。
 
-`test/contextualHelp.test.tsx` 验证延迟挂载、关闭释放、焦点保留及自定义快捷键更新。`test/browser/contextualHelp.html` 提供三主题、窄视口与缩放的实际 Tooltip 检查入口。
+`test/contextualHelp.test.tsx` 验证延迟挂载、关闭释放、焦点保留、自定义快捷键、各提示块类型、表注/图注区别和空公式状态。`test/browser/contextualHelp.html` 提供实际 Tooltip 检查入口；`?gallery&theme=chen-guang` 展示全部预览，`?compare&sample=block.callout.tip&theme=mo-ye` 将选定预览与真实编辑器并排展示。重型编辑器仅属于浏览器测试入口。

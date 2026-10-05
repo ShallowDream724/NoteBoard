@@ -221,11 +221,6 @@ export function newNativeDocument(): void {
   createUntitledDocument('noteboard');
 }
 
-/** Open an editable, unsaved copy without changing the supplied template. */
-export function openNativeTemplate(title: string, content: string): string {
-  return createUntitledDocument('noteboard', { title, content });
-}
-
 export function newDefaultDocument(): void {
   createUntitledDocument(useSettingsStore.getState().settings.editor.pureMarkdown ? 'markdown' : 'noteboard');
 }
@@ -238,7 +233,10 @@ export async function openShowcase(onlyIfEmpty = false): Promise<string | undefi
     const { prepareShowcaseAssets } = await import('./showcaseAssets');
     const prepared = await prepareShowcaseAssets(content);
     if (onlyIfEmpty && useWindowStore.getState().tabs.length) return;
-    return createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content: prepared });
+    const key = createUntitledDocument('noteboard', { title: '欢迎使用 NoteBoard.nb', content: prepared });
+    const { startShowcaseGuide } = await import('../learning/startInteractivePractice');
+    startShowcaseGuide(key);
+    return key;
   } catch (error) {
     showToast(`无法打开功能示例：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
   }

@@ -18,9 +18,11 @@ it('preserves progress on another active tab, and exits when the owned tab close
 });
 it('follows the same atomic NB tab identity and refuses unrelated replacement', () => {
   useWindowStore.setState({ tabs: [tab('practice'), tab('other')] });
-  usePracticeStore.getState().start('practice'); usePracticeStore.getState().complete('practice', 'selection'); stop = trackPracticeTab();
+  usePracticeStore.getState().start('practice'); usePracticeStore.getState().selectStep('selection'); usePracticeStore.getState().complete('practice', 'selection');
+  usePracticeStore.getState().selectStep('highlight'); usePracticeStore.getState().skip('highlight'); stop = trackPracticeTab();
   useWindowStore.setState({ tabs: [tab('saved.nb', 'saved.nb'), tab('other')] });
   expect(usePracticeStore.getState().sessionKey).toBe('saved.nb'); expect(usePracticeStore.getState().completed).toEqual(['selection']);
+  expect(usePracticeStore.getState().stepId).toBe('highlight'); expect(usePracticeStore.getState().skipped).toEqual(['highlight']);
   useWindowStore.setState({ tabs: [tab('unrelated'), tab('other')] }); expect(usePracticeStore.getState().sessionKey).toBeNull();
 });
 it('unsubscribes without closing or changing the practice document', () => {
@@ -31,5 +33,11 @@ it('unsubscribes without closing or changing the practice document', () => {
 it('clears a session whose tab closed before the shell lifecycle attached', () => {
   useWindowStore.setState({ tabs: [] }); usePracticeStore.getState().start('missing');
   stop = trackPracticeTab();
+  expect(usePracticeStore.getState().sessionKey).toBeNull();
+});
+it('does not treat a simultaneous tab reorder and replacement as a save rename', () => {
+  useWindowStore.setState({ tabs: [tab('practice'), tab('other')] });
+  usePracticeStore.getState().start('practice'); stop = trackPracticeTab();
+  useWindowStore.setState({ tabs: [tab('other'), tab('replacement.nb', 'replacement.nb')] });
   expect(usePracticeStore.getState().sessionKey).toBeNull();
 });

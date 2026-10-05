@@ -661,38 +661,43 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Info size={14} color="#3b82f6" />}
           label="提示块"
-          helpKey="block.callout"
           disabled={!allowsStructure}
           submenu={
             <>
               {(nativeFeaturesVisible || isSourceMode) && <ToolbarDropdownItem
                 icon={<Info size={14} />}
                 label="提示块"
+                helpKey="block.callout"
                 onClick={() => handleInsertAlert()}
               />}
               <ToolbarDropdownItem
                 icon={<Info size={14} color="#3b82f6" />}
                 label="说明"
+                helpKey="block.callout.note"
                 onClick={() => handleInsertAlert('note')}
               />
               <ToolbarDropdownItem
                 icon={<Lightbulb size={14} color="#10b981" />}
                 label="技巧"
+                helpKey="block.callout.tip"
                 onClick={() => handleInsertAlert('tip')}
               />
               <ToolbarDropdownItem
                 icon={<AlertCircle size={14} color="#8b5cf6" />}
                 label="重要"
+                helpKey="block.callout.important"
                 onClick={() => handleInsertAlert('important')}
               />
               <ToolbarDropdownItem
                 icon={<AlertTriangle size={14} color="#f59e0b" />}
                 label="警告"
+                helpKey="block.callout.warning"
                 onClick={() => handleInsertAlert('warning')}
               />
               <ToolbarDropdownItem
                 icon={<Flame size={14} color="#ef4444" />}
                 label="谨慎"
+                helpKey="block.callout.caution"
                 onClick={() => handleInsertAlert('caution')}
               />
             </>

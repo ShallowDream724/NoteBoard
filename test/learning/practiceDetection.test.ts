@@ -1,120 +1,93 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { decodeNativeDocument, encodeNativeDocument } from '../../src/core/nativeDocument';
-import { initializeEditorDocument, parseEditorDocument, serializeEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
-import { clearAllDocumentHistories, initializeDocumentHistory, isApplyingDocumentHistory, recordDocumentChange, redoDocumentHistory, registerDocumentHistoryAdapter, undoDocumentHistory } from '../../src/features/history/documentHistory';
-import { ACTION_BLOCK, OBSERVATION_BLOCK, PRACTICE_TASKS, PRACTICE_WORD, createPracticeContent } from '../../src/features/learning/practiceCourse';
-import { findPracticeText, observePracticeTask, practiceTaskSatisfied } from '../../src/features/learning/practiceDetection';
+import { initializeEditorDocument } from '../../src/features/editor-md/editorDocumentCodec';
+import { GUIDE_DISCLOSURE, GUIDE_STEPS, GUIDE_WORD } from '../../src/features/learning/practiceCourse';
+import showcase from '../../src/features/welcome/showcase.nb?raw';
+import { findPracticeText, guideBlankPosition, guideCalloutCount, guideTaskSatisfied, ownsPracticeEditor } from '../../src/features/learning/practiceDetection';
 
 const editors: Editor[] = [];
 const p = (text: string): JSONContent => ({ type: 'paragraph', ...(text ? { content: [{ type: 'text', text }] } : {}) });
-function make(content: JSONContent = decodeNativeDocument(createPracticeContent()) as JSONContent) {
+function make(content: JSONContent = { type: 'doc', content: [p(GUIDE_WORD)] }, key = 'showcase') {
   const editor = new Editor({ extensions: buildDocumentExtensions(), content });
-  initializeEditorDocument(editor, encodeNativeDocument(content), 'noteboard', '', 'practice');
+  initializeEditorDocument(editor, encodeNativeDocument(content), 'noteboard', '', key);
   editors.push(editor); return editor;
 }
-afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); clearAllDocumentHistories(); vi.restoreAllMocks(); });
+const body = (id: string, text: string): JSONContent => ({ type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id }, content: [p(text)] }] });
+afterEach(() => editors.splice(0).forEach(editor => editor.destroy()));
 
-describe('practice semantic goals', () => {
-  it('starts with no task already satisfied', () => {
-    const editor = make();
-    for (const task of PRACTICE_TASKS) expect(practiceTaskSatisfied(task.id, editor.state), task.id).toBe(false);
+describe('showcase guide semantic outcomes', () => {
+  it('starts the actual shipped sample with no semantic task already passed', () => {
+    const editor = make(decodeNativeDocument(showcase) as JSONContent), baseline = guideCalloutCount(editor.state.doc);
+    expect(baseline).toBeGreaterThan(0); expect(findPracticeText(editor.state.doc, GUIDE_WORD)).not.toBeNull();
+    for (const step of GUIDE_STEPS) expect(guideTaskSatisfied(step.id, editor.state, baseline), step.id).toBe(false);
   });
-  it('requires the exact visible selection and all target letters highlighted', () => {
-    const editor = make(), range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
-    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to - 1)));
-    expect(practiceTaskSatisfied('selection', editor.state)).toBe(false);
-    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
-    expect(practiceTaskSatisfied('selection', editor.state)).toBe(true);
+  it('requires the full visible phrase selected and highlighted', () => {
+    const editor = make(), range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+    for (const [from, to] of [[range.from, range.to - 1], [range.from + 1, range.to], [range.from, range.from]]) {
+      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, from, to)));
+      expect(guideTaskSatisfied('selection', editor.state, 0)).toBe(false);
+    }
+    editor.commands.setTextSelection(range);
+    expect(guideTaskSatisfied('selection', editor.state, 0)).toBe(true);
     editor.view.dispatch(editor.state.tr.addMark(range.from, range.to - 1, editor.schema.marks.highlight.create()));
-    expect(practiceTaskSatisfied('highlight', editor.state)).toBe(false);
-    editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.highlight.create({ color: '#ffff00' })));
-    expect(practiceTaskSatisfied('highlight', editor.state)).toBe(true);
+    expect(guideTaskSatisfied('highlight', editor.state, 0)).toBe(false);
+    editor.view.dispatch(editor.state.tr.addMark(range.to - 1, range.to, editor.schema.marks.highlight.create({ color: '#ff0000' })));
+    expect(guideTaskSatisfied('highlight', editor.state, 0)).toBe(true);
   });
-  it('checks the actual heading, callout, disclosure and formula content', () => {
-    const editor = make({ type: 'doc', content: [
-      { ...p('周末公园观察'), type: 'heading', attrs: { level: 2 } },
-      { type: 'githubAlert', content: [p('记得带水')] },
-      { type: 'disclosure', attrs: { title: '装备清单' }, content: [p('水壶')] },
-      { type: 'paragraph', content: [{ type: 'mathInline', attrs: { latex: 'x^2 + y^2 = r^2' } }] },
-    ] });
-    for (const id of ['heading', 'callout', 'disclosure', 'formula']) expect(practiceTaskSatisfied(id, editor.state), id).toBe(true);
-    editor.commands.setContent({ type: 'doc', content: [{ ...p('周末公园观察'), type: 'heading', attrs: { level: 1 } },
-      { type: 'githubAlert', content: [{ type: 'paragraph' }] }, { type: 'disclosure', attrs: { title: '装备清单' }, content: [{ type: 'paragraph' }] }, p('x^2+y^2=r^2')] });
-    for (const id of ['heading', 'callout', 'disclosure', 'formula']) expect(practiceTaskSatisfied(id, editor.state), id).toBe(false);
-  });
-  it('requires headers and a filled observation row, then the document table style', () => {
-    const table = { type: 'table', content: [
-      { type: 'tableRow', content: [{ type: 'tableHeader', content: [p('项目')] }, { type: 'tableHeader', content: [p('记录')] }] },
-      { type: 'tableRow', content: [{ type: 'tableCell', content: [p('天气')] }, { type: 'tableCell', content: [p('晴')] }] },
-    ] };
-    const editor = make({ type: 'doc', content: [table] });
-    expect(practiceTaskSatisfied('table', editor.state)).toBe(true); expect(practiceTaskSatisfied('table-style', editor.state)).toBe(false);
-    editor.commands.setContent({ type: 'doc', content: [{ type: 'documentPresentation', attrs: { tableStyle: 'three-line' } }, table] });
-    expect(practiceTaskSatisfied('table-style', editor.state)).toBe(true);
-    table.content[1].content[1].content = [p('')]; editor.commands.setContent({ type: 'doc', content: [table] });
-    expect(practiceTaskSatisfied('table', editor.state)).toBe(false);
-  });
-  it('requires a saved nonempty explanation connected to the target', () => {
-    const body = (text: string) => ({ type: 'annotationStore', content: [{ type: 'annotationBody', attrs: { id: 'note' }, content: [p(text)] }] });
-    const editor = make({ type: 'doc', content: [p(PRACTICE_WORD), body('说明')] });
-    expect(practiceTaskSatisfied('annotation', editor.state)).toBe(false);
-    editor.commands.setContent({ type: 'doc', content: [{ ...p(PRACTICE_WORD), attrs: { annotationId: 'note' } }, body('')] });
-    expect(practiceTaskSatisfied('annotation', editor.state)).toBe(false);
-    editor.commands.setContent({ type: 'doc', content: [{ ...p(PRACTICE_WORD), attrs: { annotationId: 'note' } }, body('观察让人留意身边')] });
-    expect(practiceTaskSatisfied('annotation', editor.state)).toBe(true);
-    editor.commands.setContent({ type: 'doc', content: [p(PRACTICE_WORD), body('说明')] });
-    const range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
+  it('requires a saved nonempty body linked to all target letters', () => {
+    const editor = make({ type: 'doc', content: [p(GUIDE_WORD), body('note', '说明')] });
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+    const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
     editor.view.dispatch(editor.state.tr.addMark(range.from, range.to - 1, editor.schema.marks.annotationReference.create({ id: 'note' })));
-    expect(practiceTaskSatisfied('annotation', editor.state)).toBe(false);
-    editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'note' })));
-    expect(practiceTaskSatisfied('annotation', editor.state)).toBe(true);
-    editor.commands.setContent({ type: 'doc', content: [p('其他文字'), body(PRACTICE_WORD)] });
-    expect(findPracticeText(editor.state.doc, PRACTICE_WORD)).toBeNull();
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+    editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'draft' })));
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+    const linked: JSONContent = { ...p(GUIDE_WORD), content: [{ type: 'text', text: GUIDE_WORD, marks: [{ type: 'annotationReference', attrs: { id: 'note' } }] }] };
+    editor.commands.setContent({ type: 'doc', content: [linked, body('note', '   ')] });
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(false);
+    editor.commands.setContent({ type: 'doc', content: [linked, body('note', '记下这个想法')] });
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(true);
   });
-  it('accepts moving the full block and rejects merely duplicating it', () => {
-    const editor = make({ type: 'doc', content: [p(ACTION_BLOCK), p(OBSERVATION_BLOCK)] });
-    expect(practiceTaskSatisfied('move', editor.state)).toBe(true);
-    editor.commands.setContent({ type: 'doc', content: [p(ACTION_BLOCK), p(OBSERVATION_BLOCK), p(ACTION_BLOCK)] });
-    expect(practiceTaskSatisfied('move', editor.state)).toBe(false);
+  it('also accepts a saved explanation on the target block', () => {
+    const editor = make({ type: 'doc', content: [{ ...p(GUIDE_WORD), attrs: { annotationId: 'block' } }, body('block', '说明')] });
+    expect(guideTaskSatisfied('annotation-save', editor.state, 0)).toBe(true);
   });
-});
-
-describe('practice editor observation', () => {
-  it('never reads an unrelated editor and ignores invalidated ownership and cleanup', () => {
-    const foreign = { isDestroyed: false, get state() { throw Error('unrelated document was read'); } } as unknown as Editor;
-    expect(() => observePracticeTask({ editor: foreign, activeKey: 'other', sessionKey: 'practice', stepId: 'selection', current: () => true, onComplete: vi.fn() })()).not.toThrow();
-    const editor = make(), done = vi.fn(), range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
-    let current = true;
-    const stop = observePracticeTask({ editor, activeKey: 'practice', sessionKey: 'practice', stepId: 'selection', current: () => current, onComplete: done });
-    current = false; editor.commands.setTextSelection(range); expect(done).not.toHaveBeenCalled();
-    stop(); current = true; editor.commands.setTextSelection(1); editor.commands.setTextSelection(range); expect(done).not.toHaveBeenCalled();
+  it('ignores hidden annotation text and preserves positions through inline atoms and split marks', () => {
+    const editor = make({ type: 'doc', content: [body('hidden', GUIDE_WORD), { type: 'paragraph', content: [
+      { type: 'text', text: '前' }, { type: 'mathInline', attrs: { latex: 'x' } },
+      { type: 'text', text: GUIDE_WORD.slice(0, 3), marks: [{ type: 'bold' }] }, { type: 'text', text: GUIDE_WORD.slice(3) },
+    ] }] });
+    const range = findPracticeText(editor.state.doc, GUIDE_WORD)!;
+    expect(editor.state.doc.textBetween(range.from, range.to)).toBe(GUIDE_WORD);
+    expect(findPracticeText(make({ type: 'doc', content: [p('别的文字'), body('hidden', GUIDE_WORD)] }).state.doc, GUIDE_WORD)).toBeNull();
   });
-  it('latches completion without changing selection or advancing a task', () => {
-    const editor = make(), done = vi.fn(), range = findPracticeText(editor.state.doc, PRACTICE_WORD)!;
-    const stop = observePracticeTask({ editor, activeKey: 'practice', sessionKey: 'practice', stepId: 'selection', current: () => true, onComplete: done });
-    editor.commands.setTextSelection(range); expect(done).toHaveBeenCalledTimes(1); expect(editor.state.selection.from).toBe(range.from);
-    editor.commands.setTextSelection(1); editor.commands.setTextSelection(range); expect(done).toHaveBeenCalledTimes(1); stop();
+  it('counts only newly inserted visible callouts and the intended opened disclosure', () => {
+    const alert: JSONContent = { type: 'githubAlert', content: [p('已有提示')] };
+    const editor = make({ type: 'doc', content: [alert, { type: 'disclosure', attrs: { title: GUIDE_DISCLOSURE, open: false }, content: [p('水壶')] }] });
+    const baseline = guideCalloutCount(editor.state.doc);
+    expect(baseline).toBe(1); expect(guideTaskSatisfied('insert-callout', editor.state, baseline)).toBe(false);
+    editor.commands.insertContentAt(editor.state.doc.content.size, alert);
+    expect(guideTaskSatisfied('insert-callout', editor.state, baseline)).toBe(true);
+    expect(guideTaskSatisfied('disclosure', editor.state, baseline)).toBe(false);
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'disclosure', attrs: { title: '别的清单', open: true }, content: [p('水壶')] }] });
+    expect(guideTaskSatisfied('disclosure', editor.state, baseline)).toBe(false);
+    editor.commands.setContent({ type: 'doc', content: [{ type: 'disclosure', attrs: { title: GUIDE_DISCLOSURE, open: true }, content: [p('水壶')] }] });
+    expect(guideTaskSatisfied('disclosure', editor.state, baseline)).toBe(true);
   });
-  it('checks a new edit, actual undo and actual redo, rejecting manual recreation', () => {
-    const editor = make({ type: 'doc', content: [p('原文')] }), done = vi.fn(), progress = vi.fn();
-    initializeDocumentHistory('practice', serializeEditorDocument(editor), 'visual');
-    const unregister = registerDocumentHistoryAdapter('practice', { applyEntry: entry => parseEditorDocument(editor, entry.content, 'history') });
-    editor.on('transaction', ({ transaction }) => {
-      if (transaction.docChanged && !isApplyingDocumentHistory('practice')) recordDocumentChange('practice', serializeEditorDocument(editor), { mode: 'visual', startsNewGroup: true });
-    });
-    const stop = observePracticeTask({ editor, activeKey: 'practice', sessionKey: 'practice', stepId: 'history', current: () => true, onComplete: done, onHistoryProgress: progress });
-    editor.commands.insertContent('新'); expect(undoDocumentHistory('practice')).toBe(true);
-    expect(progress).toHaveBeenCalledWith(true); expect(done).not.toHaveBeenCalled();
-    editor.commands.insertContent('新'); expect(done).not.toHaveBeenCalled();
-    expect(undoDocumentHistory('practice')).toBe(true); expect(redoDocumentHistory('practice')).toBe(true);
-    expect(done).toHaveBeenCalledTimes(1); stop(); unregister();
+  it('locates a top-level empty line or current slash query', () => {
+    const editor = make({ type: 'doc', content: [{ type: 'githubAlert', content: [p('')] }, p('正文'), p('/note'), p('')] });
+    let position = 0; editor.state.doc.forEach((node, pos) => { if (node.textContent === '/note') position = pos; });
+    expect(guideBlankPosition(editor.state.doc)).toBe(position);
+    expect(guideBlankPosition(make({ type: 'doc', content: [p('正文')] }).state.doc)).toBeNull();
   });
-  it('releases listeners when the editor is destroyed', () => {
-    const editor = make(), off = vi.spyOn(editor, 'off'), done = vi.fn();
-    const stop = observePracticeTask({ editor, activeKey: 'practice', sessionKey: 'practice', stepId: 'selection', current: () => true, onComplete: done });
-    editor.destroy(); expect(off).toHaveBeenCalledWith('transaction', expect.any(Function)); stop(); expect(done).not.toHaveBeenCalled();
+  it('rejects missing, destroyed and foreign editor identities without reading their content', () => {
+    const foreign = { isDestroyed: false, get state() { throw Error('foreign document read'); } } as unknown as Editor;
+    expect(ownsPracticeEditor(foreign, 'showcase')).toBe(false);
+    const editor = make(); expect(ownsPracticeEditor(editor, 'showcase')).toBe(true);
+    expect(ownsPracticeEditor(editor, 'other')).toBe(false); expect(ownsPracticeEditor(null, 'showcase')).toBe(false);
+    editor.destroy(); expect(ownsPracticeEditor(editor, 'showcase')).toBe(false);
   });
 });

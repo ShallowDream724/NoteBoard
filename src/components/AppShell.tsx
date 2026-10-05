@@ -638,7 +638,8 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                         </div>
                       );
                     })}
-                    {!isBoardPresentationMode && showOutline && (outlineVisible ? (
+                    {/* Temporarily clear the target area; keep the saved outline preference. */}
+                    {!isBoardPresentationMode && practiceSessionKey !== activeKey && showOutline && (outlineVisible ? (
                       <OutlinePanel editor={activeEditor} />
                     ) : (
                       <Tooltip content="展开大纲" side="left">
