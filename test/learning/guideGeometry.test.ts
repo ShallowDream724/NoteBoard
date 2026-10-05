@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bottom, guideArrow, intersectionArea, placeGuideCard, right, unionRects, type GuideRect } from '../../src/features/learning/guideGeometry';
+import { bottom, guideArrow, intersectionArea, nearestGuideTarget, placeGuideCard, right, unionRects, type GuideRect } from '../../src/features/learning/guideGeometry';
 
 describe('guide placement around editable targets', () => {
   it.each([
@@ -27,6 +27,13 @@ describe('guide placement around editable targets', () => {
     expect(unionRects([])).toBeNull();
     expect(unionRects([{ left: 100, top: 100, width: 150, height: 20 }, { left: 60, top: 125, width: 80, height: 20 }])).toEqual({ left: 60, top: 100, width: 190, height: 45 });
   });
+  it('points from below to the nearest actual text line without crossing the other line', () => {
+    const card = { left: 100, top: 300, width: 290, height: 160 };
+    const lines = [{ left: 100, top: 100, width: 200, height: 20 }, { left: 100, top: 150, width: 100, height: 20 }];
+    expect(nearestGuideTarget(card, lines)).toEqual(lines[1]);
+    expect(nearestGuideTarget(card, [])).toBeNull();
+    expect(guideArrow(card, nearestGuideTarget(card, lines)!).end.y).toBe(176);
+  });
   it.each([
     { left: 10, top: 100, width: 200, height: 120 },
     { left: 600, top: 100, width: 200, height: 120 },
@@ -37,5 +44,14 @@ describe('guide placement around editable targets', () => {
     expect([card.left, right(card)].includes(arrow.start.x) || [card.top, bottom(card)].includes(arrow.start.y)).toBe(true);
     expect(arrow.end.x < target.left || arrow.end.x > right(target) || arrow.end.y < target.top || arrow.end.y > bottom(target)).toBe(true);
     expect(arrow.path).not.toContain('NaN');
+    expect(arrow.path).toBe(`M ${arrow.start.x} ${arrow.start.y} L ${arrow.end.x} ${arrow.end.y}`);
+  });
+  it.each([680, 1440])('leaves a readable straight arrow beside the Note indicator at width %s', width => {
+    const target = { left: width - 80, top: 240, width: 18, height: 18 };
+    const card = placeGuideCard(target, { width: 290, height: 160 }, { width, height: 540 });
+    const arrow = guideArrow(card, target);
+    expect(arrow.start.y).toBe(arrow.end.y);
+    expect(Math.abs(arrow.end.x - arrow.start.x)).toBeGreaterThanOrEqual(40);
+    expect(intersectionArea(card, target)).toBe(0);
   });
 });

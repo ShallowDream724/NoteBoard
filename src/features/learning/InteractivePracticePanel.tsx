@@ -5,7 +5,7 @@ import { Check, X } from 'lucide-react';
 import { usePracticeStore } from './practiceStore';
 import { GUIDE_STEPS } from './practiceCourse';
 import { guideCalloutCount, guideTaskSatisfied, ownsPracticeEditor } from './practiceDetection';
-import { guideArrow, placeGuideCard, unionRects, type GuideRect } from './guideGeometry';
+import { guideArrow, nearestGuideTarget, placeGuideCard, unionRects, type GuideRect } from './guideGeometry';
 import { guideUICompleted, resolveGuideTarget, visibleGuideElement } from './guideTargets';
 import { useWindowStore } from '../../stores/windowStore';
 import './interactivePractice.css';
@@ -47,7 +47,7 @@ export function InteractivePracticePanel({ activeEditor, activeKey }: Interactiv
       const rects = target.rects.filter(r => r.width > 0 && r.height > 0 && r.top < viewport.height - 24 && r.top + r.height > topBoundary && r.left < viewport.width && r.left + r.width > 0)
         .map(r => ({ left: Math.max(4, r.left), top: Math.max(topBoundary, r.top), width: Math.max(1, Math.min(viewport.width - 4, r.left + r.width) - Math.max(4, r.left)), height: Math.max(1, Math.min(viewport.height - 24, r.top + r.height) - Math.max(topBoundary, r.top)) }));
       const anchor = unionRects(rects);
-      const obstacles = Array.from(document.querySelectorAll<HTMLElement>('.nb-annotation-panel,[role="toolbar"].nb-editor-selection-toolbar')).map(element => {
+      const obstacles = Array.from(document.querySelectorAll<HTMLElement>('.nb-annotation-panel,[role="toolbar"].nb-editor-selection-toolbar,.responsive-toolbar')).map(element => {
         const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height };
       });
       const size = { width: Math.min(290, viewport.width - 24), height: card.current?.offsetHeight ?? 210 };
@@ -84,23 +84,24 @@ export function InteractivePracticePanel({ activeEditor, activeKey }: Interactiv
 
   if (!active || (!step && !summary)) return null;
   const locate = () => { if (activeEditor) resolveGuideTarget(activeEditor, session.stepId).element?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }); };
-  const arrow = placement.target ? guideArrow(placement.card, placement.target) : null;
-  const instruction = !completed && placement.fallback === 'selection' ? '先拖选圈中的文字，再点击浮动工具栏里的“添加说明”。'
-    : !completed && placement.fallback === 'command' ? '点击圈出的空行，输入 /note，重新打开命令菜单。' : step?.instruction;
+  const arrowTarget = nearestGuideTarget(placement.card, placement.rects);
+  const arrow = arrowTarget ? guideArrow(placement.card, arrowTarget) : null;
+  const instruction = !completed && placement.fallback === 'selection' ? '选中文字时，浮动工具栏会出现“添加说明”。圈中的文字可以用来试试。'
+    : !completed && placement.fallback === 'command' ? '命令菜单已经收起。在圈出的空行输入 /note，可以再次找到 Note。' : step?.instruction;
   return createPortal(<div className="nb-onboarding-layer" data-guide-step={session.stepId} style={{ visibility: placement.blocked ? 'hidden' : 'visible' }}>
     <svg className="nb-onboarding-map" aria-hidden="true" focusable="false">
-      <defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 1 1 L 8 5 L 1 9" fill="none" stroke="var(--editor-accent)" strokeWidth="1.8"/></marker></defs>
+      <defs><marker id={`${id}-arrow`} viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto"><path d="M 1 1 L 8 5 L 1 9" fill="none" stroke="var(--editor-accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></marker></defs>
       {placement.rects.map((r, index) => <rect key={index} data-guide-spotlight="" x={r.left - 4} y={r.top - 4} width={r.width + 8} height={r.height + 8} rx="5" className="nb-onboarding-ring"/>)}
       {arrow && <path data-guide-arrow="" d={arrow.path} className="nb-onboarding-arrow" markerEnd={`url(#${id}-arrow)`}/>}
     </svg>
     <div ref={card} className="nb-onboarding-card" role="region" aria-label="上手引导" style={{ left: placement.card.left, top: placement.card.top, width: placement.card.width, maxHeight: 'calc(100vh - 24px)' }}>
-      <header><span>{summary ? '已经上手了' : `${index + 1} / ${GUIDE_STEPS.length}`}</span><button type="button" aria-label="退出引导" onClick={session.exit}><X size={16}/></button></header>
-      <div className="nb-onboarding-copy" aria-live="polite"><h2>{summary ? '继续写你自己的笔记' : step.title}</h2><p>{summary ? '这份示例可以继续修改、保存。往下看看图片、表格和公式，菜单上的讲解也可以随时查看。' : completed ? step.success : instruction}</p></div>
+      <header><span>{summary ? '功能示例' : `${index + 1} / ${GUIDE_STEPS.length}`}</span><button type="button" aria-label="退出引导" onClick={session.exit}><X size={16}/></button></header>
+      <div className="nb-onboarding-copy" aria-live="polite"><h2>{summary ? '还有图片、表格和公式' : step.title}</h2><p>{summary ? '后面的示例也都可以直接编辑，菜单里还有对应的功能说明。这份文档可以继续修改，也可以保存下来。' : completed ? step.success : instruction}</p></div>
       {!summary && !placement.target && <button type="button" className="nb-onboarding-locate" onClick={locate}>定位到这一步</button>}
       <footer>{!summary && <button type="button" className="nb-onboarding-skip" onClick={() => { session.skip(session.stepId); next(); }}>跳过这步</button>}
-        {summary ? <button type="button" className="nb-onboarding-next" onClick={session.exit}>开始使用</button>
-          : completed && !step.autoAdvance ? <button type="button" className="nb-onboarding-next" onClick={next}><Check size={14}/>{index === GUIDE_STEPS.length - 1 ? '完成' : '继续'}</button>
-          : <span className="nb-onboarding-state">{completed ? '完成' : '试着操作圈出的内容'}</span>}
+        {summary ? <button type="button" className="nb-onboarding-next" onClick={session.exit}>继续浏览</button>
+          : completed && !step.autoAdvance ? <button type="button" className="nb-onboarding-next" onClick={next}><Check size={14}/>继续</button>
+          : null}
       </footer>
     </div>
   </div>, document.body);

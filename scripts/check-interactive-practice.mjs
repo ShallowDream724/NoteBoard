@@ -8,7 +8,8 @@ const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODUL
 const cdpUrl = process.env.NOTEBOARD_TEST_CDP;
 const minimum = process.argv.includes('--minimum');
 const compact = minimum || process.argv.includes('--compact');
-const directory = `.tmp/guided-showcase${cdpUrl ? '/native' : minimum ? '/minimum' : compact ? '/compact' : ''}`; await fs.mkdir(directory, { recursive: true });
+const directory = `.tmp/guided-showcase${cdpUrl ? minimum ? '/native-minimum' : compact ? '/native-compact' : '/native' : minimum ? '/minimum' : compact ? '/compact' : ''}`; await fs.mkdir(directory, { recursive: true });
+const smallViewport = { width: minimum ? 680 : 960, height: 540 };
 const server = await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
 const browser = cdpUrl ? await chromium.connectOverCDP(cdpUrl) : await chromium.launch({ channel: 'msedge', headless: true });
@@ -16,7 +17,7 @@ const report = { steps: [], layouts: [], errors: [] }; let page;
 const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 try {
   page = cdpUrl ? browser.contexts()[0].pages()[0] : await browser.newPage(compact
-    ? { viewport: { width: minimum ? 680 : 960, height: 540 }, deviceScaleFactor: 2 }
+    ? { viewport: smallViewport, deviceScaleFactor: 2 }
     : { viewport: { width: 1440, height: 1000 } });
   page.on('pageerror', error => report.errors.push(error.message));
   if (!cdpUrl) {
@@ -25,11 +26,21 @@ try {
   } else {
     await page.getByRole('button', { name: '新建或打开', exact: true }).waitFor();
     const fonts = page.getByRole('button', { name: '使用系统字体', exact: true }); if (await fonts.isVisible()) await fonts.click();
+    if (compact) {
+      // Resize the actual Tauri window; CDP alone preserves its existing size.
+      await page.evaluate(async size => {
+        const { invoke, metadata } = window.__TAURI_INTERNALS__, label = metadata.currentWindow.label;
+        if (await invoke('plugin:window|is_maximized', { label })) await invoke('plugin:window|toggle_maximize', { label });
+        await invoke('plugin:window|set_size', { label, value: { Logical: size } });
+      }, smallViewport);
+      await page.waitForFunction(size => Math.abs(window.innerWidth - size.width) <= 2 && Math.abs(window.innerHeight - size.height) <= 2, smallViewport);
+    }
     if (!await page.locator('.nb-onboarding-layer').count()) {
       await page.getByRole('button', { name: '回到主界面', exact: true }).click();
       await page.getByRole('button', { name: '浏览功能示例', exact: true }).click();
     }
   }
+  report.viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight, scale: window.devicePixelRatio }));
   const card = page.getByRole('region', { name: '上手引导', exact: true });
   const step = async id => { await page.locator(`.nb-onboarding-layer[data-guide-step="${id}"]`).waitFor({ state: 'visible' }); await frames(); report.steps.push(id); console.log('Step:', id); };
   const continueGuide = () => card.getByRole('button', { name: /^(继续|完成)$/ }).click();
@@ -55,6 +66,7 @@ try {
   assert.equal(await page.evaluate(() => String(window.getSelection())), '把想法写下来');
   await step('highlight');
   const topHighlight = page.locator('.responsive-toolbar').first().getByRole('button', { name: '应用文字颜色与高亮', exact: true });
+  if (minimum) assert.equal(await topHighlight.isVisible(), false, 'The minimum-width run must exercise the collapsed top control');
   const highlight = await topHighlight.isVisible() ? topHighlight : page.getByRole('toolbar', { name: '文字工具栏', exact: true }).getByRole('button', { name: '应用文字颜色与高亮', exact: true });
   await checkTarget(highlight); await page.screenshot({ path: `${directory}/02-highlight.png` }); await highlight.click();
   await step('annotation-open');
@@ -81,7 +93,7 @@ try {
   const toggle = disclosure.getByRole('button', { name: '展开内容', exact: true });
   await checkTarget(toggle); await toggle.click(); await continueGuide();
   await step('summary'); await page.screenshot({ path: `${directory}/05-complete.png` });
-  await card.getByRole('button', { name: '开始使用', exact: true }).click(); assert.equal(await card.count(), 0);
+  await card.getByRole('button', { name: '继续浏览', exact: true }).click(); assert.equal(await card.count(), 0);
   assert(await editor.innerText().then(text => text.includes('这是我写下的第一条笔记。')));
   // Open help from a real editor menu, including its first lazy-load boundary.
   await editor.locator('p').filter({ hasText: '把想法写下来' }).first().hover();

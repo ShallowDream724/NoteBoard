@@ -1,16 +1,16 @@
 #!noteboard 1
 @block {"type":"annotationStore"}
-@child {"type":"annotationBody","attrs":{"id":"showcase-welcome"},"content":[{"type":"paragraph","content":[{"type":"text","text":"小问号后面是补充说明。背景、出处和自己的批注都可以放在这里，不必挤进正文。"}]},{"type":"paragraph","content":[{"type":"text","text":"选中文字，再点击浮动工具栏的“添加说明”，就能写下一条。说明会和这份笔记一起保存。"}]}]}
+@child {"type":"annotationBody","attrs":{"id":"showcase-welcome"},"content":[{"type":"paragraph","content":[{"type":"text","text":"补充说明可以记录背景、出处或批注，和对应的内容一起保存。"}]},{"type":"paragraph","content":[{"type":"text","text":"选中文字后，工具栏的“添加说明”可以新增一条；图片、公式和代码块也能附加说明。"}]}]}
 @child {"type":"annotationBody","attrs":{"id":"showcase-observation"},"content":[{"type":"paragraph","content":[{"type":"text","text":"同一处景色，也有不同的光线与情绪。晨光记轮廓，林间记发现，暮色回看一天的变化。"}]},{"type":"paragraph","content":[{"type":"text","text":"点击图钉固定这份说明，再拖动浮窗顶部调整位置。你可以改写正文、添加列表或图片；说明随文档一起保存。"}]}]}
 @child {"type":"annotationBody","attrs":{"id":"showcase-code"},"content":[{"type":"paragraph","content":[{"type":"text","text":"这段函数统计数量与平均值；空列表返回 0，避免除以零。说明可以附在整个代码块上，把用途、边界或待改进之处留在代码旁边。"}]}]}
 @block {"type":"heading","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null,"level":1},"content":[{"type":"text","text":"欢迎使用 NoteBoard"}]}
 @block {"type":"paragraph","attrs":{"textAlign":null,"indent":0,"concealed":false,"annotationId":null},"content":[{"type":"text","text":"把想法写下来，把关系画出来。"}]}
-@block {"type":"paragraph","content":[{"type":"text","text":"这份示例可以直接编辑。左上角按钮可收起侧栏；段落左侧的六点把手可拖动整块。按 "},{"type":"text","text":"Ctrl+S","marks":[{"type":"bold"}]},{"type":"text","text":" 保存自己的版本。"}]}
-@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"用鼠标添加："},{"type":"text","text":"按 Enter 新起一个空段落，将鼠标移到这一行左侧，点击出现的 +，就能插入表格、图片、公式或折叠块。"}]}
-@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"用键盘添加："},{"type":"text","text":"在空段落输入 / 打开命令菜单，继续输入名称搜索。试试 /fold 折叠块、/table 表格或 /note 提示块；用 ↑ / ↓ 选择，Enter 确认，→ 展开分类，Esc 收起。清除格式也可以在菜单中选择，或搜索 /clear。"}]}
-@block {"type":"githubAlert","attrs":{"concealed":false,"annotationId":"showcase-welcome","kind":"note"},"content":[{"type":"paragraph","content":[{"type":"text","text":"文字、图片和公式都可以留在同一份笔记里。右上角的小问号藏着一条补充说明。"}]}]}
+@block {"type":"paragraph","content":[{"type":"text","text":"这是一份可以直接编辑的功能示例。文字、图片和公式都能调整，按 "},{"type":"text","text":"Ctrl+S","marks":[{"type":"bold"}]},{"type":"text","text":" 可以保存为自己的笔记。"}]}
+@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"添加与整理："},{"type":"text","text":"空行左侧的 + 可以插入表格、图片、公式等内容；段落左侧的六点把手可以拖动整块。"}]}
+@block {"type":"paragraph","content":[{"type":"text","marks":[{"type":"bold"}],"text":"键盘操作："},{"type":"text","text":"空行输入 / 可以按名称找功能，例如 /note 提示块、/table 表格和 /fold 折叠块。↑ / ↓ 选择，Enter 插入。"}]}
+@block {"type":"githubAlert","attrs":{"concealed":false,"annotationId":"showcase-welcome","kind":"note"},"content":[{"type":"paragraph","content":[{"type":"text","text":"提示块可以用来放备注、提醒或补充信息。右上角的问号还附了一条说明。"}]}]}
 @block {"type":"paragraph"}
-@block {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"先试试：把一段旅程放进文档"}]}
+@block {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"图片与图注"}]}
 @block {"type":"paragraph","content":[{"type":"text","text":"从顶部工具栏的图片菜单，可以插入单张图片、四宫格、六宫格、九宫格或图片轮播。下面的四宫格留了一格给你，点击空格即可加入自己的图片。图注也可以直接修改。"}]}
 @block {"type":"imageCollection","attrs":{"layout":"grid","columns":2}}
 @child {"type":"imageSlot","content":[{"type":"image","attrs":{"src":"./assets/morning.png","alt":"晨光中的山峰与湖面"}},{"type":"paragraph","content":[{"type":"text","text":"01 / 晨光 · 在湖边开始记录"}]}]}

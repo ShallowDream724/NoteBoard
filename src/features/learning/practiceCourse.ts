@@ -10,12 +10,12 @@ export interface GuideStep {
 }
 /** One visible target and one real outcome per step, inside the actual sample. */
 export const GUIDE_STEPS: readonly GuideStep[] = [
-  { id: 'read-note', title: '先看一条补充说明', instruction: '把鼠标移到圈出的问号上，也可以点击它。', success: '说明已展开。读完后，我们试试改一处文字。' },
-  { id: 'selection', title: '拖选圈出的这句话', instruction: '按住鼠标，从“把”拖到“来”。', success: '选中了', autoAdvance: true },
-  { id: 'highlight', title: '点这里，加上高亮', instruction: '文字已选中。点击圈出的彩色 A，给它加上背景色。', success: '高亮已添加', autoAdvance: true },
-  { id: 'annotation-open', title: '给这句话留个批注', instruction: '点击圈出的“添加说明”。', success: '可以写说明了', autoAdvance: true },
-  { id: 'annotation-save', title: '写一句，再保存', instruction: '在圈出的编辑区写一句话，再点击“保存”。', success: '说明已留在这句话旁边。' },
-  { id: 'insert-menu', title: '用键盘插入内容', instruction: '点击圈出的空行，输入 /note。', success: '命令已经找到', autoAdvance: true },
-  { id: 'insert-callout', title: '选择 Note', instruction: '点击圈出的 Note，或按 Enter。', success: '提示块已插入，可以直接在里面写字。' },
-  { id: 'disclosure', title: '展开这份清单', instruction: '点击圈出的箭头，看看折叠块里的内容。', success: '详细内容展开了，再点一次就能收起。' },
+  { id: 'read-note', title: '补充说明', instruction: '问号可以展开补充说明。鼠标停在这里，就能看到这份示例的备注。', success: '背景、出处和批注都可以放在这里，随文档一起保存。' },
+  { id: 'selection', title: '文字排版', instruction: '示例里的文字都能直接编辑。可以拖选圈中的几个字，看看选区旁的格式工具。', success: '格式工具会作用于这段选中的文字。', autoAdvance: true },
+  { id: 'highlight', title: '文字高亮', instruction: '彩色 A 可以给选中文字加上背景色，用来标记重点。点击就能看到效果。', success: '这段文字有了高亮。旁边的菜单还可以更换颜色。', autoAdvance: true },
+  { id: 'annotation-open', title: '在原处添加批注', instruction: '选中文字后，还可以附上一条说明。圈出的问号按钮就是入口。', success: '说明编辑区已打开。', autoAdvance: true },
+  { id: 'annotation-save', title: '随内容保存的说明', instruction: '这里可以写备注、出处或想法。写好后保存，文字旁就会出现说明标记。', success: '文字旁多了一个问号，以后可以从这里查看或修改这条说明。' },
+  { id: 'insert-menu', title: '用 / 找到内容块', instruction: '空行里的 / 可以唤出命令菜单。试试输入 /note，就能找到提示块。', success: '菜单会随输入筛选，/note 对应 Note 提示块。', autoAdvance: true },
+  { id: 'insert-callout', title: 'Note 提示块', instruction: 'Note 适合放备注和补充信息。选择这个菜单项，或按 Enter，就能插入。', success: '提示块已经插入，标题、图标和颜色都可以调整。' },
+  { id: 'disclosure', title: '按需展开内容', instruction: '细节较多的内容可以收进折叠块。这里的箭头能展开下面这份清单。', success: '再次点击箭头可以收起清单，里面的内容会保留。' },
 ];
