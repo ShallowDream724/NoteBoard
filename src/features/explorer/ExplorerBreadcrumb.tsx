@@ -3,7 +3,8 @@
 // 详见 docs/07-UI布局与交互规范.md §5
 
 import { useRef, useEffect } from 'react';
-import { ChevronRight, HardDrive, Folder } from 'lucide-react';
+import { ChevronRight, HardDrive } from 'lucide-react';
+import { getFileIcon } from '../../components/FileIcon';
 import { Tooltip } from '../../components/Tooltip';
 import { useExplorerStore } from './explorerStore';
 import { useTreeData } from './useTreeData';
@@ -212,7 +213,7 @@ export function ExplorerBreadcrumb({ root, onRefresh }: ExplorerBreadcrumbProps)
                 {seg.isDrive ? (
                   <HardDrive size={11} style={{ flexShrink: 0, opacity: 0.75 }} />
                 ) : (
-                  <Folder size={11} style={{ flexShrink: 0, opacity: 0.7 }} />
+                  getFileIcon(seg.fullPath, { isDir: true, size: 11, style: { opacity: 0.7 } })
                 )}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{seg.name}</span>
               </button>

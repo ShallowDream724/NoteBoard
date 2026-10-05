@@ -1,0 +1,5 @@
+# Preserve upstream byte fingerprints and deterministic generated output.
+vendor/pierre-file-icons/svgs/*.svg -text
+vendor/pierre-file-icons/LICENSE.md -text
+src/assets/file-icons.svg text eol=lf
+public/licenses/pierre-vscode-icons.txt text eol=lf

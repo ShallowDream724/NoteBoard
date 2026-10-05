@@ -1,4 +1,5 @@
-import { FileText, FileCode, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
+import { getFileIcon } from '../FileIcon';
 import { useId, useState } from 'react';
 import { showToast } from '../../stores/toastStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -86,8 +87,8 @@ export function TypographyPanel() {
         <RangeField label="条目行高" value={typography.explorerLineHeight ?? 24} min={20} max={36} unit="px" onChange={value => setTypography({ explorerLineHeight: value })}/>
       </div>
       <div className="nb-settings-type-preview nb-settings-explorer-preview" style={{ fontFamily: 'var(--explorer-font-family)', fontSize: typography.explorerFontSize ?? 13 }}>
-        <div style={{ minHeight: typography.explorerLineHeight ?? 24 }}><FileText size={14}/>快速入门 Guide.md</div>
-        <div style={{ minHeight: typography.explorerLineHeight ?? 24 }}><FileCode size={14}/>notes.json</div>
+        <div style={{ minHeight: typography.explorerLineHeight ?? 24 }}>{getFileIcon('Guide.md')}快速入门 Guide.md</div>
+        <div style={{ minHeight: typography.explorerLineHeight ?? 24 }}>{getFileIcon('notes.json')}notes.json</div>
       </div>
     </SettingsSection>
   </div>;

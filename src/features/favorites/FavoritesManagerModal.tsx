@@ -5,7 +5,6 @@ import { useMenuBounds } from '../../components/useMenuBounds';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Star,
-  Folder,
   FolderOpen,
   FolderPlus,
   Search,
@@ -564,7 +563,7 @@ export function FavoritesManagerModal() {
                       <span>收藏夹</span>
                     </button>
                     <span style={{ color: 'var(--editor-text-muted)', fontSize: 12 }}>/</span>
-                    <Folder size={15} style={{ color: '#eab308' }} />
+                    {getFileIcon(currentFolder?.name || '', { isDir: true, size: 15 })}
                     <span
                       style={{
                         fontWeight: 600,
@@ -660,7 +659,7 @@ export function FavoritesManagerModal() {
                   borderBottom: '1px solid var(--editor-border)',
                 }}
               >
-                <Folder size={16} style={{ color: '#eab308' }} />
+                {getFileIcon(newFolderName, { isDir: true, size: 16 })}
                 <input
                   ref={newFolderInputRef}
                   type="text"
@@ -1043,11 +1042,7 @@ function FolderTreeNode({
         </button>
 
         {/* 文件夹图标 */}
-        {isExpanded ? (
-          <FolderOpen size={14} style={{ color: '#eab308', flexShrink: 0 }} />
-        ) : (
-          <Folder size={14} style={{ color: '#eab308', flexShrink: 0 }} />
-        )}
+        {getFileIcon(node.name, { isDir: true, isOpen: isExpanded, size: 14 })}
 
         {/* 文件夹名称 */}
         <span
@@ -1165,7 +1160,7 @@ function FavoriteFolderRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-        <Folder size={18} style={{ color: '#eab308', flexShrink: 0 }} />
+        {getFileIcon(folder.name, { isDir: true, size: 18 })}
 
         {isEditing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }} onClick={(e) => e.stopPropagation()}>

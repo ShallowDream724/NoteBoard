@@ -1,310 +1,40 @@
-// Shared file-type icons for the tree, tabs, favorites and file detail view.
-
-import type { ReactNode } from 'react';
-import {
-  FileText,
-  File,
-  Database,
-  Braces,
-  FileCode,
-  CodeXml,
-  PencilRuler,
-  FileQuestion,
-  Folder,
-  FolderOpen,
-  Image as ImageIcon,
-  Film,
-  AppWindow,
-  Shapes,
-  SlidersHorizontal,
-  Terminal,
-  Table,
-  Archive,
-  Music,
-  Video,
-  Network,
-  Workflow,
-  GitMerge,
-  Layout,
-  ChartColumn,
-  Presentation,
-  BookOpen,
-  FunctionSquare,
-  FileSpreadsheet,
-} from 'lucide-react';
-import { extFromPath } from '../core/docKind';
+import { memo, type CSSProperties, type ReactNode } from 'react';
+import { resolveFileIcon } from '../core/fileIconCatalog';
+import pierreSprite from '../assets/file-icons.svg?url';
+import nativeSprite from '../assets/noteboard-file-icons.svg?url';
+import './FileIcon.css';
 
 export interface FileIconOptions {
   size?: number;
   isDir?: boolean;
   isOpen?: boolean;
   className?: string;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }
 
-// Markdown is the primary editable format: a solid note silhouette remains
-// distinct from external-document outlines even at 14px and without colour.
-function MarkdownFileIcon({ size, className, style }: FileIconOptions) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24"
-      strokeLinecap="round" strokeLinejoin="round"
-      className={className} style={style} aria-hidden="true" focusable="false">
-      <path fill="var(--editor-accent, #3b82f6)" d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9Z" />
-      <path fill="none" stroke="white" strokeWidth="1.8" d="M14 3v6h6 M7 13h10 M7 17h7" />
-    </svg>
-  );
-}
-
-/** Bound notebook + N monogram, distinct from Markdown's folded sheet. */
-export function NoteBoardFileIcon({ size = 14, className, style }: FileIconOptions) {
-  return <svg width={size} height={size} viewBox="0 0 24 24" className={className} style={style} aria-hidden="true" focusable="false">
-    <rect x="3" y="2" width="18" height="20" rx="4" fill="#6366d9"/>
-    <path d="M7 3v18" stroke="#b8bbff" strokeWidth="1.5"/>
-    <path d="M10 16V8l7 8V8" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M16 2h3v5l-1.5-1L16 7Z" fill="#72dfce"/>
+/** One SVG resource is shared across rows. No effects, subscriptions,
+ * per-file imports or path caches; CSS handles theme changes without rerenders. */
+export const FileIcon = memo(function FileIcon({ fileName, size = 14, isDir = false,
+  isOpen = false, className = '', style }: FileIconOptions & { fileName: string }) {
+  const icon = resolveFileIcon(fileName, isDir, isOpen);
+  const classes = `nb-file-type-icon nb-file-tone-${icon.tone}${icon.secondaryTone ? ` nb-file-secondary-${icon.secondaryTone}` : ''} ${className}`.trim();
+  return <svg width={size} height={size} viewBox="0 0 16 16" fill="none"
+    className={classes} style={style} aria-hidden="true" focusable="false"
+    data-file-icon={icon.symbol}>
+    <use href={`${icon.native ? nativeSprite : pierreSprite}#${icon.symbol}`} />
   </svg>;
+});
+
+export function getFileIcon(fileNameOrPath: string, options: FileIconOptions = {}): ReactNode {
+  return <FileIcon fileName={fileNameOrPath} {...options} />;
 }
 
-export function getFileIcon(
-  fileNameOrPath: string,
-  options: FileIconOptions = {},
-): ReactNode {
-  const { size = 14, isDir = false, isOpen = false, className, style } = options;
-  const iconProps = {
-    size,
-    className,
-    style: { flexShrink: 0, ...style },
-  };
-
-  // 1. 文件夹图标渲染（温暖琥珀金黄色）
-  if (isDir) {
-    if (isOpen) {
-      return <FolderOpen {...iconProps} color="#f59e0b" />;
-    }
-    return <Folder {...iconProps} color="#f59e0b" />;
-  }
-
-  const ext = extFromPath(fileNameOrPath);
-
-  // 2. 根据文件扩展名返回专属图标与调优配色
-  switch (ext) {
-    case 'pdf':
-      return <FileText {...iconProps} color="#dc5252" />;
-    case 'doc': case 'docx': case 'odt': case 'rtf':
-      return <FileText {...iconProps} color="var(--editor-text-secondary, #64748b)" />;
-    case 'ppt': case 'pptx': case 'odp':
-      return <Presentation {...iconProps} color="#d97745" />;
-    case 'ods': case 'xlsm':
-      return <FileSpreadsheet {...iconProps} color="#26956d" />;
-    case 'tex': case 'sty': case 'bib':
-      return <FunctionSquare {...iconProps} color="#528a80" />;
-    case 'epub': case 'mobi':
-      return <BookOpen {...iconProps} color="#9470c5" />;
-    // ── Markdown 笔记（NoteBoard 核心，品牌蓝）──
-    case 'md':
-    case 'markdown':
-      return <MarkdownFileIcon {...iconProps} />;
-    case 'nb': case 'nbdoc':
-      return <NoteBoardFileIcon {...iconProps} />;
-
-    // ── 思维导图与大纲（XMind / MindMap，活力珊瑚橙）──
-    case 'mindmap':
-    case 'xmind':
-    case 'mm':
-      return <Network {...iconProps} color="#f97316" />;
-
-    // ── Draw.io / 架构流程图（经典科技橙红）──
-    case 'drawio':
-    case 'dio':
-      return <Layout {...iconProps} color="#ea580c" />;
-
-    // ── 多维表格（多维表格风格蓝色）──
-    case 'bitable':
-    case 'table':
-      return <Table {...iconProps} color="#2563eb" />;
-
-    // ── Mermaid 流程与时序图表（现代青绿）──
-    case 'mmd':
-    case 'mermaid':
-      return <Workflow {...iconProps} color="#00bfb2" />;
-
-    // ── 信息图脚本（.infographic，青碧绿区别于 Mermaid 与 PlantUML）──
-    case 'infographic':
-    case 'ig':
-      return <ChartColumn {...iconProps} color="#14b8a6" />;
-
-    // ── UML / PlantUML 建模图（优雅洋紫）──
-    case 'puml':
-    case 'plantuml':
-    case 'iuml':
-    case 'uml':
-      return <GitMerge {...iconProps} color="#a855f7" />;
-
-    // ── 自由画板 / 白板（艺术品红与紫）──
-    case 'board':
-    case 'canvas':
-    case 'excalidraw':
-      return <PencilRuler {...iconProps} color="var(--accent-strong, #8b5cf6)" />;
-
-    // ── 常见位图图片格式（翡翠绿）──
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'jpe':
-    case 'jfif':
-    case 'bmp':
-    case 'dib':
-    case 'avif':
-      return <ImageIcon {...iconProps} color="#10b981" />;
-
-    // ── 动态图片格式 GIF / APNG（动态玫粉）──
-    case 'gif':
-    case 'apng':
-      return <Film {...iconProps} color="#f43f5e" />;
-
-    // ── 现代 Web 图片格式 WEBP（科技青蓝）──
-    case 'webp':
-      return <ImageIcon {...iconProps} color="#06b6d4" />;
-
-    // ── 应用/系统图标格式 ICO / CUR（琥珀金黄）──
-    case 'ico':
-    case 'cur':
-      return <AppWindow {...iconProps} color="#f59e0b" />;
-
-    // ── 矢量图形格式 SVG（优雅橙）──
-    case 'svg':
-      return <Shapes {...iconProps} color="#f97316" />;
-
-    // ── 数据库与 SQL（钴蓝）──
-    case 'sql':
-    case 'sqlite':
-    case 'db':
-      return <Database {...iconProps} color="#0284c7" />;
-
-    // ── JSON 数据契约（暖金黄）──
-    case 'json':
-    case 'jsonc':
-    case 'json5':
-      return <Braces {...iconProps} color="#eab308" />;
-
-    // ── YAML 配置（森林翠绿）──
-    case 'yaml':
-    case 'yml':
-      return <FileCode {...iconProps} color="#16a34a" />;
-
-    // HTML: browser window with markup, distinct from XML's angle brackets.
-    case 'html':
-    case 'htm':
-      return <svg width={size} height={size} viewBox="0 0 24 24" className={className} style={iconProps.style} aria-hidden="true" focusable="false">
-        <rect x="2" y="3" width="20" height="18" rx="3" fill="#e56a32" />
-        <path d="M2 8h20" stroke="#ffb88d" strokeWidth="1.5" />
-        <path d="m8 12-3 3 3 3m8-6 3 3-3 3m-3-7-2 8" stroke="white" strokeWidth="1.7" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>;
-
-    // ── XML 与标记语言（珊瑚橙红）──
-    case 'xml':
-    case 'xsd':
-    case 'rss':
-    case 'atom':
-      return <CodeXml {...iconProps} color="#ea580c" />;
-
-    // ── 样式表（CSS 蓝/紫）──
-    case 'css':
-    case 'scss':
-    case 'sass':
-    case 'less':
-      return <FileCode {...iconProps} color="#2563eb" />;
-
-    // ── JavaScript / TypeScript 前端代码 ──
-    case 'js':
-    case 'mjs':
-    case 'cjs':
-      return <FileCode {...iconProps} color="#eab308" />;
-    case 'ts':
-    case 'mts':
-    case 'cts':
-      return <FileCode {...iconProps} color="#3178c6" />;
-    case 'jsx':
-    case 'tsx':
-      return <FileCode {...iconProps} color="#06b6d4" />;
-
-    // ── 后端与系统级编程语言 ──
-    case 'rs':
-      return <FileCode {...iconProps} color="#ea580c" />;
-    case 'py':
-    case 'pyw':
-      return <FileCode {...iconProps} color="#3b82f6" />;
-    case 'go':
-      return <FileCode {...iconProps} color="#00add8" />;
-    case 'java':
-    case 'kt':
-      return <FileCode {...iconProps} color="#f97316" />;
-    case 'c':
-    case 'cpp':
-    case 'cc':
-    case 'cxx':
-    case 'h':
-    case 'hpp':
-      return <FileCode {...iconProps} color="#6366f1" />;
-
-    // ── 脚本与终端指令 ──
-    case 'sh':
-    case 'bash':
-    case 'zsh':
-    case 'bat':
-    case 'cmd':
-    case 'ps1':
-      return <Terminal {...iconProps} color="#10b981" />;
-
-    // ── 表格与数据表 ──
-    case 'csv':
-    case 'tsv':
-    case 'xlsx':
-    case 'xls':
-      return <Table {...iconProps} color="#10b981" />;
-
-    // ── 配置文件与系统环境（控制滑块，石板灰）──
-    case 'ini':
-    case 'conf':
-    case 'cfg':
-    case 'env':
-    case 'properties':
-    case 'toml':
-      return <SlidersHorizontal {...iconProps} color="#64748b" />;
-
-    // ── 纯文本与运行日志（极简中性灰）──
-    case 'txt':
-    case 'log':
-    case 'text':
-      return <FileText {...iconProps} color="#64748b" />;
-
-    // ── 压缩包文件 ──
-    case 'zip':
-    case 'tar':
-    case 'gz':
-    case '7z':
-    case 'rar':
-      return <Archive {...iconProps} color="#a855f7" />;
-
-    // ── 音频与视频媒体 ──
-    case 'mp3':
-    case 'wav':
-    case 'flac':
-    case 'aac':
-    case 'ogg':
-      return <Music {...iconProps} color="#ec4899" />;
-    case 'mp4':
-    case 'mkv':
-    case 'avi':
-    case 'mov':
-    case 'webm':
-      return <Video {...iconProps} color="#8b5cf6" />;
-
-    // ── 默认与未知文件 ──
-    default:
-      if (!ext) {
-        return <File {...iconProps} color="var(--explorer-text-muted, #94a3b8)" />;
-      }
-      return <FileQuestion {...iconProps} color="var(--explorer-text-muted, #94a3b8)" />;
-  }
+/** Fixed-format actions share the resulting file's resolver and glyph.
+ * Create these components once at module scope, not during a render. */
+export function createFileTypeIcon(fileName: string) {
+  return memo(function FileTypeIcon({ size, className, style }: FileIconOptions & { color?: string; fill?: string }) {
+    return <FileIcon fileName={fileName} size={size} className={className} style={style} />;
+  });
 }
+
+export const NoteBoardFileIcon = createFileTypeIcon('document.nb');

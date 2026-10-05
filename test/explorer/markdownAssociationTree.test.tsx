@@ -43,8 +43,8 @@ const key = (element: HTMLElement, value: string) => element.dispatchEvent(new K
 
 it('shows one nested Markdown child and expands the NB without treating its path as a directory', async () => {
   expect(rows().map(element => element.dataset.explorerRow)).toEqual([nb.path, alternate.path]);
-  expect(row(nb.path).querySelector('svg rect[rx="4"]')).not.toBeNull();
-  expect(row(alternate.path).querySelector('svg rect[rx="4"]')).not.toBeNull();
+  expect(row(nb.path).querySelector('[data-file-icon="noteboard"]')).not.toBeNull();
+  expect(row(alternate.path).querySelector('[data-file-icon="noteboard"]')).not.toBeNull();
   await act(async () => key(row(nb.path), 'ArrowRight'));
   expect(rows().map(element => element.dataset.explorerRow)).toEqual([nb.path, md.path, alternate.path]);
   expect(row(md.path).style.paddingLeft).toBe('20px');

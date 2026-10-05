@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowUp, FolderOpen, HardDrive, Search } from 'lucide-react';
+import { ArrowUp, HardDrive, Search } from 'lucide-react';
 import { browseLocations, pathExists, readDir, type BrowseLocation } from '../../core/ipc/commands';
 import type { FileTreeNode } from '../../core/ipc/types';
 import { getFileIcon } from '../../components/FileIcon';
@@ -80,7 +80,7 @@ export function PathBrowser({ initialPath, finish, back }: { initialPath: string
     </form>
     <div className="nb-browser-body">
       <nav aria-label="常用位置">{locations.map(location => <button key={location.path} type="button" onClick={() => void navigate(location.path)} title={location.path}>
-        {location.kind === 'drive' ? <HardDrive size={16}/> : <FolderOpen size={16}/>}<span>{location.name}</span>
+        {location.kind === 'drive' ? <HardDrive size={16}/> : getFileIcon(location.path, { isDir: true, isOpen: true, size: 16 })}<span>{location.name}</span>
       </button>)}</nav>
       <section>
         <label className="nb-browser-filter"><Search size={15}/><input aria-label="筛选当前文件夹" placeholder="筛选当前文件夹" value={query} onChange={event => { setQuery(event.target.value); anchor.current = null; }}/></label>

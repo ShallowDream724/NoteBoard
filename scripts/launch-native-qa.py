@@ -20,6 +20,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--name', default='acceptance')
     parser.add_argument('--exe', type=Path)
+    parser.add_argument('--open-path', type=Path, help='Existing file or directory to open through the normal application CLI')
     args = parser.parse_args()
     if not re.fullmatch(r'[a-z0-9-]{1,64}', args.name):
         parser.error('--name must be 1–64 lowercase letters, digits or hyphens')
@@ -50,7 +51,8 @@ def main():
     startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startup.wShowWindow = 0
     with (profile / 'native.log').open('wb') as log:
-        process = subprocess.Popen([str(exe)], cwd=root, env=env, startupinfo=startup,
+        command = [str(exe)] + ([str(args.open_path.resolve(strict=True))] if args.open_path else [])
+        process = subprocess.Popen(command, cwd=root, env=env, startupinfo=startup,
                                    stdin=subprocess.DEVNULL, stdout=log, stderr=log)
     record = {'pid': process.pid, 'port': port, 'exe': str(exe), 'profile': str(profile),
               'createdAt': psutil.Process(process.pid).create_time(), 'systemFontsPreconfigured': True}

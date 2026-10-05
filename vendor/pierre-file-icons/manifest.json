@@ -1,0 +1,590 @@
+{
+  "repository": "https://github.com/pierrecomputer/vscode-icons",
+  "commit": "04a9028f0b227aaf820e9e73da2992af86ba0f26",
+  "license": "MIT",
+  "treeTokenIcons": {
+    "database": {
+      "icon": "server-duo",
+      "tier": "standard"
+    },
+    "default": {
+      "icon": "file-duo",
+      "tier": "standard"
+    },
+    "bash": {
+      "icon": "bash-duo",
+      "tier": "standard"
+    },
+    "c": {
+      "icon": "lang-c",
+      "tier": "standard"
+    },
+    "cpp": {
+      "icon": "lang-c",
+      "tier": "standard"
+    },
+    "css": {
+      "icon": "lang-css-duo",
+      "tier": "standard"
+    },
+    "font": {
+      "icon": "font",
+      "tier": "standard"
+    },
+    "git": {
+      "icon": "git",
+      "tier": "standard"
+    },
+    "go": {
+      "icon": "lang-go",
+      "tier": "standard"
+    },
+    "html": {
+      "icon": "lang-html-duo",
+      "tier": "standard"
+    },
+    "image": {
+      "icon": "image-duo",
+      "tier": "standard"
+    },
+    "javascript": {
+      "icon": "lang-javascript-duo",
+      "tier": "standard"
+    },
+    "json": {
+      "icon": "braces",
+      "tier": "standard"
+    },
+    "markdown": {
+      "icon": "lang-markdown",
+      "tier": "standard"
+    },
+    "mcp": {
+      "icon": "mcp",
+      "tier": "standard"
+    },
+    "python": {
+      "icon": "lang-python",
+      "tier": "standard"
+    },
+    "ruby": {
+      "icon": "lang-ruby",
+      "tier": "standard"
+    },
+    "rust": {
+      "icon": "lang-rust",
+      "tier": "standard"
+    },
+    "swift": {
+      "icon": "lang-swift",
+      "tier": "standard"
+    },
+    "table": {
+      "icon": "file-table-duo",
+      "tier": "standard"
+    },
+    "text": {
+      "icon": "file-text-duo",
+      "tier": "standard"
+    },
+    "typescript": {
+      "icon": "lang-typescript-duo",
+      "tier": "standard"
+    },
+    "zip": {
+      "icon": "folder-zip-duo",
+      "tier": "standard"
+    },
+    "astro": {
+      "icon": "astro",
+      "tier": "complete"
+    },
+    "babel": {
+      "icon": "babel",
+      "tier": "complete"
+    },
+    "biome": {
+      "icon": "biome",
+      "tier": "complete"
+    },
+    "bootstrap": {
+      "icon": "bootstrap-duo",
+      "tier": "complete"
+    },
+    "browserslist": {
+      "icon": "browserslist-duo",
+      "tier": "complete"
+    },
+    "bun": {
+      "icon": "bun",
+      "tier": "complete"
+    },
+    "claude": {
+      "icon": "claude",
+      "tier": "complete"
+    },
+    "docker": {
+      "icon": "docker",
+      "tier": "complete"
+    },
+    "eslint": {
+      "icon": "eslint",
+      "tier": "complete"
+    },
+    "graphql": {
+      "icon": "graphql",
+      "tier": "complete"
+    },
+    "nextjs": {
+      "icon": "nextjs",
+      "tier": "complete"
+    },
+    "npm": {
+      "icon": "npm-duo",
+      "tier": "complete"
+    },
+    "oxc": {
+      "icon": "oxc",
+      "tier": "complete"
+    },
+    "postcss": {
+      "icon": "postcss",
+      "tier": "complete"
+    },
+    "prettier": {
+      "icon": "prettier",
+      "tier": "complete"
+    },
+    "react": {
+      "icon": "react",
+      "tier": "complete"
+    },
+    "sass": {
+      "icon": "sass",
+      "tier": "complete"
+    },
+    "stylelint": {
+      "icon": "stylelint",
+      "tier": "complete"
+    },
+    "svg": {
+      "icon": "svg-2",
+      "tier": "complete"
+    },
+    "svelte": {
+      "icon": "svelte",
+      "tier": "complete"
+    },
+    "svgo": {
+      "icon": "svgo",
+      "tier": "complete"
+    },
+    "tailwind": {
+      "icon": "tailwind",
+      "tier": "complete"
+    },
+    "terraform": {
+      "icon": "terraform",
+      "tier": "complete"
+    },
+    "vite": {
+      "icon": "vite",
+      "tier": "complete"
+    },
+    "vscode": {
+      "icon": "vscode",
+      "tier": "complete"
+    },
+    "vue": {
+      "icon": "vue",
+      "tier": "complete"
+    },
+    "wasm": {
+      "icon": "wasm-duo",
+      "tier": "complete"
+    },
+    "webpack": {
+      "icon": "webpack",
+      "tier": "complete"
+    },
+    "yml": {
+      "icon": "yml",
+      "tier": "complete"
+    },
+    "zig": {
+      "icon": "zig",
+      "tier": "complete"
+    }
+  },
+  "supplementalIcons": [
+    "folder-duo",
+    "folder-open-duo",
+    "code",
+    "code-block-duo",
+    "gear",
+    "rss",
+    "extension"
+  ],
+  "files": [
+    {
+      "path": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/LICENSE.md",
+      "bytes": 1084,
+      "sha256": "aef11f1ea1092ed19cf5c2ace111cdca883ceabe2a69af2ee7afec648aa5c36d"
+    },
+    {
+      "path": "svgs/astro.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/astro.svg",
+      "bytes": 610,
+      "sha256": "a5d5e1ace5f3809bf91aa9cf3a4d92b7b8b01e6bdefaf87238f033d9462c968c"
+    },
+    {
+      "path": "svgs/babel.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/babel.svg",
+      "bytes": 1012,
+      "sha256": "069c21d194ccba8fa79c77cc0a21d1732de166f5e95173b7c5cf39f691ed482c"
+    },
+    {
+      "path": "svgs/bash-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/bash-duo.svg",
+      "bytes": 682,
+      "sha256": "4ab039d88f66810951c9fa7667e0e5268293b924fdf8b53eaaad4e35821eeefc"
+    },
+    {
+      "path": "svgs/biome.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/biome.svg",
+      "bytes": 323,
+      "sha256": "14f704c3c608fe9c916b7b5054cbb8d4997e40478da2bda1df3faae16598bd2a"
+    },
+    {
+      "path": "svgs/bootstrap-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/bootstrap-duo.svg",
+      "bytes": 933,
+      "sha256": "d284648f2845a28dc82f5be8754868c99e6d62f4ae03bd652c573023d153cf35"
+    },
+    {
+      "path": "svgs/braces.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/braces.svg",
+      "bytes": 786,
+      "sha256": "6c9a253c462da1c65c9ff6d65750523b626a6a017b5fc6926aced3ca507cc28b"
+    },
+    {
+      "path": "svgs/browserslist-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/browserslist-duo.svg",
+      "bytes": 1297,
+      "sha256": "b2d9830c5c60d5dbcac4d1c809da8ed0d5e0252b0cb8c2ff9ec177673d558919"
+    },
+    {
+      "path": "svgs/bun.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/bun.svg",
+      "bytes": 1108,
+      "sha256": "398d6bbbc6bc80dcc5510c069939a2c08ac294c9abe897304112ee400221a22a"
+    },
+    {
+      "path": "svgs/claude.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/claude.svg",
+      "bytes": 1256,
+      "sha256": "1effb382073af45d6dde080a65719ebc3455c4a0a285377032c69a032af79155"
+    },
+    {
+      "path": "svgs/code.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/code.svg",
+      "bytes": 393,
+      "sha256": "5a35b9e9a6b103bee379083424f9f90f01c5e93c19eab83091ab91a41e2a0fec"
+    },
+    {
+      "path": "svgs/code-block-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/code-block-duo.svg",
+      "bytes": 776,
+      "sha256": "0bcb6d94f105690c7b45a26249627ba00116e3fbb88cee14a08d7643d0b2fe42"
+    },
+    {
+      "path": "svgs/docker.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/docker.svg",
+      "bytes": 1342,
+      "sha256": "cbc1c5853da41c0e25596f2ac3f580d50b5bfb47ae555faf304985055f0bf723"
+    },
+    {
+      "path": "svgs/eslint.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/eslint.svg",
+      "bytes": 650,
+      "sha256": "f037c03084bd93dacbc0a225eb7a5661a64f49be820ab6ce5bf8d7e25a92c51d"
+    },
+    {
+      "path": "svgs/extension.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/extension.svg",
+      "bytes": 491,
+      "sha256": "b781a004af0a84fb139de74921c676b34f2226ab961cfbf3c1f8b3d96d2a387b"
+    },
+    {
+      "path": "svgs/file-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/file-duo.svg",
+      "bytes": 374,
+      "sha256": "179360b54688183aca5283f441242c2a0bf668c7768a09db15114308e196765f"
+    },
+    {
+      "path": "svgs/file-table-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/file-table-duo.svg",
+      "bytes": 516,
+      "sha256": "ea1f27d8099c467caf4b2e558161630de6be0efcfb736170775af88ebd97afe8"
+    },
+    {
+      "path": "svgs/file-text-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/file-text-duo.svg",
+      "bytes": 481,
+      "sha256": "e617de1bfd73449aa0a35188840814bcc7d86b643cf226beaa4f6fa0d1a168e4"
+    },
+    {
+      "path": "svgs/folder-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/folder-duo.svg",
+      "bytes": 340,
+      "sha256": "85a62ce9925d7c0c47fd5b1ac20a060ffc06683175479f3659c20645fcdcaa96"
+    },
+    {
+      "path": "svgs/folder-open-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/folder-open-duo.svg",
+      "bytes": 449,
+      "sha256": "0cee704e193d7b34662bb3299cf5f2f939d911f3d267611c78f51004fbdd8e9d"
+    },
+    {
+      "path": "svgs/folder-zip-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/folder-zip-duo.svg",
+      "bytes": 572,
+      "sha256": "bc627eabc74e761b1a80d37614c2c42fe8464782e7652e17a4277ebbb8a78386"
+    },
+    {
+      "path": "svgs/font.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/font.svg",
+      "bytes": 535,
+      "sha256": "98074242ece7ec045426091aadacbf896dad8d196136d150129630815bb6c0a2"
+    },
+    {
+      "path": "svgs/gear.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/gear.svg",
+      "bytes": 720,
+      "sha256": "8891589903840f48cd587772e4a41db114700e05a963f902e85c74e6c2221b30"
+    },
+    {
+      "path": "svgs/git.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/git.svg",
+      "bytes": 442,
+      "sha256": "267a4334908d16723e700f483feef0d485011815dfade386a05b394e0aa2eb93"
+    },
+    {
+      "path": "svgs/graphql.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/graphql.svg",
+      "bytes": 731,
+      "sha256": "4e81b3a002effeb917059257d54b6fdb2d09823772d3610568bf580aa5a4a6de"
+    },
+    {
+      "path": "svgs/image-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/image-duo.svg",
+      "bytes": 389,
+      "sha256": "5cd4f1ad01d76889f75683cc6a12dc7da8b22430d5f0d70af8173cebba333e76"
+    },
+    {
+      "path": "svgs/lang-c.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-c.svg",
+      "bytes": 546,
+      "sha256": "584a2f052198841c5b1f19da2d9dd1f6609d470c0c80c69e42ac504abfe0a19a"
+    },
+    {
+      "path": "svgs/lang-css-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-css-duo.svg",
+      "bytes": 1053,
+      "sha256": "6e6e25515e398f58fa11f47bf9cd1581148fccd02e5253c40059a0a71be05500"
+    },
+    {
+      "path": "svgs/lang-go.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-go.svg",
+      "bytes": 853,
+      "sha256": "08a4160c59b4874b0e31bf1ab4f1883e3338687ea5e27b5432658e29ecac14fa"
+    },
+    {
+      "path": "svgs/lang-html-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-html-duo.svg",
+      "bytes": 581,
+      "sha256": "3ebac8d60a3a074d2b9dee11d818279192b20f0ed3e3587c2e1db41bb8c4722d"
+    },
+    {
+      "path": "svgs/lang-javascript-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-javascript-duo.svg",
+      "bytes": 654,
+      "sha256": "3404cf3fb872787023c3efc13303b9b581674f85a77df72b39ac6239c04e0b86"
+    },
+    {
+      "path": "svgs/lang-markdown.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-markdown.svg",
+      "bytes": 206,
+      "sha256": "a3fc1837b59a8c09912977789a51a833f817301a12fea040c37ce7ea5b5cef48"
+    },
+    {
+      "path": "svgs/lang-python.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-python.svg",
+      "bytes": 1123,
+      "sha256": "6c6923088c6578e140d4be1d27f1f8d4a4aa24586406d0748515cfbff6de7107"
+    },
+    {
+      "path": "svgs/lang-ruby.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-ruby.svg",
+      "bytes": 480,
+      "sha256": "6c48c1a72096b82a939052c6b6a04d8d64bd5af514368342da89d813b944d908"
+    },
+    {
+      "path": "svgs/lang-rust.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-rust.svg",
+      "bytes": 2088,
+      "sha256": "ecff7517cdd0f08e4d42a23b60efca7acff45d1921a017da72fc500ae0ef50db"
+    },
+    {
+      "path": "svgs/lang-swift.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-swift.svg",
+      "bytes": 423,
+      "sha256": "23edde9af7df44c3bf46b6fc8e2cef881d05479557fea4f7c1e6ec6a2fcfbbdf"
+    },
+    {
+      "path": "svgs/lang-typescript-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/lang-typescript-duo.svg",
+      "bytes": 580,
+      "sha256": "11951025738075d740661dc00f0ba86fa1afa9bb74975c8fd876806c42cc9beb"
+    },
+    {
+      "path": "svgs/mcp.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/mcp.svg",
+      "bytes": 909,
+      "sha256": "8d60e35efa4956c2599bc4c8a2100380584f80408510eb18cdba8498aa64662e"
+    },
+    {
+      "path": "svgs/nextjs.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/nextjs.svg",
+      "bytes": 545,
+      "sha256": "fb05f8e80147b0dbd3166cd3c5262b02492fa415d4a979ab4212acfc816d8621"
+    },
+    {
+      "path": "svgs/npm-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/npm-duo.svg",
+      "bytes": 299,
+      "sha256": "040e18cc46f2cbd8cf71263eb4bb7093498ec19e9091dfc2ef505191d218b727"
+    },
+    {
+      "path": "svgs/oxc.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/oxc.svg",
+      "bytes": 763,
+      "sha256": "8af687c733c6d13ce532932e78edaf90e8a76e1e2327937ff1dba8d3d32b131a"
+    },
+    {
+      "path": "svgs/postcss.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/postcss.svg",
+      "bytes": 601,
+      "sha256": "349cea4abf2f6fc4fe1136b8c12d12b69c6d90f28238959877658efc89ddd61f"
+    },
+    {
+      "path": "svgs/prettier.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/prettier.svg",
+      "bytes": 480,
+      "sha256": "dbefaf597373b136b05ecccd493c29d45cae77c835df1c845121edaeb3052360"
+    },
+    {
+      "path": "svgs/react.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/react.svg",
+      "bytes": 1662,
+      "sha256": "3ae9cb4f997eacea553c02c28fd9a107a9bf52edf61c7dc9b9213a081e19d571"
+    },
+    {
+      "path": "svgs/rss.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/rss.svg",
+      "bytes": 298,
+      "sha256": "495e4c19bb43dd24cd4ef422b07977e88dcac243f623616ba1646a15208d5a47"
+    },
+    {
+      "path": "svgs/sass.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/sass.svg",
+      "bytes": 919,
+      "sha256": "b2a8f2df26147729fa1ea3c209d57c2c31e486737df0605b0fa7fe04771a10f3"
+    },
+    {
+      "path": "svgs/server-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/server-duo.svg",
+      "bytes": 1342,
+      "sha256": "7f4f6106b9398c8ca40a2a93fec041a2dfa0c2d3348d9e8352c8671bed82269d"
+    },
+    {
+      "path": "svgs/stylelint.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/stylelint.svg",
+      "bytes": 422,
+      "sha256": "e74e0229e3bde01bfabb7374647ee0e64a187c6e45a5755c5af1c31262ab8949"
+    },
+    {
+      "path": "svgs/svelte.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/svelte.svg",
+      "bytes": 1229,
+      "sha256": "f3ae4d1d77f773a0bcb735ee8e13ce271cd58905d996f5570ef89bd0b9dcdc09"
+    },
+    {
+      "path": "svgs/svg-2.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/svg-2.svg",
+      "bytes": 309,
+      "sha256": "29a6696aab9d829153d7a339b07331275993e7209144d5c6ecb1c9c9730268ac"
+    },
+    {
+      "path": "svgs/svgo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/svgo.svg",
+      "bytes": 1179,
+      "sha256": "58e35672f04aefdae30077c7b0c729284fe8aafa8b09f8afa609f5e24211749b"
+    },
+    {
+      "path": "svgs/tailwind.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/tailwind.svg",
+      "bytes": 494,
+      "sha256": "7df291b75d5c793b7cff74ae9b7d6f52136f22cce4ac571ee8e1b2b7966a3130"
+    },
+    {
+      "path": "svgs/terraform.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/terraform.svg",
+      "bytes": 262,
+      "sha256": "4a4a9148eac576ae1812c58d8f0f2bb84c48292cdf5f44c53fa34240363fef0f"
+    },
+    {
+      "path": "svgs/vite.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/vite.svg",
+      "bytes": 394,
+      "sha256": "c1597c1591ceb53f0a69b53d489e53354084795760cc50f26534fa12226b63fd"
+    },
+    {
+      "path": "svgs/vscode.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/vscode.svg",
+      "bytes": 603,
+      "sha256": "f253011c7c7eeae4d3851291e8486de33989d74498cb71f925632030699fb3b4"
+    },
+    {
+      "path": "svgs/vue.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/vue.svg",
+      "bytes": 264,
+      "sha256": "c2447a317246ffe0356e4325483c632b0b9841b7670d7a16e6bfa06a96e597cd"
+    },
+    {
+      "path": "svgs/wasm-duo.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/wasm-duo.svg",
+      "bytes": 536,
+      "sha256": "d26339062d820ca42c1fda8aebb78b38430c5ba4693397ab2b0f9bac211fd5a9"
+    },
+    {
+      "path": "svgs/webpack.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/webpack.svg",
+      "bytes": 505,
+      "sha256": "c1fcfcd4d412a83bca7bad9423a5afd68c4921c08c3a0e8c685691bc45b6f653"
+    },
+    {
+      "path": "svgs/yml.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/yml.svg",
+      "bytes": 537,
+      "sha256": "c99c0a2c5eba32be64cf69e81ecfd9c60a0c83791c138c2401afa0c761479eb2"
+    },
+    {
+      "path": "svgs/zig.svg",
+      "url": "https://raw.githubusercontent.com/pierrecomputer/vscode-icons/04a9028f0b227aaf820e9e73da2992af86ba0f26/svgs/zig.svg",
+      "bytes": 357,
+      "sha256": "d1cd3274bd8d6ee7431069988b42420f9eb2d430d3097924d19c1e00e3697e36"
+    }
+  ]
+}

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { Plus, FileText, Table2, PencilRuler, Network, GitCompare, Layout,
-  ChartColumn, Workflow, GitMerge, Braces, Database, FileCode, CodeXml,
+import { Plus, FileText, GitCompare, FileCode,
   FolderOpen, Star, Archive, ChevronRight } from 'lucide-react';
-import { NoteBoardFileIcon } from '../FileIcon';
+import { createFileTypeIcon, NoteBoardFileIcon } from '../FileIcon';
 import { Tooltip } from '../Tooltip';
 import { on, off } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -11,25 +10,39 @@ import { useFavoritesStore } from '../../features/favorites/favoritesStore';
 import * as actions from '../../features/welcome/welcomeActions';
 import { useSettingsStore } from '../../stores/settingsStore';
 
+const MarkdownIcon = createFileTypeIcon('note.md');
+const TextIcon = createFileTypeIcon('note.txt');
+const BitableIcon = createFileTypeIcon('note.bitable');
+const ExcalidrawIcon = createFileTypeIcon('note.excalidraw');
+const MindmapIcon = createFileTypeIcon('note.mindmap');
+const DrawioIcon = createFileTypeIcon('note.drawio');
+const InfographicIcon = createFileTypeIcon('note.infographic');
+const MermaidIcon = createFileTypeIcon('note.mmd');
+const PlantUmlIcon = createFileTypeIcon('note.puml');
+const JsonIcon = createFileTypeIcon('note.json');
+const SqlIcon = createFileTypeIcon('note.sql');
+const YamlIcon = createFileTypeIcon('note.yaml');
+const XmlIcon = createFileTypeIcon('note.xml');
+
 type Action = { label: string; icon: ComponentType<{ size?: number }>; run: () => unknown };
 const primary: Action[] = [
   { label: '新建 NoteBoard 文档 (.nb)', icon: NoteBoardFileIcon, run: actions.newNativeDocument },
-  { label: '新建 Markdown 笔记 (.md)', icon: FileText, run: actions.newMarkdown },
-  { label: '新建文本文档 (.txt)', icon: FileText, run: actions.newText },
-  { label: '新建多维表格 (.bitable)', icon: Table2, run: actions.newBitable },
-  { label: '新建自由画板 (.excalidraw)', icon: PencilRuler, run: actions.newBoard },
-  { label: '新建思维导图 (.mindmap)', icon: Network, run: actions.newMindmap },
+  { label: '新建 Markdown 笔记 (.md)', icon: MarkdownIcon, run: actions.newMarkdown },
+  { label: '新建文本文档 (.txt)', icon: TextIcon, run: actions.newText },
+  { label: '新建多维表格 (.bitable)', icon: BitableIcon, run: actions.newBitable },
+  { label: '新建自由画板 (.excalidraw)', icon: ExcalidrawIcon, run: actions.newBoard },
+  { label: '新建思维导图 (.mindmap)', icon: MindmapIcon, run: actions.newMindmap },
   { label: '文本对比', icon: GitCompare, run: actions.newTextDiff },
 ];
 const formats: Action[] = [
-  { label: 'Draw.io 架构图 (.drawio)', icon: Layout, run: actions.newDrawio },
-  { label: '信息图 (.infographic)', icon: ChartColumn, run: actions.newInfographic },
-  { label: 'Mermaid 图表 (.mmd)', icon: Workflow, run: actions.newMermaid },
-  { label: 'PlantUML 建模 (.puml)', icon: GitMerge, run: actions.newPlantUml },
-  { label: 'JSON 配置文件 (.json)', icon: Braces, run: actions.newJson },
-  { label: 'SQL 数据库脚本 (.sql)', icon: Database, run: actions.newSql },
-  { label: 'YAML 配置文件 (.yaml)', icon: FileCode, run: actions.newYaml },
-  { label: 'XML 标记文档 (.xml)', icon: CodeXml, run: actions.newXml },
+  { label: 'Draw.io 架构图 (.drawio)', icon: DrawioIcon, run: actions.newDrawio },
+  { label: '信息图 (.infographic)', icon: InfographicIcon, run: actions.newInfographic },
+  { label: 'Mermaid 图表 (.mmd)', icon: MermaidIcon, run: actions.newMermaid },
+  { label: 'PlantUML 建模 (.puml)', icon: PlantUmlIcon, run: actions.newPlantUml },
+  { label: 'JSON 配置文件 (.json)', icon: JsonIcon, run: actions.newJson },
+  { label: 'SQL 数据库脚本 (.sql)', icon: SqlIcon, run: actions.newSql },
+  { label: 'YAML 配置文件 (.yaml)', icon: YamlIcon, run: actions.newYaml },
+  { label: 'XML 标记文档 (.xml)', icon: XmlIcon, run: actions.newXml },
 ];
 const openActions: Action[] = [
   { label: '打开文件 (Ctrl+O)', icon: FileText, run: actions.openFileDialog },

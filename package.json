@@ -7,7 +7,7 @@
   "scripts": {
     "sync:version": "node scripts/sync-version.mjs",
     "predev": "node scripts/sync-version.mjs",
-    "prebuild": "node scripts/sync-version.mjs",
+    "prebuild": "node scripts/sync-version.mjs && node scripts/generate-file-icons.mjs --check",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "tauri": "node scripts/run-tauri.mjs",
@@ -17,7 +17,9 @@
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test:contract": "vitest run test/contract",
     "gate:budget": "node scripts/check-budget.mjs --check",
-    "verify:ico": "node scripts/verify-ico.mjs"
+    "verify:ico": "node scripts/verify-ico.mjs",
+    "icons:files": "node scripts/generate-file-icons.mjs",
+    "icons:files:check": "node scripts/generate-file-icons.mjs --check"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.0.0",

@@ -3,7 +3,7 @@
 // 详见 docs/07-UI布局与交互规范.md §11
 
 import React, { useState } from 'react';
-import { NoteBoardFileIcon } from './FileIcon';
+import { createFileTypeIcon, NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
 import { useSettingsStore } from '../stores/settingsStore';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
@@ -11,26 +11,27 @@ import { useSettingsStore } from '../stores/settingsStore';
 //    渲染同步命中 fulfilled lazy（零 fallback、远低于 1s 目标）。
 import {
   FolderOpen,
-  FilePlus,
-  PencilRuler,
   FileSearch,
-  FileText,
-  Network,
-  Layout,
-  Workflow,
-  GitMerge,
   GitCompare,
-  Braces,
-  FileCode,
-  Database,
-  CodeXml,
-  ChartColumn,
   Sparkles,
   Archive,
-  Table2,
   Star,
 } from 'lucide-react';
 import { ChevronRight } from 'lucide-react';
+
+const MarkdownIcon = createFileTypeIcon('note.md');
+const TextIcon = createFileTypeIcon('note.txt');
+const BitableIcon = createFileTypeIcon('note.bitable');
+const ExcalidrawIcon = createFileTypeIcon('note.excalidraw');
+const MindmapIcon = createFileTypeIcon('note.mindmap');
+const DrawioIcon = createFileTypeIcon('note.drawio');
+const InfographicIcon = createFileTypeIcon('note.infographic');
+const MermaidIcon = createFileTypeIcon('note.mmd');
+const PlantUmlIcon = createFileTypeIcon('note.puml');
+const JsonIcon = createFileTypeIcon('note.json');
+const SqlIcon = createFileTypeIcon('note.sql');
+const YamlIcon = createFileTypeIcon('note.yaml');
+const XmlIcon = createFileTypeIcon('note.xml');
 
 interface WelcomeScreenProps {
   onOpenFile?: () => void;
@@ -90,7 +91,7 @@ export function WelcomeScreen({
       onClick: onNewNativeDocument,
     },
     {
-      icon: FilePlus,
+      icon: MarkdownIcon,
       label: '新建 Markdown 笔记 (.md)',
       desc: '富文本与源码双模笔记',
       shortcut: '',
@@ -98,7 +99,7 @@ export function WelcomeScreen({
       onClick: onNewMarkdown,
     },
     {
-      icon: FileText,
+      icon: TextIcon,
       label: '新建文本文档 (.txt)',
       desc: '轻量纯文本记录与备忘',
       shortcut: '',
@@ -106,7 +107,7 @@ export function WelcomeScreen({
       onClick: onNewText,
     },
     {
-      icon: Table2,
+      icon: BitableIcon,
       label: '新建多维表格 (.bitable)',
       desc: '结构化数据与看板视图',
       shortcut: '',
@@ -114,7 +115,7 @@ export function WelcomeScreen({
       onClick: onNewBitable,
     },
     {
-      icon: PencilRuler,
+      icon: ExcalidrawIcon,
       label: '新建自由画板 (.excalidraw)',
       desc: 'Excalidraw 自由手绘与白板',
       shortcut: '',
@@ -122,7 +123,7 @@ export function WelcomeScreen({
       onClick: onNewBoard,
     },
     {
-      icon: Network,
+      icon: MindmapIcon,
       label: '新建思维导图 (.mindmap)',
       desc: '大纲 ⇄ 脑图双模切换',
       shortcut: '',
@@ -207,56 +208,56 @@ export function WelcomeScreen({
   // 更多格式列表（8 项：Draw.io, 信息图, Mermaid, PlantUML, JSON, SQL, YAML, XML）
   const moreFormats = [
     {
-      icon: Layout,
+      icon: DrawioIcon,
       label: 'Draw.io 架构图 (.drawio)',
       desc: '专业系统架构与业务流程图',
       color: '#ea580c',
       onClick: onNewDrawio,
     },
     {
-      icon: ChartColumn,
+      icon: InfographicIcon,
       label: '信息图 (.infographic)',
       desc: '指标看板、时间线与漏斗等可视化',
       color: '#14b8a6',
       onClick: onNewInfographic,
     },
     {
-      icon: Workflow,
+      icon: MermaidIcon,
       label: 'Mermaid 图表 (.mmd)',
       desc: '时序图、流程图与状态机脚本',
       color: '#00bfb2',
       onClick: onNewMermaid,
     },
     {
-      icon: GitMerge,
+      icon: PlantUmlIcon,
       label: 'PlantUML 建模 (.puml)',
       desc: '类图、时序图与系统组件图',
       color: '#a855f7',
       onClick: onNewPlantUml,
     },
     {
-      icon: Braces,
+      icon: JsonIcon,
       label: 'JSON 配置文件 (.json)',
       desc: 'JSON 数据、格式化与校验',
       color: '#eab308',
       onClick: onNewJson,
     },
     {
-      icon: Database,
+      icon: SqlIcon,
       label: 'SQL 数据库脚本 (.sql)',
       desc: 'SQL 数据库查询与 DDL 语句',
       color: '#3b82f6',
       onClick: onNewSql,
     },
     {
-      icon: FileCode,
+      icon: YamlIcon,
       label: 'YAML 配置文件 (.yaml)',
       desc: 'YAML 服务配置与清单管理',
       color: '#06b6d4',
       onClick: onNewYaml,
     },
     {
-      icon: CodeXml,
+      icon: XmlIcon,
       label: 'XML 标记文档 (.xml)',
       desc: 'XML 结构化标记与配置',
       color: '#ec4899',

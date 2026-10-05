@@ -1,0 +1,57 @@
+.nb-file-type-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  color: var(--file-icon-color, var(--explorer-text-muted, #6c6c71));
+}
+
+/* Pierre palette: 600 on light surfaces, 400 on dark surfaces. */
+:root {
+  --file-icon-gray: #6c6c71;
+  --file-icon-red: #d52c36;
+  --file-icon-vermilion: #d5512f;
+  --file-icon-orange: #d47628;
+  --file-icon-yellow: #d5a910;
+  --file-icon-green: #199f43;
+  --file-icon-mint: #16a994;
+  --file-icon-teal: #17a5af;
+  --file-icon-cyan: #1ca1c7;
+  --file-icon-blue: #1a85d4;
+  --file-icon-indigo: #693acf;
+  --file-icon-purple: #a631be;
+  --file-icon-pink: #d32a61;
+  --file-icon-brown: #956b4f;
+}
+:root[data-theme="mo-ye"] {
+  --file-icon-gray: #adadb1;
+  --file-icon-red: #ff6762;
+  --file-icon-vermilion: #ff8c5b;
+  --file-icon-orange: #ffa359;
+  --file-icon-yellow: #ffd452;
+  --file-icon-green: #5ecc71;
+  --file-icon-mint: #61d5c0;
+  --file-icon-teal: #64d1db;
+  --file-icon-cyan: #68cdf2;
+  --file-icon-blue: #69b1ff;
+  --file-icon-indigo: #9d6afb;
+  --file-icon-purple: #d568ea;
+  --file-icon-pink: #ff678d;
+  --file-icon-brown: #c3987b;
+}
+.nb-file-tone-gray { --file-icon-color: var(--file-icon-gray); }
+.nb-file-tone-red { --file-icon-color: var(--file-icon-red); }
+.nb-file-tone-vermilion { --file-icon-color: var(--file-icon-vermilion); }
+.nb-file-tone-orange { --file-icon-color: var(--file-icon-orange); }
+.nb-file-tone-yellow { --file-icon-color: var(--file-icon-yellow); }
+.nb-file-tone-green { --file-icon-color: var(--file-icon-green); }
+.nb-file-tone-mint { --file-icon-color: var(--file-icon-mint); }
+.nb-file-tone-teal { --file-icon-color: var(--file-icon-teal); }
+.nb-file-tone-cyan { --file-icon-color: var(--file-icon-cyan); }
+.nb-file-tone-blue { --file-icon-color: var(--file-icon-blue); }
+.nb-file-tone-indigo { --file-icon-color: var(--file-icon-indigo); }
+.nb-file-tone-purple { --file-icon-color: var(--file-icon-purple); }
+.nb-file-tone-pink { --file-icon-color: var(--file-icon-pink); }
+.nb-file-tone-brown { --file-icon-color: var(--file-icon-brown); }
+.nb-file-secondary-yellow { --file-icon-secondary: var(--file-icon-yellow); }
+.nb-file-secondary-pink { --file-icon-secondary: var(--file-icon-pink); }
+.nb-file-secondary-cyan { --file-icon-secondary: var(--file-icon-cyan); }
