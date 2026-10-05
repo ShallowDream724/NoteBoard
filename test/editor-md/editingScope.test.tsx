@@ -58,7 +58,10 @@ describe('parent-owned editing scopes', () => {
     let caption!: ReturnType<typeof mountFigureCaptionEditor>;
     await act(async () => { caption = mountFigureCaptionEditor(host, { view: editor.view, getPos: () => 0, label: '图注', close: () => caption.destroy() }); });
     cleanups.push(() => caption.destroy());
-    caption.editor.commands.setTextSelection({ from: 1, to: 8 }); caption.editor.view.dom.focus();
+    await act(async () => {
+      caption.editor.commands.setTextSelection({ from: 1, to: 8 });
+      caption.editor.view.focus();
+    });
     const top = await toolbar(editor);
     await click(top, '加粗');
     expect(editor.state.doc.firstChild!.attrs.captionContent[0].marks).toContainEqual({ type: 'bold' });
@@ -86,13 +89,16 @@ describe('parent-owned editing scopes', () => {
     let caption!: ReturnType<typeof mountFigureCaptionEditor>;
     await act(async () => { caption = mountFigureCaptionEditor(host, { view: editor.view, getPos: () => 0, label: '图注', close: () => caption.destroy() }); });
     cleanups.push(() => caption.destroy());
-    caption.editor.commands.setTextSelection({ from: 1, to: 8 }); caption.editor.view.dom.focus();
+    await act(async () => {
+      caption.editor.commands.setTextSelection({ from: 1, to: 8 });
+      caption.editor.view.focus();
+    });
     const selection = caption.editor.state.selection, top = await toolbar(editor);
     const portal = document.body.appendChild(document.createElement('button')); portal.className = 'nb-highlight-menu';
     await act(async () => { portal.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })); portal.focus(); });
     expect(caption.editor.state.selection.eq(selection)).toBe(true); expect(getEditingScope(editor.view)?.kind).toBe('tiptap');
     await click(top, '插入/编辑超链接');
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 60)); });
+    await act(async () => { await vi.waitFor(() => expect(host.querySelector('input[placeholder*="https"]')).not.toBeNull()); });
     const input = host.querySelector<HTMLInputElement>('input[placeholder*="https"]')!;
     expect(input).not.toBeNull();
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;

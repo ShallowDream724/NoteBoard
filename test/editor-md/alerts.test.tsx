@@ -17,6 +17,7 @@ import { EditorView } from '@codemirror/view';
 import { acceptCompletion, currentCompletions, startCompletion } from '@codemirror/autocomplete';
 import { sourceTypingAssist } from '../../src/features/editor-md/sourceTypingAssist';
 import { act } from 'react';
+import { TooltipProvider } from '../../src/components/Tooltip';
 import { createRoot } from 'react-dom/client';
 import CalloutMenu from '../../src/features/editor-md/CalloutMenu';
 import { EmptyBlockInsertMenu } from '../../src/features/editor-md/EmptyBlockInsertMenu';
@@ -115,7 +116,7 @@ describe('提示块内容与保存', () => {
     const close = vi.fn();
     try {
       initializeEditorDocument(editor, '#!noteboard 1\n@block {"type":"paragraph"}\n', 'noteboard');
-      await act(async () => root.render(<EmptyBlockInsertMenu editor={editor} pos={0} close={close}/>));
+      await act(async () => root.render(<TooltipProvider><EmptyBlockInsertMenu editor={editor} pos={0} close={close}/></TooltipProvider>));
       const groups = Array.from(host.querySelectorAll('.nb-empty-block-menu > [role="group"]'));
       expect(groups.map(group => group.getAttribute('aria-label'))).toEqual(['文字与列表', '内容块', '图片', '公式与图表']);
       const callout = Array.from(groups[1].querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === '提示块')!;

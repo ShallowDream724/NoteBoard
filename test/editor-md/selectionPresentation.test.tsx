@@ -42,7 +42,8 @@ describe('selection presentation scope', () => {
       const trigger = host.querySelector<HTMLButtonElement>('button')!;
       expect(trigger.getAttribute('aria-label')).toBe('单元格对齐');
       await act(async () => { trigger.click(); });
-      const action = document.querySelector<HTMLButtonElement>('.nb-alignment-menu button[title="居中"]')!;
+      const action = [...document.querySelectorAll<HTMLButtonElement>('.nb-alignment-menu button')].find(button => button.textContent?.trim() === '居中')!;
+      expect(action).toBeDefined();
       const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
       await act(async () => { action.dispatchEvent(down); action.click(); });
       expect(down.defaultPrevented).toBe(true);
