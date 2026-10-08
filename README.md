@@ -144,7 +144,7 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-项目使用 Tauri、React、TypeScript、TipTap 和 CodeMirror。格式与接口说明见 [原生文档](docs/architecture/native-documents.md)、[NB 编写规范](docs/architecture/native-authoring.md) 和 [导出设计](docs/architecture/document-export.md)。
+项目使用 Tauri、React、TypeScript、TipTap 和 CodeMirror。格式与接口说明见 [原生文档](docs/architecture/native-documents.md)、[NB 编写规范](docs/architecture/native-authoring.md) 和 [导出设计](docs/architecture/document-export.md)。本地安装包、构建缓存和验收配置的保留范围见 [构建产物保留](docs/local-artifact-retention.md)。
 
 ## 来源与许可
 
