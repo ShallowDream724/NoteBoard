@@ -23,7 +23,7 @@
 
 /* Keep the current branch legible where its rail crosses selection fill. */
 .nb-explorer-children[data-active-branch]::before {
-  background: color-mix(in srgb, var(--explorer-indent-guide) 65%, var(--explorer-text-muted));
+  background: var(--explorer-indent-guide-active);
 }
 
 .nb-explorer-disclosure {

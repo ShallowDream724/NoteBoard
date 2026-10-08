@@ -243,6 +243,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --explorer-active: #e5e7eb;
   --explorer-border: #e5e7eb;
   --explorer-indent-guide: #e5e7eb;
+  --explorer-indent-guide-active: #c9cfd9;
 
   --outline-bg: #ffffff;
   --outline-item-active-bg: #eff6ff;
@@ -380,6 +381,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --explorer-active: #E2DFD3;
   --explorer-border: #E2DFD3;
   --explorer-indent-guide: #E2DFD3;
+  --explorer-indent-guide-active: #C9C6BB;
 
   --outline-bg: #F5F4EF;
   --outline-item-active-bg: #FDF0EB;
@@ -517,6 +519,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --explorer-active: #475569;
   --explorer-border: #334155;
   --explorer-indent-guide: #334155;
+  --explorer-indent-guide-active: #8494aa;
 
   --outline-bg: #1e293b;
   --outline-item-active-bg: #1e3a5f;

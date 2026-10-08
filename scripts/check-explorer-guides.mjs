@@ -108,10 +108,19 @@ try {
   await row(`${samples}/README.md`).click(); await moveOutside();
   assert.deepEqual(visible(await snapshot()), [samples]);
 
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'mo-ye'));
   report.dark = await snapshot(); verifyGeometry(report.dark);
+  assert.notEqual(await page.locator('.nb-explorer-tree').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
   await captureTree('dark-default');
-  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  await row(version).click(); await moveOutside();
+  assert.deepEqual(visible(await snapshot()), [releases]);
+  await captureTree('dark-folder');
+  await row(`${samples}/README.md`).click(); await moveOutside();
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'hu-po'));
+  report.warm = await snapshot(); verifyGeometry(report.warm);
+  assert.deepEqual(visible(report.warm), [samples]);
+  await captureTree('warm-default');
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'chen-guang'));
   await row(samples).hover(); await page.keyboard.down('Control'); await page.mouse.wheel(0, -100); await page.keyboard.up('Control');
   report.scaled = await snapshot(); verifyGeometry(report.scaled);
   await page.setViewportSize({ width: 680, height: 540 });
