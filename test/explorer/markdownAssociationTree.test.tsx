@@ -62,10 +62,43 @@ it('shows one nested Markdown child and expands the NB without treating its path
 it('reveals a linked Markdown by opening its group and refreshes only real directories', async () => {
   await act(async () => useExplorerStore.getState().setRevealed(md.path, true));
   expect(row(md.path)).toBeDefined(); expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  expect(document.querySelector('[data-active-branch]')?.getAttribute('data-explorer-branch')).toBe(nb.path);
   await act(async () => refreshExplorer());
   expect(io.readDir).toHaveBeenCalledWith(directory, expect.any(Boolean));
   expect(io.readDir.mock.calls.every(([path]) => path === directory)).toBe(true);
   expect(io.headers).toHaveBeenCalledWith([nb.path, alternate.path]);
+});
+
+it('keeps the selected file or folder in exactly its displayed parent branch', async () => {
+  const folder = (name: string): FileTreeNode => ({ ...entry(name), isDir: true });
+  const outputs = folder('outputs'), samples = folder('outputs\\File-Text-Samples');
+  const releases = folder('outputs\\releases'), version = folder('outputs\\releases\\1.0.1');
+  const readme = entry('outputs\\File-Text-Samples\\README.md');
+  const checksum = entry('outputs\\releases\\1.0.1\\SHA256SUMS.txt');
+  const activeBranches = () => Array.from(document.querySelectorAll('[data-active-branch]'), element => element.getAttribute('data-explorer-branch'));
+  await act(async () => {
+    useExplorerStore.getState().setRoot(directory, [outputs]);
+    useExplorerStore.getState().expand(outputs.path, [samples, releases]);
+    useExplorerStore.getState().expand(samples.path, [readme]);
+    useExplorerStore.getState().expand(releases.path, [version]);
+    useExplorerStore.getState().expand(version.path, [checksum]);
+    useExplorerStore.getState().setRevealed(readme.path, false);
+  });
+  expect(activeBranches()).toEqual([samples.path]);
+  await act(async () => useExplorerStore.getState().setRevealed(version.path, false));
+  expect(activeBranches()).toEqual([releases.path]);
+  const state = useExplorerStore.getState();
+  await act(async () => {
+    row(checksum.path).dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    row(checksum.path).dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+  });
+  expect(useExplorerStore.getState()).toBe(state);
+  expect(io.readDir).not.toHaveBeenCalled();
+  await act(async () => key(row(version.path), 'ArrowLeft'));
+  expect(row(checksum.path)).toBeUndefined();
+  expect(activeBranches()).toEqual([releases.path]);
+  await act(async () => useExplorerStore.getState().setRevealed(outputs.path, false));
+  expect(activeBranches()).toEqual([]);
 });
 
 it('renames a nested Markdown at its actual filesystem parent, retaining the normal file action', async () => {

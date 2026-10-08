@@ -27,6 +27,10 @@ import { showToast } from '../../stores/toastStore';
 import * as ipc from '../../core/ipc/commands';
 import { groupMarkdownAssociations } from '../document-format/markdownAssociationIndex';
 import { normalizePath, sameKey } from './pathUtils';
+import './explorerTree.css';
+
+const DISCLOSURE_SIZE = 12;
+const ROW_BORDER = 2;
 
 interface TreeNodeProps {
   node: FileTreeNode;
@@ -123,6 +127,9 @@ export const TreeNode = memo(function TreeNode({
   const expanded = node.isDir ? isNodeExpanded : !!associatedMarkdown && isAssociationExpanded;
   const visibleChildren = useMemo(() => !expanded ? [] : node.isDir ? groupMarkdownAssociations(children ?? [])
     : associatedMarkdown ? [{ node: associatedMarkdown }] : [], [expanded, node.isDir, children, associatedMarkdown, associationRevision]);
+  // Use the displayed parent, including NB → Markdown groups, rather than the
+  // filesystem parent. Selecting a folder activates its parent's guide too.
+  const activeBranch = useMemo(() => visibleChildren.some(({ node: child }) => sameKey(revealed, child.path)), [visibleChildren, revealed]);
   useEffect(() => {
     if (associatedMarkdown && sameKey(revealed, associatedMarkdown.path)) expandAssociation(node.path);
   }, [associatedMarkdown?.path, revealed, revealCount, node.path, expandAssociation]);
@@ -154,7 +161,7 @@ export const TreeNode = memo(function TreeNode({
     cursor: 'pointer',
     userSelect: 'none',
     background: isRevealed ? 'var(--explorer-active)' : 'transparent',
-    borderLeft: isRevealed ? '2px solid var(--accent-strong)' : '2px solid transparent',
+    borderLeft: `${ROW_BORDER}px solid ${isRevealed ? 'var(--accent-strong)' : 'transparent'}`,
     color: 'var(--explorer-text)',
     fontSize: 'var(--explorer-font-size, 13px)',
     fontFamily: 'var(--explorer-font-family, inherit)',
@@ -342,18 +349,18 @@ export const TreeNode = memo(function TreeNode({
             <span
               onClick={handleArrowClick}
               style={{
-                width: 12,
-                height: 12,
+                width: DISCLOSURE_SIZE,
+                height: DISCLOSURE_SIZE,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
               }}
             >
-              <DisclosureTriangle expanded={expanded} size={12} color="var(--explorer-text-muted)" style={{ transition: 'transform var(--transition-fast)' }} />
+              <DisclosureTriangle expanded={expanded} size={DISCLOSURE_SIZE} variant="chevron" color="var(--explorer-text-muted)" className="nb-explorer-disclosure" />
             </span>
           ) : (
-            <span style={{ width: 12, flexShrink: 0 }} />
+            <span style={{ width: DISCLOSURE_SIZE, flexShrink: 0 }} />
           )}
 
           {/* 文件/目录优雅图标 */}
@@ -573,7 +580,9 @@ export const TreeNode = memo(function TreeNode({
 
       {/* 子节点递归渲染 */}
       {expanded && visibleChildren.length > 0 && (
-        <div role="group">
+        <div role="group" className="nb-explorer-children" data-explorer-branch={node.path}
+          data-active-branch={activeBranch || undefined}
+          style={{ '--explorer-guide-left': `${paddingLeft + ROW_BORDER + DISCLOSURE_SIZE / 2}px` } as React.CSSProperties}>
           {visibleChildren.map(({ node: child, markdown }, i) => (
             <TreeNode
               key={child.path}

@@ -1,11 +1,13 @@
 import type { SVGProps } from 'react';
 
 const TRIANGLE_PATH = 'M3 1.5 9 6 3 10.5Z';
+const CHEVRON_PATH = 'M4.25 2.75 7.5 6 4.25 9.25';
 
-/** Shared filled indicator: right when collapsed and down when expanded. */
-export function DisclosureTriangle({ expanded = false, size = 12, style, ...props }: SVGProps<SVGSVGElement> & { expanded?: boolean; size?: number | string }) {
-  return <svg width={size} height={size} viewBox="0 0 12 12" fill="currentColor" stroke="none" aria-hidden="true" focusable="false" style={{ transform: expanded ? 'rotate(90deg)' : undefined, ...style }} {...props}>
-    <path d={TRIANGLE_PATH}/>
+/** Shared disclosure geometry; file navigation opts into the lighter chevron. */
+export function DisclosureTriangle({ expanded = false, size = 12, variant = 'filled', style, ...props }: SVGProps<SVGSVGElement> & { expanded?: boolean; size?: number | string; variant?: 'filled' | 'chevron' }) {
+  const chevron = variant === 'chevron';
+  return <svg width={size} height={size} viewBox="0 0 12 12" fill={chevron ? 'none' : 'currentColor'} stroke={chevron ? 'currentColor' : 'none'} strokeWidth={chevron ? 1.25 : undefined} strokeLinecap={chevron ? 'round' : undefined} strokeLinejoin={chevron ? 'round' : undefined} aria-hidden="true" focusable="false" style={{ transform: expanded ? 'rotate(90deg)' : undefined, ...style }} {...props}>
+    <path d={chevron ? CHEVRON_PATH : TRIANGLE_PATH}/>
   </svg>;
 }
 

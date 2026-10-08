@@ -1,0 +1,37 @@
+.nb-explorer-children {
+  position: relative;
+}
+
+/* One rail per expanded group spans its actual visible descendants. */
+.nb-explorer-children::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: var(--explorer-guide-left);
+  width: 1px;
+  background: var(--explorer-indent-guide);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.nb-explorer-children[data-active-branch]::before,
+.nb-explorer-tree .nb-vertical-scroll-area:hover .nb-explorer-children::before,
+.nb-explorer-tree .nb-vertical-scroll-area:has([data-explorer-row]:focus-visible) .nb-explorer-children::before {
+  opacity: 1;
+}
+
+/* Keep the current branch legible where its rail crosses selection fill. */
+.nb-explorer-children[data-active-branch]::before {
+  background: color-mix(in srgb, var(--explorer-indent-guide) 65%, var(--explorer-text-muted));
+}
+
+.nb-explorer-disclosure {
+  transition: transform var(--transition-fast);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-explorer-disclosure {
+    transition: none;
+  }
+}

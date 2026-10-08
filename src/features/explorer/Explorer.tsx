@@ -158,7 +158,7 @@ export function Explorer() {
   }
 
   return (
-    <div style={containerStyle} role="tree">
+    <div style={containerStyle} role="tree" className="nb-explorer-tree">
       {/* 标题行 */}
       <ExplorerHeader>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
