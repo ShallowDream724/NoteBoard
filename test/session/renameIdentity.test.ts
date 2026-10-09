@@ -11,6 +11,7 @@ import { initializeDocumentHistory, getCurrentDocumentHistoryContent } from '@/f
 import { getBaseline } from '@/features/editor-md/serialize';
 import { getStagedPath, registerRestoredStagedPath } from '@/features/staging/stagingManager';
 import { kindFromPath, languageFromPath } from '@/core/docKind';
+import { useExplorerStore } from '@/features/explorer/explorerStore';
 
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'rename-test' }) }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
@@ -37,6 +38,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [], pendingCloseKeys: [], isWindowClosing: false });
   useDocumentStore.getState().clear();
+  useExplorerStore.getState().clear();
   resetEditorRegistryForTest();
   vi.mocked(ipc.renamePath).mockResolvedValue(undefined);
 });
@@ -71,6 +73,10 @@ it('moves pending input, history, revision and staging after draining writes wit
 
 it('keeps dirty content and the original session when native rename fails', async () => {
   const key = 'C:\\notes\\failure.md'; seed(key); edit(key, 'unsaved');
+  const context = { root: 'C:\\notes', source: 'tree' as const };
+  useWindowStore.getState().setTabExplorerContext(key, context);
+  useExplorerStore.getState().setRoot('C:\\notes', []);
+  useExplorerStore.getState().setWorkspaceRoot('C:\\notes');
   const generation = getSessionGeneration(key);
   vi.mocked(ipc.renamePath).mockRejectedValueOnce(new Error('target exists'));
   await expect(renameOpenPath(key, 'C:\\notes\\target.md', false)).rejects.toThrow('target exists');
@@ -78,14 +84,29 @@ it('keeps dirty content and the original session when native rename fails', asyn
   expect(getSessionGeneration(key)).toBe(generation);
   expect(useWindowStore.getState().transferringKeys).toEqual([]);
   expect(ipc.writeDocument).not.toHaveBeenCalled();
+  expect(useWindowStore.getState().getTab(key)?.explorerContext).toBe(context);
+  expect(useExplorerStore.getState().root).toBe('C:\\notes');
+  expect(useExplorerStore.getState().workspaceRoot).toBe('C:\\notes');
 });
 
 it('renames only directory descendants using normalized identities', async () => {
   seed('C:/notes/sub/a.md'); seed('C:\\NOTES\\b.md'); seed('C:\\notes-other\\c.md');
+  useWindowStore.getState().setTabExplorerContext('C:/notes/sub/a.md', { root: 'C:\\notes', source: 'tree' });
+  useWindowStore.getState().setTabExplorerContext('C:\\NOTES\\b.md', { root: 'C:\\notes', source: 'locate' });
+  useWindowStore.getState().setTabExplorerContext('C:\\notes-other\\c.md', { root: 'C:\\notes-other', source: 'parent' });
+  useExplorerStore.getState().setWorkspaceRoot('C:\\notes');
+  useExplorerStore.getState().setRoot('C:\\notes', []);
+  useExplorerStore.getState().expand('C:\\notes\\sub', []);
   await renameOpenPath('c:\\notes', 'C:\\renamed', true);
   expect(useDocumentStore.getState().hasDocument('C:\\renamed\\sub\\a.md')).toBe(true);
   expect(useDocumentStore.getState().hasDocument('C:\\renamed\\b.md')).toBe(true);
   expect(useDocumentStore.getState().hasDocument('C:\\notes-other\\c.md')).toBe(true);
+  expect(useWindowStore.getState().getTab('C:\\renamed\\sub\\a.md')?.explorerContext).toEqual({ root: 'C:\\renamed', source: 'tree' });
+  expect(useWindowStore.getState().getTab('C:\\renamed\\b.md')?.explorerContext).toEqual({ root: 'C:\\renamed', source: 'locate' });
+  expect(useWindowStore.getState().getTab('C:\\notes-other\\c.md')?.explorerContext).toEqual({ root: 'C:\\notes-other', source: 'parent' });
+  expect(useExplorerStore.getState().workspaceRoot).toBe('C:\\renamed');
+  expect(useExplorerStore.getState().root).toBe('C:\\renamed');
+  expect(useExplorerStore.getState().children.size).toBe(1);
 });
 
 it('reclassifies the tab after an extension change', async () => {

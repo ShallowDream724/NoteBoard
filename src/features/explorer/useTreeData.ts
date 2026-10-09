@@ -4,7 +4,7 @@
 
 import { useCallback } from 'react';
 import type { FileTreeNode } from '../../core/ipc/types';
-import { useExplorerStore, sameKey } from './explorerStore';
+import { useExplorerStore } from './explorerStore';
 import { readExplorerDirectory } from './explorerActions';
 
 /**
@@ -42,11 +42,11 @@ export function useTreeData() {
       }
 
       // 需要加载
-      const root = useExplorerStore.getState().root;
+      const rootRevision = useExplorerStore.getState().rootRevision;
       setLoading(true);
       const children = await loadChildren(dirPath);
+      if (useExplorerStore.getState().rootRevision !== rootRevision) return;
       setLoading(false);
-      if (!sameKey(useExplorerStore.getState().root, root)) return;
       expand(dirPath, children);
     },
     [isExpanded, collapse, setLoading, expand, loadChildren],

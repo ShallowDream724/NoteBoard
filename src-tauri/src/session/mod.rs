@@ -30,6 +30,8 @@ pub struct SessionWindow {
     #[serde(default)]
     pub explorer_root: String,
     #[serde(default)]
+    pub explorer_workspace_root: Option<String>,
+    #[serde(default)]
     pub layout: SessionLayout,
     #[serde(default)]
     pub tabs: Vec<SessionTab>,
@@ -61,6 +63,15 @@ pub struct SessionTab {
     // 保留关闭时的标题，用于兼容未命名或旧路径场景。
     #[serde(default)]
     pub display_name: String,
+    #[serde(default)]
+    pub explorer_context: Option<ExplorerContext>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplorerContext {
+    pub root: String,
+    pub source: String,
 }
 
 pub mod commands {
@@ -321,5 +332,18 @@ mod tests {
         assert!(tab.source_path.is_none());
         assert!(tab.staged_path.is_none());
         assert!(tab.display_name.is_empty());
+        assert!(tab.explorer_context.is_none());
+    }
+
+    #[test]
+    fn explorer_navigation_metadata_round_trips() {
+        let json = r#"{"seq":0,"explorerRoot":"C:\\outside","explorerWorkspaceRoot":"C:\\workspace","tabs":[{"key":"C:\\outside\\nested\\a.md","isPinned":false,"viewMode":null,"explorerContext":{"root":"C:\\outside","source":"tree"}}]}"#;
+        let window: SessionWindow = serde_json::from_str(json).expect("navigation metadata");
+        assert_eq!(window.explorer_workspace_root.as_deref(), Some("C:\\workspace"));
+        assert_eq!(window.tabs[0].explorer_context.as_ref().unwrap().root, "C:\\outside");
+        let reloaded: SessionWindow = serde_json::from_str(&serde_json::to_string(&window).unwrap()).unwrap();
+        assert_eq!(reloaded.tabs[0].explorer_context.as_ref().unwrap().source, "tree");
+        let legacy: SessionWindow = serde_json::from_str(r#"{"seq":0,"explorerRoot":"C:\\workspace"}"#).unwrap();
+        assert!(legacy.explorer_workspace_root.is_none());
     }
 }

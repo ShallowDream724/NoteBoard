@@ -3,7 +3,7 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as ipc from '../../core/ipc/commands';
-import type { SessionSnapshot, SessionTabSnapshot } from '../../core/ipc/types';
+import type { ExplorerContext, SessionSnapshot, SessionTabSnapshot, SessionWindowSnapshot } from '../../core/ipc/types';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWindowStore } from '../../stores/windowStore';
@@ -15,6 +15,8 @@ import { useDocumentStore } from '../../stores/documentStore';
 import type { Tab } from '../../stores/windowStore';
 import { hasUnsavedWork } from '../staging/stagingPolicy';
 import { showToast } from '../../stores/toastStore';
+import { currentExplorerNavigation, isCurrentNavigation, readExplorerDirectory, type ExplorerNavigation } from '../explorer/explorerActions';
+import { isSubPath, parentDirectory, sameKey } from '../explorer/pathUtils';
 
 let windowHadTabs = false;
 
@@ -66,6 +68,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
     sourcePath: tab.path,
     stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
     displayName: tab.displayName,
+    explorerContext: tab.explorerContext,
   }));
   const layout = useLayoutStore.getState();
   const snapshot: SessionSnapshot = {
@@ -74,6 +77,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
     windows: [{
       seq: currentWindowSequence(),
       explorerRoot: useExplorerStore.getState().root ?? '',
+      explorerWorkspaceRoot: useExplorerStore.getState().workspaceRoot,
       layout: {
         explorerVisible: layout.explorerVisible,
         explorerWidth: layout.explorerWidth,
@@ -95,6 +99,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
  * 已命名文件只打开原路径；重启期间原文件被删除则直接跳过。只有原本未命名的文件才回退到暂存路径。
  */
 export async function restoreLastClosedWindow(): Promise<boolean> {
+  const navigation = currentExplorerNavigation();
   const snapshot = await ipc.loadSession();
   const windowSnapshot = snapshot?.windows[0];
   if (!windowSnapshot || windowSnapshot.tabs.length === 0) return false;
@@ -182,6 +187,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
       isDetached: false,
       lazySource: candidate,
       lazyStagedPath: staged,
+      explorerContext: restoredExplorerContext(tab.explorerContext, candidate, windowSnapshot.explorerRoot),
     });
   }
 
@@ -190,17 +196,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     useWindowStore.getState().addRestoredTabs(restoredTabs);
     // 标签描述符建立后再应用布局，避免资源管理器状态覆盖原窗口布局
     useLayoutStore.getState().restoreFrom(windowSnapshot.layout);
-    if (windowSnapshot.explorerRoot) {
-      try {
-        const rootState = await ipc.pathExists(windowSnapshot.explorerRoot);
-        if (rootState.exists && rootState.isDir) {
-          const children = await ipc.readDir(windowSnapshot.explorerRoot, false);
-          useExplorerStore.getState().setRoot(windowSnapshot.explorerRoot, children);
-        }
-      } catch (error) {
-        console.warn('[closedWindowSession] 恢复原资源管理器目录失败:', error);
-      }
-    }
+    await restoreExplorerRoots(windowSnapshot, navigation);
   }
   // 🔴 R01：恢复事务落盘——把恢复出的标签（含未加载条目的原暂存路径）重写回会话，
   //    而不是 clearSession：未加载标签在进程异常退出后仍可再次恢复；
@@ -213,6 +209,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
       windows: [{
         seq: currentWindowSequence(),
         explorerRoot: useExplorerStore.getState().root ?? '',
+        explorerWorkspaceRoot: useExplorerStore.getState().workspaceRoot,
         layout: {
           explorerVisible: layoutNow.explorerVisible,
           explorerWidth: layoutNow.explorerWidth,
@@ -226,6 +223,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
           sourcePath: tab.path,
           stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
           displayName: tab.displayName,
+          explorerContext: tab.explorerContext,
         })),
         activeKey: '',
       }],
@@ -244,6 +242,50 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     showToast(`已恢复 ${restoredCount} 个最近文件`, 'success');
   }
   return restoredCount > 0;
+}
+
+/** A missing temporary display directory must not discard a valid pinned workspace. */
+async function restoreExplorerRoots(snapshot: SessionWindowSnapshot, navigation: ExplorerNavigation): Promise<void> {
+  if (!isCurrentNavigation(navigation)) return;
+  const workspace = snapshot.explorerWorkspaceRoot || null;
+  const displayed = snapshot.explorerRoot || null;
+  const existsDirectory = async (path: string | null): Promise<boolean> => {
+    if (!path) return false;
+    try {
+      const state = await ipc.pathExists(path);
+      return state.exists && state.isDir;
+    } catch (error) {
+      console.warn('[closedWindowSession] 检查恢复目录失败:', path, error);
+      return false;
+    }
+  };
+  const [workspaceExists, displayedExists] = workspace && sameKey(workspace, displayed)
+    ? await existsDirectory(workspace).then(exists => [exists, exists])
+    : await Promise.all([existsDirectory(workspace), existsDirectory(displayed)]);
+  if (!isCurrentNavigation(navigation)) return;
+  const validWorkspace = workspaceExists ? workspace : null;
+  const candidates = displayed && displayedExists ? [displayed] : [];
+  if (validWorkspace && !sameKey(validWorkspace, candidates[0])) candidates.push(validWorkspace);
+  for (const root of candidates) {
+    if (!isCurrentNavigation(navigation)) return;
+    try {
+      const children = await readExplorerDirectory(root);
+      if (!isCurrentNavigation(navigation)) return;
+      useExplorerStore.getState().setWorkspaceRoot(validWorkspace);
+      useExplorerStore.getState().setRoot(root, children);
+      return;
+    } catch (error) {
+      console.warn('[closedWindowSession] 恢复资源管理器目录失败:', root, error);
+    }
+  }
+  if (isCurrentNavigation(navigation)) useExplorerStore.getState().setWorkspaceRoot(validWorkspace);
+}
+
+/** Old snapshots retain their containing tree root without guessing a deepest parent. */
+function restoredExplorerContext(context: ExplorerContext | null | undefined, filePath: string, legacyRoot: string): ExplorerContext {
+  if (context?.root.trim() && ['workspace', 'tree', 'parent', 'locate'].includes(context.source)) return context;
+  if (legacyRoot && isSubPath(legacyRoot, filePath)) return { root: legacyRoot, source: 'tree' };
+  return { root: parentDirectory(filePath), source: 'parent' };
 }
 
 // ── S10：按需加载 ──

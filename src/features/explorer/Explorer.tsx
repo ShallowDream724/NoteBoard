@@ -1,5 +1,5 @@
 // NoteBoard 资源管理器
-// 单根纯跟随目录树 + 文件操作 + 实时监听
+// 单份目录树 + 标签导航上下文 + 文件操作 + 实时监听
 // 详见 docs/07-UI布局与交互规范.md §5
 // 详见 docs/09-开发路线图.md 阶段5
 
@@ -29,7 +29,7 @@ export function Explorer() {
   const [creatingType, setCreatingType] = useState<'file' | 'folder' | null>(null);
   const [creatingName, setCreatingName] = useState('');
 
-  // 纯跟随 + Reveal
+  // 根据工作区与标签来源跟随，不被动离开工作区
   useReveal();
 
   // 文件监听
@@ -63,6 +63,7 @@ export function Explorer() {
   // 提交新建文件/文件夹
   const handleCreateSubmit = async () => {
     const name = creatingName.trim();
+    const explorerRoot = root ?? undefined;
     if (!root || !name) {
       setCreatingType(null);
       setCreatingName('');
@@ -74,7 +75,7 @@ export function Explorer() {
         const payload = await ipc.createFile(root, name, '');
         await handleRefresh();
         if (payload?.key) {
-          await openDocument(payload.key);
+          await openDocument(payload.key, { explorerRoot });
         }
       } else if (creatingType === 'folder') {
         await ipc.createDir(root, name);

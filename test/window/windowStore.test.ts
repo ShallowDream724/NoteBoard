@@ -241,4 +241,13 @@ describe('windowStore tab 关闭操作', () => {
     expect(state.tabs[1]?.key).toBe('C:\\other\\doc2.md');
     expect(state.activeKey).toBe('C:\\new-notes\\doc1.md');
   });
+
+  it('keeps a containing tree origin on rename and releases it when the document moves outside it', () => {
+    const tab = { ...createMockTab('C:\\notes\\a.md', 'a.md'), explorerContext: { root: 'C:\\notes', source: 'tree' as const } };
+    useWindowStore.getState().openTab(tab);
+    useWindowStore.getState().updateTabPath(tab.key, 'C:\\notes\\deep\\a.md', 'a.md');
+    expect(useWindowStore.getState().getTab('C:\\notes\\deep\\a.md')?.explorerContext).toBe(tab.explorerContext);
+    useWindowStore.getState().updateTabPath('C:\\notes\\deep\\a.md', 'E:\\a.md', 'a.md');
+    expect(useWindowStore.getState().getTab('E:\\a.md')?.explorerContext).toEqual({ root: 'E:\\', source: 'parent' });
+  });
 });

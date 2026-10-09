@@ -396,6 +396,12 @@ export interface StagingResult {
 
 // ── 最近关闭窗口 ──
 
+/** A tab remembers navigation intent, never a directory tree or cache. */
+export interface ExplorerContext {
+  root: string;
+  source: 'workspace' | 'tree' | 'parent' | 'locate';
+}
+
 export interface SessionTabSnapshot {
   key: string;
   isPinned: boolean;
@@ -403,11 +409,14 @@ export interface SessionTabSnapshot {
   sourcePath: string | null;
   stagedPath: string | null;
   displayName: string;
+  explorerContext?: ExplorerContext | null;
 }
 
 export interface SessionWindowSnapshot {
   seq: number;
   explorerRoot: string;
+  /** The manually opened folder remains distinct from a tab's explicit navigation. */
+  explorerWorkspaceRoot?: string | null;
   layout: {
     explorerVisible: boolean;
     explorerWidth: number;

@@ -4,8 +4,8 @@
 
 import { create } from 'zustand';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import type { DocumentKind } from '../core/ipc/types';
-import { normalizePath } from '../features/explorer/pathUtils';
+import type { DocumentKind, ExplorerContext } from '../core/ipc/types';
+import { normalizePath, isSubPath, parentDirectory, remapDirectoryPath } from '../features/explorer/pathUtils';
 import { kindFromPath, languageFromPath } from '../core/docKind';
 // 🔴 R4-05/D05：disposeTabLifecycleAsync 独立入口需终结 documents 记录
 //    （documentStore 不依赖 windowStore——单向依赖无循环）
@@ -55,6 +55,8 @@ export interface Tab {
   toolKind?: 'textdiff';
   /** Session-only receipt for a file produced by export; never persisted as document data. */
   exportNotice?: { warnings?: string };
+  /** Only a root and its origin; Explorer owns the single directory cache. */
+  explorerContext?: ExplorerContext;
   // ── S10 会话恢复轻量描述符 ──
   /** 未加载正文的恢复标签：激活时才真正打开（读盘/注册/编辑器加载） */
   lazySource?: string | null;
@@ -81,6 +83,8 @@ interface WindowStore {
   setTabDirty: (key: string, isDirty: boolean) => void;
   setTabPreview: (key: string, isPreview: boolean) => void;
   setTabViewMode: (key: string, mode: 'visual' | 'source') => void;
+  setTabExplorerContext: (key: string, context: ExplorerContext) => void;
+  renameExplorerContexts: (oldDir: string, newDir: string) => void;
   setTabExternalStatus: (key: string, status: Tab['externalStatus']) => void;
   setTabDetached: (key: string, isDetached: boolean) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
@@ -398,6 +402,29 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     });
   },
 
+  setTabExplorerContext: (key, explorerContext) => {
+    set(state => {
+      const tab = state.tabs.find(t => t.key === key);
+      if (!tab || (tab.explorerContext?.source === explorerContext.source
+        && normalizePath(tab.explorerContext.root).toLowerCase() === normalizePath(explorerContext.root).toLowerCase())) return state;
+      return { tabs: state.tabs.map(t => t === tab ? { ...t, explorerContext } : t) };
+    });
+  },
+
+  renameExplorerContexts: (oldDir, newDir) => {
+    set(state => {
+      let changed = false;
+      const tabs = state.tabs.map(tab => {
+        if (!tab.explorerContext) return tab;
+        const root = remapDirectoryPath(tab.explorerContext.root, oldDir, newDir);
+        if (root === tab.explorerContext.root) return tab;
+        changed = true;
+        return { ...tab, explorerContext: { ...tab.explorerContext, root } };
+      });
+      return changed ? { tabs } : state;
+    });
+  },
+
   setTabExternalStatus: (key, status) => {
     set((state) => ({
       tabs: state.tabs.map((t) =>
@@ -432,6 +459,9 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
           // 另存为建立了新的有效磁盘路径，同时解除原文件删除/断开状态。
           ? { ...t, path: newPath, displayName: newDisplayName, key: newPath, kind, language,
             lazySource: t.lazySource && normalizePath(t.lazySource).toLowerCase() === normalizePath(key).toLowerCase() ? newPath : t.lazySource,
+            explorerContext: t.explorerContext && (t.explorerContext.source === 'parent'
+              || (t.explorerContext.source !== 'workspace' && !isSubPath(t.explorerContext.root, newPath)))
+              ? { root: parentDirectory(newPath), source: 'parent' } : t.explorerContext,
             viewMode: kind === t.kind ? t.viewMode : null, externalStatus: 'clean', isDetached: false }
           : t,
       ),
@@ -442,6 +472,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   // 批量更新被重命名目录下所有 Tab 的路径与 key
   renameTabsDirectory: (oldDir, newDir) => {
+    get().renameExplorerContexts(oldDir, newDir);
     const normOld = normalizePath(oldDir).toLowerCase();
     const normNew = normalizePath(newDir);
     set((state) => {

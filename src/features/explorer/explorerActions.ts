@@ -1,14 +1,14 @@
 import * as ipc from '../../core/ipc/commands';
-import type { FileTreeNode } from '../../core/ipc/types';
+import type { ExplorerContext, FileTreeNode } from '../../core/ipc/types';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useExplorerStore } from './explorerStore';
-import { getPathChain, isSubPath, normalizePath, sameKey } from './pathUtils';
+import { getPathChain, isSubPath, normalizePath, parentDirectory, sameKey } from './pathUtils';
 import { refreshMarkdownAssociations } from '../document-format/markdownAssociationIndex';
 
 // Directory entries and bounded NB headers share one navigation/refresh request.
 const reads = new Map<string, { force: boolean; work: Promise<FileTreeNode[]> }>();
-const directoryReadKey = (path: string) => `${useSettingsStore.getState().settings.file.showHiddenFiles}:${normalizePath(path).toLowerCase()}`;
+const directoryReadKey = (path: string) => `${useExplorerStore.getState().rootRevision}:${useSettingsStore.getState().settings.file.showHiddenFiles}:${normalizePath(path).toLowerCase()}`;
 export function readExplorerDirectory(path: string, forceAssociations = false): Promise<FileTreeNode[]> {
   const hidden = useSettingsStore.getState().settings.file.showHiddenFiles;
   const key = directoryReadKey(path);
@@ -64,14 +64,19 @@ export interface ExplorerNavigation {
   rootRevision: number;
 }
 
+export function currentExplorerNavigation(): ExplorerNavigation {
+  return { revision: revealRevision, rootRevision: useExplorerStore.getState().rootRevision };
+}
+
 /** Reserve before document preparation so an older directory read cannot win. */
 export function beginExplorerNavigation(filePath?: string): ExplorerNavigation {
-  const request = { revision: ++revealRevision, rootRevision: useExplorerStore.getState().rootRevision };
+  revealRevision += 1;
+  const request = currentExplorerNavigation();
   parentNavigation = filePath ? { filePath, request, work: null } : null;
   return request;
 }
 
-function isCurrentNavigation(request: ExplorerNavigation): boolean {
+export function isCurrentNavigation(request: ExplorerNavigation): boolean {
   return request.revision === revealRevision && request.rootRevision === useExplorerStore.getState().rootRevision;
 }
 
@@ -79,7 +84,45 @@ export async function openExplorerDirectory(directory: string, request = beginEx
   if (!directory.trim() || !isCurrentNavigation(request)) return;
   const children = await readExplorerDirectory(directory);
   if (!isCurrentNavigation(request)) return;
+  useExplorerStore.getState().setWorkspaceRoot(directory);
   useExplorerStore.getState().setRoot(directory, children);
+}
+
+/** Breadcrumb navigation belongs to the active tab; opening a folder pins a workspace. */
+export async function navigateExplorerDirectory(directory: string): Promise<void> {
+  const request = beginExplorerNavigation();
+  const activeKey = useWindowStore.getState().activeKey;
+  const children = await readExplorerDirectory(directory);
+  if (!isCurrentNavigation(request) || useWindowStore.getState().activeKey !== activeKey) return;
+  useExplorerStore.getState().setRoot(directory, children);
+  if (activeKey) useWindowStore.getState().setTabExplorerContext(activeKey, { root: directory, source: 'locate' });
+}
+
+/** Capture at the request/click boundary, before asynchronous document preparation. */
+export function captureExplorerContext(filePath: string, treeRoot?: string, directParent = false): ExplorerContext {
+  const { root, workspaceRoot } = useExplorerStore.getState();
+  if (workspaceRoot && isSubPath(workspaceRoot, filePath)) return { root: workspaceRoot, source: 'workspace' };
+  if (treeRoot && isSubPath(treeRoot, filePath)) return { root: treeRoot, source: 'tree' };
+  if (workspaceRoot) return { root: workspaceRoot, source: 'workspace' };
+  if (!directParent && root && isSubPath(root, filePath)) return { root, source: 'tree' };
+  return { root: parentDirectory(filePath), source: 'parent' };
+}
+
+function targetRoot(filePath: string, directory: string, explicit: boolean): string {
+  const { root, workspaceRoot } = useExplorerStore.getState();
+  const context = useWindowStore.getState().getTab(filePath)?.explorerContext;
+  if (workspaceRoot && isSubPath(workspaceRoot, filePath)) return workspaceRoot;
+  if (explicit) {
+    if (context?.root && isSubPath(context.root, filePath)) return context.root;
+    if (root && isSubPath(root, filePath)) return root;
+    return directory;
+  }
+  if (workspaceRoot) {
+    if (context && (context.source === 'tree' || context.source === 'locate') && isSubPath(context.root, filePath)) return context.root;
+    return workspaceRoot;
+  }
+  if (context?.root && isSubPath(context.root, filePath)) return context.root;
+  return root && isSubPath(root, filePath) ? root : directory;
 }
 
 let parentNavigation: { filePath: string; request: ExplorerNavigation; work: Promise<void> | null } | null = null;
@@ -121,7 +164,7 @@ function afterDocumentPaint(): Promise<void> {
   });
 }
 
-/** External file opening enters its direct parent without changing sidebar visibility. */
+/** Deferred open following respects the workspace and the tab's captured origin. */
 export function openExplorerFileParent(filePath: string, directory: string, request: ExplorerNavigation, isCurrent: () => boolean): Promise<void> {
   const current = () => isCurrentNavigation(request) && isCurrent();
   if (!filePath.trim() || !directory.trim() || !current()) return Promise.resolve();
@@ -130,13 +173,7 @@ export function openExplorerFileParent(filePath: string, directory: string, requ
   navigation.work = (async () => {
     await afterDocumentPaint();
     if (!current()) return;
-    const children = useExplorerStore.getState().getChildren(directory) ?? await readExplorerDirectory(directory);
-    if (!current()) return;
-    if (!sameKey(useExplorerStore.getState().root, directory)) {
-      useExplorerStore.getState().setRoot(directory, children);
-      request.rootRevision = useExplorerStore.getState().rootRevision;
-    }
-    useExplorerStore.getState().setRevealed(filePath, true);
+    await revealFile(filePath, directory, request, isCurrent, false);
   })().finally(() => { if (parentNavigation === navigation) parentNavigation = null; });
   return navigation.work;
 }
@@ -148,12 +185,12 @@ export function followExplorerFile(filePath: string, directory: string, isCurren
     if (!parentNavigation.work) return Promise.resolve();
     if (sameKey(parentNavigation.filePath, filePath)) return parentNavigation.work;
   }
-  return revealExplorerFile(filePath, directory, isCurrent);
+  return revealFile(filePath, directory, beginExplorerNavigation(), isCurrent, false);
 }
 
-/** Shared by ordinary tab following and the explicit locate button. */
+/** Explicit Locate may leave the workspace, and saves only this tab's navigation. */
 export async function revealExplorerFile(filePath: string, directory: string, isCurrent: () => boolean = () => true): Promise<void> {
-  return revealFile(filePath, directory, beginExplorerNavigation(), isCurrent);
+  return revealFile(filePath, directory, beginExplorerNavigation(), isCurrent, true);
 }
 
 /** A completed write must not rely on a watcher or reuse a pre-write directory snapshot. */
@@ -165,28 +202,37 @@ export function revealWrittenExplorerFile(filePath: string, directory: string, i
   navigation.work = (async () => {
     await afterDocumentPaint();
     if (!current()) return;
+    if (!isSubPath(targetRoot(filePath, directory, false), filePath)) {
+      await revealFile(filePath, directory, request, isCurrent, false);
+      return;
+    }
     // Let a read started before the write settle, then request a fresh snapshot.
     await reads.get(directoryReadKey(directory))?.work.catch(() => undefined);
     if (!current()) return;
     const children = await readExplorerDirectory(directory, true);
     if (!current()) return;
-    await revealFile(filePath, directory, request, isCurrent, children, expandAssociation);
+    await revealFile(filePath, directory, request, isCurrent, false, children, expandAssociation);
   })().finally(() => { if (parentNavigation === navigation) parentNavigation = null; });
   return navigation.work;
 }
 
 async function revealFile(filePath: string, directory: string, request: ExplorerNavigation, isCurrent: () => boolean,
-  freshChildren?: FileTreeNode[], expandAssociation = false): Promise<void> {
-  let root = useExplorerStore.getState().root;
+  explicit: boolean, freshChildren?: FileTreeNode[], expandAssociation = false): Promise<void> {
+  const root = targetRoot(filePath, directory, explicit);
   const current = () => isCurrentNavigation(request) && isCurrent();
-  if (!current()) return;
-  if (!root || !isSubPath(root, filePath)) {
-    const children = freshChildren ?? await readExplorerDirectory(directory);
+  if (!root || !filePath.trim() || !current()) return;
+  if (!sameKey(useExplorerStore.getState().root, root)) {
+    const children = sameKey(root, directory) && freshChildren ? freshChildren
+      : useExplorerStore.getState().getChildren(root) ?? await readExplorerDirectory(root);
     if (!current()) return;
-    useExplorerStore.getState().setRoot(directory, children);
+    useExplorerStore.getState().setRoot(root, children);
     request.rootRevision = useExplorerStore.getState().rootRevision;
-    root = directory;
-  } else if (freshChildren) useExplorerStore.getState().updateChildren(directory, freshChildren);
+  }
+  if (!isSubPath(root, filePath)) {
+    useExplorerStore.getState().setRevealed(null, false);
+    return;
+  }
+  if (freshChildren) useExplorerStore.getState().updateChildren(directory, freshChildren);
   for (const dir of getPathChain(root, filePath)) {
     if (!current()) return;
     if (!useExplorerStore.getState().isExpanded(dir)) {
@@ -198,5 +244,6 @@ async function revealFile(filePath: string, directory: string, request: Explorer
   if (current()) {
     if (expandAssociation) useExplorerStore.getState().expandAssociation(filePath);
     useExplorerStore.getState().setRevealed(filePath, true);
+    if (explicit) useWindowStore.getState().setTabExplorerContext(filePath, { root, source: 'locate' });
   }
 }

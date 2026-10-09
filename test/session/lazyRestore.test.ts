@@ -3,12 +3,14 @@
 //           恢复不抢焦点、缺失文件跳过、暂存副本的关闭保护。
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { restoreLastClosedWindow, loadRestoredTab } from '@/features/session/closedWindowSession';
+import { restoreLastClosedWindow, loadRestoredTab, saveCurrentWindowSnapshot } from '@/features/session/closedWindowSession';
 import * as ipc from '@/core/ipc/commands';
 import { getEditorCapabilities, resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import { useLayoutStore } from '@/stores/layoutStore';
+import { useExplorerStore } from '@/features/explorer/explorerStore';
+import { captureExplorerContext, followExplorerFile, openExplorerDirectory } from '@/features/explorer/explorerActions';
 
 // Mock openDocument（loadRestoredTab 走完整打开链；恢复本身不得调用）
 const openDocumentMock = vi.fn();
@@ -60,8 +62,10 @@ function snapshotWith(tabs: Array<{ key: string; sourcePath?: string | null; sta
 describe('S10 会话恢复轻量描述符', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(ipc.readDir).mockReset().mockResolvedValue([]);
     useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [] });
     useDocumentStore.setState({ documents: new Map() });
+    useExplorerStore.getState().clear();
     useLayoutStore.setState({ explorerVisible: false, outlineVisible: false });
     resetEditorRegistryForTest();
     openDocumentMock.mockResolvedValue('opened');
@@ -242,5 +246,119 @@ describe('S10 会话恢复轻量描述符', () => {
     await loadRestoredTab(KEY_A);
     // 懒标记保留（可重试）
     expect(useWindowStore.getState().getTab(KEY_A)?.lazySource).toBe(KEY_A);
+  });
+
+  it('roundtrips the pinned workspace and independent tree origin while restoring Home lazily', async () => {
+    const file = 'C:\\outside\\B\\a.md';
+    const snapshot = snapshotWith([{ key: file, sourcePath: file }]);
+    const window = { ...snapshot.windows[0], explorerRoot: 'C:\\outside', explorerWorkspaceRoot: 'C:\\workspace',
+      tabs: snapshot.windows[0].tabs.map(tab => ({ ...tab, explorerContext: { root: 'C:\\outside', source: 'tree' as const } })) };
+    vi.mocked(ipc.loadSession).mockResolvedValue({ ...snapshot, windows: [window] });
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({ exists: true, isDir: path !== file }));
+    expect(await restoreLastClosedWindow()).toBe(true);
+    expect(useWindowStore.getState().activeKey).toBeNull();
+    expect(useWindowStore.getState().getTab(file)?.explorerContext).toEqual({ root: 'C:\\outside', source: 'tree' });
+    expect(useExplorerStore.getState().root).toBe('C:\\outside');
+    expect(useExplorerStore.getState().workspaceRoot).toBe('C:\\workspace');
+    expect(openDocumentMock).not.toHaveBeenCalled();
+    await saveCurrentWindowSnapshot();
+    expect(vi.mocked(ipc.saveSession).mock.lastCall?.[0].windows[0]).toMatchObject({
+      explorerRoot: 'C:\\outside', explorerWorkspaceRoot: 'C:\\workspace',
+      tabs: [{ explorerContext: { root: 'C:\\outside', source: 'tree' } }],
+    });
+  });
+
+  it('restores a legacy containing root as tree origin when optional navigation fields are absent', async () => {
+    const snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    snapshot.windows[0].explorerRoot = 'C:\\t';
+    vi.mocked(ipc.loadSession).mockResolvedValue(snapshot);
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({ exists: true, isDir: path === 'C:\\t' }));
+    await restoreLastClosedWindow();
+    expect(useWindowStore.getState().getTab(KEY_A)?.explorerContext).toEqual({ root: 'C:\\t', source: 'tree' });
+    expect(useExplorerStore.getState().workspaceRoot).toBeNull();
+    expect(useWindowStore.getState().getTab(KEY_A)?.lazySource).toBe(KEY_A);
+  });
+
+  it('does not apply old session navigation over a folder chosen while recovery checks are pending', async () => {
+    const snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    snapshot.windows[0].explorerRoot = 'C:\\t';
+    vi.mocked(ipc.loadSession).mockResolvedValue(snapshot);
+    let resolve!: (value: { exists: boolean; isDir: boolean }) => void;
+    vi.mocked(ipc.pathExists).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const restoring = restoreLastClosedWindow();
+    await vi.waitFor(() => expect(ipc.pathExists).toHaveBeenCalled());
+    await openExplorerDirectory('C:\\chosen');
+    resolve({ exists: true, isDir: false }); await restoring;
+    expect(useExplorerStore.getState().root).toBe('C:\\chosen');
+    expect(useExplorerStore.getState().workspaceRoot).toBe('C:\\chosen');
+    expect(ipc.readDir).toHaveBeenCalledExactlyOnceWith('C:\\chosen', false);
+  });
+
+  it.each(['missing', 'read-denied'] as const)('restores the workspace when the previous temporary display root is %s', async failure => {
+    const workspace = 'C:\\workspace', displayed = 'C:\\temporary';
+    const snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    vi.mocked(ipc.loadSession).mockResolvedValue({ ...snapshot,
+      windows: [{ ...snapshot.windows[0], explorerRoot: displayed, explorerWorkspaceRoot: workspace }] });
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({
+      exists: path !== displayed || failure !== 'missing', isDir: path !== KEY_A,
+    }));
+    vi.mocked(ipc.readDir).mockImplementation(async path => {
+      if (path === displayed) throw new Error('access denied');
+      return [];
+    });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await restoreLastClosedWindow()).toBe(true);
+    expect(useWindowStore.getState().activeKey).toBeNull();
+    expect(openDocumentMock).not.toHaveBeenCalled();
+    expect(useExplorerStore.getState().workspaceRoot).toBe(workspace);
+    expect(useExplorerStore.getState().root).toBe(workspace);
+    expect(vi.mocked(ipc.saveSession).mock.lastCall?.[0].windows[0]).toMatchObject({ explorerRoot: workspace, explorerWorkspaceRoot: workspace });
+    const outside = 'C:\\another\\f.md', restored = useWindowStore.getState().getTab(KEY_A)!;
+    useWindowStore.getState().openTab({ ...restored, key: outside, path: outside, lazySource: undefined,
+      explorerContext: captureExplorerContext(outside, undefined, true) });
+    await followExplorerFile(outside, 'C:\\another', () => useWindowStore.getState().activeKey === outside);
+    expect(useExplorerStore.getState().root).toBe(workspace);
+    expect(vi.mocked(ipc.readDir).mock.calls.map(([path]) => path)).toEqual(failure === 'missing' ? [workspace] : [displayed, workspace]);
+    warning.mockRestore();
+  });
+
+  it('does not pin a missing workspace when neither saved directory can be restored', async () => {
+    const snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    vi.mocked(ipc.loadSession).mockResolvedValue({ ...snapshot, windows: [{ ...snapshot.windows[0],
+      explorerRoot: 'C:\\missing-temporary', explorerWorkspaceRoot: 'C:\\missing-workspace' }] });
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({ exists: path === KEY_A, isDir: false }));
+    expect(await restoreLastClosedWindow()).toBe(true);
+    expect(useWindowStore.getState().activeKey).toBeNull();
+    expect(useExplorerStore.getState().workspaceRoot).toBeNull();
+    expect(useExplorerStore.getState().root).toBeNull();
+    expect(ipc.readDir).not.toHaveBeenCalled();
+  });
+
+  it('checks and reads a displayed workspace once when both saved roots are the same', async () => {
+    const workspace = 'C:\\workspace', snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    vi.mocked(ipc.loadSession).mockResolvedValue({ ...snapshot, windows: [{ ...snapshot.windows[0],
+      explorerRoot: workspace, explorerWorkspaceRoot: workspace }] });
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({ exists: true, isDir: path !== KEY_A }));
+    await restoreLastClosedWindow();
+    expect(vi.mocked(ipc.pathExists).mock.calls.map(([path]) => path)).toEqual([KEY_A, workspace]);
+    expect(ipc.readDir).toHaveBeenCalledExactlyOnceWith(workspace, false);
+    expect(useExplorerStore.getState().workspaceRoot).toBe(workspace);
+  });
+
+  it('abandons a pending workspace fallback when the user starts newer navigation', async () => {
+    const workspace = 'C:\\workspace', snapshot = snapshotWith([{ key: KEY_A, sourcePath: KEY_A }]);
+    vi.mocked(ipc.loadSession).mockResolvedValue({ ...snapshot, windows: [{ ...snapshot.windows[0],
+      explorerRoot: 'C:\\missing-temporary', explorerWorkspaceRoot: workspace }] });
+    vi.mocked(ipc.pathExists).mockImplementation(async path => ({ exists: path === KEY_A || path === workspace, isDir: path === workspace }));
+    let resolve!: (nodes: []) => void;
+    vi.mocked(ipc.readDir).mockImplementation(path => path === workspace ? new Promise(done => { resolve = done; }) : Promise.resolve([]));
+    const restoring = restoreLastClosedWindow();
+    await vi.waitFor(() => expect(ipc.readDir).toHaveBeenCalledWith(workspace, false));
+    await openExplorerDirectory('C:\\chosen');
+    resolve([]); await restoring;
+    expect(useWindowStore.getState().activeKey).toBeNull();
+    expect(useExplorerStore.getState().root).toBe('C:\\chosen');
+    expect(useExplorerStore.getState().workspaceRoot).toBe('C:\\chosen');
+    expect(vi.mocked(ipc.readDir).mock.calls.map(([path]) => path)).toEqual([workspace, 'C:\\chosen']);
   });
 });

@@ -4,6 +4,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { assertDocumentIdentity, commitDocumentIdentity, materializeIdentityPending, prepareDocumentIdentity, protectDocumentIdentity, type DocumentIdentityLease } from '../session/documentIdentity';
 import { isSubPath, normalizePath, sameKey } from './pathUtils';
+import { useExplorerStore } from './explorerStore';
 
 /** Rename the filesystem entry and all captured local identities without saving. */
 export async function renameOpenPath(from: string, to: string, directory: boolean): Promise<void> {
@@ -37,6 +38,10 @@ export async function renameOpenPath(from: string, to: string, directory: boolea
     }
     // No await after the filesystem commit: consume pending while its original
     // generation is valid, then publish each new document/tab identity together.
+    if (directory) {
+      useWindowStore.getState().renameExplorerContexts(source, destination);
+      useExplorerStore.getState().renameDirectory(source, destination);
+    }
     for (const move of moves) {
       const name = move.to.split(/[\\/]/).pop() ?? move.to;
       const parent = move.to.slice(0, move.to.lastIndexOf('\\'));

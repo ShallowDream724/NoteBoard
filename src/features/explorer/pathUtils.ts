@@ -88,3 +88,16 @@ export function getPathChain(rootDir: string, targetPath: string): string[] {
 
   return chain;
 }
+
+/** Keep drive roots valid when a directly opened file lives at C:\\file.md. */
+export function parentDirectory(path: string): string {
+  const normalized = normalizePath(path);
+  const slash = normalized.lastIndexOf('\\');
+  if (slash < 0) return '';
+  return normalizePath(normalized.slice(0, slash));
+}
+
+export function remapDirectoryPath(path: string, oldDir: string, newDir: string): string {
+  if (!isSubPath(oldDir, path)) return path;
+  return normalizePath(newDir) + normalizePath(path).slice(normalizePath(oldDir).length);
+}

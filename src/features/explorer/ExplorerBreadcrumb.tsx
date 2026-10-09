@@ -6,8 +6,7 @@ import { useRef, useEffect } from 'react';
 import { ChevronRight, HardDrive } from 'lucide-react';
 import { getFileIcon } from '../../components/FileIcon';
 import { Tooltip } from '../../components/Tooltip';
-import { useExplorerStore } from './explorerStore';
-import { useTreeData } from './useTreeData';
+import { navigateExplorerDirectory, refreshExplorerDirectory } from './explorerActions';
 
 export interface PathSegment {
   name: string;
@@ -77,8 +76,6 @@ interface ExplorerBreadcrumbProps {
 
 export function ExplorerBreadcrumb({ root, onRefresh }: ExplorerBreadcrumbProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { setRoot, setRevealed } = useExplorerStore();
-  const { loadChildren } = useTreeData();
 
   const segments = parsePathSegments(root);
 
@@ -106,16 +103,13 @@ export function ExplorerBreadcrumb({ root, onRefresh }: ExplorerBreadcrumbProps)
       if (onRefresh) {
         onRefresh();
       } else {
-        const nodes = await loadChildren(seg.fullPath);
-        setRoot(seg.fullPath, nodes);
+        await refreshExplorerDirectory(seg.fullPath);
       }
       return;
     }
 
     try {
-      const nodes = await loadChildren(seg.fullPath);
-      setRoot(seg.fullPath, nodes);
-      setRevealed('');
+      await navigateExplorerDirectory(seg.fullPath);
     } catch (err) {
       console.error('切换面包屑目录失败:', err);
     }

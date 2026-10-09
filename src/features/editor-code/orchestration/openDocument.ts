@@ -5,10 +5,10 @@
 
 import * as ipc from '../../../core/ipc/commands';
 import { notifyOpenRequestsAvailable } from '../../../core/ipc/events';
-import type { OpenRequestSource } from '../../../core/ipc/types';
+import type { ExplorerContext, OpenRequestSource } from '../../../core/ipc/types';
 import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../../stores/windowStore';
-import { activateWithExplorerPolicy, beginExplorerNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, revealExplorerFile, type ExplorerNavigation } from '../../explorer/explorerActions';
+import { activateWithExplorerPolicy, beginExplorerNavigation, captureExplorerContext, followExplorerFile, isCurrentNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, type ExplorerNavigation } from '../../explorer/explorerActions';
 import { useLayoutStore } from '../../../stores/layoutStore';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoaders';
@@ -33,7 +33,7 @@ function scheduleExplorerFollowUp(targetKey: string, dirPath: string, navigation
     return;
   }
   useLayoutStore.getState().setExplorerVisible(true);
-  void revealExplorerFile(targetKey, dirPath, () => useWindowStore.getState().activeKey === targetKey)
+  void followExplorerFile(targetKey, dirPath, () => useWindowStore.getState().activeKey === targetKey)
     .catch(error => console.error('加载父文件夹目录失败:', error));
 }
 
@@ -62,33 +62,59 @@ function buildTab(key: string, displayName: string, kind: Tab['kind'], language:
 
 interface OpenDocumentOptions {
   exportNotice?: Tab['exportNotice'];
-  /** External requests enter the parent; export activation preserves the complete Explorer view. */
+  /** External opens defer following until paint; export activation preserves the complete Explorer view. */
   explorer?: 'parent' | 'preserve';
+  /** The tree root captured at click time, including a deliberately located foreign folder. */
+  explorerRoot?: string;
   /** Preserved when an external open is routed to the document's actual owner. */
   openRequestSource?: OpenRequestSource;
 }
 
+interface CapturedOpenOptions extends OpenDocumentOptions {
+  explorerContext: ExplorerContext;
+  navigation?: ExplorerNavigation;
+}
+
 /** Keep explicit and passive Explorer follow-up behavior aligned for every local activation. */
-function activateDocumentTab(key: string, options: OpenDocumentOptions, tab?: Tab): void {
-  activateWithExplorerPolicy(key, options.explorer === 'preserve' ? 'preserve' : 'follow', () => {
-    const store = useWindowStore.getState();
-    if (tab) store.openTab(tab);
+function activateDocumentTab(key: string, options: CapturedOpenOptions, tab?: Tab): void {
+  const preserve = options.explorer === 'preserve' || (options.navigation && !isCurrentNavigation(options.navigation));
+  const store = useWindowStore.getState();
+  // Publish metadata before the activation-scoped preserve subscription starts.
+  const existing = store.getTab(key);
+  if (existing && !existing.explorerContext) store.setTabExplorerContext(key, options.explorerContext);
+  activateWithExplorerPolicy(key, preserve ? 'preserve' : 'follow', () => {
+    // Reopening/refocusing an existing tab must not replace its original tree root.
+    if (tab) store.openTab({ ...tab, explorerContext: options.explorerContext });
     else store.activateTab(key);
+    if (!preserve && options.explorer !== 'parent') useLayoutStore.getState().setExplorerVisible(true);
   });
 }
 
 /** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
 export async function openDocument(path: string, options: OpenDocumentOptions = {}): Promise<OpenDocumentResult> {
   if (!path.trim()) return 'failed';
-  const navigation = options.explorer === 'parent' ? beginExplorerNavigation(path) : undefined;
+  const explorerContext = captureExplorerContext(path, options.explorerRoot, options.explorer === 'parent');
+  const navigation = options.explorer !== 'preserve' ? beginExplorerNavigation(path) : undefined;
+  let result: OpenDocumentResult | undefined;
   try {
-    return await openDocumentInternal(path, 0, options, navigation);
+    result = await openDocumentInternal(path, 0, { ...options, explorerContext, navigation }, navigation);
+    return result;
   } finally {
-    if (navigation) releaseExplorerNavigation(navigation);
+    if (navigation) {
+      releaseExplorerNavigation(navigation);
+      if ((result === 'failed' || result === 'cancelled') && isCurrentNavigation(navigation)) {
+        const key = useWindowStore.getState().activeKey;
+        const directory = key ? useDocumentStore.getState().getDocument(key)?.dirPath : null;
+        if (key && directory && !key.startsWith('untitled:')) {
+          void followExplorerFile(key, directory, () => useWindowStore.getState().activeKey === key)
+            .catch(error => console.error('恢复活动标签目录跟随失败:', error));
+        }
+      }
+    }
   }
 }
 
-async function openDocumentInternal(path: string, retryDepth: number, options: OpenDocumentOptions, navigation?: ExplorerNavigation): Promise<OpenDocumentResult> {
+async function openDocumentInternal(path: string, retryDepth: number, options: CapturedOpenOptions, navigation?: ExplorerNavigation): Promise<OpenDocumentResult> {
   if (retryDepth > 2) {
     showToast('该文件当前处于打开状态，请稍后重试', 'warning');
     return 'failed';

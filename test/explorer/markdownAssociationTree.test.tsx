@@ -54,7 +54,7 @@ it('shows one nested Markdown child and expands the NB without treating its path
   await act(async () => key(row(nb.path), 'ArrowRight'));
   expect(document.activeElement).toBe(row(md.path));
   await act(async () => key(row(md.path), 'Enter'));
-  expect(io.open).toHaveBeenCalledWith(md.path);
+  expect(io.open).toHaveBeenCalledWith(md.path, { explorerRoot: directory });
   await act(async () => key(row(md.path), 'ArrowLeft'));
   expect(document.activeElement).toBe(row(nb.path));
 });
@@ -120,6 +120,21 @@ it('updates grouping from an already-read source without hover or keyboard files
   await act(async () => recordNativeAssociation(nb.path, '#!noteboard 1\n'));
   expect(rows().map(element => element.dataset.explorerRow)).toEqual([nb.path, md.path, alternate.path]);
   await act(async () => { row(nb.path).dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); key(row(nb.path), 'Enter'); });
-  expect(io.open).toHaveBeenCalledWith(nb.path);
+  expect(io.open).toHaveBeenCalledWith(nb.path, { explorerRoot: directory });
   expect(io.readDir).not.toHaveBeenCalled(); expect(io.headers).not.toHaveBeenCalled();
+});
+
+it('passes the displayed root for deeply nested file clicks and Enter', async () => {
+  const folder = (name: string): FileTreeNode => ({ ...entry(name), isDir: true });
+  const a = folder('A'), b = folder('A\\B'), file = entry('A\\B\\nested.md');
+  await act(async () => {
+    useExplorerStore.getState().setRoot(directory, [a]);
+    useExplorerStore.getState().expand(a.path, [b]);
+    useExplorerStore.getState().expand(b.path, [file]);
+  });
+  await act(async () => row(file.path).dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await act(async () => key(row(file.path), 'Enter'));
+  expect(io.open).toHaveBeenNthCalledWith(1, file.path, { explorerRoot: directory });
+  expect(io.open).toHaveBeenNthCalledWith(2, file.path, { explorerRoot: directory });
+  expect(io.readDir).not.toHaveBeenCalled();
 });

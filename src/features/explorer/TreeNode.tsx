@@ -19,6 +19,7 @@ import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type { FileTreeNode } from '../../core/ipc/types';
 import { useExplorerStore } from './explorerStore';
 import { useTreeData } from './useTreeData';
+import { refreshExplorerDirectory } from './explorerActions';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { markOpenDocumentDeleted } from '../external/missingFileGuard';
 import { getFileIcon } from '../../components/FileIcon';
@@ -48,8 +49,7 @@ export const TreeNode = memo(function TreeNode({
   associatedMarkdown,
   associationRevision = 0,
 }: TreeNodeProps) {
-  const { toggle, loadChildren } = useTreeData();
-  const expand = useExplorerStore((s) => s.expand);
+  const { toggle } = useTreeData();
   const nodeKey = normalizePath(node.path).toLowerCase();
 
   // 精确响应式订阅：当前节点的展开状态、子节点缓存、高亮状态以及定位滚动触发计数
@@ -62,7 +62,6 @@ export const TreeNode = memo(function TreeNode({
   const revealCount = useExplorerStore((s) => s.revealCount);
   const setRevealed = useExplorerStore((s) => s.setRevealed);
   const root = useExplorerStore((s) => s.root);
-  const setRoot = useExplorerStore((s) => s.setRoot);
   const revealed = useExplorerStore(s => s.revealed);
 
   // 重命名状态
@@ -190,7 +189,7 @@ export const TreeNode = memo(function TreeNode({
     if (node.isDir) {
       toggle(node.path);
     } else {
-      void openDocument(node.path);
+      void openDocument(node.path, { explorerRoot: useExplorerStore.getState().root ?? undefined });
     }
   };
 
@@ -228,7 +227,7 @@ export const TreeNode = memo(function TreeNode({
       e.preventDefault();
       e.stopPropagation();
       if (node.isDir) toggle(node.path);
-      else void openDocument(node.path);
+      else void openDocument(node.path, { explorerRoot: useExplorerStore.getState().root ?? undefined });
       return;
     }
     if (matchesShortcut('explorer.rename', e.nativeEvent)) {
@@ -243,11 +242,9 @@ export const TreeNode = memo(function TreeNode({
     const lastSlash = node.path.lastIndexOf('\\');
     const parentDir = lastSlash > 0 ? node.path.substring(0, lastSlash) : '';
     if (parentDir) {
-      const parentNodes = await loadChildren(parentDir);
-      useExplorerStore.getState().updateChildren(parentDir, parentNodes);
+      await refreshExplorerDirectory(parentDir);
     } else if (root) {
-      const nodes = await loadChildren(root);
-      setRoot(root, nodes);
+      await refreshExplorerDirectory(root);
     }
   };
 
@@ -282,11 +279,9 @@ export const TreeNode = memo(function TreeNode({
 
       // 刷新父目录以更新左侧文件树
       if (parentDir) {
-        const parentNodes = await loadChildren(parentDir);
-        useExplorerStore.getState().updateChildren(parentDir, parentNodes);
+        await refreshExplorerDirectory(parentDir);
       } else if (root) {
-        const rootNodes = await loadChildren(root);
-        setRoot(root, rootNodes);
+        await refreshExplorerDirectory(root);
       }
     } catch (error: unknown) {
       // 将 Rust 与 JavaScript 的不同异常形态统一转换为用户可读消息。
@@ -301,6 +296,7 @@ export const TreeNode = memo(function TreeNode({
   // 提交目录内新建子项（文件或文件夹）
   const handleCreateSubSubmit = async () => {
     const name = creatingSubName.trim();
+    const explorerRoot = useExplorerStore.getState().root ?? undefined;
     if (!name) {
       setCreatingSub(null);
       setCreatingSubName('');
@@ -310,15 +306,13 @@ export const TreeNode = memo(function TreeNode({
     try {
       if (creatingSub === 'file') {
         const payload = await ipc.createFile(node.path, name, '');
-        const newChildren = await loadChildren(node.path);
-        useExplorerStore.getState().updateChildren(node.path, newChildren);
+        await refreshExplorerDirectory(node.path);
         if (payload?.key) {
-          await openDocument(payload.key);
+          await openDocument(payload.key, { explorerRoot });
         }
       } else if (creatingSub === 'folder') {
         await ipc.createDir(node.path, name);
-        const newChildren = await loadChildren(node.path);
-        useExplorerStore.getState().updateChildren(node.path, newChildren);
+        await refreshExplorerDirectory(node.path);
       }
     } catch (error: unknown) {
       // 将 Rust 与 JavaScript 的不同异常形态统一转换为用户可读消息。
@@ -445,7 +439,7 @@ export const TreeNode = memo(function TreeNode({
               label="打开文件"
               onClick={() => {
                 setMenuPos(null);
-                openDocument(node.path);
+                void openDocument(node.path, { explorerRoot: useExplorerStore.getState().root ?? undefined });
               }}
             />
           )}
@@ -459,8 +453,7 @@ export const TreeNode = memo(function TreeNode({
                 onClick={async () => {
                   setMenuPos(null);
                   if (!expanded) {
-                    const ch = await loadChildren(node.path);
-                    expand(node.path, ch);
+                    await toggle(node.path);
                   }
                   setCreatingSub('file');
                   setCreatingSubName('');
@@ -472,8 +465,7 @@ export const TreeNode = memo(function TreeNode({
                 onClick={async () => {
                   setMenuPos(null);
                   if (!expanded) {
-                    const ch = await loadChildren(node.path);
-                    expand(node.path, ch);
+                    await toggle(node.path);
                   }
                   setCreatingSub('folder');
                   setCreatingSubName('');
