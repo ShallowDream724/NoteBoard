@@ -1,7 +1,8 @@
 import { Schema } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { blockHandlePosition } from '@/features/editor-md/blockHandleGeometry';
+import { releaseListMarkerGeometry } from '@/features/editor-md/listMarkerGeometry';
 
 const schema = new Schema({ nodes: { doc: { content: 'paragraph+' }, paragraph: { content: 'text*', group: 'block' }, text: { group: 'inline' } } });
 const bounds = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} });
@@ -31,5 +32,22 @@ describe('block handle geometry', () => {
 
   it('retains the top alignment for content blocks', () => {
     expect(geometry(2, 84, 90, 'Content').top).toBe(50 + 84 + 2);
+  });
+
+  it.each([[31, 15], [76, 528]])('keeps a wide-counter handle outside the row at measured width %s', (glyphWidth, expectedLeft) => {
+    const lists = new Schema({ nodes: { doc: { content: 'block+' }, paragraph: { content: 'text*', group: 'block' },
+      orderedList: { content: 'listItem+', group: 'block', attrs: { start: { default: 1 } } }, listItem: { content: 'paragraph+' }, text: { group: 'inline' } } });
+    const doc = lists.nodes.doc.create(null, lists.nodes.orderedList.create({ start: 123456 }, lists.nodes.listItem.create(null, lists.nodes.paragraph.create(null, lists.text('one')))));
+    const view = { state: { doc } } as unknown as EditorView;
+    const host = document.createElement('div'), list = document.createElement('ol'), item = list.appendChild(document.createElement('li'));
+    host.append(list); host.getBoundingClientRect = () => bounds(0, 100, 600, 400);
+    Object.defineProperties(host, { offsetWidth: { value: 600 }, clientWidth: { value: 600 }, clientHeight: { value: 400 } });
+    list.getBoundingClientRect = () => bounds(64, 190, 456, 100); item.getBoundingClientRect = () => bounds(88, 200, 432, 26);
+    Object.assign(item.style, { fontSize: '16px', listStyleType: 'decimal' });
+    const spy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ measureText: () => ({ width: glyphWidth }) } as unknown as CanvasRenderingContext2D);
+    try {
+      const position = blockHandlePosition(view, { element: item, pos: 1, node: doc.firstChild!.firstChild! }, host);
+      expect(position.width).toBe(30); expect(position.left).toBe(expectedLeft);
+    } finally { releaseListMarkerGeometry(view); spy.mockRestore(); }
   });
 });

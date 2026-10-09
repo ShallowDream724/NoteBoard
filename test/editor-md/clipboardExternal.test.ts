@@ -7,13 +7,16 @@ import { NATIVE_DOCUMENT_HEADER } from '../../src/core/nativeDocument';
 import { ClipboardImport, DOCUMENT_SLICE_MIME, importClipboardSnapshot } from '../../src/features/editor-md/clipboard/clipboardImport';
 import { clipboardHtmlSource, needsClipboardImageFallback, normalizeExternalHtml, normalizeExternalText } from '../../src/features/editor-md/clipboard/external';
 import { handlePastedImageFiles } from '../../src/features/editor-md/imagePaste';
+import { DocumentCapabilityGuard } from '../../src/features/document-format/capabilityGuard';
 
 vi.mock('../../src/features/editor-md/imagePaste', () => ({ handlePastedImageFiles: vi.fn() }));
+const conversion = vi.hoisted(() => ({ confirm: vi.fn().mockResolvedValue(null) }));
+vi.mock('../../src/features/document-format/NativeConversionDialog', () => ({ requestNativeConversion: conversion.confirm }));
 const editors: Editor[] = [];
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); vi.clearAllMocks(); });
 function create(format: RichDocumentFormat = 'markdown', content = '<p>target</p>') {
-  const editor = new Editor({ extensions: [...buildDocumentExtensions(), ClipboardImport.configure({ docKey: `test.${format}` })], content });
-  initializeEditorDocument(editor, format === 'noteboard' ? `${NATIVE_DOCUMENT_HEADER}\n` : '', format);
+  const editor = new Editor({ extensions: [...buildDocumentExtensions(), ClipboardImport.configure({ docKey: `test.${format}` }), DocumentCapabilityGuard], content });
+  initializeEditorDocument(editor, format === 'noteboard' ? `${NATIVE_DOCUMENT_HEADER}\n` : '', format, '', `test.${format}`);
   editors.push(editor); editor.commands.selectAll(); return editor;
 }
 function paste(editor: Editor, formats: Record<string, string>, plain = false, files?: File[]) {
@@ -81,20 +84,70 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
     expect(editor.state.doc.textContent).toBe('Word标题第三项NestedFourth');
     const list = editor.state.doc.child(1); expect(list.type.name).toBe('orderedList'); expect(list.attrs.start).toBe(3);
     expect(list.firstChild?.child(1).type.name).toBe('bulletList');
-    expect(list.firstChild?.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(expect.arrayContaining(['bold', 'textColor']));
+    expect(list.firstChild?.firstChild?.firstChild?.marks.map(mark => mark.type.name)).toEqual(expect.arrayContaining(format === 'noteboard' ? ['bold', 'textColor'] : ['bold']));
+    if (format === 'markdown') expect(list.firstChild?.firstChild?.firstChild?.marks.some(mark => mark.type.name === 'textColor')).toBe(false);
   });
   it('imports Excel displayed dates, zeros, merged cells and styled text into existing table cells', () => {
     const editor = create(format);
     paste(editor, { 'text/html': '<html><head><style>.xl1{background:#ff0;text-align:right}</style></head><body><table><tr><td rowspan="2" class="xl1">00123</td><td>2026/09/26</td><td></td></tr><tr><td>3.00</td><td><span style="mso-spacerun:yes">  spaced  </span><br>line</td></tr></table></body></html>', 'text/plain': '00123\t2026/09/26\t\n\t3.00\t  spaced  \nline' });
     const table = editor.state.doc.firstChild!; expect(table.type.name).toBe('table');
-    expect(table.firstChild?.firstChild?.attrs).toMatchObject({ rowspan: 2, background: '#ffff00' });
+    expect(table.firstChild?.firstChild?.attrs).toMatchObject(format === 'noteboard' ? { rowspan: 2, background: '#ffff00' } : { rowspan: 1, background: null });
     expect(table.textContent).toContain('001232026/09/263.00  spaced  line');
     editor.commands.setTextSelection(4); paste(editor, { 'text/html': '<p><b>rich</b></p>', 'text/plain': 'rich' });
     expect(editor.state.doc.firstChild?.firstChild?.firstChild?.firstChild?.firstChild?.marks[0]?.type.name).toBe('bold');
   });
+  it('keeps translated web text, links and emphasis without promoting MD for page appearance', async () => {
+    const editor = create(format);
+    const html = '<p style="text-align:center;color:#444"><span style="color:rgb(180, 30, 20);background:#ff0">中文译文 <a href="https://arxiv.org/html/2410.05160#bib.bib1">[1]</a> <strong>重点</strong> <em>术语</em></span></p>';
+    paste(editor, { 'text/html': html, 'text/plain': '中文译文 [1] 重点 术语' });
+    expect(editor.state.doc.textContent).toBe('中文译文 [1] 重点 术语');
+    const marks = editor.getJSON().content?.[0].content?.flatMap(node => node.marks ?? []) ?? [];
+    expect(marks).toEqual(expect.arrayContaining([{ type: 'link', attrs: expect.objectContaining({ href: 'https://arxiv.org/html/2410.05160#bib.bib1' }) }, { type: 'bold' }, { type: 'italic' }]));
+    expect(marks.some(mark => mark.type === 'textColor')).toBe(format === 'noteboard');
+    await Promise.resolve(); expect(conversion.confirm).not.toHaveBeenCalled();
+  });
+  it('Ctrl+Shift+V skips rich HTML and conversion while inserting only plain text', async () => {
+    const editor = create(format);
+    editor.view.someProp('handleKeyDown', handler => handler(editor.view, new KeyboardEvent('keydown', { key: 'V', ctrlKey: true, shiftKey: true })));
+    paste(editor, { 'text/html': '<p style="color:#f00;text-align:center"><a href="https://example.com">label</a></p>', 'text/plain': 'label' });
+    expect(editor.state.doc.textContent).toBe('label'); expect(editor.state.doc.firstChild?.firstChild?.marks).toEqual([]);
+    await Promise.resolve(); expect(conversion.confirm).not.toHaveBeenCalled();
+  });
 });
 
 describe('external normalization boundaries', () => {
+  it('resolves relative web links and images from CF_HTML SourceURL identically in the UI and Worker', () => {
+    const html = 'Version:1.0\r\nStartHTML:0000000100\r\nStartFragment:0000000200\r\nSourceURL:https://arxiv.org/html/2410.05160\r\n<html><body><!--StartFragment--><p><a href="#bib.bib1">citation</a> <a href="/abs/2410.05160">paper</a> <a href="related">related</a></p><img src="images/figure.png"><!--EndFragment--></body></html>';
+    const options = { preservePresentation: false };
+    const result = normalizeExternalHtml(new DOMParser().parseFromString(clipboardHtmlSource(html), 'text/html'), html, undefined, options);
+    const worker = new WorkerDOMParser().parseFromString(clipboardHtmlSource(html), 'text/html') as unknown as Document;
+    expect(normalizeExternalHtml(worker, html, undefined, options)).toEqual(result);
+    const links = result.content[0].content?.flatMap(node => node.marks?.filter(mark => mark.type === 'link').map(mark => mark.attrs?.href) ?? []);
+    expect(links).toEqual(['https://arxiv.org/html/2410.05160#bib.bib1', 'https://arxiv.org/abs/2410.05160', 'https://arxiv.org/html/related']);
+    expect(result.content[1].attrs?.src).toBe('https://arxiv.org/html/images/figure.png');
+  });
+  it('uses an explicit web base without using the local parser URL or importing unsafe schemes', () => {
+    const html = '<html><head><base href="../assets/"></head><body><p><a href="guide.html#one">guide</a><a href="javascript:alert(1)">unsafe</a><a href="mailto:person@example.com">mail</a></p><img src="//cdn.example.com/a.png"></body></html>';
+    const result = normalizeExternalHtml(new DOMParser().parseFromString(html, 'text/html'), html, undefined, { sourceUrl: 'https://example.com/docs/page.html' });
+    expect(result.content[0].content?.[0].marks?.[0].attrs?.href).toBe('https://example.com/assets/guide.html#one');
+    expect(result.content[0].content?.[1].marks).toBeUndefined(); expect(result.content[0].content?.[2].marks?.[0].attrs?.href).toBe('mailto:person@example.com');
+    expect(result.content[1].attrs?.src).toBe('https://cdn.example.com/a.png');
+    expect(normalizedHtml('<p><a href="relative.md">local</a></p>').content[0].content?.[0].marks?.[0].attrs?.href).toBe('relative.md');
+    const unsafe = '<html><head><base href="javascript:alert(1)"></head><body><p><a href="#one">safe</a></p></body></html>';
+    expect(normalizeExternalHtml(new DOMParser().parseFromString(unsafe, 'text/html'), unsafe, undefined, { sourceUrl: 'https://example.com/page' }).content[0].content?.[0].marks?.[0].attrs?.href).toBe('https://example.com/page#one');
+  });
+  it('shares portable appearance policy with the Worker DOM and retains figure caption text', () => {
+    const html = '<p style="color:#f00;text-align:center"><a href="https://example.com" style="background:#ff0">link</a></p><figure><img src="https://example.com/a.png"><figcaption><b>caption</b></figcaption></figure><table><tr><td rowspan="2" style="background:#ff0;vertical-align:bottom">merged</td><td>A</td></tr><tr><td>B</td></tr></table>';
+    const options = { inferMarkdown: true, preservePresentation: false };
+    const result = normalizeExternalHtml(new DOMParser().parseFromString(html, 'text/html'), html, undefined, options);
+    const worker = new WorkerDOMParser().parseFromString(`<html><body>${html}</body></html>`, 'text/html') as unknown as Document;
+    expect(normalizeExternalHtml(worker, html, undefined, options)).toEqual(result);
+    expect(result.content.map(node => node.type)).toEqual(['paragraph', 'image', 'paragraph', 'table']);
+    expect(result.content[2].content?.[0]).toMatchObject({ text: 'caption', marks: [{ type: 'bold' }] });
+    const json = JSON.stringify(result); expect(json).not.toContain('textColor'); expect(json).not.toContain('highlight'); expect(json).not.toContain('textAlign'); expect(json).not.toContain('captionContent');
+    expect(result.content[3].content?.map(row => row.content?.length)).toEqual([2, 2]);
+    expect(json.match(/merged/g)).toHaveLength(1);
+  });
   it('has equivalent source-wrapper and Office results in the browser and Worker parser', () => {
     for (const html of ['<pre># heading\n\n$a$</pre>', '<p style="mso-list:l0 level1 lfo1"><!--[if !supportLists]><span style="mso-list:Ignore">1. </span><![endif]-->Item</p>', '<p><!--[if gte vml 1]><v:shape><v:imagedata src="file:///C:/word.png" o:title="chart"/></v:shape><![endif]--></p>']) {
       const worker = new WorkerDOMParser().parseFromString(`<html><body>${html}</body></html>`, 'text/html') as unknown as Document;

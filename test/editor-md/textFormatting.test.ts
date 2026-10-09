@@ -8,6 +8,7 @@ import { toggleSelectedCellMark } from '../../src/features/document-style/cellTe
 import { transactionStart } from '../../src/features/editor-md/transactionStart';
 import { nativeTestEditor } from './nativeTestEditor';
 import { NodeSelection } from '@tiptap/pm/state';
+import { unwrapCallout } from '../../src/features/editor-md/alertCommands';
 
 function create(content: string) { return nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(), content })); }
 const table = '<table data-table-align="right"><tr><th><p><b>A</b></p></th><th><p><b>B</b></p></th><th><p><b>C</b></p></th></tr><tr><td><p><b>D</b></p></td><td><p><b>E</b></p></td><td><p><b>F</b></p></td></tr><tr><td><p><b>G</b></p></td><td><p><b>H</b></p></td><td><p><b>I</b></p></td></tr></table>';
@@ -16,7 +17,7 @@ describe('clear text presentation without clearing meaning or structure', () => 
     const editor = create('<p>before</p><div data-alert="note" data-callout-title="Custom title" data-annotation-id="note-1"><div class="alert-body"><p><b><a href="https://example.com">keep</a></b></p><blockquote><p>nested</p></blockquote><img src="one.png"></div></div><p>after</p>');
     try {
       const before = editor.state.doc, pos = before.firstChild!.nodeSize, callout = before.nodeAt(pos)!;
-      expect(clearBlockFormatting(editor, pos)).toBe(true);
+      expect(unwrapCallout(editor, pos)).toBe(true);
       expect(editor.state.doc.nodeAt(pos)!.textContent).toBe('Custom title');
       expect(editor.state.doc.nodeAt(pos)!.attrs.annotationId).toBe('note-1');
       expect(editor.state.doc.child(2).eq(callout.child(0))).toBe(true);
@@ -26,7 +27,7 @@ describe('clear text presentation without clearing meaning or structure', () => 
       editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
     } finally { editor.destroy(); }
   });
-  it('clears a selected Callout shell from the toolbar, but selected text only loses its text marks', () => {
+  it('keeps the Callout container when clearing either its body selection or the whole block', () => {
     const editor = create('<div data-alert="note"><div class="alert-body"><p><b>inside</b></p></div></div><p>after</p>');
     try {
       const before = editor.state.doc;
@@ -36,7 +37,10 @@ describe('clear text presentation without clearing meaning or structure', () => 
       editor.commands.undo();
       editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 0)));
       clearSelectionTextFormatting(editor);
-      expect(editor.state.doc.firstChild!.eq(before.firstChild!.firstChild!)).toBe(true);
+      expect(editor.state.doc.firstChild!.type.name).toBe('githubAlert');
+      expect(editor.state.doc.firstChild!.attrs).toEqual(before.firstChild!.attrs);
+      expect(editor.state.doc.firstChild!.firstChild!.textContent).toBe('inside');
+      expect(editor.state.doc.firstChild!.firstChild!.firstChild!.marks).toHaveLength(0);
       editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
     } finally { editor.destroy(); }
   });

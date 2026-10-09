@@ -4,7 +4,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { toggleMark } from '@tiptap/pm/commands';
 import { documentColor } from '../../document-style/colors';
 import { dispatchDiscreteEdit } from '../discreteEdit';
-import { TEXT_STYLE_MARKS } from '../textFormatting';
+import { TEXT_STYLE_MARKS } from '../textStyleMarks';
 
 export type MarkStatus = false | true | 'mixed';
 

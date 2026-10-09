@@ -32,7 +32,10 @@ export function formatBlock(editor: Editor, pos: number, command: (chain: Chaine
   const end = titleOnly ? pos + range.node.nodeSize : range.to;
   return runDiscreteEdit(editor, chain => {
     if (isListItem(range.node)) {
-      chain = chain.setTextSelection({ from: pos + 2, to: titleOnly ? pos + range.node.firstChild!.nodeSize : end - 2 });
+      chain = chain.command(({ tr }) => {
+        tr.setSelection(TextSelection.between(tr.doc.resolve(pos + 2), tr.doc.resolve(titleOnly ? pos + range.node.firstChild!.nodeSize : end - 2)));
+        return true;
+      });
       if (titleOnly) chain = chain.liftListItem(range.node.type.name);
     } else chain = chain.setTextSelection({ from: pos + 1, to: end - 1 });
     return command(chain);

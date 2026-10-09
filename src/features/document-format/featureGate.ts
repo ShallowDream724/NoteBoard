@@ -1,8 +1,7 @@
 import type { Editor } from '@tiptap/core';
-import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import { editorDocumentDirectory, editorDocumentFormat, editorDocumentKey } from '../editor-md/editorDocumentCodec';
-import { resolveRelativeDocPath } from '../../core/documentPath';
+import { sameDocument } from './documentComparison';
 import { getMdTipTapEditor, subscribeMdTipTapEditors } from '../editor-md/editorInstances';
 import { formatSupportsCapability, type DocumentCapabilityId } from './capabilities';
 import { showToast } from '../../stores/toastStore';
@@ -15,26 +14,6 @@ export function useNativeFeatureVisibility(): boolean {
   return !useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
 }
 const pending = new WeakMap<Editor, Promise<Editor | null>>();
-// Editor schemas have distinct NodeType identities across a format conversion.
-// Compare semantic structure without allocating two complete JSON document trees.
-function comparableAttrs(type: string, attrs: Record<string, unknown>, directory: string): string {
-  const field = type === 'image' ? 'src' : type === 'link' ? 'href' : null;
-  const value = field && attrs[field];
-  if (field && typeof value === 'string' && value && !/^(?:[a-z][a-z0-9+.-]*:|[\\/#])/i.test(value) && directory) {
-    return JSON.stringify({ ...attrs, [field]: resolveRelativeDocPath(directory, value).replace(/\\/g, '/') });
-  }
-  return JSON.stringify(attrs);
-}
-function sameDocument(left: Node, right: Node, directory: string): boolean {
-  if (left.type.name !== right.type.name || left.text !== right.text || left.childCount !== right.childCount
-    || comparableAttrs(left.type.name, left.attrs, directory) !== comparableAttrs(right.type.name, right.attrs, directory) || left.marks.length !== right.marks.length) return false;
-  for (let index = 0; index < left.marks.length; index++) {
-    const a = left.marks[index], b = right.marks[index];
-    if (a.type.name !== b.type.name || comparableAttrs(a.type.name, a.attrs, directory) !== comparableAttrs(b.type.name, b.attrs, directory)) return false;
-  }
-  for (let index = 0; index < left.childCount; index++) if (!sameDocument(left.child(index), right.child(index), directory)) return false;
-  return true;
-}
 function waitForNativeEditor(key: string): Promise<Editor | null> {
   const current = getMdTipTapEditor(key);
   if (current && !current.isDestroyed && editorDocumentFormat(current) === 'noteboard') return Promise.resolve(current);

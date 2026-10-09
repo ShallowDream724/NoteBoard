@@ -2,10 +2,17 @@ import type { JSONContent } from '@tiptap/core';
 import { parseClipboardMatrix } from '../../../core/clipboardMatrix';
 import { clipboardMathElement, clipboardTextMath } from './htmlMath';
 import { figureCaptionText } from '../figureCaption';
+import { buildLogicalTableGrid } from '../tableGrid';
 
 /** Import limits bound DOM parsing, schema materialization and one final transaction. */
 export const CLIPBOARD_LIMITS = { characters: 16_000_000, nodes: 250_000, depth: 48, cells: 100_000, rules: 2_048, synchronous: 24_000 } as const;
 export interface ClipboardImportResult { content: JSONContent[]; diagnostics: string[]; nodes: number; openStart?: number; openEnd?: number; tableScope?: 'row' | 'column' | 'table' | 'cells' }
+export interface ExternalHtmlOptions {
+  /** Foreign HTML in MD keeps portable semantics, without page appearance. Defaults to rich import. */
+  preservePresentation?: boolean;
+  /** Explicit web origin supplied by the clipboard transport, never the local editor URL. */
+  sourceUrl?: string;
+}
 export class ClipboardImportError extends Error {}
 /** Bound text parsing before constructing either paragraph or Markdown trees. */
 export function clipboardTextLineCount(raw: string): number {
@@ -59,10 +66,24 @@ export function safeClipboardUrl(raw: string, image = false): string | null {
   return null;
 }
 
+function clipboardWebBase(raw: string | null | undefined, base?: string): string | undefined {
+  const value = raw && safeClipboardUrl(raw);
+  if (!value) return;
+  try { const url = new URL(value, base); return /^https?:$/.test(url.protocol) ? url.href : undefined; } catch { return; }
+}
+
 /** DOM is detached; only a small allowlist is translated to schema data. No computed styles or HTML survives. */
-export function normalizeClipboardDocument(document: Document, inputCharacters: number): ClipboardImportResult {
+export function normalizeClipboardDocument(document: Document, inputCharacters: number, options: ExternalHtmlOptions = {}): ClipboardImportResult {
   if (inputCharacters > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴（每次最多 1600 万字符）');
   const diagnostics = new Set<string>(); let nodes = 0, cells = 0;
+  const rich = options.preservePresentation !== false;
+  const sourceUrl = clipboardWebBase(options.sourceUrl);
+  const baseUrl = clipboardWebBase(document.querySelector('base[href]')?.getAttribute('href'), sourceUrl) ?? sourceUrl;
+  const urlFor = (raw: string, image = false) => {
+    const value = safeClipboardUrl(raw, image);
+    if (!value || !baseUrl || /^(?:https?:|mailto:|tel:|data:)/i.test(value)) return value;
+    try { return new URL(value, baseUrl).href; } catch { return null; }
+  };
   const styleRules = new Map<string, Style>(); let ruleCount = 0;
   for (const element of Array.from(document.querySelectorAll('style'))) {
     for (const match of (element.textContent ?? '').matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -93,19 +114,22 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     if (tag === 'U' || style['text-decoration']?.includes('underline')) add('underline');
     if (['S', 'STRIKE', 'DEL'].includes(tag) || style['text-decoration']?.includes('line-through')) add('strike');
     if (tag === 'CODE') add('code');
-    const color = clipboardColor(style.color || element.getAttribute('color') || undefined); if (color) add('textColor', { color });
-    const highlight = clipboardColor(style['background-color'] || style.background); if (highlight && !['TD', 'TH', 'TABLE', 'TR'].includes(tag)) add('highlight', { color: highlight });
-    if (tag === 'MARK' && !highlight) add('highlight', { color: '#ffff00' });
-    if (tag === 'A') { const href = safeClipboardUrl(element.getAttribute('href') ?? ''); if (href) add('link', { href }); }
+    if (rich) {
+      const color = clipboardColor(style.color || element.getAttribute('color') || undefined); if (color) add('textColor', { color });
+      const highlight = clipboardColor(style['background-color'] || style.background); if (highlight && !['TD', 'TH', 'TABLE', 'TR'].includes(tag)) add('highlight', { color: highlight });
+      if (tag === 'MARK' && !highlight) add('highlight', { color: '#ffff00' });
+    }
+    if (tag === 'A') { const href = urlFor(element.getAttribute('href') ?? ''); if (href) add('link', { href }); }
     return marks;
   }
   const paragraph = (content: JSONContent[] = [], attrs?: Record<string, unknown>): JSONContent => ({ type: 'paragraph', ...(attrs ? { attrs } : {}), ...(content.length ? { content } : {}) });
   function alignment(element: Element, style: Style) {
+    if (!rich) return undefined;
     const textAlign = style['text-align'] || element.getAttribute('align');
     return textAlign && ['left', 'center', 'right'].includes(textAlign) ? { textAlign } : undefined;
   }
   function image(element: Element): JSONContent {
-    const raw = element.getAttribute('src') ?? '', src = safeClipboardUrl(raw, true), alt = element.getAttribute('alt') || element.getAttribute('o:title') || '';
+    const raw = element.getAttribute('src') ?? '', src = urlFor(raw, true), alt = element.getAttribute('alt') || element.getAttribute('o:title') || '';
     if (!src) { diagnostics.add('无法读取的图片已保留替代文字和来源'); return paragraph([{ type: 'text', text: `[图片：${alt || '不可读取'}${raw ? `；来源：${raw.slice(0, 300)}` : ''}]` }]); }
     return { type: 'image', attrs: { src, alt, title: element.getAttribute('title') } };
   }
@@ -180,11 +204,22 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         const span = (name: string) => Math.min(100, Math.max(1, Number(cell.getAttribute(name)) || 1));
         const colspan = span('colspan'), rowspan = span('rowspan'); rowWidth += colspan;
         if (rowspan > 1) { activeSpanWidth += colspan; spanEnds.set(rowIndex + rowspan, (spanEnds.get(rowIndex + rowspan) ?? 0) + colspan); }
-        content.push({ type: cell.tagName.toUpperCase() === 'TH' ? 'tableHeader' : 'tableCell', attrs: { colspan, rowspan, background: clipboardColor(style['background-color'] || style.background || cell.getAttribute('bgcolor') || undefined), verticalAlign: ['top', 'middle', 'bottom'].includes(style['vertical-align']) ? style['vertical-align'] : null }, content: body.length ? body : [paragraph()] });
+        content.push({ type: cell.tagName.toUpperCase() === 'TH' ? 'tableHeader' : 'tableCell', attrs: { colspan, rowspan, ...(rich ? { background: clipboardColor(style['background-color'] || style.background || cell.getAttribute('bgcolor') || undefined), verticalAlign: ['top', 'middle', 'bottom'].includes(style['vertical-align']) ? style['vertical-align'] : null } : {}) }, content: body.length ? body : [paragraph()] });
       }
       if (content.length || rowWidth) {
         rows.push({ type: 'tableRow', content }); maximumWidth = Math.max(maximumWidth, rowWidth);
         if (maximumWidth * rows.length > CLIPBOARD_LIMITS.cells) throw new ClipboardImportError('表格展开后的网格过大，请分段粘贴');
+      }
+    }
+    if (!rich && rows.some(row => row.content?.some(cell => Number(cell.attrs?.colspan) > 1 || Number(cell.attrs?.rowspan) > 1))) {
+      const grid = buildLogicalTableGrid(rows.map(row => row.content ?? []), cell => cell.attrs ?? {});
+      if (grid.width * rows.length > CLIPBOARD_LIMITS.cells) throw new ClipboardImportError('表格展开后的网格过大，请分段粘贴');
+      // One real cell's content belongs to its first slot; covered slots remain
+      // empty. This preserves table meaning without repeating merged text.
+      for (let row = 0; row < rows.length; row++) {
+        const content: JSONContent[] = Array.from({ length: grid.width }, () => ({ type: 'tableCell', content: [paragraph()] }));
+        for (const placement of grid.rows[row]) content[placement.column] = { ...placement.cell, attrs: { colspan: 1, rowspan: 1 } };
+        rows[row].content = content;
       }
     }
     return rows.length ? { type: 'table', content: rows } : paragraph();
@@ -213,7 +248,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       if (tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
         flush();
         const picture = image(element.querySelector('img')!), caption = element.querySelector('figcaption')!;
-        if (picture.type === 'image') {
+        if (picture.type === 'image' && rich) {
           const content = inline(caption, [], depth + 1, true).filter(child => child.type === 'text' || child.type === 'hardBreak');
           picture.attrs = { ...picture.attrs, caption: figureCaptionText(content), captionContent: content.length ? content : null };
           result.push(picture);

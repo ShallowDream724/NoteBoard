@@ -9,7 +9,11 @@
 - 转换默认保留并关联原 Markdown；“删除原 Markdown，不再关联”默认关闭。取消、转换失败和确认期间源内容变化均不执行原操作。
 - 新编辑器通过 `subscribeMdTipTapEditors` 注册事件取得，转换后恢复原选区。重复按键/拖拽事件不会在转换弹窗后堆积执行。
 
-`DocumentCapabilityGuard` 为视觉编辑器的直接 TipTap 命令、快捷键、粘贴和尺寸拖拽提供事务检查。它只检查新增 marks、属性和替换片段，普通输入不扫描全文；已读取的 HTML 样式、普通表格操作、选区事务与显式历史恢复不触发转换。被拦截事务仅在新 NB 的基准文档仍一致时重放。
+`DocumentCapabilityGuard` 为视觉编辑器的直接 TipTap 命令、快捷键、粘贴和尺寸拖拽提供事务检查。它只检查新增 marks、属性和替换片段，普通输入不扫描全文；已读取的 HTML 样式、普通表格操作、选区事务与显式历史恢复不触发转换。被拦截事务仅在新 NB 的基准文档仍一致时重放。转换入口与事务回放共用 `documentComparison.sameDocument`，按节点/标记名称及属性比较语义，并归一图片和链接相对路径，不分配两份完整 JSON 文档树。回放使用步骤 JSON 和新编辑器 schema 重建步骤与 stored marks，一次提交且可独立撤销；不能复用旧 schema 的节点或标记实例。
+
+外部 HTML 普通粘贴采用目标格式策略：MD 保留文字、链接、基础格式、列表、表格、图片与公式，忽略网页颜色、高亮、对齐和单元格底色；图注展开为紧随图片的普通段落，合并单元格按稀疏逻辑网格展开，原文字只保留一次。NB 继续保留可识别的丰富外观。`ExternalHtmlOptions.preservePresentation` 默认为 `true`，主编辑器的 MD 外部 HTML 入口传 `false`；小输入与 Worker 共用规范化实现，大输入无需先在主线程构建或二次解析整份剪贴板。内部结构化 MIME 与显式 Markdown 来源保持其结构，并由能力门控决定是否转换。Ctrl+Shift+V 始终走纯文本入口，不推断 Markdown/表格或读取 HTML 外观。
+
+网页相对链接、锚点和图片共用 URL 解析策略：仅根据 CF_HTML `SourceURL`、调用方提供的 `sourceUrl` 或有效 HTTP(S) `<base>` 补齐地址，不借用本地编辑器/解析器的页面 URL。缺少来源时保留原相对路径；显式 Markdown 和内部 MIME 的本地路径不经过网页基址转换。URL allowlist 在主线程和 Worker 共用，解析不触发资源下载。
 
 工具栏、选区菜单、内容块菜单和图片节点菜单使用相同命令入口。图片拖拽只预览尺寸，松开后提交一次可撤销修改。NB 源码不显示 Markdown 格式化工具栏；Markdown 源码不显示私有样式入口。
 

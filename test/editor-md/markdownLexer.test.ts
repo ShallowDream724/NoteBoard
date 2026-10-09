@@ -62,4 +62,11 @@ describe('document lexer ownership and bounded probes', () => {
     parseMarkdownDocument(source).forEach(node => types.push(node.type.name));
     expect(types).toEqual(['paragraph', 'mathBlock', 'paragraph', 'githubAlert']);
   });
+  it.each([
+    ['\\\\[x\\\\]', '\\[x\\]'],
+    ['\\> [!NOTE]', '> [!NOTE]'],
+  ])('does not peel an escape off a first-line block opener: %s', (source, text) => {
+    const doc = parseMarkdownDocument(source);
+    expect(doc.childCount).toBe(1); expect(doc.firstChild!.type.name).toBe('paragraph'); expect(doc.textContent).toBe(text);
+  });
 });

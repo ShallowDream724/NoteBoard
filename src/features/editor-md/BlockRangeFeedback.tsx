@@ -3,12 +3,14 @@ import type { Editor } from '@tiptap/core';
 import type { Transaction } from '@tiptap/pm/state';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { findTopLevelBlockElement } from './blockReorder';
+import { listItemHorizontalBounds, releaseListMarkerGeometry } from './listMarkerGeometry';
 import './blockRangeFeedback.css';
 
 /** A UI-owned overlay: hovering never changes selection, history or editable DOM.
  * Only the current block is measured; large documents require no block traversal. */
 export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: number }) {
   const overlay = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => () => releaseListMarkerGeometry(editor.view), [editor]);
   useLayoutEffect(() => {
     const layer = overlay.current;
     if (!layer) return;
@@ -27,10 +29,13 @@ export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: numbe
       }
       if (!target || !target.isConnected) { layer.hidden = true; return; }
       const rect = target.getBoundingClientRect(), bounds = host.getBoundingClientRect();
+      // Outside markers are not part of an LI's border box. Include only its
+      // own list's horizontal gutter while retaining the current item's height.
       const scale = bounds.width / host.offsetWidth || 1;
+      const row = listItemHorizontalBounds(editor.view, currentPos!, target, rect, scale);
       // Clip to the scroll viewport so a huge table never creates a huge layer.
-      const left = Math.max(rect.left - 2 * scale, bounds.left);
-      const right = Math.min(rect.right + 2 * scale, bounds.right - (host.offsetWidth - host.clientWidth) * scale);
+      const left = Math.max(row.left - 2 * scale, bounds.left);
+      const right = Math.min(row.right + 2 * scale, bounds.right - (host.offsetWidth - host.clientWidth) * scale);
       const top = Math.max(rect.top - 2 * scale, bounds.top);
       const bottom = Math.min(rect.bottom + 2 * scale, bounds.bottom);
       layer.hidden = right <= left || bottom <= top;

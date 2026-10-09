@@ -23,6 +23,8 @@ import { inlineCodeComposition, inlineCodeInputRule, mapInlineCodeComposition } 
 import { Plugin } from '@tiptap/pm/state';
 import { InlineFormattingInput, withoutFormattingRules } from './inlineFormattingInput';
 import { pairedFormattingTokenizer } from './inlineFormattingMask';
+import { ScopedListCommands } from './scopedListCommands';
+import { ParagraphCommands } from './paragraphCommands';
 
 const ConsistentStarterKit = StarterKit.extend({
   addExtensions() { return (this.parent?.() ?? []).map(extension => withoutFormattingRules(extension.name === 'underline'
@@ -62,7 +64,7 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     // Highlight must wrap inline code; serializing its markup inside backticks
     // would turn the mark into literal code and discard the highlight on reload.
     withoutFormattingRules(MarkdownHighlight.configure({ multicolor: true })), InlineFormattingInput, TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,
-    MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }),
+    MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }), ScopedListCommands, ParagraphCommands,
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
     MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, NativeError, ...richContentGrammar, ...annotationSchemaExtensions,
     PresentedMarkdown.configure({ marked: createMarkdownLexer() }),

@@ -31,6 +31,7 @@ import { BlockRangeFeedback } from './BlockRangeFeedback';
 import { Plus } from 'lucide-react';
 import { isEmptyParagraph } from './blockInteractionScope';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
+import { releaseListMarkerGeometry } from './listMarkerGeometry';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -70,6 +71,7 @@ interface DragHandleState {
   nodePos: number | null;
   nodeType: string | null;
   empty: boolean;
+  width: number;
 }
 
 interface DragFeedbackState {
@@ -135,6 +137,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     nodePos: null,
     nodeType: null,
     empty: false,
+    width: 50,
   });
   const [isHoveringHandle, setIsHoveringHandle] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -163,7 +166,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     setMenuOpen(open);
     if (!open) refreshHoverRef.current?.();
   });
-  useEffect(() => () => { editor?.view.dom.classList.remove('nb-block-menu-open'); }, [editor]);
+  useEffect(() => () => { if (editor) { editor.view.dom.classList.remove('nb-block-menu-open'); releaseListMarkerGeometry(editor.view); } }, [editor]);
   useLayoutEffect(() => {
     if (!editor || !state.visible || state.nodeType !== 'heading' || state.nodePos === null) return;
     return markHeadingHandleTarget(editor, state.nodePos);
@@ -263,7 +266,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }
 
       clearHideTimer();
-      const blockElement = findTopLevelBlockElement(editorDom, targetElement);
+      const blockElement = findTopLevelBlockElement(editorDom, targetElement, pointer.y);
       if (!blockElement) { scheduleHide(); return; }
 
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
@@ -274,15 +277,16 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       // Read the same container policy as CSS, including transitions between
       // empty/nonempty blocks; the previous handle's measured width can be stale.
       const width = empty ? 30 : parseFloat(getComputedStyle(editorDom).getPropertyValue('--document-block-handle-width')) || 50;
-      const { top, left } = blockHandlePosition(editor.view, blockInfo, scrollParent, width, handleRef.current?.offsetHeight || 30);
+      const { top, left, width: fittedWidth } = blockHandlePosition(editor.view, blockInfo, scrollParent, width, handleRef.current?.offsetHeight || 30);
 
-      setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) && current.empty === empty ? current : ({
+      setState(current => current.visible && current.nodePos === blockInfo.pos && current.top === top && current.left === Math.max(left, 4) && current.empty === empty && current.width === fittedWidth ? current : ({
         visible: true,
         top,
         left: Math.max(left, 4),
         nodePos: blockInfo.pos,
         nodeType: blockInfo.node.type.name,
         empty,
+        width: fittedWidth,
       }));
     };
     const handleMouseMove = (event: MouseEvent) => {
@@ -570,10 +574,11 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
           style={{
             top: state.top,
             left: state.left,
+            width: state.width,
           }}
           aria-label={state.empty ? '添加内容' : `拖动${blockLabel}`}
         >
-          {state.empty ? <Plus size={18} aria-hidden="true"/> : <><BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/><span className="nb-block-grip" aria-hidden="true">⠿</span></>}
+          {state.empty ? <Plus size={18} aria-hidden="true"/> : <><BlockTypeIcon type={state.nodeType} level={state.nodePos === null ? undefined : editor?.state.doc.nodeAt(state.nodePos)?.attrs.level}/>{state.width > 30 && <span className="nb-block-grip" aria-hidden="true">⠿</span>}</>}
         </button>
       </Popover.Anchor>
       <Popover.Portal><Popover.Content {...menuHover.contentProps} className="nb-block-menu-popover" side="left" align="start" sideOffset={5} collisionPadding={10}

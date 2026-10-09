@@ -6,11 +6,8 @@ import { selectBlock } from './blockActions';
 import { styleSelectedCells } from '../document-style/cellTextStyle';
 import { figureCaptionContent } from './figureCaption';
 import { BlockMetadataStep } from './blockMetadataStep';
-import { NodeSelection } from '@tiptap/pm/state';
-import { unwrapCallout } from './alertCommands';
-
-/** Presentation only. Links, annotations and concealment carry meaning. */
-export const TEXT_STYLE_MARKS = ['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'textColor', 'subscript', 'superscript'] as const;
+import { TEXT_STYLE_MARKS, clearTextStyleMarks } from './textStyleMarks';
+export { TEXT_STYLE_MARKS, clearTextStyleMarks } from './textStyleMarks';
 
 // Explicit product policy, not "any node containing text". Source/media atoms
 // and internal container nodes are intentionally excluded from the block menu.
@@ -28,24 +25,13 @@ export function supportsBlockTextFormatting(node: Node): boolean {
 
 export function clearSelectionTextFormatting(editor: Editor, clearBlockTextColor = false): boolean {
   const { state } = editor, { selection } = state;
-  if (selection instanceof NodeSelection && selection.node.type.name === 'githubAlert') return unwrapCallout(editor, selection.from);
-  const marks = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
   if (selection instanceof CellSelection) {
+    const marks = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
     const result = styleSelectedCells(editor, marks.map(type => ({ type, attrs: null })), { textColor: null, background: null });
     if (result !== null) return result;
   }
-  const ranges = selection.empty && selection.$from.parent.isTextblock
-    ? [{ from: selection.$from.start(), to: selection.$from.end() }]
-    : selection.ranges.map(({ $from, $to }) => ({ from: $from.pos, to: $to.pos }));
   const tr = state.tr;
-  for (const { from, to } of ranges) for (const mark of marks) tr.removeMark(from, to, state.schema.marks[mark]);
-  // The block-menu action also removes inherited text color. Row/cell fills
-  // remain structural appearance, separate from selected-text formatting.
-  if (clearBlockTextColor) for (const { from, to } of ranges) state.doc.nodesBetween(from, to, (node, pos) => {
-    if (node.attrs.blockTextColor && pos >= from && pos + node.nodeSize <= to) tr.setNodeAttribute(pos, 'blockTextColor', null);
-  });
-  if (selection.empty) for (const mark of marks) tr.removeStoredMark(state.schema.marks[mark]);
-  if (!tr.docChanged && !tr.storedMarksSet) return false;
+  if (!clearTextStyleMarks(tr, clearBlockTextColor)) return false;
   // No implicit focus/scroll: this action belongs to the selected text, even if
   // the caret was elsewhere before a block menu opened.
   dispatchDiscreteEdit(editor.view, tr);
@@ -54,7 +40,6 @@ export function clearSelectionTextFormatting(editor: Editor, clearBlockTextColor
 
 export function clearBlockFormatting(editor: Editor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
-  if (node?.type.name === 'githubAlert') return unwrapCallout(editor, pos);
   if (!node || !supportsBlockTextFormatting(node) || !selectBlock(editor, pos, true)) return false;
   return clearSelectionTextFormatting(editor, true);
 }

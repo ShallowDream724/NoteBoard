@@ -8,6 +8,7 @@ import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
 import { BLOCK_MOVE_META, foldedSectionEnd, headingFoldingKey } from './headingFolding';
 import { isListItem, canMoveListItem, moveListItem } from './listItemActions';
 import { blockInteractionScope, isBlockInteractionTarget } from './blockInteractionScope';
+import { listItemAtY } from './listItemHitTest';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
 export interface TopLevelBlockInfo {
@@ -31,12 +32,14 @@ export interface BlockMoveResult {
 }
 
 /**
- * 将任意编辑器内部元素提升为 ProseMirror 的直接子块。
- * 只接受 editorDom 的直接子节点，从 DOM 层杜绝把块拖入列表项、表格单元格或代码块内部。
+ * Resolve a block or individual list item within the supported editing scope.
+ * Pointer hits in generated list markers/padding retain that row's item; calls
+ * without pointer coordinates retain the exact model/DOM node for feedback.
  */
 export function findTopLevelBlockElement(
   editorDom: HTMLElement,
   target: EventTarget | null,
+  clientY?: number,
 ): HTMLElement | null {
   let element = target instanceof Element ? target : null;
   if (!element || element.closest('.ProseMirror') !== editorDom) return null;
@@ -44,7 +47,9 @@ export function findTopLevelBlockElement(
   if (disclosure?.parentElement?.closest('.nb-disclosure')) return null;
   const body = element.closest('.nb-disclosure-body');
   const container = body ?? editorDom;
-  const item = element?.closest('li');
+  const listHit = clientY !== undefined && element.matches('ol,ul');
+  const item = listHit ? listItemAtY(element, clientY) : element.closest('li');
+  if (listHit && !item) return null;
   if (item instanceof HTMLElement && container.contains(item) && !item.closest('td,th')) return item;
 
   while (element && element.parentElement && element.parentElement !== container) {
@@ -151,6 +156,21 @@ export function resolveTopLevelDropTarget(
     if (clientY < rect.top + rect.height / 2) high = middle; else low = middle + 1;
   }
   if (low < entries.length) {
+      const previous = entries[low - 1];
+      // The last row's lower half still belongs to its list. The next
+      // paragraph's boundary would silently pull the item into a new list.
+      // Descendants keep their own boundaries rather than skipping a subtree.
+      if (items && previous && isListItem(previous.node)
+        && entries[low].pos >= previous.pos + previous.node.nodeSize
+        && clientY < rectOf(entries[low]).top) {
+        return {
+          insertPos: previous.pos + previous.node.nodeSize,
+          indicatorClientY: previous.element.getBoundingClientRect().bottom,
+          targetPos: previous.pos,
+          edge: 'after',
+          element: previous.element,
+        };
+      }
       const entry = entries[low];
       return {
         insertPos: entry.pos,

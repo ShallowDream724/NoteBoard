@@ -56,7 +56,7 @@ export const MarkdownTypingKeys = Extension.create({
       }
       const level = /^markdown\.heading([0-6])$/.exec(command.id)?.[1];
       if (level === undefined) dispatchEditorShortcut(view, command.defaults[0]);
-      else if (Number(level) === 0) this.editor.commands.setParagraph();
+      else if (Number(level) === 0) this.editor.commands.restoreParagraph();
       else this.editor.commands.setHeading({ level: Number(level) as 1|2|3|4|5|6 });
       event.preventDefault();
       return true;

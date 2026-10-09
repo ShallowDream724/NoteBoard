@@ -47,3 +47,13 @@ export function currentParagraph(source: string): string {
   const end = /\n[ \t]*\n/.exec(source)?.index;
   return end === undefined ? source : source.slice(0, end);
 }
+
+/** Marked probes startBlock on source.slice(1). The first partial line cannot
+ * establish an own-line block: an escaped opener would lose its leading slash.
+ * A genuine opener at the current position is handled by tokenize() itself. */
+export function followingBlockStart(source: string, opener: RegExp): number {
+  const paragraph = currentParagraph(source), newline = paragraph.indexOf('\n');
+  if (newline < 0) return -1;
+  const match = opener.exec(paragraph.slice(newline + 1));
+  return match ? newline + 1 + match.index : -1;
+}

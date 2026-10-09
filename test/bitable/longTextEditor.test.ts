@@ -5,6 +5,7 @@
 import { describe, test, expect } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { buildLongTextExtensions } from '@/features/bitable/BitableRichTextEditor';
+import { clearTextStyleMarks } from '@/features/editor-md/textStyleMarks';
 
 /** 用与线上一致的扩展集创建一个挂载到 jsdom 的编辑器 */
 function createTestEditor(content = '') {
@@ -20,6 +21,43 @@ function createTestEditor(content = '') {
 }
 
 describe('多行文本富文本编辑器扩展集', () => {
+  test('列表转换后的紧邻输入单独撤销，再次撤销才恢复原列表', () => {
+    const editor = createTestEditor('- one\n- two\n- three');
+    try {
+      let at = 0; editor.state.doc.descendants((node, pos) => { if (node.isTextblock && node.textContent === 'two') at = pos + 1; });
+      editor.commands.setTextSelection(at); const before = editor.state.doc;
+      expect(editor.commands.toggleOrderedList()).toBe(true); const converted = editor.state.doc;
+      editor.view.dispatch(editor.state.tr.insertText('x'));
+      expect(editor.commands.undo()).toBe(true); expect(editor.state.doc.eq(converted)).toBe(true);
+      expect(editor.commands.undo()).toBe(true); expect(editor.state.doc.eq(before)).toBe(true);
+      expect(editor.commands.redo()).toBe(true); expect(editor.state.doc.eq(converted)).toBe(true);
+    } finally { editor.destroy(); }
+  });
+  test('切换当前列表项类型时保留其他项，并与相邻新列表连续编号', () => {
+    const editor = createTestEditor('- one\n- two\n- three');
+    try {
+      const select = (text: string) => { let at = 0; editor.state.doc.descendants((node, pos) => { if (node.isTextblock && node.textContent === text) at = pos + 1; }); editor.commands.setTextSelection(at); };
+      select('two'); expect(editor.commands.toggleOrderedList()).toBe(true);
+      select('three'); expect(editor.commands.toggleOrderedList()).toBe(true);
+      const lists = editor.state.doc.content.content.filter(node => node.type.name.endsWith('List'));
+      expect(lists).toHaveLength(2); expect(lists[0].type.name).toBe('bulletList'); expect(lists[0].textContent).toBe('one');
+      expect(lists[1].type.name).toBe('orderedList'); expect(lists[1].childCount).toBe(2); expect(lists[1].attrs.start).toBe(1);
+      editor.state.doc.check();
+    } finally { editor.destroy(); }
+  });
+  test('清除文字样式保留单元格正文的链接、列表和其他项', () => {
+    const editor = createTestEditor('- [**one**](https://example.com)\n- **two**\n\nafter');
+    try {
+      let from = 0;
+      editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph' && node.textContent === 'one') from = pos + 1; });
+      editor.commands.setTextSelection({ from, to: from + 3 });
+      expect(editor.chain().command(({ tr }) => clearTextStyleMarks(tr)).run()).toBe(true);
+      expect(editor.state.doc.firstChild!.type.name).toBe('bulletList');
+      expect(editor.state.doc.firstChild!.firstChild!.firstChild!.firstChild!.marks.map(mark => mark.type.name)).toEqual(['link']);
+      expect(editor.getMarkdown()).toContain('**two**');
+      expect(editor.getMarkdown()).toContain('[one](https://example.com)'); editor.state.doc.check();
+    } finally { editor.destroy(); }
+  });
   test('编辑器可用 Markdown 初始化并原样序列化回 Markdown', () => {
     const md = '# 标题\n\n正文 **加粗** 与 `行内代码`。';
     const editor = createTestEditor(md);

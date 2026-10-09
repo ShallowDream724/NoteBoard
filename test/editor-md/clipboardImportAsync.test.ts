@@ -6,7 +6,8 @@ import { readClipboardSnapshot, pasteFromSystemClipboard } from '../../src/featu
 import { registerMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { useDocumentStore, type Document } from '../../src/stores/documentStore';
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
-import { normalizeExternalText } from '../../src/features/editor-md/clipboard/external';
+import { normalizeExternalHtml, normalizeExternalText, type ExternalTextOptions } from '../../src/features/editor-md/clipboard/external';
+import { DOMParser as WorkerDOMParser } from 'linkedom';
 
 vi.mock('../../src/features/editor-md/imagePaste', () => ({ handlePastedImageFiles: vi.fn() }));
 class WorkerMock {
@@ -101,6 +102,19 @@ describe('asynchronous rich paste ownership', () => {
     worker.onmessage?.({ data: { ok: true, result: normalizeExternalText(raw, { inferMarkdown: true, inferTable: true }) } } as MessageEvent);
     await vi.waitFor(() => expect(editor.state.doc.firstChild?.type.name).toBe('heading'));
     expect(editor.state.doc.firstChild?.textContent).toBe('heading');
+    editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
+  });
+  it('passes MD presentation policy to the Worker for large translated web HTML', async () => {
+    const raw = '<!--' + 'padding'.repeat(5000) + '--><p style="text-align:center"><span style="color:#c00">译文 <a href="https://example.com">reference</a></span></p>';
+    editor.commands.selectAll(); importClipboardSnapshot(editor.view, { formats: { 'text/html': raw, 'text/plain': '译文 reference' } });
+    const worker = WorkerMock.instances.at(-1)!;
+    const request = worker.postMessage.mock.calls[0][0] as ExternalTextOptions & { kind: string; plainText: string };
+    expect(request).toMatchObject({ kind: 'html', preservePresentation: false });
+    const document = new WorkerDOMParser().parseFromString(`<html><body>${raw}</body></html>`, 'text/html') as unknown as globalThis.Document;
+    worker.onmessage?.({ data: { ok: true, result: normalizeExternalHtml(document, raw, request.plainText, request) } } as MessageEvent);
+    await vi.waitFor(() => expect(editor.state.doc.textContent).toBe('译文 reference'));
+    const marks = editor.getJSON().content?.[0].content?.flatMap(node => node.marks ?? []) ?? [];
+    expect(marks.some(mark => mark.type === 'textColor')).toBe(false); expect(marks.some(mark => mark.type === 'link')).toBe(true);
     editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
   });
   it('large code-context paste stays inside its original code block with literal newlines', async () => {

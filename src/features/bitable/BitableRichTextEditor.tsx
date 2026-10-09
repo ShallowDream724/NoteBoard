@@ -25,6 +25,10 @@ import {
   Minus,
 } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
+import { clearTextStyleMarks } from '../editor-md/textStyleMarks';
+import { ScopedListCommands } from '../editor-md/scopedListCommands';
+import { DiscreteHistoryBoundary } from '../editor-md/discreteHistoryBoundary';
+import { discreteTransaction } from '../editor-md/discreteEdit';
 
 /** Markdown 允许粗体/斜体包裹行内代码；默认 Code 的 excludes: '_' 会导致解析出非法 marks */
 const MarkdownCompatibleCode = Code.extend({ excludes: '' });
@@ -47,6 +51,8 @@ export function buildLongTextExtensions(placeholder = '输入内容，支持 Mar
       undoRedo: { depth: 100, newGroupDelay: 300 },
     }),
     MarkdownCompatibleCode,
+    ScopedListCommands,
+    DiscreteHistoryBoundary,
     Placeholder.configure({ placeholder }),
     // Markdown 序列化/解析：使 setContent/getMarkdown 直接以 Markdown 为载体
     Markdown,
@@ -378,8 +384,8 @@ export function BitableRichTextEditor({
         <span className="nb-bitable-rte-sep" />
 
         <ToolbarBtn
-          title="清除格式"
-          onClick={() => ed.chain().focus().unsetAllMarks().clearNodes().run()}
+          title="清除文字样式（保留链接和列表）"
+          onClick={() => ed.chain().focus().command(({ tr }) => { if (!clearTextStyleMarks(tr)) return false; discreteTransaction(tr); return true; }).run()}
         >
           <RemoveFormatting size={14} />
         </ToolbarBtn>

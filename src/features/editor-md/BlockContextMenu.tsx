@@ -30,6 +30,7 @@ import { isEmptyParagraph } from './blockInteractionScope';
 import { EmptyBlockInsertMenu } from './EmptyBlockInsertMenu';
 import { RemoveFormatting } from 'lucide-react';
 import { clearBlockFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting, clearCaptionTextFormatting } from './textFormatting';
+import { unwrapCallout } from './alertCommands';
 import { ArrowRightLeft, WrapText, Square, Check } from 'lucide-react';
 import { documentFormulaReadingMode, setDocumentFormulaReadingMode, documentTableReadingMode, setDocumentTableReadingMode } from './documentReadingView';
 import { preserveReadingAnchor } from '../../core/dom/readingAnchor';
@@ -79,7 +80,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
   return <div className="nb-block-context-menu" role="menu" aria-label="内容块操作" onPointerDown={event => event.preventDefault()}>
     {type === 'codeBlock' && <><Tooltip content="转为正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button role="menuitem" type="button" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={16}/>转为正文</button></Tooltip><hr/></>}
     {text && <div className="nb-block-format-grid">
-      <Tooltip content="正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button type="button" aria-label="正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.setParagraph(), true))}><Type size={17}/></button></Tooltip>
+      <Tooltip content="还原为正文" helpKey="block.paragraph" shortcut="Ctrl+0" side="right"><button type="button" aria-label="还原为正文" onClick={() => action(() => formatBlock(editor, pos, chain => chain.restoreParagraph(), true))}><Type size={17}/></button></Tooltip>
       {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} helpKey={HEADING_HELP_KEYS[level]} shortcut={`Ctrl+${level}`} side="right"><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
       {([{ label:'无序列表', Icon:List, command:'toggleBulletList', shortcut: 'Ctrl+Shift+8', helpKey: 'list.bullet' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList', shortcut: 'Ctrl+Shift+7', helpKey: 'list.ordered' },
@@ -107,7 +108,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
           onClick={() => readingAction(() => type === 'mathBlock' ? setDocumentFormulaReadingMode(editor, mode) : mode !== 'wrap' && setDocumentTableReadingMode(editor, mode))}><Icon size={16}/>{label}{readingMode === mode && <Check size={14} style={{ marginLeft:'auto' }}/>}</button></Tooltip>)}
       <hr/>
     </>}
-    {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文本格式'}</button>}
+    {(type === 'githubAlert' || supportsBlockTextFormatting(range.node)) && <button role="menuitem" type="button" onClick={() => action(() => type === 'githubAlert' ? unwrapCallout(editor, pos) : clearBlockFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'githubAlert' ? '取消提示块' : '清除文字样式'}</button>}
     {native && hasCaptionTextFormatting(range.node) && <button role="menuitem" type="button" onClick={() => action(() => clearCaptionTextFormatting(editor, pos))}><RemoveFormatting size={16}/>{type === 'table' ? '清除表注文字格式' : '清除图注文字格式'}</button>}
     {native && type === 'imageCollection' && <>
       <ImageCollectionMenu editor={editor} node={range.node} pos={pos}/>

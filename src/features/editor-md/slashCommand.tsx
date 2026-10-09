@@ -46,6 +46,7 @@ import {
 import { insertLocalImageWithDialog } from './imagePaste';
 import { insertDocumentTable } from './insertDocumentTable';
 import { runSlashCommandAction } from './slashHistory';
+import { clearTextStyleMarks } from './textStyleMarks';
 import { markMermaidCreation } from './mermaidCreation';
 import { DEFAULT_MERMAID_CODE } from './insertContentRecipes';
 import { insertMath } from './insertMath';
@@ -547,7 +548,7 @@ const PARAGRAPH_LEAF: LeafCommandItem = {
   icon: <Pilcrow size={17} />,
   aliases: ['zw', 'zhengwen', 'p', 'paragraph', 'text'],
   keywords: '正文 段落 text paragraph zhengwen zw',
-  action: (editor, range) => editor.chain().focus().deleteRange(range).setParagraph().run(),
+  action: (editor, range) => editor.chain().focus().deleteRange(range).restoreParagraph().run(),
 };
 
 const DIVIDER_LEAF: LeafCommandItem = {
@@ -563,13 +564,13 @@ const DIVIDER_LEAF: LeafCommandItem = {
 
 const CLEAR_FORMAT_LEAF: LeafCommandItem = {
   id: 'clearFormat',
-  label: '清除格式',
-  description: '清除文本样式、高亮与多余格式',
+  label: '清除文字样式',
+  description: '清除加粗、颜色等文字样式，保留链接和列表',
   shortcutHint: '/clear',
   icon: <RemoveFormatting size={17} color="#ef4444" />,
   aliases: ['qingchu', 'qc', 'clear', 'clean', 'plain'],
   keywords: '清除格式 清空样式 clear clean format qingchu qc',
-  action: (editor, range) => editor.chain().focus().deleteRange(range).unsetAllMarks().run(),
+  action: (editor, range) => editor.chain().focus().deleteRange(range).command(({ tr }) => { clearTextStyleMarks(tr); return true; }).run(),
 };
 
 /** 一级菜单分组配置列表 */

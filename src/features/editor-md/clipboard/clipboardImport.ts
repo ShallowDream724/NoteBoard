@@ -20,6 +20,7 @@ import { ensureContainerTail } from '../containerEditing';
 import { imageOnlySlice, imageInsertionTransaction, imageSlotPosition } from '../imageInsertionTransaction';
 import { imageSelectionSlice, normalizeImageSlot } from '../imageCaptions';
 import { imageRemovalTransaction } from '../imageRemoval';
+import { editorDocumentFormat } from '../editorDocumentCodec';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -127,11 +128,11 @@ function clipboardFiles(data: DataTransfer): File[] {
 
 /** Body/button paste has no native editor event. Claim only an image-only rich
  * payload, keeping the same normalization and insertion as a focused editor. */
-function smallClipboardImages(view: EditorView, data: DataTransfer): ImportedSlice | undefined {
+function smallClipboardImages(view: EditorView, data: DataTransfer, preservePresentation: boolean): ImportedSlice | undefined {
   const own = data.getData(DOCUMENT_SLICE_MIME), html = data.getData('text/html');
   const raw = own || html;
   if (!raw || raw.length > CLIPBOARD_LIMITS.synchronous || data.getData(TABLE_SELECTION_MIME)) return;
-  const normalized = own ? parseStructuredClipboard(raw) : normalizeExternalHtml(new DOMParser().parseFromString(clipboardHtmlSource(raw), 'text/html'), raw, data.getData('text/plain'));
+  const normalized = own ? parseStructuredClipboard(raw) : normalizeExternalHtml(new DOMParser().parseFromString(clipboardHtmlSource(raw), 'text/html'), raw, data.getData('text/plain'), { preservePresentation });
   const value = imported(synchronousNodes(normalized.content, view.state.schema), normalized.diagnostics, own ? normalized.openStart : undefined, own ? normalized.openEnd : undefined);
   return imageOnlySlice(value.slice) ? value : undefined;
 }
@@ -274,7 +275,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
             if (!raw) return false;
             try {
               if (raw.length > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴（每次最多 1600 万字符）');
-              const textOptions = { inferTable: !plain, tableContext: isInTable(view.state), inferMarkdown: !plain, stripAnnotations, plainText: types.includes('text/plain') ? data.getData('text/plain') : undefined };
+              const textOptions = { inferTable: !plain, tableContext: isInTable(view.state), inferMarkdown: !plain, stripAnnotations, preservePresentation: !editor || editorDocumentFormat(editor) === 'noteboard', plainText: types.includes('text/plain') ? data.getData('text/plain') : undefined };
               const textResult = choice === 'text' && !plain && raw.length <= CLIPBOARD_LIMITS.synchronous ? normalizeExternalText(raw, textOptions) : undefined;
               // Ordinary prose retains ProseMirror's native selection/mark behavior.
               if (textResult && !stripAnnotations && textResult.content.every(node => node.type === 'paragraph' && (node.content ?? []).every(child => child.type === 'text' && !child.marks?.length))) return false;
@@ -347,7 +348,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           const data = event.clipboardData, slot = pastePointer?.slot();
           if (!data || !slot || data.getData(TABLE_SELECTION_MIME)) return;
           try {
-            const images = smallClipboardImages(view, data);
+            const images = smallClipboardImages(view, data, !editor || editorDocumentFormat(editor) === 'noteboard');
             if (images) {
               event.preventDefault(); event.stopPropagation();
               insertImportedSlice(view, images, view.state.selection, slot.position); return;

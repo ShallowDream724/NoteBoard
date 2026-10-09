@@ -62,8 +62,8 @@ it('a slash command undoes as one action, redoes exactly, and leaves no menu on 
     expect(editor.state.doc.textContent).toContain('again');
     expect(document.body.textContent).not.toContain('插入内容');
     await act(async () => { editor.commands.insertContent(' /'); });
-    expect(document.querySelector('button[aria-label^="清除格式"]')).toBeTruthy();
+    expect(document.querySelector('button[aria-label^="清除文字样式"]')).toBeTruthy();
     await act(async () => { editor.commands.insertContent('clear'); });
-    expect(document.querySelector('button[aria-label^="清除格式"]')).toBeTruthy();
+    expect(document.querySelector('button[aria-label^="清除文字样式"]')).toBeTruthy();
   } finally { await act(async () => root.unmount()); host.remove(); }
 });

@@ -21,7 +21,7 @@ export const sourceFormattingGrammar: Configuration = {
   parseInline: (() => {
     const cache = new WeakMap<object, Map<number, FormattingSpan | { from: number; to: number }>>();
     return [{
-      name: 'NoteBoardFormatting', before: 'Emphasis',
+      name: 'NoteBoardFormatting', before: 'Escape',
       parse(context, next, pos) {
         if (!starts.has(next)) return -1;
         let tokens = cache.get(context);

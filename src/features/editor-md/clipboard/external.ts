@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { documentParser } from '../documentExtensions';
 import { annotationBodyContent, remapAnnotationIds } from '../annotations/model';
-import { CLIPBOARD_LIMITS, ClipboardImportError, clipboardTextLineCount, normalizeClipboardDocument, normalizeClipboardText, safeClipboardUrl, type ClipboardImportResult } from './normalize';
+import { CLIPBOARD_LIMITS, ClipboardImportError, clipboardTextLineCount, normalizeClipboardDocument, normalizeClipboardText, safeClipboardUrl, type ClipboardImportResult, type ExternalHtmlOptions } from './normalize';
 
 export const MARKDOWN_MIMES = ['text/markdown', 'text/x-markdown'] as const;
 const isClipboardHtmlEnvelope = (raw: string) => /^(?:Version:|StartHTML:)/i.test(raw) && /\r?\nStartFragment:\s*-?\d+/i.test(raw);
@@ -56,7 +56,7 @@ export function needsClipboardImageFallback(raw: string): boolean {
   visit(document.body, 0);
   return images > 0 && !readable && !other;
 }
-export interface ExternalTextOptions {
+export interface ExternalTextOptions extends ExternalHtmlOptions {
   inferTable?: boolean;
   tableContext?: boolean;
   inferMarkdown?: boolean;
@@ -167,7 +167,9 @@ export function normalizeExternalHtml(document: Document, input: number | string
       if (normalized.content.some(node => node.type !== 'paragraph' || node.content?.some(child => child.type !== 'text' || child.marks?.length))) return normalized;
     }
   }
-  const normalized = normalizeClipboardDocument(document, inputCharacters);
+  const sourceUrl = typeof input === 'string' && isClipboardHtmlEnvelope(input)
+    ? /^SourceURL:\s*([^\r\n]+)/mi.exec(input.slice(0, Math.min(input.indexOf('<') < 0 ? input.length : input.indexOf('<'), 16_384)))?.[1] : undefined;
+  const normalized = normalizeClipboardDocument(document, inputCharacters, { ...options, sourceUrl: options.sourceUrl ?? sourceUrl });
   return !hasReadableContent(normalized.content) && plainText?.trim()
     ? normalizeExternalText(plainText, options) : normalized;
 }

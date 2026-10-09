@@ -1,9 +1,10 @@
 // Grammar and document structure only. No React views, stores, IPC or editor lifecycle.
 import { Node, mergeAttributes, type MarkdownToken, type MarkdownTokenizer } from '@tiptap/core';
-import { findMathStart, readMath, readMathBlock, writeMath, type MathDelimiter, type MathSource } from './mathSyntax';
+import { findMathStart, isDisplayMath, readMath, readMathBlock, writeMath, type MathDelimiter, type MathSource } from './mathSyntax';
+import { inlineMathCarrier } from './inlineMathCarrier';
 import { alertKind, type AlertKind } from './alertPresentation';
 import { diagramLanguage, DIAGRAM_LANGUAGES } from './diagramSyntax';
-import { currentParagraph } from './markdownLexer';
+import { followingBlockStart } from './markdownLexer';
 import { calloutAttributes, calloutEmoji, calloutStyleText, calloutSvgIcon, calloutTitle, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle } from './calloutPresentation';
 import { figureCaptionDOM, figureCaptionText, markdownFigureCaption, normalizeFigureCaption, parseFigureCaptionContent, validateFigureCaption, validateFigureCaptionContent } from './figureCaption';
 
@@ -17,7 +18,7 @@ const inlineTokenizer: MarkdownTokenizer = {
 };
 const blockTokenizer: MarkdownTokenizer = {
   name: 'mathBlock', level: 'block',
-  start: source => /^ {0,3}(?:\$\$|\\\[)/m.exec(currentParagraph(source))?.index ?? -1,
+  start: source => followingBlockStart(source, /^ {0,3}(?:\$\$|\\\[)/m),
   tokenize(source) {
     const match = readMathBlock(source);
     return match ? { type: 'mathBlock', raw: match.raw, latex: match.latex, delimiter: match.delimiter } : undefined;
@@ -34,7 +35,14 @@ export const MathInlineNode = Node.create({
   renderText({ node }) { return writeMath(mathSource(node.attrs, false)); },
   markdownTokenName: 'mathInline', markdownTokenizer: inlineTokenizer,
   parseMarkdown(token, helpers) { return helpers.createNode('mathInline', mathSource(token as MathToken, false)); },
-  renderMarkdown(node) { return writeMath(mathSource(node.attrs, false)); },
+  renderMarkdown(node, _helpers, context) {
+    const source = mathSource(node.attrs, false), previous = context.previousNode;
+    // Display delimiters are only safe inline after ordinary text on the same
+    // line. Multiline TeX and formula-only paragraphs retain explicit ownership.
+    const inlinePrefix = previous?.type === 'text' && /\S[^\r\n]*$/.test(previous.text ?? '');
+    return isDisplayMath(source.delimiter) && (!inlinePrefix || /[\r\n]/.test(source.latex))
+      ? inlineMathCarrier(source, true) : writeMath(source);
+  },
 });
 export const MathBlockNode = Node.create({
   name: 'mathBlock', group: 'block', atom: true, selectable: true,
@@ -86,7 +94,7 @@ export const AlertNode = Node.create({
   markdownTokenName: 'githubAlert',
   markdownTokenizer: {
     name: 'githubAlert', level: 'block',
-    start: source => /^ {0,3}>[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/im.exec(currentParagraph(source))?.index ?? -1,
+    start: source => followingBlockStart(source, /^ {0,3}>[ \t]*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/im),
     tokenize(source, _tokens, lexer) {
       const header = /^ {0,3}>[ \t]*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\r?\n|$)/i.exec(source);
       if (!header) return undefined;

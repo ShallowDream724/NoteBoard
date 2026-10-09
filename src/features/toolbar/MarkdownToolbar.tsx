@@ -66,6 +66,7 @@ import { emit } from '../../core/emitter';
 import type { EditorView } from '@codemirror/view';
 import { ResponsiveToolbar, ToolbarOverflowItem } from './ResponsiveToolbar';
 import { HighlightControl } from './HighlightControl';
+import { TextResetControl } from './TextResetControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
@@ -79,6 +80,7 @@ import { nativeMarkdownLink } from '../document-format/nativeLink';
 import { selectionPresentation } from '../document-style/selectionPresentation';
 import { insertCallout } from '../editor-md/alertCommands';
 import { clearSelectionTextFormatting } from '../editor-md/textFormatting';
+import { clearSourceTextFormatting } from '../editor-md/sourceFormatting';
 import { CellSelection } from '@tiptap/pm/tables';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
 import { DEFAULT_INFOGRAPHIC_CODE, DEFAULT_MERMAID_CODE, diagramContent } from '../editor-md/insertContentRecipes';
@@ -122,6 +124,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const [headingDropdownOpen, setHeadingDropdownOpen] = useState(false);
   const [insertDropdownOpen, setInsertDropdownOpen] = useState(false);
   const [highlightDropdownOpen, setHighlightDropdownOpen] = useState(false);
+  const [resetDropdownOpen, setResetDropdownOpen] = useState(false);
 
   // ── 获取当前标题状态 ──
   const currentHeadingLabel = (() => {
@@ -154,7 +157,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     }
     if (!editor || !isCurrentTarget()) return;
     if (level === 'paragraph') {
-      editor.chain().focus().setParagraph().run();
+      editor.chain().focus().restoreParagraph().run();
     } else {
       editor.chain().focus().setHeading({ level: level as 1 | 2 | 3 | 4 | 5 | 6 }).run();
     }
@@ -397,35 +400,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
 
   const handleClearFormat = () => {
     if (isSourceMode) {
-      executeSourceAction((view) => {
-        const { from, to, empty } = view.state.selection.main;
-        let targetFrom = from;
-        let targetTo = to;
-        let text = '';
-        if (empty) {
-          // 无选区时选取当前整行进行清除
-          const line = view.state.doc.lineAt(from);
-          targetFrom = line.from;
-          targetTo = line.to;
-          text = line.text;
-        } else {
-          text = view.state.sliceDoc(from, to);
-        }
-        // 清除行首块级语法（标题 #, 引用 >, 列表 -, 1.）及行内语法（加粗 **, 斜体 *, 删除线 ~~, 高亮 ==, 行内代码 `, 链接 [t](u)）
-        const cleaned = text
-          .replace(/^(#{1,6}\s+|>+\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+\.\s+)/gm, '')
-          .replace(/(\*\*|__)(.*?)\1/g, '$2')
-          .replace(/(\*|_)(.*?)\1/g, '$2')
-          .replace(/(~~)(.*?)\1/g, '$2')
-          .replace(/(==)(.*?)\1/g, '$2')
-          .replace(/(`)(.*?)\1/g, '$2')
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
-        view.dispatch({
-          changes: { from: targetFrom, to: targetTo, insert: cleaned },
-          selection: { anchor: targetFrom, head: targetFrom + cleaned.length },
-        });
-      });
+      executeSourceAction(clearSourceTextFormatting);
       return;
     }
 
@@ -442,6 +417,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       setHeadingDropdownOpen(false);
       setHighlightDropdownOpen(false);
       setInsertDropdownOpen(false);
+      setResetDropdownOpen(false);
     }}>
       {/* ── 历史操作组 ── */}
       <ToolbarButton
@@ -482,7 +458,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       >
         <ToolbarDropdownItem
           icon={<Pilcrow size={14} />}
-          label="正文段落"
+          label="还原为正文"
           helpKey="block.paragraph"
           disabled={!canBlocks}
           shortcut="Ctrl+0"
@@ -803,6 +779,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         /></ToolbarOverflowItem>
 
         {/* 8. 日期时间二级菜单 */}
+        <ToolbarOverflowItem id="text-reset"><>
+          <ToolbarDropdownItem icon={<RemoveFormatting size={14}/>} label="清除文字样式" disabled={scope ? !canInline : !canBlocks}
+            onClick={() => { setInsertDropdownOpen(false); handleClearFormat(); }}/>
+          <ToolbarDropdownItem icon={<Pilcrow size={14}/>} label="还原为正文" shortcut="Ctrl+0" disabled={!canBlocks}
+            onClick={() => { setInsertDropdownOpen(false); handleSetHeading('paragraph'); }}/>
+        </></ToolbarOverflowItem>
         <ToolbarDropdownItem
           icon={<Calendar size={14} />}
           label="日期时间"
@@ -858,12 +840,12 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       {/* ── 清除格式 ── */}
       {hasMarkdownLink && <ToolbarButton icon={<RefreshCw size={15}/>} title="更新关联 Markdown" label="更新关联 Markdown" collapsePriority={25}
         onClick={() => { void import('../editor-code/orchestration/saveDocument').then(({ saveDocument }) => saveDocument(docKey)); }}/>}
-      <ToolbarButton
-        icon={<RemoveFormatting size={15} color="#ef4444" />}
-        title="清除选中文本格式"
+      <TextResetControl
+        open={resetDropdownOpen} onOpenChange={setResetDropdownOpen}
         disabled={scope ? !canInline : !canBlocks}
-        collapsePriority={60}
-        onClick={handleClearFormat}
+        restoreDisabled={!canBlocks} collapsePriority={60} overflowId="text-reset"
+        onClear={handleClearFormat} onRestore={() => handleSetHeading('paragraph')}
+        onReturnToEditor={() => { if (!isCurrentTarget()) return; if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.view.dom.focus({ preventScroll: true }); }}
       />
     </ResponsiveToolbar>
   );

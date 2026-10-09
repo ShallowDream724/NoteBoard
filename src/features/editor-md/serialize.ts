@@ -7,40 +7,10 @@
 
 import type { Editor, JSONContent } from '@tiptap/core';
 import { reconcileDocumentHistory } from './documentReconciliation';
+import { escapeMarkdownText } from './markdownTextEscape';
 
-// CommonMark 允许反斜杠转义的 ASCII 标点；这些字符前的双反斜杠不能擅自折叠，
-// 否则原本可见的反斜杠会在下一次解析时被当成转义符吞掉。
-const COMMONMARK_ESCAPABLE_PUNCTUATION = new Set(
-  [...'!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'],
-);
-// Include delimiters supplied by our inline grammar, not only StarterKit marks.
-const TIPTAP_MARKDOWN_SPECIAL_CHARACTERS = new Set(['`', '*', '_', '[', ']', '~', '=', '$']);
 // Unicode 标点与符号类别用于发现“可能是转义前缀”的反斜杠，不按具体字符逐项维护。
 const UNICODE_PUNCTUATION_OR_SYMBOL = /[\p{P}\p{S}]/u;
-
-/**
- * 转义普通文本中的 Markdown 标记，同时避免把 Windows 路径等安全反斜杠无条件翻倍。
- * 反斜杠仅在行尾或 CommonMark 可转义标点前需要自我转义；字母、数字、中文前可原样保留。
- */
-function escapeMarkdownText(text: string): string {
-  let output = '';
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '\\') {
-      const nextCharacter = text[index + 1];
-      const mustEscapeBackslash =
-        nextCharacter === undefined
-        || nextCharacter === '\n'
-        || COMMONMARK_ESCAPABLE_PUNCTUATION.has(nextCharacter);
-      output += mustEscapeBackslash ? '\\\\' : '\\';
-      continue;
-    }
-    output += TIPTAP_MARKDOWN_SPECIAL_CHARACTERS.has(character)
-      ? `\\${character}`
-      : character;
-  }
-  return output;
-}
 
 interface BacktickRun {
   start: number;

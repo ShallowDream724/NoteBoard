@@ -10,6 +10,7 @@ import { runWithDocumentCapability, ensureDocumentCapability } from '../../src/f
 import { registerMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { formatSupportsCapability, capabilityVisible } from '../../src/features/document-format/capabilities';
+import { ClipboardImport, DOCUMENT_SLICE_MIME, importClipboardSnapshot } from '../../src/features/editor-md/clipboard/clipboardImport';
 
 const requests = vi.hoisted(() => ({ confirm: vi.fn(), convert: vi.fn() }));
 vi.mock('../../src/features/document-format/NativeConversionDialog', () => ({ requestNativeConversion: requests.confirm }));
@@ -17,7 +18,7 @@ vi.mock('../../src/features/document-format/convertDocument', () => ({ convertMa
 const editors: Editor[] = [];
 const cleanup: Array<() => void> = [];
 function make(format: 'markdown' | 'noteboard' = 'markdown', key?: string, content = '<p>hello world</p>') {
-  const editor = new Editor({ extensions: [...buildDocumentExtensions(), DocumentCapabilityGuard], content });
+  const editor = new Editor({ extensions: [...buildDocumentExtensions(), DocumentCapabilityGuard, ClipboardImport.configure({ docKey: key ?? '' })], content });
   initializeEditorDocument(editor, format === 'noteboard' ? serializeNativeNode(editor.state.doc) : 'hello world', format, '', key);
   editors.push(editor); return editor;
 }
@@ -123,5 +124,52 @@ describe('document format capabilities', () => {
     await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
     editor.commands.insertContent('new'); finish({ removeMarkdown: false });
     expect(await result).toBeNull(); expect(requests.convert).not.toHaveBeenCalled();
+  });
+  it('replays rejected internal rich paste once in the converted schema with one undo and redo', async () => {
+    const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
+    const before = native.getJSON(); editor.commands.selectAll();
+    requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
+    cleanup.push(registerMdTipTapEditor('C:/note.nb', native));
+    const update = vi.fn(); native.on('update', update);
+    importClipboardSnapshot(editor.view, { formats: { [DOCUMENT_SLICE_MIME]: JSON.stringify({ version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'rich paste', marks: [{ type: 'textColor', attrs: { color: '#123456' } }, { type: 'link', attrs: { href: 'https://example.com' } }] }] }], openStart: 0, openEnd: 0 }), 'text/html': '<p>fallback</p>' } });
+    expect(editor.state.doc.textContent).toBe('hello world');
+    await vi.waitFor(() => expect(native.state.doc.textContent).toBe('rich paste'));
+    expect(requests.confirm).toHaveBeenCalledTimes(1); expect(update).toHaveBeenCalledTimes(1);
+    native.state.doc.check(); expect(native.state.doc.firstChild?.firstChild?.type).toBe(native.schema.nodes.text);
+    expect(native.state.doc.firstChild?.firstChild?.marks.find(mark => mark.type.name === 'textColor')?.type).toBe(native.schema.marks.textColor);
+    const pasted = native.getJSON(); expect(native.commands.undo()).toBe(true); expect(native.getJSON()).toEqual(before);
+    expect(native.commands.redo()).toBe(true); expect(native.getJSON()).toEqual(pasted);
+  });
+  it('rebuilds stored marks in the converted schema before later typing', async () => {
+    const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
+    editor.commands.setTextSelection(3); requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
+    cleanup.push(registerMdTipTapEditor('C:/note.nb', native)); editor.commands.toggleHighlight({ color: '#fef08a' });
+    await vi.waitFor(() => expect(native.state.storedMarks?.[0]?.type).toBe(native.schema.marks.highlight));
+    native.commands.insertContent('x'); expect(native.state.doc.textContent).toBe('hexllo world'); expect(native.getAttributes('highlight').color).toBe('#fef08a');
+  });
+  it('rebuilds mark steps in the converted schema and refuses a changed destination', async () => {
+    const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
+    editor.commands.setTextSelection({ from: 1, to: 6 }); requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
+    cleanup.push(registerMdTipTapEditor('C:/note.nb', native)); editor.commands.setHighlight({ color: '#fef08a' });
+    await vi.waitFor(() => expect(native.state.doc.firstChild?.firstChild?.marks[0]?.type).toBe(native.schema.marks.highlight));
+    native.commands.undo(); expect(native.state.doc.firstChild?.firstChild?.marks).toEqual([]);
+    native.commands.insertContent('changed');
+    requests.confirm.mockClear(); editor.commands.setHighlight({ color: '#fef08a' });
+    await vi.waitFor(() => expect(requests.confirm).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(native.state.doc.textContent).toContain('changed'); expect(native.state.doc.firstChild?.firstChild?.marks).toEqual([]);
+  });
+  it('leaves rejected rich paste unchanged after cancellation or source edits during confirmation', async () => {
+    for (const changed of [false, true]) {
+      const editor = make('markdown', `C:/note-${changed}.md`); editor.commands.selectAll();
+      let finish!: (value: { removeMarkdown: boolean } | null) => void;
+      requests.confirm.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+      editor.commands.insertContent({ type: 'paragraph', content: [{ type: 'text', text: 'rich', marks: [{ type: 'textColor', attrs: { color: '#123456' } }] }] });
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+      if (changed) { editor.commands.setTextSelection(1); editor.commands.insertContent('new'); }
+      finish(changed ? { removeMarkdown: false } : null);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(editor.state.doc.textContent).toBe(changed ? 'newhello world' : 'hello world'); expect(requests.convert).not.toHaveBeenCalled();
+    }
   });
 });

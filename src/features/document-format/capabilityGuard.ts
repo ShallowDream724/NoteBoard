@@ -1,8 +1,10 @@
 import { Extension, type Editor } from '@tiptap/core';
 import type { Mark, Node, Fragment } from '@tiptap/pm/model';
 import { Plugin, PluginKey, Selection, type Transaction } from '@tiptap/pm/state';
-import { ReplaceStep, ReplaceAroundStep, AddMarkStep } from '@tiptap/pm/transform';
-import { editorDocumentFormat } from '../editor-md/editorDocumentCodec';
+import { Step, ReplaceStep, ReplaceAroundStep, AddMarkStep } from '@tiptap/pm/transform';
+import { editorDocumentDirectory, editorDocumentFormat } from '../editor-md/editorDocumentCodec';
+import { dispatchDiscreteEdit } from '../editor-md/discreteEdit';
+import { sameDocument } from './documentComparison';
 import { runWithDocumentCapability } from './featureGate';
 import type { DocumentCapabilityId } from './capabilities';
 import { formatSupportsCapability } from './capabilities';
@@ -147,15 +149,19 @@ export const DocumentCapabilityGuard = Extension.create({
         || tr.getMeta('noteboard-document-replacement') || tr.getMeta('history$') || tr.getMeta(guardKey)) return true;
       const capability = transactionAddedCapability(tr, editor.state.storedMarks);
       if (!capability) return true;
-      const before = tr.before, selection = tr.selection.toJSON(), steps = tr.steps.slice();
+      const before = tr.before, selection = tr.selection.toJSON(), steps = tr.steps.map(step => step.toJSON());
+      const storedMarksSet = tr.storedMarksSet, storedMarks = tr.storedMarks?.map(mark => mark.toJSON()) ?? null;
+      const directory = editorDocumentDirectory(editor);
       // Conversion must happen outside the dispatch currently being filtered.
       queueMicrotask(() => runWithDocumentCapability(editor, capability, next => {
-        if (!next.state.doc.eq(before)) { showToast('内容已变化，请重新应用此操作', 'warning'); return false; }
+        if (!sameDocument(before, next.state.doc, directory)) { showToast('内容已变化，请重新应用此操作', 'warning'); return false; }
         const replay = next.state.tr;
-        for (const step of steps) if (replay.maybeStep(step).failed) return false;
-        try { replay.setSelection(Selection.fromJSON(replay.doc, selection)); } catch { return false; }
-        if (tr.storedMarksSet) replay.setStoredMarks(tr.storedMarks);
-        next.view.dispatch(replay.setMeta(guardKey, true));
+        try {
+          for (const step of steps) if (replay.maybeStep(Step.fromJSON(next.schema, step)).failed) return false;
+          replay.setSelection(Selection.fromJSON(replay.doc, selection));
+          if (storedMarksSet) replay.setStoredMarks(storedMarks?.map(mark => next.schema.markFromJSON(mark)) ?? null);
+        } catch { showToast('操作无法恢复，请重新应用此操作', 'warning'); return false; }
+        dispatchDiscreteEdit(next.view, replay.setMeta(guardKey, true));
         return true;
       }));
       return false;
