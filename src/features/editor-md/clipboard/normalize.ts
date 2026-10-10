@@ -79,6 +79,9 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
   const rich = options.preservePresentation !== false;
   const sourceUrl = clipboardWebBase(options.sourceUrl);
   const baseUrl = clipboardWebBase(document.querySelector('base[href]')?.getAttribute('href'), sourceUrl) ?? sourceUrl;
+  // Decorative website icons should not become full-width figures in copied
+  // article/search text. A standalone image copy retains its explicit intent.
+  const hasText = /\S/.test((document.body ?? document.documentElement).textContent ?? '');
   const urlFor = (raw: string, image = false) => {
     const value = safeClipboardUrl(raw, image);
     if (!value || !baseUrl || /^(?:https?:|mailto:|tel:|data:)/i.test(value)) return value;
@@ -133,6 +136,21 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     if (!src) { diagnostics.add('无法读取的图片已保留替代文字和来源'); return paragraph([{ type: 'text', text: `[图片：${alt || '不可读取'}${raw ? `；来源：${raw.slice(0, 300)}` : ''}]` }]); }
     return { type: 'image', attrs: { src, alt, title: element.getAttribute('title') } };
   }
+  function decorativeImage(element: Element, style: Style): boolean {
+    if (!hasText || element.tagName.toUpperCase() !== 'IMG' || element.closest('figure')) return false;
+    if (element.getAttribute('aria-hidden') === 'true' || element.getAttribute('role') === 'presentation') return true;
+    const dimension = (name: string) => {
+      const value = style[name] || element.getAttribute(name) || '';
+      return /^\d+(?:\.\d+)?(?:px)?$/.test(value) ? Number.parseFloat(value) : 0;
+    };
+    const width = dimension('width'), height = dimension('height');
+    if (width > 0 && width <= 32 && height > 0 && height <= 32 && element.getAttribute('alt') === '') return true;
+    // Semantic favicon endpoints, independent of search engine/domain. Keep
+    // explicitly large pictures and meaningful figures even on such a path.
+    if (width > 32 || height > 32) return false;
+    try { return /(?:^|\/)favicons?(?:\.[^/]+)?\/?$/i.test(new URL(element.getAttribute('src') ?? '', baseUrl ?? 'https://clipboard.invalid/').pathname); }
+    catch { return false; }
+  }
   const visibleImageSources = new Set(Array.from(document.querySelectorAll('img')).map(element => element.getAttribute('src')));
   function officeCommentImage(node: globalThis.Node): JSONContent | null {
     if (node.nodeType !== 8 || !/<v:imagedata\b/i.test(node.textContent ?? '')) return null;
@@ -162,7 +180,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       if (math && style.display !== 'none') { if (math.type === 'mathInline') math.marks = marksFor(element, inherited, style); result.push(math); continue; }
       if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
       if (tag === 'BR') { result.push({ type: 'hardBreak' }); continue; }
-      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { result.push(image(element)); continue; }
+      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { if (!decorativeImage(element, style)) result.push(image(element)); continue; }
       result.push(...inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
     }
     return result;
@@ -245,6 +263,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         continue;
       }
       if (skipped.has(tag) || style.display === 'none') continue;
+      if (decorativeImage(element, style)) continue;
       if (tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
         flush();
         const picture = image(element.querySelector('img')!), caption = element.querySelector('figcaption')!;

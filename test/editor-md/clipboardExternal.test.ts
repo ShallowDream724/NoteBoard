@@ -49,6 +49,14 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
     const formula = editor.getJSON().content?.[0].content?.[1];
     expect(formula && 'attrs' in formula && formula.attrs?.latex).toBe('a');
   });
+  it('keeps Markdown image-labeled links as links and explicit image syntax as pictures', () => {
+    const editor = create(format), url = 'https://p.kagi.com/proxy/favicons?c=source';
+    paste(editor, { 'text/markdown': `([image](${url}))` });
+    expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.doc.firstChild?.content.content.some(node => node.marks.some(mark => mark.type.name === 'link' && mark.attrs.href === url))).toBe(true);
+    editor.commands.selectAll(); paste(editor, { 'text/markdown': `![illustration](${url})` });
+    expect(editor.state.doc.firstChild?.type.name).toBe('image');
+  });
   it('recognizes source-editor HTML wrappers without discarding semantic HTML', () => {
     const editor = create(format);
     paste(editor, { 'text/html': '<div style="font-family:monospace;white-space:pre"><div><span style="color:#f00"># 222</span></div><div><span>$a$ is \\(b\\)</span></div></div>', 'text/plain': '# 222\n$a$ is \\(b\\)' });
@@ -116,6 +124,18 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
 });
 
 describe('external normalization boundaries', () => {
+  it('omits decorative favicons in copied web text without dropping links or authored pictures', () => {
+    const icon = 'https://p.kagi.com/proxy/favicons?c=source';
+    const html = `<h3><a href="https://www.whatsapp.com/download">Download WhatsApp</a></h3><a href="https://www.whatsapp.com/download"><img src="${icon}" alt="网站图标"></a><p>description <img src="https://example.com/icon.png" width="16" height="16" alt=""> text</p><img src="https://example.com/chart.png" width="600" height="400" alt="chart"><figure><img src="${icon}" width="16" height="16" alt="favicon design"><figcaption>Authored illustration</figcaption></figure>`;
+    const result = normalizedHtml(html);
+    const worker = new WorkerDOMParser().parseFromString(`<html><body>${html}</body></html>`, 'text/html') as unknown as Document;
+    expect(normalizeExternalHtml(worker, html, undefined)).toEqual(result);
+    expect(result.content.filter(node => node.type === 'image').map(node => node.attrs?.src)).toEqual(['https://example.com/chart.png', icon]);
+    expect(result.content[0].content?.[0].marks?.[0]).toMatchObject({ type: 'link', attrs: { href: 'https://www.whatsapp.com/download' } });
+    expect(result.content.flatMap(node => node.content?.map(child => child.text ?? '') ?? []).join('')).toContain('description  text');
+    expect(normalizedHtml(`<img src="${icon}" width="16" height="16" alt="">`).content[0].type).toBe('image');
+    expect(normalizedHtml('<p>label<img src="https://example.com/icon.png" width="16" height="16" alt="important symbol"></p>').content.some(node => node.type === 'image')).toBe(true);
+  });
   it('resolves relative web links and images from CF_HTML SourceURL identically in the UI and Worker', () => {
     const html = 'Version:1.0\r\nStartHTML:0000000100\r\nStartFragment:0000000200\r\nSourceURL:https://arxiv.org/html/2410.05160\r\n<html><body><!--StartFragment--><p><a href="#bib.bib1">citation</a> <a href="/abs/2410.05160">paper</a> <a href="related">related</a></p><img src="images/figure.png"><!--EndFragment--></body></html>';
     const options = { preservePresentation: false };
