@@ -7,4 +7,9 @@
   background: color-mix(in srgb, var(--editor-accent) 8%, transparent);
 }
 .nb-block-range-feedback[hidden] { display: none; }
+.nb-block-range-feedback.nb-block-drag-source-feedback {
+  background: color-mix(in srgb, var(--editor-background, #fff) 48%, transparent);
+  border-color: color-mix(in srgb, var(--editor-accent) 45%, transparent);
+  border-style: dashed;
+}
 @media print { .nb-block-range-feedback { display: none; } }

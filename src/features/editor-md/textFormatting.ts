@@ -3,8 +3,8 @@ import type { Node } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { selectBlock } from './blockActions';
-import { styleSelectedCells } from '../document-style/cellTextStyle';
-import { figureCaptionContent } from './figureCaption';
+import { selectedCellStyleTransaction } from '../document-style/cellTextStyle';
+import { figureCaptionContent, clearedFigureCaption } from './figureCaption';
 import { BlockMetadataStep } from './blockMetadataStep';
 import { TEXT_STYLE_MARKS, clearTextStyleMarks } from './textStyleMarks';
 export { TEXT_STYLE_MARKS, clearTextStyleMarks } from './textStyleMarks';
@@ -14,7 +14,7 @@ export { TEXT_STYLE_MARKS, clearTextStyleMarks } from './textStyleMarks';
 const BLOCK_TEXT_FORMATTING: Record<string, boolean> = {
   paragraph: true, heading: true, bulletList: true, orderedList: true,
   taskList: true, listItem: true, taskItem: true, blockquote: true,
-  githubAlert: false, disclosure: true, table: true,
+  githubAlert: true, disclosure: true, table: true,
   codeBlock: false, mathBlock: false, mermaidBlock: false,
   image: false, imageCollection: false, imageSlot: false,
   horizontalRule: false, documentPresentation: false,
@@ -23,15 +23,21 @@ export function supportsBlockTextFormatting(node: Node): boolean {
   return BLOCK_TEXT_FORMATTING[node.type.name] === true;
 }
 
-export function clearSelectionTextFormatting(editor: Editor, clearBlockTextColor = false): boolean {
+export function clearSelectionTextFormatting(editor: Editor, clearBlockStyles = true, wholeTablePos?: number): boolean {
   const { state } = editor, { selection } = state;
   if (selection instanceof CellSelection) {
     const marks = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
-    const result = styleSelectedCells(editor, marks.map(type => ({ type, attrs: null })), { textColor: null, background: null });
-    if (result !== null) return result;
+    const tr = selectedCellStyleTransaction(editor, marks.map(type => ({ type, attrs: null })), undefined, clearBlockStyles)!;
+    if (wholeTablePos !== undefined) {
+      const table = tr.doc.nodeAt(wholeTablePos), caption = table?.type.name === 'table' ? clearedFigureCaption(table.attrs) : null;
+      if (caption) tr.step(new BlockMetadataStep(wholeTablePos, 'captionContent', caption));
+    }
+    if (!tr.docChanged) return false;
+    dispatchDiscreteEdit(editor.view, tr); return true;
   }
   const tr = state.tr;
-  if (!clearTextStyleMarks(tr, clearBlockTextColor)) return false;
+  clearTextStyleMarks(tr, clearBlockStyles);
+  if (!tr.docChanged && !tr.storedMarksSet) return false;
   // No implicit focus/scroll: this action belongs to the selected text, even if
   // the caret was elsewhere before a block menu opened.
   dispatchDiscreteEdit(editor.view, tr);
@@ -41,7 +47,9 @@ export function clearSelectionTextFormatting(editor: Editor, clearBlockTextColor
 export function clearBlockFormatting(editor: Editor, pos: number): boolean {
   const node = editor.state.doc.nodeAt(pos);
   if (!node || !supportsBlockTextFormatting(node) || !selectBlock(editor, pos, true)) return false;
-  return clearSelectionTextFormatting(editor, true);
+  // The table menu represents the whole table, including its outside caption.
+  // Ordinary rectangular cell selections deliberately exclude that caption.
+  return clearSelectionTextFormatting(editor, true, node.type.name === 'table' ? pos : undefined);
 }
 
 export function hasCaptionTextFormatting(node: Node): boolean {

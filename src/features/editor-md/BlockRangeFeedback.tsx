@@ -8,7 +8,7 @@ import './blockRangeFeedback.css';
 
 /** A UI-owned overlay: hovering never changes selection, history or editable DOM.
  * Only the current block is measured; large documents require no block traversal. */
-export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: number }) {
+export function BlockRangeFeedback({ editor, pos, to, className = '' }: { editor: Editor; pos: number; to?: number; className?: string }) {
   const overlay = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => () => releaseListMarkerGeometry(editor.view), [editor]);
   useLayoutEffect(() => {
@@ -16,7 +16,9 @@ export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: numbe
     if (!layer) return;
     const host = findScrollContainer(editor.view.dom);
     let currentPos: number | null = pos;
+    let currentEnd = to;
     let target: HTMLElement | null = null;
+    let lastTarget: HTMLElement | null = null;
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -29,15 +31,25 @@ export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: numbe
       }
       if (!target || !target.isConnected) { layer.hidden = true; return; }
       const rect = target.getBoundingClientRect(), bounds = host.getBoundingClientRect();
+      const end = currentEnd === undefined || currentEnd > editor.state.doc.content.size ? null : editor.state.doc.resolve(currentEnd);
+      const lastPos = end?.nodeBefore ? currentEnd! - end.nodeBefore.nodeSize : currentPos;
+      const last = lastPos === null ? null : findTopLevelBlockElement(editor.view.dom, editor.view.nodeDOM(lastPos));
+      if (last !== lastTarget) {
+        if (lastTarget && lastTarget !== target) resize.unobserve(lastTarget);
+        lastTarget = last;
+        if (lastTarget && lastTarget !== target) resize.observe(lastTarget);
+      }
       // Outside markers are not part of an LI's border box. Include only its
       // own list's horizontal gutter while retaining the current item's height.
       const scale = bounds.width / host.offsetWidth || 1;
       const row = listItemHorizontalBounds(editor.view, currentPos!, target, rect, scale);
+      const lastRect = last?.getBoundingClientRect() ?? rect;
+      const lastRow = last && lastPos !== null ? listItemHorizontalBounds(editor.view, lastPos, last, lastRect, scale) : row;
       // Clip to the scroll viewport so a huge table never creates a huge layer.
-      const left = Math.max(row.left - 2 * scale, bounds.left);
-      const right = Math.min(row.right + 2 * scale, bounds.right - (host.offsetWidth - host.clientWidth) * scale);
+      const left = Math.max(Math.min(row.left, lastRow.left) - 2 * scale, bounds.left);
+      const right = Math.min(Math.max(row.right, lastRow.right) + 2 * scale, bounds.right - (host.offsetWidth - host.clientWidth) * scale);
       const top = Math.max(rect.top - 2 * scale, bounds.top);
-      const bottom = Math.min(rect.bottom + 2 * scale, bounds.bottom);
+      const bottom = Math.min(lastRect.bottom + 2 * scale, bounds.bottom);
       layer.hidden = right <= left || bottom <= top;
       Object.assign(layer.style, {
         left: `${(left - bounds.left) / scale + host.scrollLeft}px`,
@@ -57,6 +69,7 @@ export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: numbe
         const replaced = before?.type === after?.type && before?.content === after?.content;
         currentPos = mapped.deletedAcross || mapped.deleted && !replaced ? null : mapped.pos;
       }
+      if (currentEnd !== undefined) currentEnd = transaction.mapping.map(currentEnd, -1);
       schedule();
     };
     const resize = new ResizeObserver(schedule);
@@ -71,6 +84,6 @@ export function BlockRangeFeedback({ editor, pos }: { editor: Editor; pos: numbe
       host.removeEventListener('scroll', schedule);
       editor.off('transaction', onTransaction);
     };
-  }, [editor, pos]);
-  return <div ref={overlay} className="nb-block-range-feedback" aria-hidden="true" hidden/>;
+  }, [editor, pos, to]);
+  return <div ref={overlay} className={`nb-block-range-feedback ${className}`} aria-hidden="true" hidden/>;
 }

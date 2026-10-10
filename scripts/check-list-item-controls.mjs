@@ -49,6 +49,7 @@ if (!cdpUrl) {
 }
 await prose.waitFor();
 await frames();
+if (cdpUrl) await load('# 列表操作\n\n1. 我是1\n2. 2\n3. 我是3\n');
 
 // Walk across text → generated marker/list padding → control. A direct jump
 // from text to the button misses the regression in a real mouse trajectory.
@@ -152,7 +153,7 @@ async function approach(item) {
       editor.state.doc.descendants((node, at) => { if (node.type.name === 'paragraph' && node.textContent === 'two') editor.commands.setTextSelection({ from: at + 1, to: at + 4 }); });
     });
     const selection = (await snapshot()).selection;
-    const expand = page.getByRole('button', { name: '清除与还原选项', exact: true });
+    const expand = page.locator('[data-toolbar-id="text-reset"]:not([data-hidden="true"])').getByRole('button', { name: '清除与还原选项', exact: true });
     await expand.hover();
     const reset = page.getByRole('menu', { name: '清除与还原', exact: true });
     await reset.waitFor(); assert.deepEqual((await snapshot()).selection, selection);

@@ -47,7 +47,7 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
         {block('无序列表', <List size={16}/>, { type: 'bulletList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { helpKey: 'list.bullet', shortcut: 'Ctrl+Shift+8' })}
         {block('有序列表', <OrderedListIcon size={16}/>, { type: 'orderedList', content: [{ type: 'listItem', content: [paragraph()] }] }, undefined, { helpKey: 'list.ordered', shortcut: 'Ctrl+Shift+7' })}
         {block('待办', <CheckSquare size={16}/>, { type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [paragraph()] }] }, undefined, { helpKey: 'list.task', shortcut: 'Ctrl+Shift+9' })}
-        {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos))}
+        {item('超链接', <Link2 size={16}/>, () => insertEmptyParagraphLink(editor, pos), { helpKey: 'text.link', shortcut: 'Ctrl+K' })}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="内容块">

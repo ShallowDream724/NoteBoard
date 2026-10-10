@@ -15,6 +15,13 @@ const ContextualHelpContent = React.lazy(() => import('./contextualHelp').then(m
 
 const boundedContent: React.CSSProperties = { maxWidth: 'min(360px, calc(100vw - 16px))', maxHeight: 'calc(100vh - 16px)', overflow: 'hidden', whiteSpace: 'normal', overflowWrap: 'anywhere' };
 const TooltipInput = createContext<React.RefObject<'pointer' | 'keyboard' | null> | null>(null);
+const TooltipDetail = createContext(true);
+
+/** Floating editing controls prioritize compact labels; portals inherit this
+ * policy without changing each shared menu or loading its rich help module. */
+export function TooltipDetailProvider({ rich, children }: { rich: boolean; children: React.ReactNode }) {
+  return <TooltipDetail.Provider value={rich}>{children}</TooltipDetail.Provider>;
+}
 
 function CursorBubble({ point, side, align, gap, children }: { point: { x: number; y: number }; side: TooltipSide; align: 'start' | 'center' | 'end'; gap: number; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -224,7 +231,7 @@ function FollowCursorTooltip({
 export function Tooltip({
   content,
   shortcut: defaultShortcut,
-  helpKey,
+  helpKey: requestedHelpKey,
   children,
   side = 'bottom',
   align = 'center',
@@ -234,6 +241,8 @@ export function Tooltip({
   delayDuration,
   followCursor = false,
 }: TooltipProps) {
+  const rich = useContext(TooltipDetail);
+  const helpKey = rich ? requestedHelpKey : undefined;
   const shortcut = useResolvedShortcutLabel(defaultShortcut);
   const input = useContext(TooltipInput);
   const menu = useContext(HoverMenuContext);

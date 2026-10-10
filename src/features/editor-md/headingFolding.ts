@@ -9,7 +9,7 @@ import './headingFolding.css';
 interface FoldingState { decorations: DecorationSet; folds: Set<number> }
 export const headingFoldingKey = new PluginKey<FoldingState>('noteboard-heading-folding');
 export const BLOCK_MOVE_META = 'noteboard-block-move';
-export interface BlockMove { from: number; to: number; inserted: number }
+export interface BlockMove { from: number; to: number; inserted: number; ranges?: readonly { from: number; to: number; inserted: number }[] }
 const sectionIndexes = new WeakMap<PMNode, Map<number, number>>();
 function sectionIndex(doc: PMNode) {
   let result = sectionIndexes.get(doc);
@@ -145,8 +145,10 @@ export const HeadingFolding = Extension.create({
           const move = tr.getMeta(BLOCK_MOVE_META) as BlockMove | undefined;
           const folds = new Set<number>();
           for (const pos of previous.folds) {
-            const mapped = move && pos >= move.from && pos < move.to
-              ? move.inserted + pos - move.from
+            const movedRange = move?.ranges ? move.ranges.find(range => pos >= range.from && pos < range.to)
+              : move && pos >= move.from && pos < move.to ? move : undefined;
+            const mapped = movedRange
+              ? movedRange.inserted + pos - movedRange.from
               : tr.mapping.mapResult(pos, 1);
             const at = typeof mapped === 'number' ? mapped : mapped.deleted ? -1 : mapped.pos;
             if (at >= 0 && tr.doc.nodeAt(at)?.type.name === 'heading') folds.add(at);

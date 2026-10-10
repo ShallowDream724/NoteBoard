@@ -1,7 +1,7 @@
 // NoteBoard Markdown 顶层块安全重排序内核
-// 统一负责顶层块命中、落点计算与 ProseMirror 原子移动，避免列表、表格、代码块等嵌套结构接收非法落点
+// 统一负责块/列表项命中、边界落点与原子移动；列表分段复用局部插入计划，拒绝文字、表格、代码内部落点
 
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { discreteTransaction, dispatchDiscreteEdit } from './discreteEdit';
@@ -9,6 +9,7 @@ import { BLOCK_MOVE_META, foldedSectionEnd, headingFoldingKey } from './headingF
 import { isListItem, canMoveListItem, moveListItem } from './listItemActions';
 import { blockInteractionScope, isBlockInteractionTarget } from './blockInteractionScope';
 import { listItemAtY } from './listItemHitTest';
+import { canInsertAtListBoundary, insertAtListBoundary } from './listBoundaryInsertion';
 
 /** 顶层块的 DOM、文档位置与节点信息。 */
 export interface TopLevelBlockInfo {
@@ -17,7 +18,7 @@ export interface TopLevelBlockInfo {
   node: ProseMirrorNode;
 }
 
-/** 指针对应的顶层块边界落点；落点永远不会进入节点内部。 */
+/** A block edge or a list-item boundary; never a text/cell/code interior. */
 export interface TopLevelDropTarget {
   insertPos: number;
   indicatorClientY: number;
@@ -90,7 +91,7 @@ export function getTopLevelBlockInfo(
 
 /**
  * 按垂直坐标解析最近的顶层块边界。
- * 仅遍历 ProseMirror 直接子节点，因此即使指针位于 td、li、pre 内部，结果仍是其所属顶层块的前/后边界。
+ * 索引包含当前区域的直接子块和列表项；表格与代码仅保留外部边界。
  */
 function dropEntries(view: EditorView, items: boolean, scope: number): TopLevelBlockInfo[] {
   const scopeDom = scope === -1 ? view.dom : view.nodeDOM(scope);
@@ -134,7 +135,7 @@ export function resolveTopLevelDropTarget(
   clientY: number,
   sourcePos?: number,
 ): TopLevelDropTarget | null {
-  const items = sourcePos !== undefined && isListItem(view.state.doc.nodeAt(sourcePos));
+  const items = sourcePos !== undefined;
   const scope = sourcePos === undefined ? -1 : blockInteractionScope(view.state.doc.resolve(sourcePos));
   if (scope === null) return null;
   const folding = headingFoldingKey.getState(view.state);
@@ -191,9 +192,10 @@ export function resolveTopLevelDropTarget(
   };
 }
 const dropIndexes = new WeakMap<EditorView, { doc: ProseMirrorNode; folding: unknown; items: boolean; scope: number; entries: TopLevelBlockInfo[] }>();
+export function releaseBlockDropIndex(view: EditorView): void { dropIndexes.delete(view); }
 
 /**
- * 校验块移动是否同时满足：源节点位于文档顶层、目标是顶层边界、目标不在源节点自身范围内。
+ * 校验同区域块边界或列表项边界，拒绝自身内部；列表分段不把普通块塞进列表项壳。
  * 该校验会在拖拽预览与最终事务提交时各执行一次，防止状态变化绕过 UI 层保护。
  */
 export function isTopLevelBlockMoveAllowed(
@@ -214,12 +216,15 @@ export function isTopLevelBlockMoveAllowed(
     if (scope === null || blockInteractionScope($insert) !== scope) return false;
     if (isListItem(sourceNode)) return canMoveListItem(doc, sourcePos, insertPos);
 
-    if ($source.parent !== $insert.parent || !sourceNode?.isBlock) return false;
+    if (!sourceNode?.isBlock) return false;
     if (insertPos === 0 && doc.firstChild?.type.name === 'documentPresentation') return false;
 
     const end = sourceEnd ?? sourcePos + sourceNode.nodeSize;
     if (end < sourcePos + sourceNode.nodeSize || end > doc.content.size || doc.resolve(end).parent !== $source.parent) return false;
     if (insertPos >= sourcePos && insertPos <= end) return false;
+
+    if (canInsertAtListBoundary(doc, insertPos, Fragment.from(sourceNode))) return true;
+    if ($source.parent !== $insert.parent) return false;
 
     return $insert.parent.canReplaceWith(
       $insert.index(),
@@ -235,7 +240,7 @@ export function isTopLevelBlockMoveAllowed(
 
 /**
  * 以“删除源块 → 映射目标位置 → 插入原节点”的单一事务完成顶层重排序。
- * 提交前再次验证映射后的父节点，确保任何列表、表格、代码块内部位置都无法进入事务。
+ * 提交前再次验证父节点与列表分段，文字、表格及代码内部位置不进入事务。
  */
 export function moveTopLevelBlock(
   view: EditorView,
@@ -252,25 +257,20 @@ export function moveTopLevelBlock(
   }
 
   const fragment = state.doc.slice(sourcePos, sourceEnd).content;
-  const mappedInsertPos = insertPos > sourceEnd
+  let mappedInsertPos = insertPos > sourceEnd
     ? insertPos - (sourceEnd - sourcePos)
     : insertPos;
 
   try {
     const tr = discreteTransaction(state.tr).delete(sourcePos, sourceEnd);
-    const $mappedInsert = tr.doc.resolve(mappedInsertPos);
-
-    if (
-      !$mappedInsert.parent.canReplace(
-        $mappedInsert.index(),
-        $mappedInsert.index(),
-        fragment,
-      )
-    ) {
-      return null;
+    const splitPosition = insertAtListBoundary(tr, mappedInsertPos, fragment);
+    if (splitPosition === null) {
+      const at = tr.doc.resolve(mappedInsertPos);
+      if (!at.parent.canReplace(at.index(), at.index(), fragment)) return null;
+      tr.insert(mappedInsertPos, fragment);
+    } else {
+      mappedInsertPos = splitPosition;
     }
-
-    tr.insert(mappedInsertPos, fragment);
     tr.setMeta(BLOCK_MOVE_META, { from: sourcePos, to: sourceEnd, inserted: mappedInsertPos });
 
     // 普通块使用 NodeSelection 保留清晰的移动结果；极少数不可选节点回退到邻近文本选区。

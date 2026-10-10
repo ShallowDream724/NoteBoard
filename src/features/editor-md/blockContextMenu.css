@@ -2,9 +2,12 @@
 .nb-block-context-menu { width:228px; max-width:calc(100vw - 24px); padding:7px; border:1px solid var(--editor-border); border-radius:10px; background:var(--editor-surface); color:var(--editor-text); box-shadow:var(--shadow-lg); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); }
 .nb-block-context-menu button { color:inherit; font:inherit; border:0; background:transparent; cursor:pointer; border-radius:5px; }
 .nb-block-context-menu > button { display:flex; align-items:center; gap:10px; padding:7px 10px; width:100%; text-align:left; }
+.nb-block-menu-shortcut { margin-left:auto; color:var(--editor-text-muted); font:inherit; font-size:11px; }
 .nb-block-context-menu button:hover,.nb-block-context-menu button:focus-visible { background:var(--toolbar-hover); outline:none; }
-.nb-block-format-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:2px; padding:4px 0 7px; }
+.nb-block-format-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:2px; padding:4px 0 7px; }
 .nb-block-format-grid button { display:grid; place-items:center; min-height:30px; font-size:12px; }
+.nb-block-format-actions { grid-column:1/-1; display:flex; gap:2px; }
+.nb-block-format-actions button { flex:1; }
 .nb-collection-widths { grid-template-columns:repeat(4,minmax(0,1fr)); }
 .nb-block-context-menu button[aria-pressed="true"] { background:var(--toolbar-active); color:var(--editor-accent); }
 .nb-block-style-row { display:flex; align-items:center; gap:6px; padding:5px 3px; border-block:1px solid var(--editor-border); margin-bottom:5px; }

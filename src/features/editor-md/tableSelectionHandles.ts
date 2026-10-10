@@ -8,6 +8,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 import { tableReadingBounds, tableReadingScroll } from './tableReadingViewport';
 import { clientBounds, CONTENT_VIEW_CHANGED } from '../../core/dom/contentViewport';
+import { beginEditorDrag, isEditorDragging } from './editorDragActivity';
 
 type Axis = 'row' | 'column';
 interface Handle { button: HTMLButtonElement; axis: Axis; index: number }
@@ -26,7 +27,7 @@ export const TableSelectionHandles = Extension.create({
     let paintedRowSide: 'left' | 'right' = 'left', paintedColumnSide: 'top' | 'bottom' = 'top';
     let visible = false;
     let gesture: { axis: Axis; index: number; pos: number; node: PMNode; table: HTMLTableElement; pointer: number; button: HTMLButtonElement;
-      x: number; y: number; startX: number; startY: number; started: boolean; boundary: number } | null = null;
+      x: number; y: number; startX: number; startY: number; started: boolean; boundary: number; endActivity?: () => void } | null = null;
     let dragScroller: DragEdgeScroller | null = null, suppressClick = false;
     const guide = host.createElement('div'); guide.className = 'nb-table-move-guide'; guide.hidden = true; overlay.append(guide);
     const handles: Handle[] = [];
@@ -46,6 +47,7 @@ export const TableSelectionHandles = Extension.create({
       const active = gesture; gesture = null;
       dragScroller?.stop(); dragScroller = null; guide.hidden = true;
       if (!active) return;
+      active.endActivity?.();
       suppressClick = active.started;
       if (active.button.hasPointerCapture(active.pointer)) active.button.releasePointerCapture(active.pointer);
       view.dom.classList.remove('nb-table-reordering');
@@ -124,6 +126,7 @@ export const TableSelectionHandles = Extension.create({
           if (!gesture.started && Math.hypot(gesture.x - gesture.startX, gesture.y - gesture.startY) < 4) return;
           if (!gesture.started) {
             gesture.started = true; view.dom.classList.add('nb-table-reordering');
+            gesture.endActivity = beginEditorDrag(view);
             startDragScroll(gesture);
           }
           dragScroller?.update(gesture.x, gesture.y);
@@ -154,7 +157,7 @@ export const TableSelectionHandles = Extension.create({
     }
     function paint() {
       frame = 0;
-      if (!visible || !table || !cell || !view.editable || !view.dom.contains(cell)) { hide(); return; }
+      if (!visible || !table || !cell || !view.editable || !view.dom.contains(cell) || isEditorDragging(view) && !gesture?.started) { hide(); return; }
       const t = table.getBoundingClientRect(), viewport = tableReadingBounds(table, scroll);
       const rows = table.rows;
       if (!rows.length) { hide(); return; }
@@ -198,7 +201,7 @@ export const TableSelectionHandles = Extension.create({
     }
     const schedule = () => { if (!frame && visible) frame = requestAnimationFrame(paint); };
     const move = (event: PointerEvent) => {
-      if (gesture || event.buttons || !(event.target instanceof Element)) return;
+      if (gesture || event.buttons || isEditorDragging(view) || !(event.target instanceof Element)) return;
       if (event.target.closest('.nb-table-accessories')) { hide(); return; }
       if (overlay.contains(event.target)) { cancelHide(); return; }
       const nextCell = event.target.closest<HTMLTableCellElement>('td,th'), next = nextCell?.closest('table');

@@ -18,6 +18,8 @@ import { TableCellView } from '../tableCellView';
 import { createMediaEditingPlugin } from '../mediaEditing';
 import { normalizeImageSlots } from '../imageCaptions';
 import { normalizeFigureCaption, renderFigureCaption } from '../figureCaption';
+import { handleTextStyleShortcut } from '../textStyleShortcuts';
+import { clearDraftTextFormatting, runDraftCommand } from './bodyFormatting';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
@@ -53,6 +55,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
   const bodyView = new EditorView(host, {
     state: EditorState.create({ schema, doc: normalizeImageSlots(schema.nodes.doc.create(null, body.content)), plugins }),
     editable: () => editable,
+    handleDOMEvents: { keydown: (view, event) => editable && handleTextStyleShortcut(view, event, () => runDraftCommand(view, clearDraftTextFormatting)) },
     attributes: { class: 'nb-annotation-richtext nb-embedded-prose', 'aria-label': editable ? '说明正文' : '补充说明正文', ...(editable ? { role: 'textbox', 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' } : {}) },
     dispatchTransaction(tr) {
       bodyView.updateState(bodyView.state.apply(tr));

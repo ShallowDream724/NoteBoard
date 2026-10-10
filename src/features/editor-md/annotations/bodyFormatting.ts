@@ -4,7 +4,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { toggleMark } from '@tiptap/pm/commands';
 import { documentColor } from '../../document-style/colors';
 import { dispatchDiscreteEdit } from '../discreteEdit';
-import { TEXT_STYLE_MARKS } from '../textStyleMarks';
+import { clearTextStyleMarks } from '../textStyleMarks';
 
 export type MarkStatus = false | true | 'mixed';
 
@@ -74,17 +74,8 @@ export function setDraftColor(view: EditorView, name: 'textColor' | 'highlight',
 
 /** Match the main editor's clear-text policy: links and semantic marks survive. */
 export const clearDraftTextFormatting: Command = (state, dispatch) => {
-  const names = TEXT_STYLE_MARKS.filter(name => !!state.schema.marks[name]);
-  const ranges = state.selection.empty && state.selection.$from.parent.isTextblock
-    ? [{ from: state.selection.$from.start(), to: state.selection.$from.end() }]
-    : state.selection.ranges.map(({ $from, $to }) => ({ from: $from.pos, to: $to.pos }));
   const tr = state.tr;
-  for (const { from, to } of ranges) for (const name of names) tr.removeMark(from, to, state.schema.marks[name]);
-  if (state.selection.empty) {
-    const current = state.storedMarks ?? state.selection.$from.marks();
-    for (const name of names) if (state.schema.marks[name].isInSet(current)) tr.removeStoredMark(state.schema.marks[name]);
-  }
-  if (!tr.docChanged && !tr.storedMarksSet) return false;
+  if (!clearTextStyleMarks(tr)) return false;
   dispatch?.(tr); return true;
 };
 

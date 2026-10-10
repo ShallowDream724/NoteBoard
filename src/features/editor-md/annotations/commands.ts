@@ -7,6 +7,7 @@ import { captureAnnotationTarget, type AnnotationDraftTarget } from './draftTarg
 import { editorSupportsCapability, runWithDocumentCapability } from '../../document-format/featureGate';
 import { BlockMetadataStep } from '../blockMetadataStep';
 import { annotationIndexKey } from './extension';
+import { isListItem } from '../listItemActions';
 
 export const ANNOTATION_OPEN_EVENT = 'nb-open-annotation';
 export const ANNOTATION_BEGIN_EVENT = 'nb-begin-annotation';
@@ -16,19 +17,33 @@ export function dismissTransientAnnotations(editor: Editor) {
   if (!editor.isDestroyed) editor.view.dom.dispatchEvent(new Event(ANNOTATION_DISMISS_TRANSIENT_EVENT));
 }
 export interface AnnotationBeginRequest { id: string; target: AnnotationDraftTarget }
+/** An item's main paragraph owns its explanation, so reordering and restoring
+ * the item keep the anchor without adding metadata to a disposable list shell. */
+export function blockAnnotationTarget(doc: ProseMirrorNode, pos: number) {
+  let node = doc.nodeAt(pos);
+  if (isListItem(node)) { node = node!.firstChild; pos += 1; }
+  return node && (canAnnotateBlock(node) || node.attrs.annotationId) ? { node, pos } : null;
+}
+function annotationSelection(doc: ProseMirrorNode, selection: Selection): Selection {
+  if (!(selection instanceof NodeSelection) || !isListItem(selection.node)) return selection;
+  const target = blockAnnotationTarget(doc, selection.from);
+  return target ? NodeSelection.create(doc, target.pos) : selection;
+}
 /** UI creation starts with a local draft. Only its explicit Save changes the document. */
 export function beginAnnotation(editor: Editor): string | null {
   if (!canAddAnnotation(editor)) return null;
   if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { beginAnnotation(next); }); return null; }
   const id = newAnnotationId();
-  editor.view.dom.dispatchEvent(new CustomEvent<AnnotationBeginRequest>(ANNOTATION_BEGIN_EVENT, { detail: { id, target: captureAnnotationTarget(editor.state.selection) } }));
+  editor.view.dom.dispatchEvent(new CustomEvent<AnnotationBeginRequest>(ANNOTATION_BEGIN_EVENT, { detail: { id, target: captureAnnotationTarget(annotationSelection(editor.state.doc, editor.state.selection)) } }));
   return id;
 }
 /** Capture the block directly: tableEditing normalizes a dispatched table
  * NodeSelection into cells, so the editor's current selection is not a target. */
 export function beginBlockAnnotation(editor: Editor, pos: number): string | null {
-  if (editor.isDestroyed || !editor.state.doc.nodeAt(pos)?.isBlock) return null;
-  const selection = NodeSelection.create(editor.state.doc, pos);
+  if (editor.isDestroyed) return null;
+  const target = blockAnnotationTarget(editor.state.doc, pos);
+  if (!target) return null;
+  const selection = NodeSelection.create(editor.state.doc, target.pos);
   if (!canAddAnnotation(editor, selection)) return null;
   if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { beginBlockAnnotation(next, pos); }); return null; }
   const id = newAnnotationId();
@@ -42,6 +57,7 @@ export function openAnnotation(editor: Editor, id: string, options: { edit?: boo
 
 export function selectedAnnotationId(editor: Editor, selection = editor.state.selection): string | null {
   const { doc } = editor.state;
+  selection = annotationSelection(doc, selection);
   if (selection instanceof NodeSelection) return annotationId(selection.node.attrs.annotationId);
   const mark = selection.$from.marks().find(value => value.type.name === 'annotationReference');
   if (mark) return annotationId(mark.attrs.id);
@@ -61,6 +77,7 @@ export function canAnnotateBlock(node: ProseMirrorNode): boolean {
 
 export function canAddAnnotation(editor: Editor, selection = editor.state.selection): boolean {
   const { schema } = editor.state;
+  selection = annotationSelection(editor.state.doc, selection);
   if (!schema.nodes.annotationStore || !schema.marks.annotationReference || selection.empty || selectedAnnotationId(editor, selection)) return false;
   for (let depth = selection.$from.depth; depth > 0; depth--) if (selection.$from.node(depth).type.name.startsWith('annotation')) return false;
   if (selection instanceof NodeSelection) return canAnnotateBlock(selection.node);
@@ -74,7 +91,7 @@ export function canAddAnnotation(editor: Editor, selection = editor.state.select
 }
 
 export function addAnnotation(editor: Editor, content: JSONContent[] = [{ type: 'paragraph' }], options: { id?: string; selection?: Selection; open?: boolean } = {}): string | null {
-  const { state } = editor, { schema } = state, selection = options.selection ?? state.selection;
+  const { state } = editor, { schema } = state, selection = annotationSelection(state.doc, options.selection ?? state.selection);
   if (!canAddAnnotation(editor, selection)) return null;
   if (!editorSupportsCapability(editor, 'annotation')) { runWithDocumentCapability(editor, 'annotation', next => { addAnnotation(next, content, { ...options, selection: undefined }); }); return null; }
   const id = options.id === undefined ? newAnnotationId() : annotationId(options.id);

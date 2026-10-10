@@ -7,6 +7,7 @@ import type { AlertKind } from './alertPresentation';
 import { runWithDocumentCapability } from '../document-format/featureGate';
 import { CALLOUT_DEFAULTS, calloutAttributes, isAlertKind, isCalloutColor, isCalloutIcon, isCalloutTitle, normalizeAlertInput, type CalloutAttributes } from './calloutPresentation';
 import { calloutContent } from './insertContentRecipes';
+import { unwrapTextContainer } from './textContainerRestoration';
 
 /** Replace only the marker's quote and enter its body, preserving the surrounding document. */
 export function completeAlert(editor: Editor, kind: AlertKind): boolean {
@@ -33,15 +34,7 @@ const calloutTextBlocks = new Set(['paragraph', 'heading', 'blockquote', 'bullet
 export function unwrapCallout(editor: Editor, pos: number): boolean {
   const { state, view } = editor, node = state.doc.nodeAt(pos);
   if (node?.type.name !== 'githubAlert') return false;
-  const children = [...node.content.content];
-  // A custom title is user content; the preset Note/Tip label is presentation.
-  const title = typeof node.attrs.title === 'string' ? node.attrs.title.trim() : '';
-  if (title) children.unshift(state.schema.nodes.paragraph.create(null, state.schema.text(title)));
-  if (node.attrs.annotationId) {
-    if (!children[0] || children[0].attrs.annotationId || !('annotationId' in children[0].attrs)) children.unshift(state.schema.nodes.paragraph.create());
-    const first = children[0];
-    children[0] = first.type.create({ ...first.attrs, annotationId: node.attrs.annotationId }, first.content, first.marks);
-  }
+  const children = unwrapTextContainer(node, [...node.content.content]);
   const content = Fragment.fromArray(children), at = state.doc.resolve(pos);
   if (!at.parent.canReplace(at.index(), at.index() + 1, content)) return false;
   view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)));

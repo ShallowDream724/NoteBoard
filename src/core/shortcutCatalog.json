@@ -248,6 +248,13 @@
     ]
   },
   {
+    "id": "markdown.clearStyles",
+    "label": "清除文字样式",
+    "group": "Markdown",
+    "contexts": ["markdown", "source"],
+    "defaults": ["Ctrl+\\"]
+  },
+  {
     "id": "markdown.heading0",
     "label": "正文段落",
     "group": "Markdown",

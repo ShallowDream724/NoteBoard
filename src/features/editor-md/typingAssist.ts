@@ -8,6 +8,7 @@ import { selectionPresentation } from '../document-style/selectionPresentation';
 import { setParagraphPresentation } from '../document-style/documentStyles';
 import type { Editor } from '@tiptap/core';
 import { dispatchDiscreteEdit } from './discreteEdit';
+import { clearSelectionTextFormatting } from './textFormatting';
 
 /** Tables, list nesting and embedded code editors retain their own Tab keys. */
 export function handleProseTab(editor: Editor, backwards = false): boolean {
@@ -55,7 +56,8 @@ export const MarkdownTypingKeys = Extension.create({
         return false;
       }
       const level = /^markdown\.heading([0-6])$/.exec(command.id)?.[1];
-      if (level === undefined) dispatchEditorShortcut(view, command.defaults[0]);
+      if (command.id === 'markdown.clearStyles') clearSelectionTextFormatting(this.editor);
+      else if (level === undefined) dispatchEditorShortcut(view, command.defaults[0]);
       else if (Number(level) === 0) this.editor.commands.restoreParagraph();
       else this.editor.commands.setHeading({ level: Number(level) as 1|2|3|4|5|6 });
       event.preventDefault();

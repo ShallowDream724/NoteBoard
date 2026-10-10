@@ -1,6 +1,6 @@
 import type { Node } from '@tiptap/pm/model';
-import type { EditorState } from '@tiptap/pm/state';
-import { CellSelection, isInTable } from '@tiptap/pm/tables';
+import type { EditorState, Selection } from '@tiptap/pm/state';
+import { CellSelection } from '@tiptap/pm/tables';
 
 export interface PresentationTarget { node: Node; pos: number }
 export interface SelectionPresentation {
@@ -18,9 +18,12 @@ export const INDENT_BLOCK_TYPES = ['paragraph', 'heading', 'horizontalRule'];
 
 /** Selection ranges, rather than the CellSelection's bounding interval, are
  * authoritative. Cache one bounded walk for all controls in the same state. */
-export function selectionPresentation(state: EditorState): SelectionPresentation {
-  const cached = scopes.get(state); if (cached) return cached;
-  const scope: SelectionPresentation = { cells: isInTable(state), textBlocks: [], indentBlocks: [], mathBlocks: [], cellBlocks: [], inline: false, blockText: false };
+export function selectionPresentation(state: EditorState, selectionOverride?: Selection): SelectionPresentation {
+  const cached = selectionOverride ? undefined : scopes.get(state); if (cached) return cached;
+  const selection = selectionOverride ?? state.selection;
+  let cells = selection instanceof CellSelection;
+  for (let depth = selection.$from.depth; !cells && depth > 0; depth--) cells = selection.$from.node(depth).type.spec.tableRole === 'table';
+  const scope: SelectionPresentation = { cells, textBlocks: [], indentBlocks: [], mathBlocks: [], cellBlocks: [], inline: false, blockText: false };
   const seen = new Set<number>();
   const visit = (node: Node, pos: number) => {
       if (seen.has(pos)) return !node.isTextblock && !node.isAtom;
@@ -34,7 +37,6 @@ export function selectionPresentation(state: EditorState): SelectionPresentation
       if (node.isTextblock && !node.type.spec.code) scope.inline = true;
       return !node.isTextblock && !node.isAtom;
   };
-  const { selection } = state;
   if (selection instanceof CellSelection) {
     // ProseMirror has already resolved each range into its cell. Starting from
     // the document (or table.nodeAt) once per range would rescan preceding rows.
@@ -51,7 +53,7 @@ export function selectionPresentation(state: EditorState): SelectionPresentation
       else state.doc.nodesBetween($from.pos, $to.pos, visit);
     }
   }
-  scopes.set(state, scope); return scope;
+  if (!selectionOverride) scopes.set(state, scope); return scope;
 }
 
 export function commonPresentationValue(targets: PresentationTarget[], key: string, fallback: string): string | null {

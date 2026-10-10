@@ -8,8 +8,57 @@ import { completeAlert } from '../../src/features/editor-md/alertCommands';
 import { formatSourceMark, setSourceHeading } from '../../src/features/editor-md/sourceFormatting';
 import { initShortcuts } from '../../src/core/shortcuts';
 import { sourceTypingAssist } from '../../src/features/editor-md/sourceTypingAssist';
+import { installMediaGestureBoundary } from '../../src/core/mediaGestures';
+import { setShortcutOverrides } from '../../src/core/shortcutBindings';
 
 describe('Markdown interactive conveniences', () => {
+  it.each(['<h3>heading</h3>', '<ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>task</p></li></ul>'])('Ctrl+0 restores %s through the real document event boundary', content => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const editor = new Editor({ element: host, extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content });
+    const dispose = installMediaGestureBoundary(document);
+    try {
+      let pos = 0;
+      editor.state.doc.descendants((node, at) => { if (node.isTextblock) { pos = at + 1; return false; } });
+      editor.commands.setTextSelection(pos);
+      const initial = editor.state.doc;
+      const event = new KeyboardEvent('keydown', { key: '0', code: 'Digit0', ctrlKey: true, bubbles: true, cancelable: true });
+      editor.view.dom.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(editor.state.doc.firstChild?.type.name).toBe('paragraph');
+      expect(editor.state.doc.textContent).toBe(initial.textContent);
+      const restored = editor.state.doc;
+      editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
+      editor.commands.redo(); expect(editor.state.doc.eq(restored)).toBe(true);
+    } finally { dispose(); editor.destroy(); host.remove(); }
+  });
+
+  it('zoom fallback permits remapped editor keys while respecting already-consumed events', () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const editor = new Editor({ element: host, extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<h2>heading</h2>' });
+    const dispose = installMediaGestureBoundary(document);
+    setShortcutOverrides({ 'markdown.heading0': ['Ctrl+Alt+0'] });
+    try {
+      editor.commands.setTextSelection(2);
+      const blocked = new KeyboardEvent('keydown', { key: '0', code: 'Digit0', ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
+      blocked.preventDefault(); editor.view.dom.dispatchEvent(blocked);
+      expect(editor.state.doc.firstChild?.type.name).toBe('heading');
+      const event = new KeyboardEvent('keydown', { key: '0', code: 'Digit0', ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
+      editor.view.dom.dispatchEvent(event);
+      expect(editor.state.doc.firstChild?.type.name).toBe('paragraph'); expect(event.defaultPrevented).toBe(true);
+      const outside = new KeyboardEvent('keydown', { key: '0', ctrlKey: true, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(outside); expect(outside.defaultPrevented).toBe(true);
+    } finally { setShortcutOverrides({}); dispose(); editor.destroy(); host.remove(); }
+  });
+
+  it('Ctrl+0 is delivered to the Markdown source editor before browser zoom is cancelled', () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const source = new EditorView({ parent: host, state: EditorState.create({ doc: '### heading', extensions: [sourceTypingAssist] }) });
+    const dispose = installMediaGestureBoundary(document);
+    try {
+      source.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: '0', code: 'Digit0', ctrlKey: true, bubbles: true, cancelable: true }));
+      expect(source.state.doc.toString()).toBe('heading');
+    } finally { dispose(); source.destroy(); host.remove(); }
+  });
   it('Backspace removes the empty paragraph after a divider without undoing the divider input rule', () => {
     const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<p>before</p><p>***</p><p>after</p>' });
     try {

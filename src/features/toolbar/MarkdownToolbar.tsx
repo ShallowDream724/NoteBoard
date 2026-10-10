@@ -117,6 +117,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
   const canInline = isSourceMode ? !!sourceView : !!selectionScope?.inline;
   const selectedCells = !isSourceMode && editor?.state.selection instanceof CellSelection;
   const canBlocks = allowsStructure && (isSourceMode ? !!sourceView : !!selectionScope?.blockText && !selectedCells);
+  const canRestore = allowsStructure && (isSourceMode ? !!sourceView : !!selectionScope?.blockText);
+  const canClear = isSourceMode ? !!sourceView : canInline || !!selectedCells;
   const canLists = canBlocks && !selectedCells;
   const canTextStyle = canInline || !!selectionScope?.mathBlocks.length;
 
@@ -459,7 +461,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         <ToolbarDropdownItem
           icon={<Pilcrow size={14} />}
           label="还原为正文"
-          helpKey="block.paragraph"
+          helpKey="format.restore"
           disabled={!canBlocks}
           shortcut="Ctrl+0"
           active={currentHeadingLabel === '正文'}
@@ -775,14 +777,17 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
           label="超链接"
           disabled={!canInline || selectedCells}
           shortcut="Ctrl+K"
+          helpKey="text.link"
           onClick={handleOpenLink}
         /></ToolbarOverflowItem>
 
         {/* 8. 日期时间二级菜单 */}
         <ToolbarOverflowItem id="text-reset"><>
-          <ToolbarDropdownItem icon={<RemoveFormatting size={14}/>} label="清除文字样式" disabled={scope ? !canInline : !canBlocks}
+          <ToolbarDropdownItem icon={<RemoveFormatting size={14}/>} label="清除文字样式" shortcut={'Ctrl+\\'} disabled={!canClear}
+            helpKey="format.clear"
             onClick={() => { setInsertDropdownOpen(false); handleClearFormat(); }}/>
-          <ToolbarDropdownItem icon={<Pilcrow size={14}/>} label="还原为正文" shortcut="Ctrl+0" disabled={!canBlocks}
+          <ToolbarDropdownItem icon={<Pilcrow size={14}/>} label="还原为正文" shortcut="Ctrl+0" disabled={!canRestore}
+            helpKey="format.restore"
             onClick={() => { setInsertDropdownOpen(false); handleSetHeading('paragraph'); }}/>
         </></ToolbarOverflowItem>
         <ToolbarDropdownItem
@@ -828,6 +833,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         overflowId="link"
         collapsePriority={30}
         shortcut="Ctrl+K"
+        helpKey="text.link"
         active={!isSourceMode && Boolean(editor?.isActive('link'))}
         onClick={handleOpenLink}
       />
@@ -842,8 +848,8 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         onClick={() => { void import('../editor-code/orchestration/saveDocument').then(({ saveDocument }) => saveDocument(docKey)); }}/>}
       <TextResetControl
         open={resetDropdownOpen} onOpenChange={setResetDropdownOpen}
-        disabled={scope ? !canInline : !canBlocks}
-        restoreDisabled={!canBlocks} collapsePriority={60} overflowId="text-reset"
+        disabled={!canClear}
+        restoreDisabled={!canRestore} collapsePriority={60} overflowId="text-reset"
         onClear={handleClearFormat} onRestore={() => handleSetHeading('paragraph')}
         onReturnToEditor={() => { if (!isCurrentTarget()) return; if (isSourceMode) getActiveSourceView(docKey)?.focus(); else editor?.view.dom.focus({ preventScroll: true }); }}
       />

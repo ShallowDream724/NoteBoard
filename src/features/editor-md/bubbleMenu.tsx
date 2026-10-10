@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { handleLinkClick } from './linkHandler';
 import { useWindowStore } from '../../stores/windowStore';
-import { Tooltip } from '../../components/Tooltip';
+import { Tooltip, TooltipDetailProvider } from '../../components/Tooltip';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
@@ -44,6 +44,9 @@ import { runWithDocumentCapability, useNativeFeatureVisibility } from '../docume
 import { selectionAllowsAuxiliaryControls } from './blockInteractionScope';
 import { clearSelectionTextFormatting } from './textFormatting';
 import { toggleSelectedCellMark } from '../document-style/cellTextStyle';
+import { TextResetControl } from '../toolbar/TextResetControl';
+import { EDITOR_DRAG_ACTIVITY, isEditorDragging } from './editorDragActivity';
+import type { ContextualHelpKey } from '../../components/contextualHelp';
 
 interface BubbleButtonProps {
   icon: ReactNode;
@@ -52,10 +55,12 @@ interface BubbleButtonProps {
   title?: string;
   danger?: boolean;
   disabled?: boolean;
+  helpKey?: ContextualHelpKey;
+  shortcut?: string;
 }
 
 /** 悬浮菜单基础按钮组件（舒适 32px 尺寸与精美悬停/按压动效） */
-function BubbleButton({ icon, onClick, active, title, danger, disabled }: BubbleButtonProps) {
+function BubbleButton({ icon, onClick, active, title, danger, disabled, helpKey, shortcut }: BubbleButtonProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -118,7 +123,7 @@ function BubbleButton({ icon, onClick, active, title, danger, disabled }: Bubble
 
   if (title) {
     return (
-      <Tooltip content={title} side="top" sideOffset={6}>
+      <Tooltip content={title} helpKey={helpKey} shortcut={shortcut} side="top" sideOffset={6}>
         {btn}
       </Tooltip>
     );
@@ -171,20 +176,24 @@ export function EditorBubbleMenu({
     if (!enabled && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
   }, [editor, enabled]);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showResetMenu, setShowResetMenu] = useState(false);
   const bubbleRoot = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
   useEditorOverlayDismiss(editor, bubbleRoot, () => {
     dismissed.current = true;
     setShowColorPicker(false);
+    setShowResetMenu(false);
     if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'hide').setMeta('addToHistory', false));
   });
   useEffect(() => {
     const resume = () => { dismissed.current = false; };
     const selection = () => { if (editor.view.hasFocus()) resume(); };
+    const drag = () => { if (isEditorDragging(editor.view)) { setShowColorPicker(false); setShowResetMenu(false); } };
     editor.view.dom.addEventListener('pointerdown', resume);
+    editor.view.dom.addEventListener(EDITOR_DRAG_ACTIVITY, drag);
     editor.on('focus', resume);
     editor.on('selectionUpdate', selection);
-    return () => { editor.view.dom.removeEventListener('pointerdown', resume); editor.off('focus', resume); editor.off('selectionUpdate', selection); };
+    return () => { editor.view.dom.removeEventListener('pointerdown', resume); editor.view.dom.removeEventListener(EDITOR_DRAG_ACTIVITY, drag); editor.off('focus', resume); editor.off('selectionUpdate', selection); };
   }, [editor]);
   useFormattingUpdates(editor, enabled);
   const preferredPosition = useSettingsStore(state => state.settings.editor.selectionToolbarPosition ?? 'below');
@@ -207,7 +216,7 @@ export function EditorBubbleMenu({
   }) => {
     const { selection } = state;
     if (currentEditor.isDestroyed) return false;
-    if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
+    if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || isEditorDragging(currentEditor.view) || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
     if (!selectionAllowsAuxiliaryControls(selection)) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
@@ -243,6 +252,7 @@ export function EditorBubbleMenu({
   if (!scrollParent) return null;
 
   return (
+    <TooltipDetailProvider rich={false}>
     <BubbleMenu
       editor={editor}
       pluginKey="bubbleMenu"
@@ -316,7 +326,7 @@ export function EditorBubbleMenu({
 
         {/* 超链接设置按钮：优先打开定制美观弹窗 */}
         <BubbleButton
-          title="设置/修改超链接 (Ctrl+K)"
+          title="设置/修改超链接" helpKey="text.link" shortcut="Ctrl+K"
           icon={<Link2 size={16} />}
           onClick={() => {
             if (onOpenLinkModal) {
@@ -349,18 +359,18 @@ export function EditorBubbleMenu({
           />
         )}
 
-        <BubbleButton
-          title="清除格式"
-          icon={<RemoveFormatting size={16} />}
-        onClick={() => clearSelectionTextFormatting(editor)}
-        />
+        {inlineOnly ? <BubbleButton title="清除文字样式" helpKey="format.clear" shortcut={'Ctrl+\\'} icon={<RemoveFormatting size={16}/>} onClick={() => clearSelectionTextFormatting(editor)}/>
+          : <TextResetControl open={showResetMenu} onOpenChange={setShowResetMenu} disabled={false} restoreDisabled={!editor.can().restoreParagraph()}
+            onClear={() => clearSelectionTextFormatting(editor)} onRestore={() => editor.chain().focus().restoreParagraph().run()} onReturnToEditor={() => editor.view.focus()}/>}
       </div>}
     </BubbleMenu>
+    </TooltipDetailProvider>
   );
 }
 
 function TableTextControls({ editor }: { editor: Editor }) {
   const [colorsOpen, setColorsOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   return <>
     {([{ mark: 'bold', label: '粗体', Icon: Bold }, { mark: 'italic', label: '斜体', Icon: Italic },
       { mark: 'underline', label: '下划线', Icon: Underline }, { mark: 'strike', label: '删除线', Icon: Strikethrough },
@@ -371,7 +381,8 @@ function TableTextControls({ editor }: { editor: Editor }) {
       onTextColor={color => setTextColor(editor, color)} active={editor.isActive('highlight')}
       currentColor={editor.getAttributes('highlight').color} onApply={color => setHighlightColor(editor, color)}
       onRemove={() => setHighlightColor(editor, null)} onReturnToEditor={() => editor.view.focus()}/>
-    <BubbleButton title="清除选中文本格式" icon={<RemoveFormatting size={16}/>} onClick={() => clearSelectionTextFormatting(editor)}/>
+    <TextResetControl open={resetOpen} onOpenChange={setResetOpen} disabled={false} restoreDisabled={!editor.can().restoreParagraph()}
+      onClear={() => clearSelectionTextFormatting(editor)} onRestore={() => editor.chain().focus().restoreParagraph().run()} onReturnToEditor={() => editor.view.focus()}/>
     <MenuDivider/>
   </>;
 }
@@ -430,7 +441,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     let lastCell: HTMLElement | null = null;
     const updateToolbar = () => {
       frame = 0;
-      if (dismissed.current || editor.isDestroyed || !editorDom.isConnected || editorDom.classList.contains('nb-block-menu-open') || isEmbeddedEditing(editor)) {
+      if (dismissed.current || editor.isDestroyed || !editorDom.isConnected || isEditorDragging(editor.view) || editorDom.classList.contains('nb-block-menu-open') || isEmbeddedEditing(editor)) {
         setShow(false);
         return;
       }
@@ -526,6 +537,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     };
     refresh.current = schedule;
     const resume = () => { dismissed.current = false; schedule(); };
+    const drag = () => { if (isEditorDragging(editor.view)) setShow(false); };
     let embeddedEditing = isEmbeddedEditing(editor);
     const onTransaction = ({ transaction }: { transaction: Transaction }) => {
       if (transaction.selectionSet && editor.view.hasFocus()) dismissed.current = false;
@@ -537,6 +549,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     editor.on('focus', resume);
     editorDom.addEventListener('pointerdown', pointerAnchor);
     editorDom.addEventListener('pointerup', pointerAnchor);
+    editorDom.addEventListener(EDITOR_DRAG_ACTIVITY, drag);
     scrollParent.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule, { passive: true });
     window.addEventListener('scroll', schedule, { passive: true });
@@ -548,6 +561,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       editor.off('focus', resume);
       editorDom.removeEventListener('pointerdown', pointerAnchor);
       editorDom.removeEventListener('pointerup', pointerAnchor);
+      editorDom.removeEventListener(EDITOR_DRAG_ACTIVITY, drag);
       scrollParent.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule);
@@ -562,6 +576,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
   const canSplit = editor.can().splitCell();
 
   return createPortal(
+    <TooltipDetailProvider rich={false}>
     <div
       ref={toolbar}
       className="nb-editor-selection-toolbar"
@@ -623,6 +638,6 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         onClick={() => deleteTableSelection(editor)}
         danger
       />
-    </div>, editor.view.dom.ownerDocument.body
+    </div></TooltipDetailProvider>, editor.view.dom.ownerDocument.body
   );
 }

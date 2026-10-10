@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { DOMSerializer, type DOMOutputSpec } from '@tiptap/pm/model';
 import { documentColor } from '../document-style/colors';
+import { TEXT_STYLE_MARKS } from './textStylePolicy';
 
 export const FIGURE_CAPTION_MAX_LENGTH = 10_000;
 export function normalizeFigureCaption(value: unknown): string | null {
@@ -43,6 +44,19 @@ export function figureCaptionContent(value: unknown, rich?: unknown): JSONConten
     try { validateFigureCaptionContent(rich); return rich as JSONContent[]; } catch { /* Read legacy text when optional rich data is invalid. */ }
   }
   return (normalizeFigureCaption(value) ?? '').split('\n').flatMap((line, index) => [...(index ? [{ type: 'hardBreak' }] : []), ...(line ? [{ type: 'text', text: line }] : [])]);
+}
+/** null means no change. Caption text and links remain, regardless of whether
+ * the owning figure stores its caption as attributes or editable paragraphs. */
+export function clearedFigureCaption(attrs: Record<string, unknown>): JSONContent[] | null {
+  if (attrs.captionContent == null) return null;
+  const content = figureCaptionContent(attrs.caption, attrs.captionContent);
+  let changed = false;
+  const next = content.map(item => {
+    const marks = item.marks?.filter(mark => !(TEXT_STYLE_MARKS as readonly string[]).includes(mark.type));
+    if (marks?.length === item.marks?.length) return item;
+    changed = true; return { ...item, marks };
+  });
+  return changed ? next : null;
 }
 export function figureCaptionText(content: JSONContent[]): string | null {
   return normalizeFigureCaption(content.map(item => item.type === 'hardBreak' ? '\n' : item.text ?? '').join(''));

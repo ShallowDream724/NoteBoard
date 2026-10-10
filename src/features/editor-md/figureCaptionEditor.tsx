@@ -16,6 +16,7 @@ import { TooltipProvider } from '../../components/Tooltip';
 import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { getEditingScope, isEditingScopeInteraction, registerEditingScope, type EditingScope } from './editingScope';
 import { LinkModal } from './LinkModal';
+import { TextStyleKeys } from './textStyleShortcuts';
 
 const active = new WeakMap<EditorView, () => void>();
 let nextHistoryGroup = -1;
@@ -39,7 +40,7 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
     StarterKit.configure({ document: false, heading: false, blockquote: false, codeBlock: false, horizontalRule: false,
       bulletList: false, orderedList: false, listItem: false, listKeymap: false, undoRedo: false,
       dropcursor: false, gapcursor: false, trailingNode: false, link: { openOnClick: false }, code: false }),
-    CaptionDocument, Code.extend({ excludes: '' }), MarkdownHighlight.configure({ multicolor: true }), TextColor,
+    CaptionDocument, Code.extend({ excludes: '' }), MarkdownHighlight.configure({ multicolor: true }), TextColor, TextStyleKeys,
   ], content: captionDocument(figureCaptionContent(original?.attrs.caption, original?.attrs.captionContent)),
   editorProps: {
     attributes: { class: 'nb-embedded-prose nb-caption-editor', role: 'textbox', 'aria-label': options.label, 'aria-multiline': 'true', 'data-shortcuts-suspended': 'true' },

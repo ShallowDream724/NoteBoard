@@ -9,14 +9,24 @@ import { documentSliceClipboardData } from './clipboard/structured';
 import { isBlockInteractionTarget } from './blockInteractionScope';
 import { imageRemovalTransaction, requestImageRemoval } from './imageRemoval';
 import { imageSelectionSlice } from './imageCaptions';
+import { editorDocumentKey } from './editorDocumentCodec';
+import { emit } from '../../core/emitter';
+import { RESTORABLE_TEXT_CONTAINERS } from './textContainerRestoration';
 
 export function blockRange(editor: Editor, pos: number) {
   const node = editor.state.doc.nodeAt(pos);
   if (!node || !isBlockInteractionTarget(editor.state.doc, pos)) return null;
   return { node, from: pos, to: foldedSectionEnd(editor.state, pos) ?? pos + node.nodeSize };
 }
-export function selectBlock(editor: Editor, pos: number, titleOnly = false): boolean {
-  const range = blockRange(editor, pos); if (!range) return false;
+/** Keep the user range only when it belongs to this logical block. Hovering
+ * another block must not silently redirect its text actions. */
+export function blockHasTextSelection(editor: Editor, pos: number): boolean {
+  const range = blockRange(editor, pos), selection = editor.state.selection;
+  return !!range && selection instanceof TextSelection && !selection.empty
+    && selection.from >= range.from && selection.to <= range.to;
+}
+export function blockSelection(editor: Editor, pos: number, titleOnly = false) {
+  const range = blockRange(editor, pos); if (!range) return null;
   let selection;
   if (range.node.type.name === 'table') {
     const map = TableMap.get(range.node), start = pos + 1;
@@ -24,10 +34,15 @@ export function selectBlock(editor: Editor, pos: number, titleOnly = false): boo
   } else if (!titleOnly && range.to > pos + range.node.nodeSize) {
     selection = TextSelection.create(editor.state.doc, pos + 1, range.to - 1);
   } else selection = NodeSelection.create(editor.state.doc, pos);
-  editor.view.dispatch(editor.state.tr.setSelection(selection));
+  return selection;
+}
+export function selectBlock(editor: Editor, pos: number, titleOnly = false): boolean {
+  const selection = blockSelection(editor, pos, titleOnly); if (!selection) return false;
+  if (!editor.state.selection.eq(selection)) editor.view.dispatch(editor.state.tr.setSelection(selection).setMeta('addToHistory', false));
   return true;
 }
-export function formatBlock(editor: Editor, pos: number, command: (chain: ChainedCommands) => ChainedCommands, titleOnly = false) {
+function formatBlockRange(editor: Editor, pos: number, command: (chain: ChainedCommands) => ChainedCommands, options: { mainBodyOnly: boolean; liftItem: boolean }) {
+  const { mainBodyOnly: titleOnly, liftItem } = options;
   const range = blockRange(editor, pos); if (!range) return false;
   const end = titleOnly ? pos + range.node.nodeSize : range.to;
   return runDiscreteEdit(editor, chain => {
@@ -36,10 +51,31 @@ export function formatBlock(editor: Editor, pos: number, command: (chain: Chaine
         tr.setSelection(TextSelection.between(tr.doc.resolve(pos + 2), tr.doc.resolve(titleOnly ? pos + range.node.firstChild!.nodeSize : end - 2)));
         return true;
       });
-      if (titleOnly) chain = chain.liftListItem(range.node.type.name);
+      if (liftItem) chain = chain.liftListItem(range.node.type.name);
     } else chain = chain.setTextSelection({ from: pos + 1, to: end - 1 });
     return command(chain);
   });
+}
+export function formatBlock(editor: Editor, pos: number, command: (chain: ChainedCommands) => ChainedCommands, titleOnly = false) {
+  return formatBlockRange(editor, pos, command, { mainBodyOnly: titleOnly, liftItem: titleOnly });
+}
+/** Restoring structure owns list unwrapping; selecting the item body must not lift it first. */
+export function restoreBlockParagraph(editor: Editor, pos: number) {
+  const node = editor.state.doc.nodeAt(pos);
+  if (node && RESTORABLE_TEXT_CONTAINERS.has(node.type.name)) {
+    if (!selectBlock(editor, pos, true)) return false;
+    return runDiscreteEdit(editor, chain => chain.restoreParagraph());
+  }
+  return formatBlockRange(editor, pos, chain => chain.restoreParagraph(), { mainBodyOnly: true, liftItem: false });
+}
+/** Use the existing link editor after selecting this item's main text, without
+ * changing its list level or keeping a second dialog/selection implementation. */
+export function editBlockLink(editor: Editor, pos: number) {
+  const key = editorDocumentKey(editor);
+  if (!key) return false;
+  if (!blockHasTextSelection(editor, pos) && !formatBlockRange(editor, pos, chain => chain, { mainBodyOnly: true, liftItem: false })) return false;
+  emit('open-link-modal', { key });
+  return true;
 }
 export function deleteBlock(editor: Editor, pos: number) {
   const range = blockRange(editor, pos); if (!range) return false;

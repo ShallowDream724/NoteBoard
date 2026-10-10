@@ -26,7 +26,13 @@ export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, 
   // A tall block can start above the viewport. Keep its control reachable without
   // a browser focus/hover scroll moving the anchor out from under the pointer.
   const blockTop = (rect.top - bounds.top) / scale;
-  const anchorTop = isEmptyParagraph(block.node) ? blockTop + (rect.height / scale - height) / 2 : blockTop + 2;
+  const text = block.element.tagName === 'LI' ? block.element.firstElementChild : block.element;
+  const textRow = text instanceof HTMLElement && text.matches('p,h1,h2,h3,h4,h5,h6');
+  const lineHeight = textRow ? parseFloat(getComputedStyle(text).lineHeight) || (parseFloat(getComputedStyle(text).fontSize) || 16) * 1.5 : 0;
+  const textRect = textRow ? text.getBoundingClientRect() : rect;
+  const anchorTop = isEmptyParagraph(block.node) ? blockTop + (rect.height / scale - height) / 2
+    : textRow ? (textRect.top - bounds.top) / scale + (Math.min(textRect.height / scale, lineHeight) - height) / 2
+    : blockTop + 2;
   const viewportTop = Math.max(0, Math.min(anchorTop, host.clientHeight - height - 4));
   let controlWidth = width, left = (edge - bounds.left) / scale + host.scrollLeft - controlWidth - 8;
   if (block.element.tagName === 'LI' && left < host.scrollLeft + 4) {

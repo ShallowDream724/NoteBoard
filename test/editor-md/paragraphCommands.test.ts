@@ -24,15 +24,20 @@ function types(editor: Editor) { return editor.getJSON().content?.filter(node =>
 function nodePos(editor: Editor, type: string) { let found = -1; editor.state.doc.descendants((node, pos) => { if (found < 0 && node.type.name === type) { found = pos; return false; } }); return found; }
 
 describe('restore paragraph structure', () => {
-  it('rejects rectangular cell selections consistently through can(), the command and Ctrl+0', () => {
+  it('restores rectangular cell contents consistently while retaining the grid and selection', () => {
     const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys], content: '<table><tr><td><h2>heading</h2></td><td><ul><li>item</li></ul></td></tr></table>' }); editors.push(editor);
     const table = editor.state.doc.firstChild!, map = TableMap.get(table);
     editor.view.dispatch(editor.state.tr.setSelection(CellSelection.create(editor.state.doc, 1 + map.map[0], 1 + map.map[1])));
-    const doc = editor.state.doc, selection = editor.state.selection;
-    expect(editor.can().restoreParagraph()).toBe(false); expect(editor.commands.restoreParagraph()).toBe(false);
-    expect(editor.state.doc).toBe(doc); expect(editor.state.selection.eq(selection)).toBe(true);
+    const doc = editor.state.doc;
+    expect(editor.can().restoreParagraph()).toBe(true); expect(editor.commands.restoreParagraph()).toBe(true);
+    expect(editor.state.doc.firstChild!.attrs).toEqual(doc.firstChild!.attrs);
+    expect(editor.state.doc.firstChild!.firstChild!.child(0).firstChild!.type.name).toBe('paragraph');
+    expect(editor.state.doc.firstChild!.firstChild!.child(1).firstChild!.type.name).toBe('paragraph');
+    expect(editor.state.selection).toBeInstanceOf(CellSelection);
+    editor.commands.undo(); expect(editor.state.doc.eq(doc)).toBe(true);
     editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: '0', code: 'Digit0', ctrlKey: true, bubbles: true, cancelable: true }));
-    expect(editor.state.doc).toBe(doc); expect(editor.state.selection.eq(selection)).toBe(true);
+    expect(editor.state.doc.firstChild!.firstChild!.child(0).firstChild!.type.name).toBe('paragraph');
+    expect(editor.state.selection).toBeInstanceOf(CellSelection); editor.commands.undo(); expect(editor.state.doc.eq(doc)).toBe(true);
   });
   it('restores only the caret item, retaining marks, sibling numbering and one undo/redo', () => {
     const editor = create('<ol start="5"><li>before</li><li><b>target</b><a href="https://example.com">link</a></li><li>after</li></ol>');
@@ -111,14 +116,15 @@ describe('restore paragraph structure', () => {
     expect(editor.state.doc.firstChild?.type.name).toBe('paragraph'); expect(editor.state.doc.firstChild?.content.size).toBe(0);
     expect(editor.state.doc.child(1).type.name).toBe('taskList'); expect(editor.state.doc.child(1).firstChild?.attrs.checked).toBe(true);
   });
-  it('restores AllSelection while retaining tables, semantic Callouts and disclosures', () => {
+  it('restores AllSelection while retaining tables and media and releasing whole text containers', () => {
     const p = (text: string): JSONContent => ({ type: 'paragraph', content: [{ type: 'text', text }] });
     const quote = (text: string): JSONContent => ({ type: 'blockquote', content: [p(text)] });
     const editor = create({ type: 'doc', content: [{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'heading' }] }, { type: 'bulletList', content: [{ type: 'listItem', content: [p('item')] }] }, { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [quote('cell')] }] }] }, { type: 'githubAlert', attrs: { kind: 'note' }, content: [quote('callout')] }, { type: 'disclosure', attrs: { title: 'title' }, content: [quote('disclosure')] }, { type: 'image', attrs: { src: 'image.png' } }] });
     editor.view.dispatch(editor.state.tr.setSelection(new AllSelection(editor.state.doc))); restore(editor);
-    expect(types(editor)).toEqual(['paragraph', 'paragraph', 'table', 'githubAlert', 'disclosure', 'image']);
+    expect(types(editor)).toEqual(['paragraph', 'paragraph', 'table', 'paragraph', 'paragraph', 'paragraph', 'image']);
     expect(editor.state.selection).toBeInstanceOf(AllSelection);
-    for (const type of ['tableCell', 'githubAlert', 'disclosure']) expect(editor.state.doc.nodeAt(nodePos(editor, type))?.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.doc.nodeAt(nodePos(editor, 'tableCell'))?.firstChild?.type.name).toBe('paragraph');
+    expect(editor.state.doc.child(3).textContent).toBe('callout'); expect(editor.state.doc.child(4).textContent).toBe('title');
   });
   it('keeps outer quotes when selection belongs to a semantic container inside them', () => {
     const editor = create({ type: 'doc', content: [{ type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'outer' }] }, { type: 'githubAlert', attrs: { kind: 'note' }, content: [{ type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'inside' }] }] }] }] }] });

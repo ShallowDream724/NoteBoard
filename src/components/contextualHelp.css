@@ -44,5 +44,8 @@
 .nb-help-document :is(h1,h2,h3,h4,h5,h6) { margin-top:0; margin-bottom:8px; }
 .nb-help-document :is(h1,h2,h3,h4,h5,h6)::before { display:none; }
 .nb-help-code-copy { display:flex; align-items:center; gap:4px; padding:2px 6px; border:0; border-radius:var(--radius-sm); background:transparent; color:var(--editor-text-muted); font:inherit; }
+.nb-help-format-comparison { display:grid; gap:12px; }
+.nb-help-format-comparison p { margin:2px 0 0; }
+.nb-help-format-comparison > div + div { border-top:1px solid var(--editor-border); padding-top:8px; }
 .nb-help-document .nb-code-block-content > code { font-family:var(--mono-font-family); color:var(--code-block-text); }
 @media(prefers-reduced-motion:reduce) { .nb-contextual-help-illustration *, .nb-contextual-help-content { animation:none!important; transition:none!important; } }

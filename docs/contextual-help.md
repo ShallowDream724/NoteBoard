@@ -10,6 +10,8 @@
 
 常见格式使用 `block.paragraph`、`block.heading.1` 至 `.6`、`list.bullet/ordered/task` 和 `block.code/quote/divider`。顶部工具栏、插入菜单、空行插入和已有块的格式菜单共享这些操作身份。列表预览使用 `ul/ol/li`；待办复用 `li[data-checked] > label > input[type=checkbox]` 与正文 `div > p` 结构，展示已完成和未完成事项。代码示意保留实际语言、折叠、换行、复制头部及行号，三行固定代码仅使用主题高亮变量，不加载高亮器或可编辑节点。已有描述的斜杠菜单保持原有简洁表面。
 
+`format.clear`、`format.restore` 和 `text.link` 分别展示清除文字样式、解除文字结构及链接的实际语义。清除前后保留超链接；完整段落也清对齐、缩进和底色，完整提示块的自定义外观恢复默认。还原前后保留文字样式，整块提示/折叠容器可解除外壳；插入空正文仍使用 `block.paragraph`。插入入口和左侧块菜单使用这些预览。文字、图注和表格浮动辅助栏在根部使用 `TooltipDetailProvider rich={false}`：包括 portal 子菜单在内仅显示文字和快捷键，不挂载或加载图文预览。清样式 Ctrl+\\ 和还原 Ctrl+0 由当前绑定的独立标签显示。
+
 图片模板使用 `image.collection.4/6/9/carousel`，入口映射集中在轻量 `contextualHelpKeys.ts`，以类型关联公开的 `ImageTemplate`，不把 UI 标识写入内容配方。四宫格为两列四格，六宫格为三列六格，九宫格为三列九格；轮播默认三格。示意复用实际 `nb-image-collection`、viewport、slots、slot 与分页 DOM 和 `carousel.css`，本地 SVG 代替用户图片，并标明“添加图片后的效果”；插入仍是空格。已有组合重排使用 `image.collection.columns.2/3` 与 `image.collection.layout.carousel`，说明保留现有图片和图注。
 
 只有轮播示意有一次有限演示：每张停留 1600ms，以 180ms 的 CSS transform 过渡从第一张到第三张即停止，真实圆点、隐藏计数和箭头状态同步。挂载后仅持有一个短计时器，不创建编辑器的 CollectionView、滚动观察器或永久循环。关闭时清理计时器与监听；页面隐藏或减少动态效果设置生效时停止，初次已启用减少动态效果时保持第一张静态。其余示意没有动画或计时器。

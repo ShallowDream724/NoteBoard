@@ -9,12 +9,14 @@ import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import { commonPresentationValue, selectionPresentation } from './selectionPresentation';
 import { Tooltip } from '../../components/Tooltip';
+import { blockSelection, blockHasTextSelection } from '../editor-md/blockActions';
 
-export function AlignmentMenu({ editor }: { editor: Editor }) {
+export function AlignmentMenu({ editor, targetPos }: { editor: Editor; targetPos?: number }) {
   const [open, setOpen] = useState(false);
   const hover = useHoverMenu(open, setOpen);
   const visible = useNativeFeatureVisibility();
-  const scope = selectionPresentation(editor.state), cells = scope.cells;
+  const selection = targetPos !== undefined && !blockHasTextSelection(editor, targetPos) ? blockSelection(editor, targetPos) ?? undefined : undefined;
+  const scope = selectionPresentation(editor.state, selection), cells = scope.cells;
   const targets = cells ? scope.cellBlocks : [...scope.textBlocks, ...scope.mathBlocks];
   const textAlign = commonPresentationValue(targets, cells ? 'align' : 'textAlign', targets.every(({ node }) => node.type.name === 'mathBlock') ? 'center' : 'left');
   const verticalAlign = commonPresentationValue(scope.cellBlocks, 'verticalAlign', 'top');

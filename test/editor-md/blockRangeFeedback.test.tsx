@@ -57,6 +57,22 @@ it('clips large block feedback to the viewport instead of allocating a full-docu
   expect(parseFloat(layer.style.width)).toBeLessThanOrEqual(600);
 });
 
+it('covers multiple selected list rows including their numbers, with one bounded layer and no selection edits', async () => {
+  editor.commands.setContent('<ol><li><p>one</p></li><li><p>two</p></li><li><p>three</p></li></ol>');
+  const list = editor.state.doc.firstChild!, first = editor.view.nodeDOM(1) as HTMLElement;
+  const lastPos = 1 + list.child(0).nodeSize + list.child(1).nodeSize;
+  const last = editor.view.nodeDOM(lastPos) as HTMLElement;
+  first.parentElement!.getBoundingClientRect = () => bounds(64, 190, 504, 180);
+  first.getBoundingClientRect = () => bounds(88, 200, 480, 26);
+  last.getBoundingClientRect = () => bounds(88, 320, 480, 26);
+  const selection = editor.state.selection, doc = editor.state.doc;
+  await act(async () => root.render(<BlockRangeFeedback editor={editor} pos={1} to={lastPos + list.child(2).nodeSize}/>));
+  const layer = slot.firstElementChild as HTMLElement;
+  expect(layer.hidden).toBe(false); expect(parseFloat(layer.style.left)).toBe(62);
+  expect(parseFloat(layer.style.top)).toBe(98); expect(parseFloat(layer.style.height)).toBe(150);
+  expect(slot.childElementCount).toBe(1); expect(editor.state.selection).toBe(selection); expect(editor.state.doc).toBe(doc);
+});
+
 it('tracks a block through preceding edits and hides feedback when it is deleted', async () => {
   const pos = editor.state.doc.firstChild!.nodeSize;
   const { layer } = await show(pos);

@@ -23,6 +23,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { sourceFormattingGrammar } from './sourceFormattingGrammar';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
 import { TextSelection } from '@tiptap/pm/state';
+import { releaseNativeHistory } from './nativeHistory';
 
 import { getBaseline } from './serialize';
 import {
@@ -538,6 +539,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           // their media, syntax decorations and rendering state.
           parseEditorDocument(editor, entry.content, 'history');
         }
+        releaseNativeHistory(editor.view);
+        visualUndoDepthRef.current = 0;
         const content = serializeEditorDocument(editor);
         synchronizeCurrentDocumentHistoryContent(docKey, content, 'visual');
         publish(content);

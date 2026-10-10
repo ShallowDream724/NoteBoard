@@ -1,8 +1,11 @@
 import type { Editor } from '@tiptap/core';
 import { Fragment, Slice, type Node, type Schema } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
+import type { Transaction } from '@tiptap/pm/state';
 import { Step, StepResult, type Mappable } from '@tiptap/pm/transform';
 import { dispatchDiscreteEdit, runDiscreteEdit } from '../editor-md/discreteEdit';
+import { textStyleResetAttributes } from '../editor-md/textStylePolicy';
+import { clearedFigureCaption } from '../editor-md/figureCaption';
 
 interface Patch { pos: number; content: Fragment }
 interface MarkChange { type: string; attrs: Record<string, unknown> | null }
@@ -47,22 +50,28 @@ export class CellTextStyleStep extends Step {
 }
 Step.jsonID('noteboardCellTextStyle', CellTextStyleStep);
 
-/** null delegates non-cell selections to ordinary text commands. */
-export function styleSelectedCells(editor: Editor, marks: MarkChange[], math?: Record<string, unknown>): boolean | null {
+/** Build one local table copy; callers may append caption metadata in the same
+ * undo transaction. null delegates non-cell selections to ordinary commands. */
+export function selectedCellStyleTransaction(editor: Editor, marks: MarkChange[], math?: Record<string, unknown>, clearBlockStyles = false): Transaction | null {
   const { state } = editor, { selection } = state;
   if (!(selection instanceof CellSelection)) return null;
   const tableStart = selection.$anchorCell.start(-1), patches: Patch[] = [];
   const changes = marks.map(change => ({ type: state.schema.marks[change.type], attrs: change.attrs }));
   const visit = (node: Node, parent: Node): Node => {
-    if (node.type.spec.code) return node;
+    if (node.type.name === 'annotationStore') return node;
     let next = node;
+    const patch = clearBlockStyles ? textStyleResetAttributes(node) : null;
+    if (patch) next = node.type.create({ ...node.attrs, ...patch }, node.content, node.marks);
+    if (node.type.spec.code) return next;
+    const caption = clearBlockStyles && ['image', 'table'].includes(node.type.name) ? clearedFigureCaption(node.attrs) : null;
+    if (caption) next = next.type.create({ ...next.attrs, captionContent: caption }, next.content, next.marks);
     if (node.isInline) {
       let result = node.marks;
       for (const change of changes) {
         if (!change.type || !parent.type.allowsMarkType(change.type)) continue;
         result = change.attrs === null ? change.type.removeFromSet(result) : change.type.create(change.attrs).addToSet(result);
       }
-      next = node.mark(result);
+      next = next.mark(result);
     }
     if (node.type.name === 'mathBlock' && math && Object.entries(math).some(([key, value]) => node.attrs[key] !== value)) next = node.type.create({ ...node.attrs, ...math }, node.content, node.marks);
     if (node.childCount) {
@@ -76,8 +85,13 @@ export function styleSelectedCells(editor: Editor, marks: MarkChange[], math?: R
     const cell = $from.parent, styled = visit(cell, cell);
     if (styled !== cell) patches.push({ pos: $from.before() - tableStart, content: styled.content });
   }
-  if (!patches.length) return false;
-  dispatchDiscreteEdit(editor.view, state.tr.step(new CellTextStyleStep(tableStart - 1, patches)));
+  return patches.length ? state.tr.step(new CellTextStyleStep(tableStart - 1, patches)) : state.tr;
+}
+export function styleSelectedCells(editor: Editor, marks: MarkChange[], math?: Record<string, unknown>, clearBlockStyles = false): boolean | null {
+  const tr = selectedCellStyleTransaction(editor, marks, math, clearBlockStyles);
+  if (!tr) return null;
+  if (!tr.docChanged) return false;
+  dispatchDiscreteEdit(editor.view, tr);
   editor.view.focus(); return true;
 }
 

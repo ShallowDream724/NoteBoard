@@ -6,7 +6,7 @@ import { keymap } from '@codemirror/view';
 import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 import { ALERT_META, matchAlertChoices } from './alertPresentation';
 import { normalizeAlertInput } from './calloutPresentation';
-import { formatSourceMark, setSourceHeading, runSourceFormatCommand } from './sourceFormatting';
+import { clearSourceTextFormatting, formatSourceMark, setSourceHeading, runSourceFormatCommand } from './sourceFormatting';
 
 function insideCode(state: EditorState, position: number) {
   for (let node = syntaxTree(state).resolveInner(position, -1); node; node = node.parent!) {
@@ -18,6 +18,7 @@ function insideCode(state: EditorState, position: number) {
 /** Source-mode adapters reuse the same Markdown vocabulary, with CM owning completion/focus. */
 export const sourceTypingAssist = [
   customCodeMirrorShortcuts('source', (view, id) => {
+    if (id === 'markdown.clearStyles') return clearSourceTextFormatting(view);
     const level = /^markdown\.heading([0-6])$/.exec(id)?.[1];
     if (level !== undefined) return setSourceHeading(view, Number(level));
     return runSourceFormatCommand(view, id);

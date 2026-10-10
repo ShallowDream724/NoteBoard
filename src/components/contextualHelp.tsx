@@ -17,12 +17,15 @@ import '../features/editor-md/documentReadingView.css';
 import './contextualHelp.css';
 
 type ImageIllustration = `image-grid-${4 | 6 | 9}` | `image-columns-${2 | 3}` | 'image-carousel';
-type Illustration = 'table-position' | `table-position-${'left' | 'center' | 'right'}` | 'cell-align' | `cell-align-${'left' | 'center' | 'right'}` | 'cell-vertical' | `cell-vertical-${'top' | 'middle' | 'bottom'}` | 'header-row' | 'header-column' | 'header-row-clear' | 'header-column-clear' | 'three-line' | 'table' | 'table-expand' | 'table-scroll' | 'formula-expand' | 'formula-wrap' | 'formula-scroll' | 'figure-caption' | 'table-caption' | 'annotation' | 'disclosure' | 'callout' | 'callout-wrap' | `callout-${AlertKind}` | 'inline-formula' | 'block-formula' | ImageIllustration | 'bullet-list' | 'ordered-list' | 'task-list' | 'code-block' | 'quote' | 'divider' | 'paragraph' | `heading-${1 | 2 | 3 | 4 | 5 | 6}`;
+type Illustration = 'table-position' | `table-position-${'left' | 'center' | 'right'}` | 'cell-align' | `cell-align-${'left' | 'center' | 'right'}` | 'cell-vertical' | `cell-vertical-${'top' | 'middle' | 'bottom'}` | 'header-row' | 'header-column' | 'header-row-clear' | 'header-column-clear' | 'three-line' | 'table' | 'table-expand' | 'table-scroll' | 'formula-expand' | 'formula-wrap' | 'formula-scroll' | 'figure-caption' | 'table-caption' | 'annotation' | 'disclosure' | 'callout' | 'callout-wrap' | `callout-${AlertKind}` | 'inline-formula' | 'block-formula' | ImageIllustration | 'bullet-list' | 'ordered-list' | 'task-list' | 'code-block' | 'quote' | 'divider' | 'paragraph' | 'format-clear' | 'format-restore' | 'link' | `heading-${1 | 2 | 3 | 4 | 5 | 6}`;
 interface HelpEntry { description: string; illustration: Illustration; scope?: string; previewLabel?: string }
 
 /** Semantic keys keep identically named operations in different scopes distinct. */
 export const contextualHelp = {
   'block.paragraph': { description: '用普通正文写说明和细节。选中已有文字后使用，可恢复为正文段落。', illustration: 'paragraph' },
+  'format.clear': { description: '去掉文字样式；完整选中段落时也清除对齐、缩进和底色。链接、说明和内容结构会保留。', illustration: 'format-clear' },
+  'format.restore': { description: '解除标题、列表和引用结构，保留文字样式。完整选中提示块或折叠块时，也会解除外壳、留下内容。', illustration: 'format-restore' },
+  'text.link': { description: '为文字添加网页或本地文件地址。选中文字后可编辑链接，按住 Ctrl 再点击即可打开。', illustration: 'link' },
   'block.heading.1': { description: '用最大的标题标出文章主题或主要部分，方便从大纲定位。', illustration: 'heading-1' },
   'block.heading.2': { description: '标出主要章节，适合放在一级标题之下组织内容。', illustration: 'heading-2' },
   'block.heading.3': { description: '标出章节中的小节，让较长的内容更容易浏览。', illustration: 'heading-3' },
@@ -203,6 +206,15 @@ function HelpIllustration({ kind, label }: { kind: Illustration; label?: string 
   else if (kind === 'code-block') content = <CodePreview/>;
   else if (kind === 'quote') content = <blockquote><p>阅读让想法不断生长。</p></blockquote>;
   else if (kind === 'divider') content = <><p>上一部分</p><hr/><p>下一部分</p></>;
+  else if (kind === 'link') content = <p>相关内容见 <a href="https://example.com" tabIndex={-1}>阅读说明</a>。</p>;
+  else if (kind === 'format-clear') content = <div className="nb-help-format-comparison">
+    <div><span className="nb-help-preview-label">清除前</span><p><strong><mark>重要内容</mark></strong>与<a href="https://example.com" tabIndex={-1}>参考链接</a></p></div>
+    <div><span className="nb-help-preview-label">清除后</span><p>重要内容与<a href="https://example.com" tabIndex={-1}>参考链接</a></p></div>
+  </div>;
+  else if (kind === 'format-restore') content = <div className="nb-help-format-comparison">
+    <div><span className="nb-help-preview-label">还原前</span><ol><li><p><strong>准备资料</strong></p></li></ol></div>
+    <div><span className="nb-help-preview-label">还原后</span><p><strong>准备资料</strong></p></div>
+  </div>;
   else if (kind === 'paragraph') content = <p>在这里写下想法，补充内容和细节。</p>;
   else if (kind.startsWith('heading-')) {
     const Heading = `h${kind.slice(8)}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';

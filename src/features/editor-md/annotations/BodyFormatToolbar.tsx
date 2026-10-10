@@ -49,7 +49,7 @@ export function BodyFormatToolbar({ view, state, imageInput, onImageInput, compo
         onPointerDown={event => event.preventDefault()} onClick={() => {
           setHref(String(draftMarkAttributes(state, 'link').href ?? '')); setPanel(panel === 'link' ? null : 'link');
         }}><Link size={14}/></button></Tooltip>}
-      <Tooltip content="清除文字格式"><button type="button" aria-label="清除文字格式" disabled={composing || !clearDraftTextFormatting(state)}
+      <Tooltip content="清除文字样式" shortcut={'Ctrl+\\'}><button type="button" aria-label="清除文字格式" disabled={composing || !clearDraftTextFormatting(state)}
         onPointerDown={event => event.preventDefault()} onClick={() => command(clearDraftTextFormatting)}><Eraser size={14}/></button></Tooltip>
       <span className="nb-annotation-format-separator"/>
       {([['bulletList', '无序列表', List], ['orderedList', '有序列表', OrderedListIcon], ['blockquote', '引用', Quote]] as const)

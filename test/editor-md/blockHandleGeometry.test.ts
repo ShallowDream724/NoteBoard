@@ -8,6 +8,7 @@ const schema = new Schema({ nodes: { doc: { content: 'paragraph+' }, paragraph: 
 const bounds = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON() {} });
 function geometry(scale: number, paragraphTop: number, paragraphHeight: number, text = '') {
   const host = document.createElement('div'), element = document.createElement('p');
+  element.style.lineHeight = '34px';
   host.getBoundingClientRect = () => bounds(20, 100, 600 * scale, 400 * scale);
   Object.defineProperties(host, { offsetWidth: { value: 600 }, clientHeight: { value: 400 } });
   host.scrollTop = 50;
@@ -30,8 +31,13 @@ describe('block handle geometry', () => {
     expect(geometry(2, -300, 900, 'Long content').top).toBe(50);
   });
 
-  it('retains the top alignment for content blocks', () => {
+  it('centers on the first text line of tall content blocks', () => {
     expect(geometry(2, 84, 90, 'Content').top).toBe(50 + 84 + 2);
+  });
+
+  it.each([1, 1.25, 2])('aligns a short paragraph and its control at %sx scale', scale => {
+    const position = geometry(scale, 84, 27, 'after');
+    expect(position.top + 15).toBe(50 + 84 + 27 / 2);
   });
 
   it.each([[31, 15], [76, 528]])('keeps a wide-counter handle outside the row at measured width %s', (glyphWidth, expectedLeft) => {

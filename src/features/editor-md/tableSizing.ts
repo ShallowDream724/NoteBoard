@@ -11,6 +11,7 @@ import { createTableRowView } from './tableRowView';
 import { runWithDocumentCapability } from '../document-format/featureGate';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { tableReadingBounds } from './tableReadingViewport';
+import { beginEditorDrag } from './editorDragActivity';
 
 export const ResizableTableRow = SizedTableRow.extend({
   addNodeView() {
@@ -25,6 +26,7 @@ interface Drag extends Edge {
   pos: number; pointer: number; origin: number; start: number; next: number; adjacent?: number;
   column: number; scale: number; guideOrigin: number;
   preview: NonNullable<ReturnType<typeof tableGesturePreview>>;
+  endActivity?: () => void;
 }
 
 function edgeAt(view: EditorView, event: PointerEvent): Edge | null {
@@ -104,6 +106,7 @@ export const TableSizing = Extension.create({
       const current = drag; drag = null; pending = null; latestPointer = undefined;
       if (pointer !== undefined && editor.dom.hasPointerCapture(pointer)) editor.dom.releasePointerCapture(pointer);
       if (!current) { hideGuide(); return; }
+      current.endActivity?.();
       cancelAnimationFrame(frame); frame = 0;
       current.preview.dispose(); hideGuide();
       editor.dom.classList.remove('nb-row-resizing', 'nb-table-resizing');
@@ -141,6 +144,7 @@ export const TableSizing = Extension.create({
               scale: pending.axis === 'row' ? bounds.height / height || 1 : preview.scale, guideOrigin: 0 };
             pending = null;
             _editor.dom.classList.add('nb-table-resizing');
+            drag.endActivity = beginEditorDrag(_editor);
             if (drag.axis === 'row') _editor.dom.classList.add('nb-row-resizing');
             showGuide(drag);
           }
@@ -181,12 +185,15 @@ export const TableSizing = Extension.create({
         guide = editor.dom.ownerDocument.createElement('div'); guide.className = 'nb-row-resize-guide'; guide.hidden = true;
         guide.setAttribute('aria-hidden', 'true'); editor.dom.ownerDocument.body.append(guide);
         const scroll = () => { if (drag) showGuide(drag); else hideGuide(); };
+        const blur = () => finish(editor, false);
         editor.dom.ownerDocument.addEventListener('scroll', scroll, true);
+        editor.dom.ownerDocument.defaultView?.addEventListener('blur', blur);
         const stopPreferences = useSettingsStore.subscribe(state => { if (state.settings.editor.pureMarkdown) finish(editor, false); });
         return {
           update() { if (editor.state.selection instanceof CellSelection || shown && !editor.dom.contains(shown.table)) hideGuide(); },
           destroy() { finish(editor, false); cancelAnimationFrame(hoverFrame); cancelAnimationFrame(frame);
             stopPreferences();
+            editor.dom.ownerDocument.defaultView?.removeEventListener('blur', blur);
             editor.dom.ownerDocument.removeEventListener('scroll', scroll, true); guide?.remove(); guide = undefined; view = undefined; },
         };
       },

@@ -29,6 +29,7 @@ import { clearTextStyleMarks } from '../editor-md/textStyleMarks';
 import { ScopedListCommands } from '../editor-md/scopedListCommands';
 import { DiscreteHistoryBoundary } from '../editor-md/discreteHistoryBoundary';
 import { discreteTransaction } from '../editor-md/discreteEdit';
+import { TextStyleKeys } from '../editor-md/textStyleShortcuts';
 
 /** Markdown 允许粗体/斜体包裹行内代码；默认 Code 的 excludes: '_' 会导致解析出非法 marks */
 const MarkdownCompatibleCode = Code.extend({ excludes: '' });
@@ -53,6 +54,7 @@ export function buildLongTextExtensions(placeholder = '输入内容，支持 Mar
     MarkdownCompatibleCode,
     ScopedListCommands,
     DiscreteHistoryBoundary,
+    TextStyleKeys,
     Placeholder.configure({ placeholder }),
     // Markdown 序列化/解析：使 setContent/getMarkdown 直接以 Markdown 为载体
     Markdown,
@@ -159,17 +161,19 @@ function ToolbarBtn({
   active,
   disabled,
   title,
+  shortcut,
   onClick,
   children,
 }: {
   active?: boolean;
   disabled?: boolean;
   title: string;
+  shortcut?: string;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <Tooltip content={title} disabled={disabled} side="top" sideOffset={4}>
+    <Tooltip content={title} shortcut={shortcut} disabled={disabled} side="top" sideOffset={4}>
       <button
         type="button"
         aria-label={title}
@@ -385,6 +389,7 @@ export function BitableRichTextEditor({
 
         <ToolbarBtn
           title="清除文字样式（保留链接和列表）"
+          shortcut={'Ctrl+\\'}
           onClick={() => ed.chain().focus().command(({ tr }) => { if (!clearTextStyleMarks(tr)) return false; discreteTransaction(tr); return true; }).run()}
         >
           <RemoveFormatting size={14} />

@@ -158,6 +158,8 @@ import { DocumentReadingView } from '../documentReadingView';
 import { NativeErrorView } from '../nativeErrorView';
 import { DocumentCapabilityGuard, supportsAutomaticMarks } from '../../document-format/capabilityGuard';
 import { InlineFormattingInput } from '../inlineFormattingInput';
+import { EditorDragActivity } from '../editorDragActivity';
+import { withApplicationHistory } from '../nativeHistory';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -177,8 +179,8 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
       infographicBlock: withRichPresentation(InfographicBlock), githubAlert: withRichPresentation(GitHubAlert), tableRow: ResizableTableRow,
       tableCell: EditableTableCell, tableHeader: EditableTableHeader, nativeError: NativeErrorView,
       imageCollection: withRichPresentation(InteractiveImageCollection), imageSlot: InteractiveImageSlot.configure({ docKey }), disclosure: withRichPresentation(InteractiveDisclosure),
-      table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }),
-    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, MediaEditing, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
+      table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }).map(withApplicationHistory),
+    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, MediaEditing, EditorDragActivity, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
