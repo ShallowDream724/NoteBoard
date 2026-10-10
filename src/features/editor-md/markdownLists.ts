@@ -1,8 +1,18 @@
 import { OrderedList, TaskList } from '@tiptap/extension-list';
+import { mergeAttributes } from '@tiptap/core';
 import { normalizeNumberingStyle } from './numbering/styles';
 
 const ordered = OrderedList.config.markdownTokenizer!;
 const task = TaskList.config.markdownTokenizer!;
+const parseOrdered: NonNullable<typeof OrderedList.config.parseMarkdown> = (token, helpers) => {
+  const parsed = OrderedList.config.parseMarkdown!(token, helpers);
+  // Upstream's ordered parser bypasses ListItem and emits [] for an empty row.
+  // Restore its required first paragraph while preserving the actual empty item.
+  for (const list of Array.isArray(parsed) ? parsed : parsed ? [parsed] : []) {
+    for (const item of list.content ?? []) if (item.type === 'listItem' && !item.content?.length) item.content = [{ type: 'paragraph' }];
+  }
+  return parsed;
+};
 
 // Upstream list tokenizers split their entire remaining source before checking
 // its first line. Reject impossible prefixes before entering that allocation.
@@ -21,6 +31,14 @@ export const MarkdownOrderedList = OrderedList.extend({
       },
     };
   },
+  renderHTML({ node, HTMLAttributes }) {
+    const start = Number(node.attrs.start) || 1;
+    // An intrinsic marker column grows with its children without a NodeView,
+    // observer or renderHTML refresh when Enter crosses a digit boundary.
+    return this.parent!({ node, HTMLAttributes: mergeAttributes(HTMLAttributes, {
+      'data-numbering-layout': 'columns', style: `counter-reset: list-item ${start - 1}`,
+    }) });
+  },
   renderMarkdown(node, helpers, context) {
     const content = OrderedList.config.renderMarkdown!(node, helpers, context);
     // Blank lines alone merge adjacent ordered lists in CommonMark. A standard
@@ -28,7 +46,7 @@ export const MarkdownOrderedList = OrderedList.extend({
     return context.previousNode?.type === 'orderedList' ? `${context.parentType === 'listItem' ? '\n' : ''}<!-- noteboard-list-boundary -->\n\n${content}` : content;
   },
   parseMarkdown(token, helpers) {
-    if (!token.ordered || !token.items?.length || !token.raw?.includes('<!-- noteboard-list-boundary -->')) return OrderedList.config.parseMarkdown!(token, helpers);
+    if (!token.ordered || !token.items?.length || !token.raw?.includes('<!-- noteboard-list-boundary -->')) return parseOrdered(token, helpers);
     // The upstream tokenizer deliberately accepts two-space nested lists, but
     // folds their same-indent HTML boundary into the preceding item's raw text.
     const groups: typeof token.items[] = []; let group: typeof token.items = [];
@@ -38,11 +56,11 @@ export const MarkdownOrderedList = OrderedList.extend({
       const boundary = /\n([ \t]*)<!-- noteboard-list-boundary -->[ \t]*(?:\r?\n[ \t]*)*$/.exec(raw);
       if (boundary?.[1] === indent) { groups.push(group); group = []; }
     }
-    if (!groups.length) return OrderedList.config.parseMarkdown!(token, helpers);
+    if (!groups.length) return parseOrdered(token, helpers);
     if (group.length) groups.push(group);
     return groups.flatMap((items, index) => {
       const marker = /^[ \t]*(\d+)[.)]/.exec(items[0].raw ?? '');
-      return OrderedList.config.parseMarkdown!({ ...token, items, start: index && marker ? Number(marker[1]) : token.start }, helpers) ?? [];
+      return parseOrdered({ ...token, items, start: index && marker ? Number(marker[1]) : token.start }, helpers) ?? [];
     });
   },
   markdownTokenizer: {

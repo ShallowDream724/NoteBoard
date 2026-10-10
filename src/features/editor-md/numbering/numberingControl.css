@@ -11,8 +11,9 @@
 .nb-numbering-control-block { height:30px; flex:1.35; min-width:42px; }
 .nb-block-format-actions .nb-numbering-control-block .nb-numbering-main { flex:1; min-width:24px; }
 .nb-block-format-actions .nb-numbering-control-block .nb-numbering-arrow { flex:none; width:14px; }
-.nb-numbering-control-overflow { width:100%; height:31px; }
-.nb-numbering-control-overflow .nb-numbering-main { flex:1; justify-content:flex-start; width:auto; padding:0 8px; font-size:12px; }
+.nb-numbering-control-overflow { width:100%; height:34px; color:var(--editor-text); }
+.nb-numbering-control-overflow .nb-numbering-main { flex:1; justify-content:flex-start; width:auto; padding:0 10px; gap:10px; font-size:inherit; }
+.nb-block-context-menu .nb-numbering-control:not([data-active]) { color:inherit; }
 .nb-numbering-control-overflow .nb-numbering-arrow { width:26px; }
 .nb-numbering-menu,.nb-numbering-style-menu,.nb-numbering-preview-popover { z-index:var(--nb-layer-editor-menu,1200); pointer-events:auto; color:var(--editor-text); background:var(--editor-surface); border:1px solid var(--editor-border); border-radius:8px; box-shadow:var(--shadow-lg,0 6px 20px #0002); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); outline:none; }
 .nb-numbering-menu { width:210px; padding:4px; max-width:calc(100vw - 20px); }
@@ -25,6 +26,7 @@
 .nb-numbering-restart button:disabled { cursor:default; }
 .nb-numbering-restart input { box-sizing:border-box; min-width:0; width:54px; height:25px; padding:2px 2px 2px 6px; border:1px solid var(--editor-border); border-radius:4px; color:var(--editor-text); background:var(--editor-background,var(--editor-surface)); font:inherit; font-variant-numeric:tabular-nums; }
 .nb-numbering-restart input:focus { outline:2px solid var(--editor-accent); outline-offset:-1px; }
+.nb-numbering-input-error { margin:0 8px 5px; color:var(--editor-text-secondary,var(--editor-text)); font-size:11px; }
 .nb-numbering-style-current { margin-left:auto; font-size:11px; color:var(--editor-text-muted); }
 .nb-numbering-row > svg:last-child { margin-left:auto; }
 .nb-numbering-style-trigger > svg:last-child { margin-left:0; }

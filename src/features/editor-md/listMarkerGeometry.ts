@@ -40,7 +40,7 @@ export function listItemHorizontalBounds(view: EditorView, pos: number, item: HT
   const list = item.tagName === 'LI' && item.parentElement?.matches('ol,ul') ? item.parentElement : null;
   const parentBounds = list?.getBoundingClientRect() ?? rect;
   let left = Math.min(rect.left, parentBounds.left), right = Math.max(rect.right, parentBounds.right);
-  if (list?.tagName === 'OL') {
+  if (list?.tagName === 'OL' && !(list.dataset.numberingLayout === 'columns' && item.ownerDocument.defaultView!.getComputedStyle(list).display === 'grid')) {
     const inside = view.state.doc.resolve(Math.min(pos + 1, view.state.doc.content.size));
     for (let depth = inside.depth; depth > 0; depth--) {
       const parent = inside.node(depth - 1);

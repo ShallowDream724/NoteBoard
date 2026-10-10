@@ -38,12 +38,13 @@ export function BlockSelectionMenu({ editor, selection: suppliedSelection, close
   const canClear = selection.items.some(item => supportsBlockTextFormatting(item.node) || hasCaptionTextFormatting(item.node) || item.node.attrs.concealed === true);
   const canRestore = selection.items.some(item => ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem', 'githubAlert', 'disclosure'].includes(item.node.type.name));
   const canNumber = selection.items.every(item => ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem'].includes(item.node.type.name));
+  const allNumbered = selection.items.every(item => item.node.type.name === 'orderedList' || item.node.type.name === 'listItem' && editor.state.doc.resolve(item.pos).parent.type.name === 'orderedList');
   const action = (run: () => unknown) => { if (restoreBlockSelection(editor, selection)) run(); close(); };
   const copy = (cut: boolean) => { if (!copyBlockSelection(editor, selection, cut)) showToast('无法写入剪贴板，请用键盘快捷键重试', 'warning'); close(); };
   return <div className="nb-block-context-menu" role="menu" aria-label={`${selection.count} 个内容块操作`} onPointerDown={event => event.preventDefault()}>
     {canNumber && <NumberingControl editor={editor} targetSelection={selection.selection} variant="overflow" onDone={close}
-      active={selection.items.every(item => item.node.type.name === 'orderedList' || item.node.type.name === 'listItem' && editor.state.doc.resolve(item.pos).parent.type.name === 'orderedList')}
-      onToggle={() => action(() => editor.chain().focus().toggleOrderedList().run())}/>}
+      active={allNumbered} actionLabel={allNumbered ? '取消有序列表' : '改为有序列表'}
+      onToggle={() => action(() => allNumbered ? runDiscreteEdit(editor, chain => chain.focus().restoreParagraph()) : editor.chain().focus().toggleOrderedList().run())}/>}
     <Tooltip content="清除文字样式" helpKey="format.clear" shortcut={'Ctrl+\\'} side="right"><button role="menuitem" type="button" disabled={!canClear} onClick={() => action(() => clearSelectionTextFormatting(editor))}><RemoveFormatting size={16}/>清除文字样式{clearShortcut && <kbd className="nb-block-menu-shortcut">{clearShortcut.split(' / ')[0]}</kbd>}</button></Tooltip>
     <Tooltip content="还原为正文" helpKey="format.restore" shortcut="Ctrl+0" side="right"><button role="menuitem" type="button" disabled={!canRestore} onClick={() => action(() => runDiscreteEdit(editor, chain => chain.restoreParagraph()))}><Type size={16}/>还原为正文{restoreShortcut && <kbd className="nb-block-menu-shortcut">{restoreShortcut.split(' / ')[0]}</kbd>}</button></Tooltip>
     <hr/>

@@ -26,8 +26,9 @@ try {
       root.style.fontSize = `${fontSize}px`; root.style.setProperty('--content-line-height', lineHeight);
       const paragraphs = [...root.querySelectorAll('li > p')], ys = paragraphs.map(p => p.getBoundingClientRect().y);
       const offsets = [...root.querySelectorAll('ol > li')].map(li => {
-        const row = li.getBoundingClientRect(), text = li.firstElementChild.getBoundingClientRect();
-        return row.y + parseFloat(getComputedStyle(li, '::before').top) - text.y - text.height / 2;
+        const row = li.getBoundingClientRect(), text = li.firstElementChild.getBoundingClientRect(), marker = getComputedStyle(li, '::before');
+        const center = marker.position === 'static' ? parseFloat(marker.marginTop) + parseFloat(marker.height) / 2 : parseFloat(marker.top);
+        return row.y + center - text.y - text.height / 2;
       });
       return { gaps: ys.slice(1).map((y, i) => y - ys[i]), offsets };
     }, { fontSize, lineHeight });
@@ -91,8 +92,9 @@ try {
   const exportPage = await browser.newPage();
   await exportPage.setContent(exported, { waitUntil: 'domcontentloaded' });
   const exportOffsets = await exportPage.locator('ol[data-number-style="circle"] > li').evaluateAll(elements => elements.map(li => {
-    const row = li.getBoundingClientRect(), text = li.firstElementChild.getBoundingClientRect();
-    return row.y + parseFloat(getComputedStyle(li, '::before').top) - text.y - parseFloat(getComputedStyle(li.firstElementChild).lineHeight) / 2;
+    const row = li.getBoundingClientRect(), text = li.firstElementChild.getBoundingClientRect(), marker = getComputedStyle(li, '::before');
+    const center = marker.position === 'static' ? parseFloat(marker.marginTop) + parseFloat(marker.height) / 2 : parseFloat(marker.top);
+    return row.y + center - text.y - parseFloat(getComputedStyle(li.firstElementChild).lineHeight) / 2;
   }));
   assert(exportOffsets.length > 0 && exportOffsets.every(offset => Math.abs(offset) < .5), `export outlined marker missed its line: ${exportOffsets}`);
   await exportPage.close();

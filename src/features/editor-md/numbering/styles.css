@@ -53,3 +53,53 @@ ol:is([data-number-style='circle'], [data-number-style='box']) > li::before {
 ol[data-number-style='circle'] > li::before { border-radius: 999px; }
 ol[data-number-style='box'] > li::before { border-radius: .1em; }
 ol:is([data-number-style='circle'], [data-number-style='box']) > li > p:first-child { margin-block-start: 0; }
+
+/* Long markers occupy an intrinsic column inside the list. The controls retain
+ * the document's left gutter; digits are never clipped, abbreviated or measured
+ * per row in JavaScript. Nested lists reset their own native counter scope. */
+@supports (grid-template-columns: subgrid) {
+  ol[data-numbering-layout='columns'] {
+    --nb-marker-style: decimal;
+    --nb-marker-prefix: '';
+    --nb-marker-suffix: '.';
+    display: grid;
+    grid-template-columns: minmax(1.35em, max-content) minmax(0, 1fr);
+    column-gap: .45em;
+    padding-inline-start: 0 !important;
+  }
+  ol ol[data-numbering-layout='columns'] { --nb-marker-style: upper-alpha; }
+  ol ol ol[data-numbering-layout='columns'] { --nb-marker-style: lower-roman; }
+  ol[data-numbering-layout='columns']:is([type='1'], [data-number-style='decimal'], [data-number-style='circle'], [data-number-style='box'], [data-number-style='paren']) { --nb-marker-style: decimal; }
+  ol[data-numbering-layout='columns']:is([type='A'], [data-number-style='upper-alpha']) { --nb-marker-style: upper-alpha; }
+  ol[data-numbering-layout='columns']:is([type='a'], [data-number-style='lower-alpha']) { --nb-marker-style: lower-alpha; }
+  ol[data-numbering-layout='columns']:is([type='I'], [data-number-style='upper-roman']) { --nb-marker-style: upper-roman; }
+  ol[data-numbering-layout='columns']:is([type='i'], [data-number-style='lower-roman']) { --nb-marker-style: lower-roman; }
+  ol[data-numbering-layout='columns'][data-number-style='chinese'] { --nb-marker-style: nb-chinese; --nb-marker-suffix: '、'; }
+  ol[data-numbering-layout='columns'][data-number-style='paren'] { --nb-marker-prefix: '('; --nb-marker-suffix: ')'; }
+  ol[data-numbering-layout='columns']:is([data-number-style='circle'], [data-number-style='box']) { --nb-marker-suffix: ''; }
+  ol[data-numbering-layout='columns'] > li {
+    display: grid;
+    grid-template-columns: subgrid;
+    grid-column: 1 / -1;
+    list-style: none;
+    counter-increment: list-item;
+    min-width: 0;
+  }
+  ol[data-numbering-layout='columns'] > li > * { grid-column: 2; min-width: 0; }
+  ol[data-numbering-layout='columns'] > li > p:first-child { margin-block-start: 0 !important; }
+  ol[data-numbering-layout='columns'] > li::before {
+    content: var(--nb-marker-prefix) counter(list-item, var(--nb-marker-style)) var(--nb-marker-suffix);
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  ol[data-numbering-layout='columns']:is([data-number-style='circle'], [data-number-style='box']) > li::before {
+    position: static;
+    inset: auto;
+    transform: none;
+    margin-block-start: calc((var(--content-line-height, var(--export-line, 1.7)) - 1.35) * .5em);
+  }
+}

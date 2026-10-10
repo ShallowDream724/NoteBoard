@@ -39,6 +39,19 @@ afterEach(async () => {
   vi.restoreAllMocks(); document.body.innerHTML = '';
 });
 
+it('converts a mixed list selection and cancels numbering across separate ordered fragments', async () => {
+  const editor = visual('<ul><li><p>one</p></li></ul><ol start="7"><li><p>two</p></li></ol>');
+  await click(editor, select(editor, 'one', 'two'), '改为有序列表');
+  expect(editor.state.doc.content.content.filter(node => node.type.name === 'bulletList')).toHaveLength(0);
+  expect(editor.state.doc.textContent).toBe('onetwo');
+  const separate = visual('<ol><li><p>first</p></li></ol><ol start="7" data-number-style="circle"><li><p>second</p></li></ol><p></p>');
+  const before = separate.state.doc;
+  await click(separate, select(separate, 'first', 'second'), '取消有序列表');
+  expect(separate.state.doc.content.content.filter(node => node.type.name === 'orderedList')).toHaveLength(0);
+  expect(separate.state.doc.textContent).toBe('firstsecond');
+  separate.commands.undo(); expect(separate.state.doc.toJSON()).toEqual(before.toJSON());
+});
+
 it('uses complete list items for movement while preserving the partial user range and direction', () => {
   const editor = visual('<ul><li><p>one</p></li><li><p>two</p></li><li><p>three</p></li></ul>');
   const selected = select(editor, 'one', 'two', 1);

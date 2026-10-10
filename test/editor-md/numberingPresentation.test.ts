@@ -66,6 +66,19 @@ describe('numbering presentation', () => {
     } finally { plain.destroy(); styled.destroy(); }
   });
 
+  it('derives wide layout for editor/export without persisting a presentation cache', async () => {
+    const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<ol start="999999999"><li><p>long ordinal</p></li><li><p></p></li></ol>' });
+    try {
+      expect(editor.getHTML()).toContain('data-numbering-layout="columns"');
+      expect(editor.getHTML()).toContain('counter-reset: list-item 999999998');
+      const source = serializeMarkdown(editor);
+      expect(source).not.toContain('numbering-layout'); expect(source).not.toContain('counter-reset');
+      expect(parseMarkdownDocument(source).toJSON()).toEqual(editor.getJSON());
+      const output = await renderDocument(source, 'Long counters', '', undefined, undefined, undefined, undefined, 'html');
+      expect(output.html).toContain('data-numbering-layout="columns"');
+    } finally { editor.destroy(); }
+  });
+
   it.each(['top', 'nested', 'deep', 'bullet', 'quote'])('preserves adjacent list segments after styling one item (%s)', context => {
     const segments = '<ol><li><p>before</p></li></ol><ol start="2" data-number-style="circle" data-numbering="continue"><li><p>styled</p></li></ol><ol start="3" data-numbering="continue"><li><p>after</p></li></ol><ol data-numbering="restart"><li><p>new group</p></li></ol>';
     const wrappers: Record<string, string> = { top: segments, nested: `<ol><li><p>parent</p>${segments}</li></ol>`, deep: `<ol><li><p>grandparent</p><ol><li><p>parent</p>${segments}</li></ol></li></ol>`, bullet: `<ul><li><p>parent</p>${segments}</li></ul>`, quote: `<blockquote>${segments}</blockquote>` };

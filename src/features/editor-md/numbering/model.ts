@@ -5,7 +5,8 @@ import type { Mapping } from '@tiptap/pm/transform';
 import { NumberingAttributesStep, type NumberingPatch } from './attributesStep';
 
 export const isOrdered = (node: Node | null | undefined): boolean => node?.type.name === 'orderedList';
-export const validStart = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= 999_999_999;
+export const MAX_NUMBERING_START = 999_999_999;
+export const validStart = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= MAX_NUMBERING_START;
 // Generated continuations may exceed the input's nine-digit limit.
 export const startOf = (node: Node) => Number.isSafeInteger(node.attrs.start) && node.attrs.start > 0 ? node.attrs.start as number : 1;
 

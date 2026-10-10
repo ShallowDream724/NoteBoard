@@ -53,17 +53,27 @@ it('keeps the primary toggle immediate and only computes numbering context when 
   expect(startInput().value).toBe('1'); expect(createNumberingDraft).not.toHaveBeenCalled();
 });
 
-it('keeps native numeric input focused through live updates, ignores invalid values and commits once on Enter', async () => {
+it('keeps native numeric input focused, rolls back invalid drafts and commits a corrected value once', async () => {
   await open(); await type('7'); await type('8'); await type(''); await type('0');
   expect(createNumberingDraft).toHaveBeenCalledOnce();
   expect(draft.update.mock.calls.map(([value]) => value)).toEqual([7, 8]);
   expect(document.activeElement).toBe(startInput()); expect(draft.commit).not.toHaveBeenCalled();
   await type('8');
   await act(async () => startInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-  expect(draft.commit).toHaveBeenCalledOnce(); expect(draft.cancel).not.toHaveBeenCalled();
+  expect(draft.commit).toHaveBeenCalledOnce(); expect(draft.cancel).toHaveBeenCalledOnce();
+  expect(createNumberingDraft).toHaveBeenCalledTimes(2);
   expect(startInput()).toBeNull();
   await act(async () => button('有序列表选项').click());
   expect(startInput().value).toBe('1');
+});
+
+it('explains an oversized start and never commits the preceding valid preview', async () => {
+  await open(); await type('7'); await type('10000000000');
+  expect(startInput().getAttribute('aria-invalid')).toBe('true');
+  expect(document.getElementById(startInput().getAttribute('aria-describedby')!)?.textContent).toContain('999,999,999');
+  expect(draft.cancel).toHaveBeenCalledOnce(); expect(draft.update).toHaveBeenCalledOnce();
+  await act(async () => button('有序列表选项').click());
+  expect(draft.commit).not.toHaveBeenCalled();
 });
 
 it('applies the default restart of 1 through both the text action and Enter without requiring an edit', async () => {

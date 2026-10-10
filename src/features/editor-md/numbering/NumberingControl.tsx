@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Editor } from '@tiptap/core';
 import { TextSelection, type Selection, type SelectionBookmark, type Transaction } from '@tiptap/pm/state';
 import * as Popover from '@radix-ui/react-popover';
@@ -10,7 +10,7 @@ import { useEditorMenuPortalContainer } from '../../../components/EditorMenuScop
 import { selectBlock } from '../blockActions';
 import { continueNumbering, createNumberingDraft, getNumberingContext, setNumberingStyle } from './numbering';
 import { formatNumbering, NUMBERING_STYLES, type NumberingStyle } from './styles';
-import { validStart as isValidNumberingStart } from './model';
+import { MAX_NUMBERING_START, validStart as isValidNumberingStart } from './model';
 import './numberingControl.css';
 import { NUMBERING_OPERATION } from './extension';
 
@@ -84,6 +84,7 @@ export interface NumberingControlProps {
   editor: Editor | null;
   disabled?: boolean;
   active?: boolean;
+  actionLabel?: string;
   onToggle: () => void;
   targetPos?: number;
   targetSelection?: Selection;
@@ -95,13 +96,14 @@ export interface NumberingControlProps {
 }
 
 /** Shared top/block/overflow UI. The command layer alone owns list scope and history. */
-export function NumberingControl({ editor, disabled, active, onToggle, targetPos, targetSelection, variant = 'toolbar', onDone, isCurrentTarget }: NumberingControlProps) {
+export function NumberingControl({ editor, disabled, active, actionLabel = '有序列表', onToggle, targetPos, targetSelection, variant = 'toolbar', onDone, isCurrentTarget }: NumberingControlProps) {
   const [open, setOpen] = useState(false);
   const [context, setContext] = useState<NumberingContext | null>(null);
   const [start, setStart] = useState('1');
   const draft = useRef<ReturnType<typeof createNumberingDraft> | null>(null);
   const selection = useRef<SelectionBookmark | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const startErrorId = useId();
   const portal = useEditorMenuPortalContainer();
   const finishDraft = (cancel = false) => {
     const current = draft.current; draft.current = null;
@@ -165,11 +167,11 @@ export function NumberingControl({ editor, disabled, active, onToggle, targetPos
   };
   return <Popover.Root modal={false} open={open} onOpenChange={hover.change}>
     <div className={`nb-numbering-control nb-numbering-control-${variant}`} data-active={active || undefined}>
-      <Tooltip content="有序列表" shortcut="Ctrl+Shift+7" helpKey="list.ordered" disabled={disabled || open} side={variant === 'block' ? 'right' : 'bottom'}>
-        <button type="button" className="nb-numbering-main" aria-label="有序列表" aria-pressed={active} disabled={disabled}
+      <Tooltip content={actionLabel} shortcut="Ctrl+Shift+7" helpKey="list.ordered" disabled={disabled || open} side={variant === 'block' ? 'right' : 'bottom'}>
+        <button type="button" className="nb-numbering-main" aria-label={actionLabel} aria-pressed={active} disabled={disabled}
           onPointerEnter={hover.keepAlive} onPointerLeave={hover.leave}
           onPointerDown={event => { event.preventDefault(); event.stopPropagation(); }}
-          onClick={event => { event.stopPropagation(); changeOpen(false); onToggle(); }}><OrderedListIcon size={18}/>{variant === 'overflow' && <span>有序列表</span>}</button>
+          onClick={event => { event.stopPropagation(); changeOpen(false); onToggle(); }}><OrderedListIcon size={18}/>{variant === 'overflow' && <span>{actionLabel}</span>}</button>
       </Tooltip>
       {editor && <Popover.Trigger {...hover.triggerProps} className="nb-numbering-arrow" aria-label="有序列表选项" aria-haspopup="menu" disabled={disabled}>
         <ChevronDown className="nb-menu-chevron" size={11}/>
@@ -184,16 +186,18 @@ export function NumberingControl({ editor, disabled, active, onToggle, targetPos
         {context && <>
           <ContinueNumberingAction context={context} onApply={() => apply(continueNumbering)}/>
           <div className={`nb-numbering-row nb-numbering-restart${!context.available ? ' is-disabled' : ''}`} role="group" aria-label="重新编号">
-            <span>从</span><input ref={input} type="number" min="1" step="1" aria-label="重新编号起始值" aria-invalid={start !== '' && !validStart || undefined} value={start} disabled={!context.available}
+            <span>从</span><input ref={input} type="number" min="1" max={MAX_NUMBERING_START} step="1" aria-label="重新编号起始值" aria-invalid={start !== '' && !validStart || undefined} aria-describedby={start !== '' && !validStart ? startErrorId : undefined} value={start} disabled={!context.available}
               onFocus={() => { hover.keepAlive(); hover.keyboard.current = true; }} onKeyDown={inputKey}
               onChange={event => {
                 const value = event.target.value; setStart(value);
                 const number = Number(value);
-                if (!value || !isValidNumberingStart(number) || !editor) return;
+                if (!value || !isValidNumberingStart(number)) { finishDraft(true); return; }
+                if (!editor) return;
                 if (!draft.current) { if (!restoreSelection()) return; draft.current = createNumberingDraft(editor); }
                 draft.current.update(number);
               }}/><button type="button" onClick={restart} disabled={!context.available || !validStart}>重新编号</button>
           </div>
+          {start !== '' && !validStart && <p id={startErrorId} className="nb-numbering-input-error" role="status">请输入 1–999,999,999 的整数</p>}
           {context.available ? <NumberingStyleMenu style={context.style} onChoose={style => apply(next => setNumberingStyle(next, style))}/>
             : <button type="button" className="nb-numbering-row" disabled><span>编号样式</span><ChevronRight size={13}/></button>}
         </>}
