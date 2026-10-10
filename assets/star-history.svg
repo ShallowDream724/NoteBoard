@@ -48,15 +48,15 @@
     <text class="axis-label" x="54" y="176" text-anchor="end">20</text>
     <text class="axis-label" x="54" y="78" text-anchor="end">30</text>
     <text class="axis-label" x="68" y="410" text-anchor="middle">2026-08-19</text>
-    <text class="axis-label" x="254" y="410" text-anchor="middle">2026-08-29</text>
-    <text class="axis-label" x="440" y="410" text-anchor="middle">2026-09-08</text>
-    <text class="axis-label" x="626" y="410" text-anchor="middle">2026-09-18</text>
-    <text class="axis-label" x="812" y="410" text-anchor="middle">2026-09-28</text>
+    <text class="axis-label" x="254" y="410" text-anchor="middle">2026-09-01</text>
+    <text class="axis-label" x="440" y="410" text-anchor="middle">2026-09-13</text>
+    <text class="axis-label" x="626" y="410" text-anchor="middle">2026-09-26</text>
+    <text class="axis-label" x="812" y="410" text-anchor="middle">2026-10-09</text>
   </g>
-  <path class="area" d="M 68 368 H 68 V 368 H 81.62 V 328.8 H 100.34 V 319 H 118.87 V 289.6 H 137.62 V 279.8 H 156.27 V 279.8 H 174.82 V 279.8 H 193.56 V 270 H 218.84 V 270 H 238.83 V 270 H 253.54 V 270 H 271.33 V 270 H 290.18 V 270 H 308.2 V 260.2 H 326.57 V 260.2 H 345.19 V 250.4 H 363.91 V 250.4 H 382.43 V 250.4 H 401.22 V 250.4 H 419.96 V 250.4 H 438.46 V 240.6 H 457.16 V 240.6 H 475.78 V 230.8 H 494.45 V 230.8 H 512.94 V 230.8 H 531.88 V 230.8 H 550.63 V 230.8 H 569.07 V 172 H 587.68 V 172 H 606.35 V 172 H 624.86 V 172 H 643.48 V 172 H 662.44 V 172 H 793.07 V 162.2 H 812 V 162.2 L 812 368 L 68 368 Z" />
-  <path class="line" d="M 68 368 H 68 V 368 H 81.62 V 328.8 H 100.34 V 319 H 118.87 V 289.6 H 137.62 V 279.8 H 156.27 V 279.8 H 174.82 V 279.8 H 193.56 V 270 H 218.84 V 270 H 238.83 V 270 H 253.54 V 270 H 271.33 V 270 H 290.18 V 270 H 308.2 V 260.2 H 326.57 V 260.2 H 345.19 V 250.4 H 363.91 V 250.4 H 382.43 V 250.4 H 401.22 V 250.4 H 419.96 V 250.4 H 438.46 V 240.6 H 457.16 V 240.6 H 475.78 V 230.8 H 494.45 V 230.8 H 512.94 V 230.8 H 531.88 V 230.8 H 550.63 V 230.8 H 569.07 V 172 H 587.68 V 172 H 606.35 V 172 H 624.86 V 172 H 643.48 V 172 H 662.44 V 172 H 793.07 V 162.2 H 812 V 162.2" />
+  <path class="area" d="M 68 368 H 68 V 368 H 78.67 V 328.8 H 93.34 V 319 H 107.86 V 289.6 H 122.56 V 279.8 H 137.17 V 279.8 H 151.71 V 279.8 H 166.4 V 270 H 186.21 V 270 H 201.88 V 270 H 213.41 V 270 H 227.35 V 270 H 242.12 V 270 H 256.24 V 260.2 H 270.64 V 260.2 H 285.23 V 250.4 H 299.9 V 250.4 H 314.41 V 250.4 H 329.14 V 250.4 H 343.82 V 250.4 H 358.33 V 240.6 H 372.98 V 240.6 H 387.58 V 230.8 H 402.21 V 230.8 H 416.69 V 230.8 H 431.54 V 230.8 H 446.23 V 230.8 H 460.69 V 172 H 475.27 V 172 H 489.9 V 172 H 504.4 V 172 H 519 V 172 H 533.86 V 172 H 636.23 V 162.2 H 651.06 V 162.2 H 665.65 V 162.2 H 680.15 V 162.2 H 695 V 162.2 H 709.51 V 162.2 H 723.84 V 162.2 H 738.69 V 162.2 H 753.39 V 162.2 H 768.28 V 162.2 H 782.69 V 162.2 H 797.41 V 162.2 H 812 V 162.2 L 812 368 L 68 368 Z" />
+  <path class="line" d="M 68 368 H 68 V 368 H 78.67 V 328.8 H 93.34 V 319 H 107.86 V 289.6 H 122.56 V 279.8 H 137.17 V 279.8 H 151.71 V 279.8 H 166.4 V 270 H 186.21 V 270 H 201.88 V 270 H 213.41 V 270 H 227.35 V 270 H 242.12 V 270 H 256.24 V 260.2 H 270.64 V 260.2 H 285.23 V 250.4 H 299.9 V 250.4 H 314.41 V 250.4 H 329.14 V 250.4 H 343.82 V 250.4 H 358.33 V 240.6 H 372.98 V 240.6 H 387.58 V 230.8 H 402.21 V 230.8 H 416.69 V 230.8 H 431.54 V 230.8 H 446.23 V 230.8 H 460.69 V 172 H 475.27 V 172 H 489.9 V 172 H 504.4 V 172 H 519 V 172 H 533.86 V 172 H 636.23 V 162.2 H 651.06 V 162.2 H 665.65 V 162.2 H 680.15 V 162.2 H 695 V 162.2 H 709.51 V 162.2 H 723.84 V 162.2 H 738.69 V 162.2 H 753.39 V 162.2 H 768.28 V 162.2 H 782.69 V 162.2 H 797.41 V 162.2 H 812 V 162.2" />
   <circle class="dot" cx="812" cy="162.2" r="6" />
   <rect class="badge" x="682" y="28" width="130" height="34" rx="17" />
   <text class="badge-text" x="747" y="50" text-anchor="middle">21 stars</text>
-  <text class="status" x="812" y="428" text-anchor="end">Observed snapshots: 2026-08-19 – 2026-09-28</text>
+  <text class="status" x="812" y="428" text-anchor="end">Observed snapshots: 2026-08-19 – 2026-10-09</text>
 </svg>
