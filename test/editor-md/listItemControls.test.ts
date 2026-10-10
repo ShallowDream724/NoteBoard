@@ -106,6 +106,36 @@ it('removes an emptied single-item wrapper and rejects dropping an item inside i
   editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
 });
 
+it.each(['ol', 'ul'])('moves a checked task before, between and after %s rows without changing its kind or losing content', tag => {
+  for (const edge of [0, 1, 3]) {
+    const editor = create(`<${tag}><li><p>one</p></li><li><p>two</p></li><li><p>three</p></li></${tag}><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p><strong>todo</strong></p></li></ul><p>tail</p>`);
+    const original = editor.state.doc, list = original.firstChild!;
+    const source = list.nodeSize + 1;
+    const target = 1 + list.content.content.slice(0, edge).reduce((size, node) => size + node.nodeSize, 0);
+    const item = original.nodeAt(source)!;
+    expect(moveTopLevelBlock(editor.view, source, target)).not.toBeNull();
+    const sections = editor.state.doc.content.content.filter(node => node.type.name !== 'paragraph');
+    const task = sections.find(node => node.type.name === 'taskList')!;
+    expect(task.firstChild).toBe(item); expect(task.firstChild!.attrs.checked).toBe(true);
+    expect(task.firstChild!.firstChild!.firstChild!.marks[0].type.name).toBe('bold');
+    expect(sections.map(node => node.textContent)).toEqual(edge === 0 ? ['todo', 'onetwothree'] : edge === 1 ? ['one', 'todo', 'twothree'] : ['onetwothree', 'todo']);
+    if (tag === 'ol') expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual(edge === 1 ? [1, 1] : [1]);
+    editor.state.doc.check(); const moved = editor.state.doc;
+    editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
+    editor.commands.redo(); expect(editor.state.doc.eq(moved)).toBe(true);
+  }
+});
+
+it('moves an ordinary list row between tasks as its original numbered section', () => {
+  const editor = create('<ol start="7"><li><p>move</p></li></ol><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>done</p></li><li data-type="taskItem" data-checked="false"><p>pending</p></li></ul><p>tail</p>');
+  const original = editor.state.doc, target = original.firstChild!.nodeSize + 1 + original.child(1).firstChild!.nodeSize;
+  expect(moveTopLevelBlock(editor.view, 1, target)).not.toBeNull();
+  expect(editor.state.doc.content.content.map(node => node.type.name)).toEqual(['taskList', 'orderedList', 'taskList', 'paragraph']);
+  expect(editor.state.doc.child(1).attrs.start).toBe(7);
+  expect([editor.state.doc.firstChild!.firstChild!.attrs.checked, editor.state.doc.child(2).firstChild!.attrs.checked]).toEqual([true, false]);
+  editor.state.doc.check(); editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
+});
+
 it('uses logarithmic geometry reads for a 1000-item gutter hit without changing document or history', () => {
   const editor = create(`<ol>${Array.from({ length: 1000 }, (_, i) => `<li><p>row ${i}</p></li>`).join('')}</ol>`);
   const { list, items } = rows(editor), doc = editor.state.doc, selection = editor.state.selection;

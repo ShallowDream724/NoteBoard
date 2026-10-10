@@ -3,7 +3,7 @@
 //           恢复不抢焦点、缺失文件跳过、暂存副本的关闭保护。
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { restoreLastClosedWindow, loadRestoredTab, saveCurrentWindowSnapshot } from '@/features/session/closedWindowSession';
+import { restoreLastClosedWindow, loadRestoredTab, saveCurrentWindowSnapshot, ensureWritableContent } from '@/features/session/closedWindowSession';
 import * as ipc from '@/core/ipc/commands';
 import { getEditorCapabilities, resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -113,6 +113,8 @@ describe('S10 会话恢复轻量描述符', () => {
     });
     // 🔴 N02 接线：真实打开链成功时会把正文交付到 documentStore——
     //    返回值本身不证明正文交付，mock 同步 upsert 正文
+    useDocumentStore.getState().upsertFromPayload({ key: KEY_A, displayName: 'a.md', dirPath: 'C:\\t', kind: 'markdown', language: 'markdown',
+      content: null, encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false }, { placeholder: true });
     openDocumentMock.mockImplementation(async () => {
       useDocumentStore.getState().upsertFromPayload({
         key: KEY_A,
@@ -133,7 +135,7 @@ describe('S10 会话恢复轻量描述符', () => {
     await loadRestoredTab(KEY_A);
 
     // 走完整打开链（读盘/注册/编辑器预取）
-    expect(openDocumentMock).toHaveBeenCalledWith(KEY_A);
+    expect(openDocumentMock).toHaveBeenCalledWith(KEY_A, expect.objectContaining({ activate: false, explorer: 'preserve', isCurrent: expect.any(Function) }));
     // 懒标记清除
     expect(useWindowStore.getState().getTab(KEY_A)?.lazySource).toBeUndefined();
   });
@@ -163,6 +165,52 @@ describe('S10 会话恢复轻量描述符', () => {
     // 懒标记保留（正文仍未交付，不能把占位当已加载）
     expect(result).toBe('stale');
     expect(useWindowStore.getState().getTab(KEY_A)?.lazySource).toBe(KEY_A);
+  });
+
+  it('restores two resource-only images without reading text, shares in-flight loading, and never supplies writable content', async () => {
+    const keys = ['C:\\t\\one.png', 'C:\\t\\two.jpg'];
+    vi.mocked(ipc.loadSession).mockResolvedValue(snapshotWith(keys.map(key => ({ key, sourcePath: key }))) as never);
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: true, isDir: false });
+    await restoreLastClosedWindow();
+    expect(openDocumentMock).not.toHaveBeenCalled();
+    expect(keys.map(key => useDocumentStore.getState().getDocument(key)?.loadState)).toEqual(['placeholder', 'placeholder']);
+    openDocumentMock.mockImplementation(async (key: string) => {
+      await Promise.resolve();
+      const descriptor = useDocumentStore.getState().getDocument(key)!;
+      useDocumentStore.getState().upsertFromPayload({ ...descriptor, content: null, readonly: true, size: 123, mtime: 7 });
+      return 'opened';
+    });
+    expect(await Promise.all([loadRestoredTab(keys[0]), loadRestoredTab(keys[0]), loadRestoredTab(keys[1])])).toEqual(['loaded', 'loaded', 'loaded']);
+    expect(openDocumentMock).toHaveBeenCalledTimes(2);
+    for (const key of keys) {
+      expect(useWindowStore.getState().getTab(key)?.lazySource).toBeUndefined();
+      expect(useDocumentStore.getState().getDocument(key)?.content).toBeNull();
+      expect(await ensureWritableContent(key)).toBeNull();
+    }
+  });
+
+  it.each(['opened', 'focused', 'cancelled'])('does not accept an image placeholder when the open chain returns %s without delivering its payload', async result => {
+    const key = 'C:\\t\\one.png';
+    vi.mocked(ipc.loadSession).mockResolvedValue(snapshotWith([{ key, sourcePath: key }]) as never);
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: true, isDir: false });
+    await restoreLastClosedWindow();
+    openDocumentMock.mockResolvedValue(result);
+    expect(await loadRestoredTab(key)).toBe('stale');
+    expect(useWindowStore.getState().getTab(key)?.lazySource).toBe(key);
+    expect(await ensureWritableContent(key)).toBeNull();
+  });
+
+  it('restores an unsupported binary handoff without inventing editable text', async () => {
+    const key = 'C:\\t\\slide.pptx';
+    vi.mocked(ipc.loadSession).mockResolvedValue(snapshotWith([{ key, sourcePath: key }]) as never);
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: true, isDir: false });
+    await restoreLastClosedWindow();
+    openDocumentMock.mockImplementation(async () => {
+      useDocumentStore.getState().upsertFromPayload({ ...useDocumentStore.getState().getDocument(key)!, kind: 'unsupported', content: null, readonly: true });
+      return 'opened';
+    });
+    expect(await loadRestoredTab(key)).toBe('loaded');
+    expect(await ensureWritableContent(key)).toBeNull();
   });
 
   it('恢复期间不抢焦点：用户交互的 activeKey 不被恢复流程覆盖', async () => {

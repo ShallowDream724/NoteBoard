@@ -1,6 +1,6 @@
 import { Fragment, type Node } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
-import { isList } from './listItemActions';
+import { isList } from './listKinds';
 
 /** Only item boundaries qualify. Text/cell/code positions remain invalid. */
 function boundary(doc: Node, pos: number) {

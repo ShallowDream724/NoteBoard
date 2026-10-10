@@ -12,6 +12,7 @@ import re
 import socket
 import subprocess
 import tempfile
+import time
 
 import psutil
 
@@ -21,6 +22,7 @@ def main():
     parser.add_argument('--name', default='acceptance')
     parser.add_argument('--exe', type=Path)
     parser.add_argument('--open-path', type=Path, help='Existing file or directory to open through the normal application CLI')
+    parser.add_argument('--restore-path', type=Path, action='append', default=[], help='Seed a previous-session file in this fresh isolated profile')
     args = parser.parse_args()
     if not re.fullmatch(r'[a-z0-9-]{1,64}', args.name):
         parser.error('--name must be 1–64 lowercase letters, digits or hyphens')
@@ -39,6 +41,17 @@ def main():
         'monoFontFamily': 'monospace', 'monoFontFamilyZh': 'sans-serif',
         'monoFontFamilySource': 'user', 'monoFontFamilyZhSource': 'user',
     }}
+    if args.restore_path:
+        paths = [str(path.resolve(strict=True)) for path in args.restore_path]
+        if any(not Path(path).is_file() for path in paths):
+            parser.error('--restore-path must reference existing files')
+        settings['file'] = {'restoreSession': True}
+        snapshot = {'schemaVersion': 1, 'savedAt': int(time.time() * 1000), 'windows': [{
+            'seq': 0, 'explorerRoot': '', 'layout': {'explorerVisible': False, 'explorerWidth': 260,
+            'outlineVisible': False, 'outlineWidth': 240}, 'activeKey': paths[0], 'tabs': [{
+                'key': path, 'sourcePath': path, 'stagedPath': None, 'displayName': Path(path).name,
+                'isPinned': False, 'viewMode': None} for path in paths]}]}
+        (settings_dir / 'session.json').write_text(json.dumps(snapshot, indent=2) + '\n', encoding='utf-8')
     (settings_dir / 'settings.json').write_text(json.dumps(settings, indent=2) + '\n', encoding='utf-8')
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))

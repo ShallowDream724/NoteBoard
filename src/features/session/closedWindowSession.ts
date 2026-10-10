@@ -17,6 +17,7 @@ import { hasUnsavedWork } from '../staging/stagingPolicy';
 import { showToast } from '../../stores/toastStore';
 import { currentExplorerNavigation, isCurrentNavigation, readExplorerDirectory, type ExplorerNavigation } from '../explorer/explorerActions';
 import { isSubPath, parentDirectory, sameKey } from '../explorer/pathUtils';
+import { getSessionGeneration } from './documentSession';
 
 let windowHadTabs = false;
 
@@ -137,7 +138,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     //    处理）——不建占位：content:null 会覆盖用户正在编辑的正文
     const existingTab = useWindowStore.getState().getTab(candidate);
     const existingDoc = useDocumentStore.getState().getDocument(candidate);
-    if (existingTab || (existingDoc && existingDoc.content != null)) {
+    if (existingTab || existingDoc?.loadState === 'loaded') {
       continue;
     }
 
@@ -167,7 +168,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
       size: 0,
       mtime: 0,
       readonly: false,
-    });
+    }, { placeholder: true });
     if (isStagedRestore && staged) {
       useDocumentStore.getState().setDirty(candidate, true);
       // 暂存路径登记回内存记录（内容未知；关闭丢弃/保留流程照常工作）
@@ -292,7 +293,7 @@ function restoredExplorerContext(context: ExplorerContext | null | undefined, fi
 
 /** 懒标签按需加载结果（供保存/另存/迁移的正文出口判断） */
 export type LazyLoadResult =
-  /** 正文已加载并交付到本 key 的会话 */
+  /** 文件载荷已交付到本 key 的会话（图片无文本正文） */
   | 'loaded'
   /** 加载失败（打开链失败或正文未交付）——标签保留可重试 */
   | 'failed'
@@ -302,43 +303,46 @@ export type LazyLoadResult =
   | 'stale';
 
 /** 懒加载在途（key → 共享加载 Promise；并发调用等待同一读取，不把"正在加载"当完成） */
-const loadingLazyTabs = new Map<string, Promise<LazyLoadResult>>();
+const loadingLazyTabs = new Map<string, { generation: number; promise: Promise<LazyLoadResult> }>();
 
 /**
- * 按需加载恢复标签的正文：走完整打开链（prepare 归属/读盘/注册/编辑器预取），
+ * 按需加载恢复标签：走完整打开链（prepare 归属/读盘/注册/编辑器预取），
  * 完成后清除懒加载标记。
  * 🔴 N02：返回明确的 loaded/failed/stale 结果——focused/cancelled 也必须验证
- *    目标会话确实得到正文（content != null）才清除懒标记；失败保留标签可重试。
+ *    目标会话确实得到载荷才清除懒标记；文本类型还须得到正文。
  */
 export async function loadRestoredTab(key: string): Promise<LazyLoadResult> {
   const tab = useWindowStore.getState().getTab(key);
   if (!tab?.lazySource) return 'no-lazy';
+  const generation = getSessionGeneration(key);
+  const isCurrent = () => getSessionGeneration(key) === generation && useWindowStore.getState().getTab(key)?.lazySource === tab.lazySource;
   // 🔴 N02：共享加载 Promise——并发保存/激活等待同一次读取，不重复触发打开链
   const existing = loadingLazyTabs.get(key);
-  if (existing) return existing;
+  if (existing?.generation === generation) return existing.promise;
 
   const task = (async (): Promise<LazyLoadResult> => {
-    try {
-      const result = await openDocument(tab.lazySource!);
-      if (result === 'failed') {
-        showToast(`无法加载 ${tab.displayName}，请重试或检查文件`, 'error');
-        return 'failed'; // 保留懒标签（可重试）
-      }
-      // 🔴 N02：opened/focused/cancelled 都不能只凭返回值清除懒标记——
-      //    必须验证本 key 的会话确实拿到正文（focused=另一处已打开，本标签无正文）
-      const doc = useDocumentStore.getState().getDocument(key);
-      if (!doc || doc.content == null) {
-        return 'stale';
-      }
-      // 打开链完成后清除懒标记（正文已在 store；编辑器正常挂载）
-      useWindowStore.getState().clearLazy(key);
-      return 'loaded';
-    } finally {
-      loadingLazyTabs.delete(key);
+    const result = await openDocument(tab.lazySource!, { isCurrent, activate: false, explorer: 'preserve' });
+    if (!isCurrent()) return 'stale';
+    if (result === 'failed') {
+      showToast(`无法加载 ${tab.displayName}，请重试或检查文件`, 'error');
+      return 'failed'; // 保留懒标签（可重试）
     }
+    // opened/focused/cancelled 都不能只凭返回值清除懒标记——
+    // 必须验证本 key 的会话确实拿到载荷（focused 可能仅激活另一窗口）。
+    const doc = useDocumentStore.getState().getDocument(key);
+    if (!doc || doc.loadState !== 'loaded'
+      || (doc.content == null && doc.kind !== 'image' && doc.kind !== 'unsupported')) {
+      return 'stale';
+    }
+    // 资源查看器使用路径；文本编辑器使用正文。两者都须完成载荷交付。
+    useWindowStore.getState().clearLazy(key);
+    return 'loaded';
   })();
-  loadingLazyTabs.set(key, task);
-  return task;
+  const entry: { generation: number; promise: Promise<LazyLoadResult> } = { generation, promise: task.finally(() => {
+    if (loadingLazyTabs.get(key) === entry) loadingLazyTabs.delete(key);
+  }) };
+  loadingLazyTabs.set(key, entry);
+  return entry.promise;
 }
 
 /**

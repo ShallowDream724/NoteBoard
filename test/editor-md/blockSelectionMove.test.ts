@@ -5,6 +5,7 @@ import { buildDocumentExtensions } from '@/features/editor-md/documentExtensions
 import { resolveBlockSelection } from '@/features/editor-md/blockSelection';
 import { prepareBlockSelectionMove, isBlockSelectionMoveAllowed, moveBlockSelection } from '@/features/editor-md/blockSelectionMove';
 import { HeadingFolding, foldedSectionEnd, headingFoldingKey, toggleHeadingFold } from '@/features/editor-md/headingFolding';
+import { moveTopLevelBlock } from '@/features/editor-md/blockReorder';
 
 const editors: Editor[] = [];
 const p = (text: string, attrs: Record<string, unknown> = {}): JSONContent => ({ type: 'paragraph', attrs, content: [{ type: 'text', text }] });
@@ -31,6 +32,30 @@ function blocks(editor: Editor) { return editor.state.doc.content.content.filter
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); vi.restoreAllMocks(); });
 
 describe('atomic complete-block selection movement', () => {
+  it('keeps single and batch task moves consistent across numbered-list boundaries, preserving wrapper note ownership', () => {
+    for (const batch of [false, true]) {
+      const tasks: JSONContent = { type: 'taskList', attrs: { annotationId: 'tasks' }, content: ['todo', 'next'].map((text, index) => ({ type: 'taskItem', attrs: { checked: index === 0 }, content: [p(text)] })) };
+      const editor = create([tasks, p('gap'), list(['a', 'b', 'c'], 7), p('tail')]), original = editor.state.doc;
+      const target = pos(editor, 'b', 'listItem');
+      if (batch) expect(moveBlockSelection(editor.view, plan(editor, 'todo', 'next'), target)).not.toBeNull();
+      else expect(moveTopLevelBlock(editor.view, pos(editor, 'todo', 'taskItem'), target)).not.toBeNull();
+      const sections = blocks(editor);
+      expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual([7, 1]);
+      const moved = sections.find(node => node.type.name === 'taskList' && node.firstChild!.textContent === 'todo')!;
+      expect(moved.firstChild!.attrs.checked).toBe(true);
+      expect(moved.attrs.annotationId).toBe(batch ? 'tasks' : null);
+      if (!batch) expect(sections.find(node => node.type.name === 'taskList' && node.textContent === 'next')!.attrs.annotationId).toBe('tasks');
+      editor.state.doc.check(); editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
+    }
+  });
+
+  it('retains the explanation of a sole moved list wrapper instead of discarding it on a compatible merge', () => {
+    const single = list(['move']); single.attrs = { ...single.attrs, annotationId: 'wrapper' };
+    const editor = create([single, p('gap'), list(['a', 'b'])]);
+    expect(moveTopLevelBlock(editor.view, pos(editor, 'move', 'listItem'), pos(editor, 'b', 'listItem'))).not.toBeNull();
+    expect(blocks(editor).filter(node => node.attrs.annotationId === 'wrapper').map(node => node.textContent)).toEqual(['move']);
+    editor.state.doc.check();
+  });
   it('reorders several sibling items with one undo and restores their complete selection and direction', () => {
     const editor = create([list(['one', 'two', 'three', 'four'], 7), p('tail')]);
     const initial = editor.state.doc, prepared = plan(editor, 'one', 'two', true);

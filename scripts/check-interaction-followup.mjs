@@ -9,7 +9,7 @@ const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODUL
 const cdp = process.env.NOTEBOARD_TEST_CDP;
 const out = `.tmp/interaction-followup/${cdp ? 'native' : 'browser'}`;
 await fs.mkdir(out, { recursive: true });
-const server = cdp ? null : await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const server = cdp ? null : await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 15170 }, logLevel: 'error' });
 const browser = cdp ? await chromium.connectOverCDP(cdp) : await chromium.launch({ channel: 'msedge', headless: true });
 const context = cdp ? browser.contexts()[0] : await browser.newContext({ viewport: { width: 1440, height: 950 } });
 const page = cdp ? context.pages().find(page => !page.url().startsWith('devtools:')) : await context.newPage();
@@ -144,6 +144,28 @@ try {
   await page.keyboard.press('Control+Shift+z'); await frames();
   assert.deepEqual((await blocks()).slice(0, 3), split.slice(0, 3));
   report.cases.push('paragraph between list rows: split/restart/one-step undo/redo');
+  for (const [ordered, edge] of [[true, 0], [true, 1], [true, 3], [false, 0], [false, 1], [false, 3]]) {
+    await load(`${ordered ? '1. one\n2. two\n3. three' : '- one\n- two\n- three'}\n\ngap\n\n- [x] todo\n\nafter`);
+    const originalTaskState = await blocks();
+    assert.equal(originalTaskState[0].content.length, 3);
+    const taskHandle = await approach(prose.locator('[data-type="taskItem"] p').filter({ hasText: /^todo$/ }));
+    const rows = prose.locator(ordered ? 'ol > li' : 'ul:not([data-type="taskList"]) > li');
+    const drop = await rows.nth(edge === 3 ? 2 : edge).boundingBox(), grip = await taskHandle.boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2); await page.mouse.down();
+    await page.mouse.move(drop.x + 40, edge === 3 ? drop.y + drop.height - 1 : drop.y + 1, { steps: 10 }); await frames();
+    assert(await page.locator('.nb-block-drop-indicator').count());
+    await page.mouse.up(); await frames();
+    const moved = await blocks(), task = moved.find(node => node.type === 'taskList');
+    assert.equal(task?.content?.[0]?.attrs?.checked, true, 'Moved todo retains checked state');
+    assert.deepEqual(moved.filter(node => node.type !== 'paragraph').map(textOf), edge === 0 ? ['todo', 'onetwothree'] : edge === 1 ? ['one', 'todo', 'twothree'] : ['onetwothree', 'todo']);
+    if (ordered) assert.deepEqual(moved.filter(node => node.type === 'orderedList').map(node => node.attrs.start), edge === 1 ? [1, 1] : [1]);
+    if (ordered && edge === 1) await page.screenshot({ path: `${out}/todo-between-numbered-rows.png` });
+    await page.keyboard.press('Control+z'); await frames();
+    assert.deepEqual(await blocks(), originalTaskState);
+    await page.keyboard.press('Control+Shift+z'); await frames();
+    assert.deepEqual((await blocks()).filter(node => node.type !== 'paragraph'), moved.filter(node => node.type !== 'paragraph'));
+  }
+  report.cases.push('actual checked-todo drag before/middle/after OL and UL, kind retained, numbered restart, one undo/redo');
   await load('**selection**\n\nafter');
   await editor(editor => { editor.commands.setTextSelection({ from: 1, to: 10 }); editor.view.focus(); });
   const textToolbar = page.getByRole('toolbar', { name: '文字工具栏', exact: true }); await textToolbar.waitFor();

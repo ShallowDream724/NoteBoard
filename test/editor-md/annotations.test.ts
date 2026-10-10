@@ -21,6 +21,21 @@ function create(content: JSONContent[] = [paragraph('Anchor words here')]) {
 afterEach(() => { for (const editor of editors.splice(0)) editor.destroy(); vi.restoreAllMocks(); });
 
 describe('补充说明文档状态', () => {
+  it('removes all references to one batch explanation while preserving an independently created explanation and all anchor text', () => {
+    const editor = create([paragraph('first'), paragraph('second'), paragraph('independent')]);
+    editor.commands.setTextSelection({ from: 1, to: 14 });
+    const shared = addAnnotation(editor, [paragraph('shared')], { open: false })!;
+    expect(annotationAnchors(editor.state.doc).filter(anchor => anchor.id === shared)).toHaveLength(2);
+    let last = 0; editor.state.doc.descendants((node, pos) => { if (node.type.name === 'paragraph' && node.textContent === 'independent') last = pos; });
+    editor.commands.setTextSelection({ from: last + 1, to: last + 12 });
+    const independent = addAnnotation(editor, [paragraph('separate')], { open: false })!;
+    const before = editor.state.doc;
+    expect(removeAnnotation(editor, shared)).toBe(true);
+    expect(annotationAnchors(editor.state.doc).map(anchor => anchor.id)).toEqual([independent]);
+    expect([...collectAnnotations(editor.state.doc).keys()]).toEqual([independent]);
+    expect(editor.state.doc.content.content.filter(node => node.type.name === 'paragraph').map(node => node.textContent)).toEqual(['first', 'second', 'independent']);
+    editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
+  });
   it('does not create divider notes, but keeps existing divider notes readable and removable', () => {
     const editor = create([{ type: 'horizontalRule' }, paragraph('After')]);
     editor.commands.setNodeSelection(0);

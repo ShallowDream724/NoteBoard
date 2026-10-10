@@ -95,8 +95,8 @@ describe('文件拖拽（Drag & Drop）测试', () => {
     ]);
 
     await openDocument(mdPath);
-    // S07：目录展开为延后任务（fire-and-forget），排空微任务后再断言
-    for (let i = 0; i < 10; i++) await Promise.resolve();
+    // Directory following is deferred; assert its result, not a fixed number of microtasks.
+    await vi.waitFor(() => expect(useExplorerStore.getState().root).toBe('C:\\notes\\project'));
 
     // 验证 Tab 是否正确开启并激活
     const tabs = useWindowStore.getState().tabs;
@@ -135,7 +135,7 @@ describe('文件拖拽（Drag & Drop）测试', () => {
     ]);
 
     await openDocument(binPath);
-    for (let i = 0; i < 10; i++) await Promise.resolve();
+    await vi.waitFor(() => expect(useExplorerStore.getState().root).toBe('C:\\downloads'));
 
     // 验证 Tab 是否创建为 unsupported
     const tabs = useWindowStore.getState().tabs;

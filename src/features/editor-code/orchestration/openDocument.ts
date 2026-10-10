@@ -15,11 +15,13 @@ import { prefetchEditor, resolveEditorKind } from '../../editor-host/editorLoade
 import { showToast } from '../../../stores/toastStore';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { confirmLargeFile, getLargeFileThresholdBytes } from '../../../core/files/largeFilePolicy';
+import { normalizePath } from '../../explorer/pathUtils';
 
 // ── 打开文件 ──
 
 /** 打开结果（S04：映射到打开队列 ACK 的 OpenOutcome） */
 export type OpenDocumentResult = 'opened' | 'focused' | 'cancelled' | 'failed';
+const pendingOpens = new Map<string, Promise<void>>();
 
 /**
  * 目录展开任务（G 节：目录及最近记录在可编辑后有序执行，不阻塞打开链路返回）。
@@ -68,6 +70,10 @@ interface OpenDocumentOptions {
   explorerRoot?: string;
   /** Preserved when an external open is routed to the document's actual owner. */
   openRequestSource?: OpenRequestSource;
+  /** Restore requests may expire while native preparation/registration is pending. */
+  isCurrent?: () => boolean;
+  /** Restoring an existing descriptor must not steal focus from a newer tab. */
+  activate?: boolean;
 }
 
 interface CapturedOpenOptions extends OpenDocumentOptions {
@@ -77,6 +83,7 @@ interface CapturedOpenOptions extends OpenDocumentOptions {
 
 /** Keep explicit and passive Explorer follow-up behavior aligned for every local activation. */
 function activateDocumentTab(key: string, options: CapturedOpenOptions, tab?: Tab): void {
+  if (options.activate === false) return;
   const preserve = options.explorer === 'preserve' || (options.navigation && !isCurrentNavigation(options.navigation));
   const store = useWindowStore.getState();
   // Publish metadata before the activation-scoped preserve subscription starts.
@@ -93,13 +100,27 @@ function activateDocumentTab(key: string, options: CapturedOpenOptions, tab?: Ta
 /** 打开文档（对外入口；already-open 重试经 openDocumentInternal 受限递归） */
 export async function openDocument(path: string, options: OpenDocumentOptions = {}): Promise<OpenDocumentResult> {
   if (!path.trim()) return 'failed';
+  if (options.isCurrent?.() === false) return 'cancelled';
+  // Capture the user's tree origin and invalidate older navigation at request
+  // time, before waiting for another lifetime of the same document.
   const explorerContext = captureExplorerContext(path, options.explorerRoot, options.explorer === 'parent');
   const navigation = options.explorer !== 'preserve' ? beginExplorerNavigation(path) : undefined;
   let result: OpenDocumentResult | undefined;
+  // One path's native ownership and local delivery form an ordered lifetime.
+  // A closed generation releases its claim before a same-path reopen prepares.
+  // Different documents remain independent; completed keys leave the map.
+  const identity = normalizePath(path).toLowerCase(), previous = pendingOpens.get(identity);
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  pendingOpens.set(identity, pending);
   try {
+    if (previous) await previous;
+    if (options.isCurrent?.() === false) return result = 'cancelled';
     result = await openDocumentInternal(path, 0, { ...options, explorerContext, navigation }, navigation);
     return result;
   } finally {
+    release();
+    if (pendingOpens.get(identity) === pending) pendingOpens.delete(identity);
     if (navigation) {
       releaseExplorerNavigation(navigation);
       if ((result === 'failed' || result === 'cancelled') && isCurrentNavigation(navigation)) {
@@ -133,11 +154,14 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
   let prepared: Awaited<ReturnType<typeof ipc.prepareDocument>>;
   try {
     prepared = await ipc.prepareDocument(label, path, getLargeFileThresholdBytes());
+    if (options.isCurrent?.() === false) return 'cancelled';
     while (prepared.type === 'confirmation-required') {
       if (!await confirmLargeFile(prepared.displayName, prepared.size)) return 'cancelled';
+      if (options.isCurrent?.() === false) return 'cancelled';
       // Approval applies to this observed size. A growing file must be checked
       // again; ownership is also rechecked before the native reader proceeds.
       prepared = await ipc.prepareDocument(label, path, Math.max(getLargeFileThresholdBytes(), prepared.size));
+      if (options.isCurrent?.() === false) return 'cancelled';
     }
   } catch (e) {
     console.error('文件准备失败:', e);
@@ -156,6 +180,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
         if (!useWindowStore.getState().getTab(prepared.key)) {
           for (let attempt = 0; attempt < 5; attempt += 1) {
             await new Promise((resolve) => setTimeout(resolve, 60));
+            if (options.isCurrent?.() === false) return 'cancelled';
             const tabNow = useWindowStore.getState().getTab(prepared.key);
             if (tabNow) {
               activateDocumentTab(prepared.key, options);
@@ -185,8 +210,23 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
     }
 
     case 'image': {
-      const docStore = useDocumentStore.getState();
-      docStore.upsertFromPayload({
+      let result: OpenDocumentResult = 'opened';
+      try {
+        const regResult = await ipc.registerDocument(label, prepared.key, 'image');
+        if (options.isCurrent?.() === false) {
+          if (regResult.type === 'ok' && useDocumentStore.getState().getDocument(prepared.key)?.loadState !== 'loaded') await ipc.unregisterDocument(label, prepared.key);
+          return 'cancelled';
+        }
+        if (regResult.type === 'already-open') {
+          if (regResult.ownerLabel !== label) return focusDocumentOwner(regResult.ownerLabel, prepared.key, options);
+          result = 'focused';
+        }
+      } catch (e) {
+        console.error('注册图片文档失败:', e);
+        return 'failed';
+      }
+      // Ownership is confirmed before publishing resource readiness.
+      useDocumentStore.getState().upsertFromPayload({
         key: prepared.key,
         displayName: prepared.displayName,
         dirPath: prepared.dirPath,
@@ -199,24 +239,10 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
         mtime: prepared.mtime,
         readonly: true,
       });
-      try {
-        const regResult = await ipc.registerDocument(label, prepared.key, 'image');
-        if (regResult.type === 'already-open') {
-          // 并发窗口竞争注册：聚焦已有所有者，本窗口不建 Tab
-          if (regResult.ownerLabel !== label) {
-            return focusDocumentOwner(regResult.ownerLabel, prepared.key, options);
-          }
-          activateDocumentTab(prepared.key, options);
-          scheduleExistingTabFollowUp(prepared.key, navigation);
-          return 'focused';
-        }
-      } catch (e) {
-        console.error('注册图片文档失败:', e);
-      }
       activateDocumentTab(prepared.key, options, buildTab(prepared.key, prepared.displayName, 'image', 'plaintext'));
       if (prepared.dirPath && options.explorer !== 'preserve') scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       scheduleRecentRecord(path, false);
-      return 'opened';
+      return result;
     }
 
     case 'unsupported': {
@@ -250,6 +276,10 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
       // 注册文档（跨窗口并发竞争由 register 的 already-open 兜底）
       try {
         const regResult = await ipc.registerDocument(label, payload.key, payload.kind);
+        if (options.isCurrent?.() === false) {
+          if (regResult.type === 'ok' && useDocumentStore.getState().getDocument(payload.key)?.loadState !== 'loaded') await ipc.unregisterDocument(label, payload.key);
+          return 'cancelled';
+        }
         if (regResult.type === 'already-open') {
           if (regResult.ownerLabel !== label) {
             return focusDocumentOwner(regResult.ownerLabel, payload.key, options);
@@ -261,6 +291,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
         }
       } catch (e) {
         console.error('注册文档失败:', e);
+        return 'failed';
       }
 
       // 建 Document 与 Tab 并激活（关键路径：到此即可编辑）
@@ -279,6 +310,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
 
 /** Forward only remote ownership; the owner's already-open/self branch never re-enqueues. */
 async function focusDocumentOwner(ownerLabel: string, key: string, options: OpenDocumentOptions): Promise<OpenDocumentResult> {
+  if (options.activate === false || options.isCurrent?.() === false) return 'focused';
   if (options.explorer === 'parent' && ownerLabel !== getCurrentWindow().label) {
     let queueVersion: number;
     try {

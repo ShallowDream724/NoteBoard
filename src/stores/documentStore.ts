@@ -28,6 +28,8 @@ export interface Document {
   language: DocumentPayload['language'];
   /** 内容镜像（防抖后，不是权威副本） */
   content: string | null;
+  /** A restored descriptor is not a delivered payload; images legitimately have no text. */
+  loadState: 'placeholder' | 'loaded';
   /** 编码 */
   encoding: DocumentPayload['encoding'];
   /** 行尾符 */
@@ -61,7 +63,7 @@ interface DocumentStore {
 
   // ── 操作 ──
   /** 从 DocumentPayload 创建 Document */
-  upsertFromPayload: (payload: DocumentPayload) => Document;
+  upsertFromPayload: (payload: DocumentPayload, options?: { placeholder: boolean }) => Document;
   /** 更新内容镜像（防抖后调用） */
   setContent: (key: string, content: string) => void;
   /** Session-only syntax choice; never changes content, file kind or dirty state. */
@@ -117,7 +119,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   getDocument: (key) => get().documents.get(key),
   hasDocument: (key) => get().documents.has(key),
 
-  upsertFromPayload: (payload) => {
+  upsertFromPayload: (payload, options) => {
     const existing = get().documents.get(payload.key);
     const doc: Document = {
       key: payload.key,
@@ -126,6 +128,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       kind: payload.kind,
       language: payload.language,
       content: payload.content,
+      loadState: options?.placeholder ? 'placeholder' : 'loaded',
       encoding: payload.encoding,
       eol: payload.eol,
       size: payload.size,

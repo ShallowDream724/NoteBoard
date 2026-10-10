@@ -74,6 +74,20 @@ it('pins a window without changing document content, and supports keyboard closi
   expect(document.activeElement).toBe(anchor());
 });
 
+it('shows the shared reference count and states that deletion removes the whole explanation', async () => {
+  const range = targetRange();
+  await act(async () => editor.view.dispatch(editor.state.tr.addMark(range.from, range.to, editor.schema.marks.annotationReference.create({ id: 'example' }))));
+  const before = editor.state.doc;
+  await act(async () => anchor().click());
+  expect(panel()?.querySelector('.nb-annotation-title')?.textContent).toBe('补充说明 · 2 处共用');
+  const remove = panel()!.querySelector<HTMLButtonElement>('button[aria-label="删除说明及全部 2 处关联"]')!;
+  expect(remove).not.toBeNull();
+  await act(async () => remove.click());
+  expect(panel()).toBeNull(); expect(annotationAnchors(editor.state.doc)).toEqual([]);
+  expect(collectAnnotations(editor.state.doc).size).toBe(0);
+  await act(async () => { editor.commands.undo(); }); expect(editor.state.doc.eq(before)).toBe(true);
+});
+
 it('retires reading popovers for a task transition without closing pins or unsaved drafts', async () => {
   const original = editor.state.doc;
   await act(async () => anchor().click());
