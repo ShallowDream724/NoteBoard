@@ -9,11 +9,13 @@ import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 import { commonPresentationValue, selectionPresentation } from './selectionPresentation';
 import { Tooltip } from '../../components/Tooltip';
+import { useEditorMenuPortalContainer } from '../../components/EditorMenuScope';
 import { blockSelection, blockHasTextSelection } from '../editor-md/blockActions';
 
 export function AlignmentMenu({ editor, targetPos }: { editor: Editor; targetPos?: number }) {
   const [open, setOpen] = useState(false);
   const hover = useHoverMenu(open, setOpen);
+  const portalContainer = useEditorMenuPortalContainer();
   const visible = useNativeFeatureVisibility();
   const selection = targetPos !== undefined && !blockHasTextSelection(editor, targetPos) ? blockSelection(editor, targetPos) ?? undefined : undefined;
   const scope = selectionPresentation(editor.state, selection), cells = scope.cells;
@@ -28,7 +30,7 @@ export function AlignmentMenu({ editor, targetPos }: { editor: Editor; targetPos
   if (!visible || !targets.length && !canIndent) return null;
   return <Popover.Root open={open} onOpenChange={hover.change}>
     <Popover.Trigger {...hover.triggerProps} className="nb-alignment-trigger" title={label} aria-label={label}>{targets.length ? <AlignLeft size={17}/> : <IndentIncrease size={17}/>}<ChevronDown className="nb-menu-chevron" size={10}/></Popover.Trigger>
-    <Popover.Portal><Popover.Content className="nb-alignment-menu" sideOffset={6} collisionPadding={8}
+    <Popover.Portal container={portalContainer}><Popover.Content className="nb-alignment-menu" sideOffset={6} collisionPadding={8}
       {...hover.contentProps} onMouseDown={event => event.preventDefault()} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}>
       <HoverMenuContext.Provider value={hover}>
       {targets.length > 0 && horizontal.map(([value,label,Icon]) => <Tooltip key={value} content={label} helpKey={cells ? `table.cell.horizontal.${value}` : undefined} side="right" disabled={!cells}><button type="button" onClick={() => apply(() => {

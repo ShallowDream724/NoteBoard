@@ -43,12 +43,12 @@ it('block-menu conversion only affects the selected item and preserves nested co
   editor.state.doc.check(); editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
 });
 
-it('converts selected adjacent items and retains the unselected ordered suffix start', () => {
+it('converts selected adjacent items and reflows the linked ordered suffix', () => {
   const editor = create('<ol start="7"><li><p>one</p></li><li><p>two</p></li><li><p>three</p></li><li><p>four</p></li></ol><p>after</p>');
   const items = positions(editor);
   editor.commands.setTextSelection({ from: items[1] + 3, to: items[2] + 4 });
   expect(editor.commands.toggleBulletList()).toBe(true);
-  expect(shape(editor).slice(0, 3)).toEqual([['orderedList', 'one', 7], ['bulletList', 'twothree', undefined], ['orderedList', 'four', 10]]);
+  expect(shape(editor).slice(0, 3)).toEqual([['orderedList', 'one', 7], ['bulletList', 'twothree', undefined], ['orderedList', 'four', 8]]);
   expect(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, '|')).toBe('wo|th');
   editor.state.doc.check();
 });

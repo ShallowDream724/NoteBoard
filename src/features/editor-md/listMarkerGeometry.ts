@@ -1,18 +1,10 @@
 import type { EditorView } from '@tiptap/pm/view';
+import { formatNumbering } from './numbering/styles';
 
 /** Counter styles used by the editor's ordered lists, including CSS fallbacks. */
 export function orderedMarkerText(value: number, style: string): string {
-  let text = String(value);
-  if (Number.isSafeInteger(value) && value > 0 && /^(?:lower|upper)-(?:alpha|latin)$/.test(style)) {
-    text = ''; let remaining = value;
-    while (remaining) { remaining--; text = String.fromCharCode(97 + remaining % 26) + text; remaining = Math.floor(remaining / 26); }
-  } else if (Number.isInteger(value) && value > 0 && value < 4000 && /^(?:lower|upper)-roman$/.test(style)) {
-    text = ''; let remaining = value;
-    for (const [amount, symbol] of [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']] as const) {
-      while (remaining >= amount) { text += symbol; remaining -= amount; }
-    }
-  } else if (style === 'decimal-leading-zero') text = (value < 0 ? '-' : '') + String(Math.abs(value)).padStart(2, '0');
-  return (style.startsWith('upper-') ? text.toUpperCase() : text) + '. ';
+  if (style === 'decimal-leading-zero') return `${value < 0 ? '-' : ''}${String(Math.abs(value)).padStart(2, '0')}. `;
+  return `${formatNumbering(value, style.replace(/-latin$/, '-alpha'))} `;
 }
 
 /** One lazy 1px measuring surface, owned and released by the active feedback
@@ -20,17 +12,20 @@ export function orderedMarkerText(value: number, style: string): string {
 function createListMarkerMeasurer(document: Document) {
   let canvas: HTMLCanvasElement | null = null, context: CanvasRenderingContext2D | null = null;
   return {
-    width(value: number, style: CSSStyleDeclaration): number {
+    width(value: number, style: CSSStyleDeclaration, numberStyle?: string | null): number {
       const fontSize = Number.parseFloat(style.fontSize);
-      if (!Number.isFinite(fontSize) || style.listStylePosition === 'inside' || style.listStyleType === 'none') return 0;
+      const outlined = numberStyle === 'circle' || numberStyle === 'box';
+      if (!Number.isFinite(fontSize) || style.listStylePosition === 'inside' || !outlined && style.listStyleType === 'none') return 0;
       if (!canvas) {
         canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
         try { context = canvas.getContext('2d'); } catch { context = null; }
       }
-      const text = orderedMarkerText(value, style.listStyleType);
+      const text = outlined ? formatNumbering(value, numberStyle) : orderedMarkerText(value, numberStyle ?? style.listStyleType);
       if (context) context.font = style.font || `${style.fontStyle || 'normal'} ${style.fontWeight || '400'} ${style.fontSize} ${style.fontFamily || 'sans-serif'}`;
       const spacing = (Number.parseFloat(style.letterSpacing) || 0) * text.length + (Number.parseFloat(style.wordSpacing) || 0);
-      return Math.max(0, (context?.measureText(text).width ?? text.length * fontSize) + spacing + fontSize / 4);
+      const width = (context?.measureText(text).width ?? text.length * fontSize) + spacing;
+      // Keep the outlined counter's padding, border and gap aligned with styles.css.
+      return outlined ? Math.max(1.35 * fontSize, width + .24 * fontSize + 2) + .45 * fontSize : Math.max(0, width + fontSize / 4);
     },
     destroy() { if (canvas) canvas.width = canvas.height = 0; context = null; canvas = null; },
   };
@@ -53,7 +48,7 @@ export function listItemHorizontalBounds(view: EditorView, pos: number, item: HT
       let surface = surfaces.get(view);
       if (!surface) { surface = createListMarkerMeasurer(item.ownerDocument); surfaces.set(view, surface); }
       const style = item.ownerDocument.defaultView!.getComputedStyle(item);
-      const width = surface.width(Number(parent.attrs.start ?? 1) + inside.index(depth - 1), style) * scale;
+      const width = surface.width(Number(parent.attrs.start ?? 1) + inside.index(depth - 1), style, parent.attrs.numberStyle) * scale;
       if (style.direction === 'rtl') right = Math.max(right, rect.right + width); else left = Math.min(left, rect.left - width);
       break;
     }

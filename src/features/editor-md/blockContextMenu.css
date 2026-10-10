@@ -1,4 +1,4 @@
-.nb-block-menu-popover { z-index:1400; outline:none; max-height:var(--radix-popover-content-available-height); overflow:auto; }
+.nb-block-menu-popover { z-index:var(--nb-layer-editor-menu,1200); outline:none; max-height:var(--radix-popover-content-available-height); overflow:auto; }
 .nb-block-context-menu { width:228px; max-width:calc(100vw - 24px); padding:7px; border:1px solid var(--editor-border); border-radius:10px; background:var(--editor-surface); color:var(--editor-text); box-shadow:var(--shadow-lg); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); }
 .nb-block-context-menu button { color:inherit; font:inherit; border:0; background:transparent; cursor:pointer; border-radius:5px; }
 .nb-block-context-menu > button { display:flex; align-items:center; gap:10px; padding:7px 10px; width:100%; text-align:left; }

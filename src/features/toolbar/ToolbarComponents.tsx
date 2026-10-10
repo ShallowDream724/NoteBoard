@@ -2,12 +2,14 @@
 // 包含：基础按钮、下拉菜单容器、多级子菜单项、调色盘、分割线等
 // 严格遵循 Hover、Active、Pressed 状态反馈与主题 Token
 
-import React, { useState, useEffect, useRef, type ReactNode } from 'react';
+import React, { useState, useRef, type ReactNode } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { Tooltip } from '../../components/Tooltip';
 import type { ContextualHelpKey } from '../../components/contextualHelp';
 import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
 import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
+import { useEditorMenuPortalContainer } from '../../components/EditorMenuScope';
 
 // ── 基础工具栏按钮 ──
 
@@ -177,59 +179,31 @@ export function ToolbarDropdown({
   align,
   style,
 }: ToolbarDropdownProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const hover = useHoverMenu(isOpen, onOpenChange);
-  const [effectiveAlign, setEffectiveAlign] = useState<'left' | 'right'>(align ?? 'left');
-
-  // 计算下拉菜单对齐方式，防止超出编辑区右边界
-  useEffect(() => {
-    if (!isOpen || !containerRef.current) return;
-    if (align) {
-      setEffectiveAlign(align);
-      return;
-    }
-    const rect = containerRef.current.getBoundingClientRect();
-    const editorPanel = containerRef.current.closest('#nb-editor') || document.body;
-    const panelRight = editorPanel.getBoundingClientRect().right;
-    // 如果向右展开可能会超出编辑区右边缘，则向左靠齐
-    if (rect.left + 190 > panelRight) {
-      setEffectiveAlign('right');
-    } else {
-      setEffectiveAlign('left');
-    }
-  }, [isOpen, align]);
-
-  // 监听外部点击自动关闭
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onOpenChange(false);
-      }
-    };
-    document.addEventListener('mousedown', handleDown);
-    return () => document.removeEventListener('mousedown', handleDown);
-  }, [isOpen, onOpenChange]);
+  const portalContainer = useEditorMenuPortalContainer();
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', display: 'inline-flex' }}>
-      <div {...hover.triggerProps} style={{ display: 'inline-flex' }}>
+    <Popover.Root open={isOpen} onOpenChange={hover.change} modal={false}>
+      <Popover.Anchor asChild><div {...hover.triggerProps} style={{ display: 'inline-flex' }}>
         {trigger}
-      </div>
+      </div></Popover.Anchor>
 
-      {isOpen && (
-        <div
-          data-nb-editor-menu={hover.contentProps['data-nb-editor-menu']}
-          onPointerEnter={hover.contentProps.onPointerEnter}
-          onPointerLeave={hover.contentProps.onPointerLeave}
-          onKeyDown={hover.contentProps.onKeyDown}
-          onMouseDown={(e) => e.stopPropagation()}
+      <Popover.Portal container={portalContainer}>
+        <Popover.Content
+          {...hover.contentProps}
+          role="menu"
+          align={align === 'right' ? 'end' : 'start'} sideOffset={4} collisionPadding={8}
+          onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}
+          onFocusOutside={event => event.preventDefault()}
+          onMouseDown={event => {
+            if (!(event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable="true"]'))) event.preventDefault();
+          }}
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 4px)',
-            ...(effectiveAlign === 'left' ? { left: 0 } : { right: 0 }),
-            zIndex: 120,
+            zIndex: 'var(--nb-layer-editor-menu, 1200)',
             minWidth: 160,
+            maxHeight: 'min(460px, var(--radix-popover-content-available-height))',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
             background: 'var(--editor-surface, #ffffff)',
             border: '1px solid var(--editor-border, #e5e7eb)',
             borderRadius: 7,
@@ -244,9 +218,9 @@ export function ToolbarDropdown({
           }}
         >
           <HoverMenuContext.Provider value={hover}>{children}</HoverMenuContext.Provider>
-        </div>
-      )}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
@@ -283,6 +257,7 @@ export function ToolbarDropdownItem({
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [flipLeft, setFlipLeft] = useState(false);
   const itemRef = useRef<HTMLDivElement>(null);
+  const portalContainer = useEditorMenuPortalContainer();
 
   const hasSubmenu = Boolean(submenu);
   const hover = useHoverMenu(submenuOpen, setSubmenuOpen, disabled || !hasSubmenu, false);
@@ -304,32 +279,32 @@ export function ToolbarDropdownItem({
     }
   }
 
-  // 计算子菜单展开方向：基于编辑区容器 (#nb-editor) 右边界而非整个视口
+  // Prefer the available side; Radix performs the final viewport collision check.
   const updateSubmenuPosition = () => {
     if (!itemRef.current) return;
     const rect = itemRef.current.getBoundingClientRect();
     const editorPanel = itemRef.current.closest('#nb-editor') || document.body;
     const panelRight = editorPanel.getBoundingClientRect().right;
     const spaceRight = panelRight - rect.right;
-    // 右侧剩余空间小于 170px 时，自动向左侧展开二级子菜单，杜绝被右侧大纲栏或面板边框裁剪
     setFlipLeft(spaceRight < 170);
   };
 
   // 鼠标悬停进入
-  const handleMouseEnter = () => {
+  const handleMouseEnter = (event: React.PointerEvent) => {
     if (disabled) return;
     setHovered(true);
+    hover.keepAlive();
     if (hasSubmenu) {
       updateSubmenuPosition();
-      hover.enter();
+      hover.enter(event);
     }
   };
 
   // 子菜单与主菜单共用离开缓冲。
-  const handleMouseLeave = () => {
+  const handleMouseLeave = (event: React.PointerEvent) => {
     setHovered(false);
     if (hasSubmenu) {
-      hover.leave();
+      hover.leave(event);
     }
   };
 
@@ -351,6 +326,7 @@ export function ToolbarDropdownItem({
       aria-label={label}
       role="menuitem" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
       aria-haspopup={hasSubmenu ? 'menu' : undefined} aria-expanded={hasSubmenu ? submenuOpen : undefined}
+      data-nb-menu-branch={hover.branch}
       onKeyDown={event => {
         if (disabled) return;
         if (hasSubmenu && ['ArrowRight', 'Enter', ' '].includes(event.key)) {
@@ -358,8 +334,8 @@ export function ToolbarDropdownItem({
         } else if (!hasSubmenu && ['Enter', ' '].includes(event.key)) { event.preventDefault(); onClick?.(); }
         if (event.key === 'Escape' || event.key === 'ArrowLeft') hover.change(false);
       }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onPointerEnter={handleMouseEnter}
+      onPointerLeave={handleMouseLeave}
       onClick={handleClick}
       style={{
         position: 'relative',
@@ -375,6 +351,7 @@ export function ToolbarDropdownItem({
         userSelect: 'none',
         transition: 'background var(--transition-fast)',
         whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {/* 左侧图标与标题 */}
@@ -404,23 +381,23 @@ export function ToolbarDropdownItem({
         )}
       </div>
 
-      {/* 二级 / 三级悬浮子菜单 */}
-      {hasSubmenu && submenuOpen && (
-        <div
-          data-nb-editor-menu={hover.contentProps['data-nb-editor-menu']}
-          onPointerEnter={hover.contentProps.onPointerEnter}
-          onPointerLeave={hover.contentProps.onPointerLeave}
-          onKeyDown={hover.contentProps.onKeyDown}
-          onMouseEnter={hover.cancel}
-          onMouseLeave={handleMouseLeave}
+    </div>
+  );
+  const trigger = <Tooltip content={label} shortcut={defaultShortcut} helpKey={helpKey} disabled={disabled || hasSubmenu || (!helpKey && !defaultShortcut)} side="right" sideOffset={10}>{item}</Tooltip>;
+  if (!hasSubmenu) return trigger;
+  return <Popover.Root open={submenuOpen} onOpenChange={hover.change} modal={false}>
+    <Popover.Anchor asChild>{item}</Popover.Anchor>
+    <Popover.Portal container={portalContainer}>
+        <Popover.Content
+          {...hover.contentProps} role="menu" side={flipLeft ? 'left' : 'right'} align="start" alignOffset={-4} sideOffset={2} collisionPadding={8}
+          onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={hover.onCloseAutoFocus}
+          onFocusOutside={event => event.preventDefault()}
           style={{
-            position: 'absolute',
-            top: -4,
-            ...(flipLeft
-              ? { right: 'calc(100% + 2px)' }
-              : { left: 'calc(100% + 2px)' }),
-            zIndex: 140,
+            zIndex: 'var(--nb-layer-editor-menu, 1200)',
             minWidth: 160,
+            maxHeight: 'min(460px, var(--radix-popover-content-available-height))',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
             background: 'var(--editor-surface, #ffffff)',
             border: '1px solid var(--editor-border, #e5e7eb)',
             borderRadius: 7,
@@ -444,9 +421,7 @@ export function ToolbarDropdownItem({
             }}
           />
           <HoverMenuContext.Provider value={hover}>{submenu}</HoverMenuContext.Provider>
-        </div>
-      )}
-    </div>
-  );
-  return <Tooltip content={label} shortcut={defaultShortcut} helpKey={helpKey} disabled={disabled || hasSubmenu || (!helpKey && !defaultShortcut)} side="right" sideOffset={10}>{item}</Tooltip>;
+        </Popover.Content>
+    </Popover.Portal>
+  </Popover.Root>;
 }

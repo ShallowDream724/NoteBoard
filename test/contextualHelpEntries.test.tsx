@@ -44,7 +44,7 @@ function editor(content: string | JSONContent = '<p>现有正文</p>') {
   editors.push(instance); return instance;
 }
 function entry(label: string) {
-  return host.querySelector(`[aria-label="${label}"]`) ?? Array.from(host.querySelectorAll('button')).find(button => button.textContent === label)!;
+  return document.querySelector(`[aria-label="${label}"]`) ?? Array.from(document.querySelectorAll('button')).find(button => button.textContent === label)!;
 }
 function help(label: string) { return entry(label)?.closest('[data-entry-help]')?.getAttribute('data-entry-help'); }
 const formats = { '正文': 'block.paragraph', '无序列表': 'list.bullet', '有序列表': 'list.ordered', '待办': 'list.task', '代码块': 'block.code', '引用': 'block.quote' };
@@ -93,6 +93,7 @@ it('exposes the matching format help and existing shortcuts from the top toolbar
   const instance = editor();
   await act(async () => root.render(<MarkdownToolbar docKey="help-entry.nb" editor={instance} viewMode="visual"/>));
   for (const label of ['无序列表', '有序列表', '待办']) expect(help(label)).toBe(formats[label as keyof typeof formats]);
+  expect(help('行内代码')).toBe('text.code');
   await act(async () => (entry('标题等级') as HTMLElement).click());
   expect(help('还原为正文')).toBe('format.restore');
   expect(help('三级标题 (H3)')).toBe('block.heading.3');

@@ -40,7 +40,7 @@ describe('atomic complete-block selection movement', () => {
       if (batch) expect(moveBlockSelection(editor.view, plan(editor, 'todo', 'next'), target)).not.toBeNull();
       else expect(moveTopLevelBlock(editor.view, pos(editor, 'todo', 'taskItem'), target)).not.toBeNull();
       const sections = blocks(editor);
-      expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual([7, 1]);
+      expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual([7, 8]);
       const moved = sections.find(node => node.type.name === 'taskList' && node.firstChild!.textContent === 'todo')!;
       expect(moved.firstChild!.attrs.checked).toBe(true);
       expect(moved.attrs.annotationId).toBe(batch ? 'tasks' : null);
@@ -75,7 +75,7 @@ describe('atomic complete-block selection movement', () => {
     const prepared = plan(editor, 'two', 'three'), nodes = prepared.snapshot.items.map(entry => entry.node);
     expect(moveBlockSelection(editor.view, prepared, editor.state.doc.content.size)).not.toBeNull();
     const moved = blocks(editor).at(-1)!;
-    expect(moved.type.name).toBe('orderedList'); expect(moved.attrs.start).toBe(8);
+    expect(moved.type.name).toBe('orderedList'); expect(moved.attrs.start).toBe(9); expect(moved.attrs.numbering).toBe('continue');
     expect(moved.child(0)).toBe(nodes[0]); expect(moved.child(1)).toBe(nodes[1]);
     expect(editor.state.doc.firstChild!.textContent).toBe('onefour'); editor.state.doc.check();
   });
@@ -86,7 +86,7 @@ describe('atomic complete-block selection movement', () => {
     const prepared = plan(editor, 'b', 'c'), initial = editor.state.doc;
     expect(moveBlockSelection(editor.view, prepared, pos(editor, 'y', 'listItem'))).not.toBeNull();
     expect(blocks(editor).map(node => node.textContent)).toEqual(['a', 'd', 'gap', 'x', 'b', 'middle', 'c', 'yz']);
-    expect(blocks(editor).filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual([4, 9, 12, 5, 9, 1]);
+    expect(blocks(editor).filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual([4, 9, 12, 13, 14, 15]);
     expect(resolveBlockSelection(editor.state)!.items.map(entry => entry.node.textContent)).toEqual(['b', 'middle', 'c']);
     editor.state.doc.check(); editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
   });
@@ -131,7 +131,8 @@ describe('atomic complete-block selection movement', () => {
     const original = editor.state.doc.firstChild!, prepared = plan(editor, 'one', 'two');
     expect(moveBlockSelection(editor.view, prepared, pos(editor, 'y', 'listItem'))).not.toBeNull();
     expect(blocks(editor).map(node => node.textContent)).toEqual(['tail', 'x', 'onetwo', 'y']);
-    expect(blocks(editor)[2]).toBe(original); editor.state.doc.check();
+    expect(blocks(editor)[2].content).toBe(original.content);
+    expect(blocks(editor)[2].attrs).toMatchObject({ start: 2, numbering: 'continue', annotationId: 'wrapper-note' }); editor.state.doc.check();
   });
 
   it('keeps numbered wrapper attributes when moving a partial run across lists', () => {
@@ -140,8 +141,8 @@ describe('atomic complete-block selection movement', () => {
     expect(moveBlockSelection(editor.view, prepared, pos(editor, 'y', 'listItem'))).not.toBeNull();
     const visible = blocks(editor);
     expect(visible.map(node => node.textContent)).toEqual(['three', 'tail', 'x', 'onetwo', 'y']);
-    expect(visible[3].attrs).toMatchObject({ start: 8, blockBackground: '#ffeedd' });
-    expect(visible[4].attrs.start).toBe(1); editor.state.doc.check();
+    expect(visible[3].attrs).toMatchObject({ start: 21, blockBackground: '#ffeedd' });
+    expect(visible[4].attrs.start).toBe(23); editor.state.doc.check();
   });
 
   it('retains an image at the first boundary and an empty paragraph at the last boundary in the moved selection', () => {

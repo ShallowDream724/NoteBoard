@@ -154,7 +154,9 @@ export function VisualKernel({
         format: editorDocumentFormat(editor),
         directory: editorDocumentDirectory(editor),
         metadata: getEditorNativeMetadata(editor),
-        doc: transaction.doc,
+        // Appended normalization (e.g. linked-list numbering) is part of the
+        // same edit. Persist the applied state, not the pre-normalization root.
+        doc: editor.state.doc,
         revision: getDocumentRevision(docKey),
         manager: getMarkdownManager(editor),
         schema: editor.schema,

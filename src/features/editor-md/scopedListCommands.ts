@@ -14,8 +14,9 @@ function closestList(selection: Selection) {
 
 function compatible(left: Node | null, right: Node | null) {
   if (!left || !right || left.type !== right.type) return false;
-  for (const name of Object.keys(left.attrs)) if (name !== 'start' && JSON.stringify(left.attrs[name]) !== JSON.stringify(right.attrs[name])) return false;
-  return left.type.name !== 'orderedList' || right.attrs.start === 1 || right.attrs.start === left.attrs.start + left.childCount;
+  if (right.type.name === 'orderedList' && right.attrs.numbering === 'restart') return false;
+  for (const name of Object.keys(left.attrs)) if (name !== 'start' && name !== 'numbering' && JSON.stringify(left.attrs[name]) !== JSON.stringify(right.attrs[name])) return false;
+  return left.type.name !== 'orderedList' || right.attrs.numbering === 'continue' || right.attrs.start === 1 || right.attrs.start === left.attrs.start + left.childCount;
 }
 function joinTargets(tr: Transaction, positions: number[]) {
   const mappingStart = tr.mapping.maps.length;
@@ -38,10 +39,10 @@ const toggleScopedList: RawCommands['toggleList'] = (listName, itemName, keepMar
   if (selection.toJSON().type === 'cell') return false;
   const target = getNodeType(listName, state.schema), itemType = getNodeType(itemName, state.schema), current = closestList(selection);
   if (current?.node.type === target) {
-    if (selection instanceof NodeSelection && isList(selection.node)) return props.chain().command(({ tr }) => {
-      tr.setSelection(TextSelection.between(tr.doc.resolve(selection.from + 1), tr.doc.resolve(selection.to - 1))); return true;
-    }).liftListItem(itemType).run();
-    if (selection.$to.depth >= current.depth && selection.$to.node(current.depth) === current.node) return coreCommands.toggleList(listName, itemName, keepMarks, attributes)(props);
+    // Use the same row-scoped restoration as Ctrl+0/Backspace. The upstream
+    // lift copies the old start into the suffix and loses continuation intent.
+    if (selection.$to.depth >= current.depth && selection.$to.node(current.depth) === current.node
+      || selection instanceof NodeSelection && isList(selection.node)) return props.commands.restoreParagraph();
   }
   const planner = listTypeConversion(selection, target, itemType, attributes);
   const plans: { pos: number; node: Node; nodes: Node[] }[] = [], paragraphs: { pos: number; node: Node }[] = [];

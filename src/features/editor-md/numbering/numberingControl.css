@@ -1,0 +1,51 @@
+.nb-numbering-control { display:inline-flex; align-items:center; flex:none; border:1px solid transparent; border-radius:5px; height:28px; color:var(--editor-text-secondary,var(--editor-text)); }
+.nb-numbering-control button { display:inline-flex; align-items:center; justify-content:center; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; height:100%; border-radius:4px; }
+.nb-numbering-control .nb-numbering-main { width:27px; padding:0 4px; gap:8px; }
+.nb-numbering-control .nb-numbering-arrow { width:16px; flex:none; padding:0; }
+.nb-numbering-control[data-active] { background:var(--editor-selection-background); color:var(--editor-accent,var(--accent-500)); border-color:var(--editor-border-focus,transparent); }
+.nb-numbering-control button:hover,.nb-numbering-control button[data-state="open"] { background:var(--toolbar-hover); }
+.nb-numbering-control button:active { background:var(--toolbar-active); }
+.nb-numbering-control button:disabled { opacity:.38; cursor:not-allowed; }
+.nb-numbering-control button:focus-visible,.nb-numbering-menu button:focus-visible,.nb-numbering-style-menu button:focus-visible { outline:2px solid var(--editor-accent); outline-offset:-2px; }
+.nb-numbering-control-block { height:30px; flex:1.35; min-width:42px; }
+.nb-block-format-actions .nb-numbering-control-block .nb-numbering-main { flex:1; min-width:24px; }
+.nb-block-format-actions .nb-numbering-control-block .nb-numbering-arrow { flex:none; width:14px; }
+.nb-numbering-control-overflow { width:100%; height:31px; }
+.nb-numbering-control-overflow .nb-numbering-main { flex:1; justify-content:flex-start; width:auto; padding:0 8px; font-size:12px; }
+.nb-numbering-control-overflow .nb-numbering-arrow { width:26px; }
+.nb-numbering-menu,.nb-numbering-style-menu,.nb-numbering-preview-popover { z-index:var(--nb-layer-editor-menu,1200); pointer-events:auto; color:var(--editor-text); background:var(--editor-surface); border:1px solid var(--editor-border); border-radius:8px; box-shadow:var(--shadow-lg,0 6px 20px #0002); font:var(--ui-font-size,13px)/1.5 var(--ui-font-family); outline:none; }
+.nb-numbering-menu { width:210px; padding:4px; max-width:calc(100vw - 20px); }
+.nb-numbering-row { box-sizing:border-box; display:flex; align-items:center; gap:8px; min-height:32px; width:100%; padding:6px 8px; border:0; border-radius:5px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.nb-numbering-row:hover:not(:disabled),.nb-numbering-row:focus-visible,.nb-numbering-row[data-state="open"] { background:var(--toolbar-hover); }
+.nb-numbering-row:disabled,.nb-numbering-row.is-disabled { color:var(--editor-text-muted); opacity:.55; cursor:default; }
+.nb-numbering-row-hint { margin-left:auto; font-size:11px; color:var(--editor-text-muted); white-space:nowrap; }
+.nb-numbering-restart { cursor:default; gap:6px; }
+.nb-numbering-restart button { flex:1; min-height:25px; padding:0; color:inherit; border:0; background:transparent; font:inherit; text-align:left; cursor:pointer; }
+.nb-numbering-restart button:disabled { cursor:default; }
+.nb-numbering-restart input { box-sizing:border-box; min-width:0; width:54px; height:25px; padding:2px 2px 2px 6px; border:1px solid var(--editor-border); border-radius:4px; color:var(--editor-text); background:var(--editor-background,var(--editor-surface)); font:inherit; font-variant-numeric:tabular-nums; }
+.nb-numbering-restart input:focus { outline:2px solid var(--editor-accent); outline-offset:-1px; }
+.nb-numbering-style-current { margin-left:auto; font-size:11px; color:var(--editor-text-muted); }
+.nb-numbering-row > svg:last-child { margin-left:auto; }
+.nb-numbering-style-trigger > svg:last-child { margin-left:0; }
+.nb-numbering-style-menu { display:grid; grid-template-columns:repeat(3,56px); gap:4px; padding:7px; }
+.nb-numbering-style-menu button { display:grid; place-items:center; width:56px; height:54px; padding:6px; color:var(--editor-text); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; }
+.nb-numbering-style-menu button:hover { background:var(--toolbar-hover); }
+.nb-numbering-style-menu button[aria-checked="true"] { border-color:var(--editor-accent); background:var(--editor-selection-background); }
+.nb-numbering-style-sample { display:flex; flex-direction:column; width:100%; gap:5px; }
+.nb-numbering-style-sample > span { display:flex; align-items:center; gap:4px; }
+.nb-numbering-style-sample b { width:21px; text-align:right; font:500 10px/1 var(--ui-font-family); color:inherit; }
+.nb-numbering-style-sample i { display:block; flex:1; height:2px; background:currentColor; border-radius:1px; opacity:.35; }
+.nb-numbering-style-sample[data-numbering-style="circle"] b,.nb-numbering-style-sample[data-numbering-style="box"] b { width:12px; height:12px; box-sizing:border-box; margin-left:9px; border:1px solid currentColor; display:grid; place-items:center; text-align:center; font-size:8px; }
+.nb-numbering-style-sample[data-numbering-style="circle"] b { border-radius:50%; }
+.nb-numbering-preview-line[data-numbering-style="circle"] > span,.nb-numbering-preview-line[data-numbering-style="box"] > span { min-width:17px; height:17px; display:grid; place-items:center; border:1px solid currentColor; box-sizing:border-box; text-align:center; font-size:10px; }
+.nb-numbering-preview-line[data-numbering-style="circle"] > span { border-radius:50%; }
+.nb-numbering-preview-popover { width:244px; pointer-events:none; }
+.nb-numbering-preview { padding:10px; }
+.nb-numbering-preview-label { margin-bottom:7px; color:var(--editor-text-muted); font-size:11px; }
+.nb-numbering-preview-line { display:flex; gap:7px; align-items:baseline; min-width:0; font-size:12px; }
+.nb-numbering-preview-line > span { flex:none; min-width:20px; text-align:right; font-variant-numeric:tabular-nums; }
+.nb-numbering-preview-line p { margin:0; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
+.nb-numbering-preview-line.is-current { color:var(--editor-accent); }
+.nb-numbering-preview-join { margin:3px 0 3px 6px; color:var(--editor-text-muted); }
+.nb-numbering-preview-join svg { transform:rotate(90deg); }
+.nb-block-context-menu .nb-numbering-quick { display:flex; font-size:12px; padding:7px 10px; }

@@ -3,7 +3,7 @@
 // 支持多级下拉菜单、实时 Active/Hover 状态同步、撤销/重做与丰富排版格式化工具
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
+import { NumberingControl } from '../editor-md/numbering/NumberingControl';
 import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import type { Editor } from '@tiptap/core';
 import { useFormattingUpdates, useSourceFormattingUpdates } from '../editor-md/useFormattingUpdates';
@@ -564,6 +564,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
       <ToolbarButton
         icon={<Code size={15} strokeWidth={2.4} />}
         title="行内代码"
+        helpKey="text.code"
         disabled={!canInline}
         collapsePriority={50}
         shortcut="`"
@@ -598,15 +599,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         active={!isSourceMode && Boolean(editor?.isActive('bulletList'))}
         onClick={() => toggleList('bullet')}
       />
-      <ToolbarButton
-        icon={<ListOrdered size={18} />}
-        title="有序列表"
-        helpKey="list.ordered"
+      <NumberingControl
+        editor={isSourceMode ? null : editor}
         disabled={!canLists || !isSourceMode && !editor?.can().toggleOrderedList()}
         collapsePriority={20}
-        shortcut="Ctrl+Shift+7"
+        overflowId="ordered-list"
         active={!isSourceMode && Boolean(editor?.isActive('orderedList'))}
-        onClick={() => toggleList('ordered')}
+        isCurrentTarget={isCurrentTarget}
+        onToggle={() => toggleList('ordered')}
       />
       <ToolbarButton
         icon={<CheckSquare size={15} strokeWidth={2.2} />}
@@ -782,6 +782,14 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         /></ToolbarOverflowItem>
 
         {/* 8. 日期时间二级菜单 */}
+        <ToolbarOverflowItem id="ordered-list"><NumberingControl
+          editor={isSourceMode ? null : editor} variant="overflow"
+          disabled={!canLists || !isSourceMode && !editor?.can().toggleOrderedList()}
+          active={!isSourceMode && Boolean(editor?.isActive('orderedList'))}
+          isCurrentTarget={isCurrentTarget}
+          onToggle={() => { setInsertDropdownOpen(false); toggleList('ordered'); }}
+          onDone={() => setInsertDropdownOpen(false)}
+        /></ToolbarOverflowItem>
         <ToolbarOverflowItem id="text-reset"><>
           <ToolbarDropdownItem icon={<RemoveFormatting size={14}/>} label="清除文字样式" shortcut={'Ctrl+\\'} disabled={!canClear}
             helpKey="format.clear"

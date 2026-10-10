@@ -119,7 +119,7 @@ it.each(['ol', 'ul'])('moves a checked task before, between and after %s rows wi
     expect(task.firstChild).toBe(item); expect(task.firstChild!.attrs.checked).toBe(true);
     expect(task.firstChild!.firstChild!.firstChild!.marks[0].type.name).toBe('bold');
     expect(sections.map(node => node.textContent)).toEqual(edge === 0 ? ['todo', 'onetwothree'] : edge === 1 ? ['one', 'todo', 'twothree'] : ['onetwothree', 'todo']);
-    if (tag === 'ol') expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual(edge === 1 ? [1, 1] : [1]);
+    if (tag === 'ol') expect(sections.filter(node => node.type.name === 'orderedList').map(node => node.attrs.start)).toEqual(edge === 1 ? [1, 2] : [1]);
     editor.state.doc.check(); const moved = editor.state.doc;
     editor.commands.undo(); expect(editor.state.doc.eq(original)).toBe(true);
     editor.commands.redo(); expect(editor.state.doc.eq(moved)).toBe(true);

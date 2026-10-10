@@ -70,15 +70,20 @@ describe('block color defaults and independent inline color', () => {
       expect(root.querySelector('.export-task-check path')).not.toBeNull();
     } finally { editor.destroy(); }
   });
-  it('clears selected-text marks separately, while clear-block-text also removes inherited text color but keeps the row fill', () => {
+  it('preserves shared paragraph colors for partial text clearing and resets them for whole-block clearing with an independent undo', () => {
     const editor = create('<p><strong>text</strong></p>');
     try {
       setBlockColors(editor, 0, { color: '#2563eb', background: '#fff7ed' });
-      editor.commands.setTextSelection({ from: 1, to: 5 }); clearSelectionTextFormatting(editor);
-      expect(editor.state.doc.firstChild!.attrs.blockTextColor).toBe('#2563eb');
+      editor.commands.setTextSelection({ from: 1, to: 3 }); clearSelectionTextFormatting(editor);
+      expect(editor.state.doc.firstChild!.attrs).toMatchObject({ blockTextColor: '#2563eb', blockBackground: '#fff7ed' });
+      expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
+      expect(editor.state.doc.firstChild!.lastChild!.marks.map(mark => mark.type.name)).toContain('bold');
+      const partiallyCleared = editor.state.doc;
+      editor.commands.setTextSelection(1);
       expect(clearBlockFormatting(editor, 0)).toBe(true);
-      expect(editor.state.doc.firstChild!.attrs).toMatchObject({ blockTextColor: null, blockBackground: '#fff7ed' });
-      editor.commands.undo(); expect(editor.state.doc.firstChild!.attrs.blockTextColor).toBe('#2563eb');
+      expect(editor.state.doc.firstChild!.attrs).toMatchObject({ blockTextColor: null, blockBackground: null });
+      expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
+      editor.commands.undo(); expect(editor.state.doc.eq(partiallyCleared)).toBe(true);
     } finally { editor.destroy(); }
   });
 });

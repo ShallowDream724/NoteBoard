@@ -19,7 +19,7 @@ function position(editor: Editor, text: string, type: string) {
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); vi.restoreAllMocks(); });
 
 describe('ordinary blocks between list items', () => {
-  for (const sourceBefore of [false, true]) it(`splits ordered lists into independent numbering, sourceBefore=${sourceBefore}`, () => {
+  for (const sourceBefore of [false, true]) it(`keeps split ordered fragments in one numbering sequence, sourceBefore=${sourceBefore}`, () => {
     const list = { type: 'orderedList', attrs: { start: 1 }, content: ['one', 'two', 'three', 'four'].map(text => item(text)) };
     const paragraph = { ...p('insert'), content: [{ type: 'text', text: 'insert', marks: [{ type: 'bold' }, { type: 'link', attrs: { href: 'https://example.com' } }] }] };
     const editor = create(sourceBefore ? [paragraph, list] : [list, paragraph]);
@@ -31,7 +31,7 @@ describe('ordinary blocks between list items', () => {
     const blocks = moved.content.content.filter(node => node.type.name !== 'paragraph' || node.content.size);
     expect(blocks.map(node => node.type.name)).toEqual(['orderedList', 'paragraph', 'orderedList']);
     expect(blocks.map(node => node.textContent)).toEqual(['onetwo', 'insert', 'threefour']);
-    expect([blocks[0].attrs.start, blocks[2].attrs.start]).toEqual([1, 1]);
+    expect([blocks[0].attrs.start, blocks[2].attrs.start]).toEqual([1, 3]);
     expect(moved.nodeAt(result.insertedPos)?.firstChild?.marks.map(mark => mark.type.name).sort()).toEqual(['bold', 'link']);
     moved.check(); editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
     editor.commands.redo(); expect(editor.state.doc.eq(moved)).toBe(true);
@@ -56,7 +56,7 @@ describe('ordinary blocks between list items', () => {
     moveTopLevelBlock(editor.view, position(editor, 'insert', 'paragraph'), position(editor, 'two', 'listItem'));
     const parent = editor.state.doc.firstChild!.firstChild!;
     expect(parent.content.content.map(node => node.type.name)).toEqual(['paragraph', 'orderedList', 'paragraph', 'orderedList']);
-    expect(parent.child(1).attrs.start).toBe(7); expect(parent.child(3).attrs.start).toBe(1);
+    expect(parent.child(1).attrs.start).toBe(7); expect(parent.child(3).attrs.start).toBe(8);
     expect(editor.state.doc.firstChild!.lastChild).toBe(sibling);
     editor.state.doc.check(); editor.commands.undo(); expect(editor.state.doc.eq(initial)).toBe(true);
   });

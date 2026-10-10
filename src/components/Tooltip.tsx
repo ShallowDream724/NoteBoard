@@ -282,8 +282,9 @@ export function Tooltip({
       <RadixTooltip.Portal>
         <RadixTooltip.Content
           data-nb-editor-menu={helpKey ? true : undefined}
+          data-nb-menu-branch={helpKey ? menu?.branch : undefined}
           onPointerEnter={helpKey ? () => menu?.cancel() : undefined}
-          onPointerLeave={helpKey ? () => menu?.leave() : undefined}
+          onPointerLeave={helpKey ? event => menu?.leave(event) : undefined}
           onPointerDown={helpKey ? event => { event.preventDefault(); setOpen(false); } : undefined}
           side={side}
           align={align}

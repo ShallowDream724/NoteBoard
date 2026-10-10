@@ -1,6 +1,7 @@
 import { Fragment, type Node, type NodeType } from '@tiptap/pm/model';
 import type { Selection } from '@tiptap/pm/state';
 import { isList } from './listItemActions';
+import { orderedSegmentAttrs } from './numbering/model';
 
 /** An operation-local plan, with no editor, DOM or persistent document cache. */
 export function listTypeConversion(selection: Selection, target: NodeType, itemType: NodeType, attributes: Record<string, unknown>) {
@@ -10,8 +11,8 @@ export function listTypeConversion(selection: Selection, target: NodeType, itemT
     : start === end ? selection.from <= start && selection.to > start : selection.from < end && selection.to > start;
   function rewrite(list: Node, pos: number): { nodes: Node[]; changed: boolean } {
     const groups: { type: NodeType; attrs: Record<string, unknown>; items: Node[]; converted: boolean }[] = [];
-    let changed = false;
-    list.forEach((item, offset, index) => {
+    let changed = false, retainedOrdered = 0;
+    list.forEach((item, offset) => {
       const itemPos = pos + 1 + offset;
       let selected = false;
       item.forEach((child, at) => { if (child.isTextblock && overlaps(itemPos + 2 + at, itemPos + at + child.nodeSize)) selected = true; });
@@ -34,9 +35,11 @@ export function listTypeConversion(selection: Selection, target: NodeType, itemT
       if (last?.type === type) { last.items.push(next); last.converted ||= selected && list.type !== target; }
       else {
         const attrs = selected && list.type !== target ? { ...list.attrs, ...attributes } : { ...list.attrs };
-        if (type.name === 'orderedList' && type === list.type) attrs.start = (list.attrs.start ?? 1) + index;
+        if (type.name === 'orderedList' && type === list.type) Object.assign(attrs, orderedSegmentAttrs(list, retainedOrdered));
+        else if (type.name === 'orderedList') { attrs.start = 1; attrs.numbering = null; attrs.numberStyle = null; }
         groups.push({ type, attrs, items: [next], converted: selected && list.type !== target });
       }
+      if (type.name === 'orderedList' && type === list.type) retainedOrdered++;
     });
     if (!changed) return { nodes: [list], changed: false };
     const nodes = groups.map(group => {

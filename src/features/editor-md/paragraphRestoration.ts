@@ -1,6 +1,7 @@
 import { Fragment, type Node } from '@tiptap/pm/model';
 import type { Selection } from '@tiptap/pm/state';
 import { isList } from './listItemActions';
+import { orderedSegmentAttrs } from './numbering/model';
 import { RESTORABLE_TEXT_CONTAINERS, carryContainerAnnotation, inheritTextContainer, unwrapTextContainer } from './textContainerRestoration';
 
 interface Segment { node: Node; selected: boolean }
@@ -30,15 +31,15 @@ export function paragraphRestoration(selection: Selection) {
   }
   function rewriteList(list: Node, pos: number): Segment[] {
     const result: Segment[] = [];
-    let group: Node[] = [], groupStart = 0, retainedShell = false;
+    let group: Node[] = [], retainedCount = 0, retainedShell = false;
     const flush = () => {
       if (!group.length) return;
-      const attrs: Record<string, unknown> = { ...list.attrs, ...(list.type.name === 'orderedList' ? { start: (list.attrs.start ?? 1) + groupStart } : {}) };
+      const attrs: Record<string, unknown> = list.type.name === 'orderedList' ? orderedSegmentAttrs(list, retainedCount) : { ...list.attrs };
       if (retainedShell && Object.hasOwn(attrs, 'annotationId')) attrs.annotationId = null;
       const content = Fragment.fromArray(group); valid &&= list.type.validContent(content);
-      result.push({ node: list.type.create(attrs, content, list.marks), selected: false }); group = []; retainedShell = true;
+      result.push({ node: list.type.create(attrs, content, list.marks), selected: false }); retainedCount += group.length; group = []; retainedShell = true;
     };
-    list.forEach((item, offset, index) => {
+    list.forEach((item, offset) => {
       const itemPos = pos + 1 + offset;
       let selected = false;
       item.forEach((child, at) => { selected ||= selectedBody(child, itemPos + 1 + at); });
@@ -49,7 +50,6 @@ export function paragraphRestoration(selection: Selection) {
         result.push(...body.map((segment, index) => ({ ...segment, node: inherited[index] })));
       }
       else {
-        if (!group.length) groupStart = index;
         group.push(copy(item, body.map(segment => segment.node)));
       }
     });

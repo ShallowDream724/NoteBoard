@@ -1,0 +1,3 @@
+:root { --nb-layer-editor-menu:1200; }
+.nb-editor-menu-overlay { position:fixed; inset:0; z-index:var(--nb-layer-editor-menu); pointer-events:none; }
+.nb-editor-menu-overlay [data-nb-editor-menu] { pointer-events:auto; }

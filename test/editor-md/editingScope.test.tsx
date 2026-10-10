@@ -70,7 +70,7 @@ describe('parent-owned editing scopes', () => {
     expect(caption.editor.isActive('code')).toBe(true);
     await click(top, '应用文字颜色与高亮');
     expect(caption.editor.isActive('highlight')).toBe(true);
-    await click(top, '清除选中文本格式');
+    await click(top, '清除文字样式');
     expect(caption.editor.isActive('bold')).toBe(false); expect(caption.editor.isActive('highlight')).toBe(false);
     await click(top, '撤销'); expect(caption.editor.isActive('bold')).toBe(true);
     expect(document.activeElement).toBe(caption.editor.view.dom);
@@ -78,8 +78,8 @@ describe('parent-owned editing scopes', () => {
     expect(top.querySelector<HTMLButtonElement>('button[aria-label="标题等级"]')!.disabled).toBe(true);
     expect(top.querySelector<HTMLButtonElement>('button[aria-label="无序列表"]')!.disabled).toBe(true);
     await click(top, '插入超链接、图片、表格、公式、图表、提示块、日期时间等');
-    expect(top.querySelector('[role="menuitem"][aria-label="表格"]')?.getAttribute('aria-disabled')).toBe('true');
-    expect(top.querySelector('[role="menuitem"][aria-label="代码块"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(document.querySelector('[role="menuitem"][aria-label="表格"]')?.getAttribute('aria-disabled')).toBe('true');
+    expect(document.querySelector('[role="menuitem"][aria-label="代码块"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(getEditingScope(editor.view)?.kind).toBe('tiptap');
   });
 
@@ -114,7 +114,7 @@ describe('parent-owned editing scopes', () => {
     let release!: () => void, replacement!: () => void;
     await act(async () => { release = registerExternalEditingScope(editor.view); replacement = registerExternalEditingScope(editor.view); });
     release(); expect(getEditingScope(editor.view)?.kind).toBe('external'); expect(getEditingScope(other.view)).toBeNull();
-    for (const label of ['加粗', '无序列表', '插入/编辑超链接', '清除选中文本格式', '撤销', '重做']) {
+    for (const label of ['加粗', '无序列表', '插入/编辑超链接', '清除文字样式', '撤销', '重做']) {
       expect(top.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!.disabled).toBe(true);
       await click(top, label);
     }

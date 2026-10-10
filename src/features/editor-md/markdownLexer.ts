@@ -38,7 +38,15 @@ class CjkTokenizer extends Tokenizer {
  * methods and constructors also provided by a Marked instance. */
 export function createMarkdownLexer(): typeof marked {
   return new Marked().setOptions({ tokenizer: new CjkTokenizer() })
-    .use({ hooks: { emStrongMask: source => formattingMask(source) } }) as unknown as typeof marked;
+    .use({ hooks: { emStrongMask: source => formattingMask(source) }, extensions: [{
+      name: 'noteboardListBoundary', level: 'block', start: () => -1,
+      tokenizer(source) {
+        // Our exact HTML comment separates adjacent Markdown lists. Keep it as a
+        // lexer boundary, but do not let the HTML fallback invent a paragraph.
+        const match = /^<!-- noteboard-list-boundary -->[ \t]*(?:\r?\n|$)/.exec(source);
+        return match ? { type: 'noteboardListBoundary', raw: match[0] } : undefined;
+      },
+    }] }) as unknown as typeof marked;
 }
 
 /** A block extension only needs to interrupt the current paragraph. Looking

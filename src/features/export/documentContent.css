@@ -3,6 +3,7 @@
 @import './richDocument.css';
 @import '../editor-md/callout.css';
 @import '../document-style/blockAppearance.css';
+@import '../editor-md/numbering/styles.css';
 :root { color-scheme: light; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: white; color: #18202b; }
@@ -16,6 +17,7 @@ li[data-type=taskItem] > div { min-width: 0; }
 h1,h2,h3,h4,h5,h6 { break-after: avoid; line-height: 1.25; margin: 1em 0 .5em; font-weight: 650; }
 h1 { font-size: 1.8em; } h2 { font-size: 1.45em; } h3 { font-size: 1.2em; }
 ul,ol { padding-left: 1.8em; margin: .5em 0; } li > p { margin: .2em 0; }
+ol { list-style-type: decimal; } ol ol { list-style-type: upper-alpha; } ol ol ol { list-style-type: lower-roman; }
 ul[data-type=taskList] { list-style: none; padding-left: .2em; }
 li[data-type=taskItem] { display: flex; gap: .5em; align-items: flex-start; margin:.35em 0; }
 li[data-type=taskItem] > label { display:flex; align-items:center; flex:0 0 1em; height:1lh; }

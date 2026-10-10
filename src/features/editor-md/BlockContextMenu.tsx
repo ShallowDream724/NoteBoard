@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core';
 import { Type, Table2, Image, Braces, Quote, List, CheckSquare, Copy, Scissors, Trash2, Plus, Rows3, Columns3, AlignLeft, AlignCenter, AlignRight, Grid2X2, GalleryHorizontalEnd, PanelTopClose, PanelTop, Minus, CircleHelp, EyeOff, MessageSquareText } from 'lucide-react';
-import { OrderedListIcon as ListOrdered } from '../../components/OrderedListIcon';
+import { BlockContinueNumbering, NumberingControl, prepareNumberingTarget } from './numbering/NumberingControl';
 import { BlockFormulaIcon } from '../../components/FormulaIcons';
 import { blockRange, blockHasTextSelection, selectBlock, copyBlock, deleteBlock, formatBlock, insertAfterBlock, restoreBlockParagraph, editBlockLink } from './blockActions';
 import { Link2 } from 'lucide-react';
@@ -90,7 +90,10 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       {([1,2,3,4,5,6] as const).map(level => <Tooltip key={level} content={'标题 ' + level} helpKey={HEADING_HELP_KEYS[level]} shortcut={`Ctrl+${level}`} side="right"><button type="button" aria-label={'标题 ' + level}
         onClick={() => action(() => formatBlock(editor, pos, chain => chain.setHeading({ level }), true))}>H{level}</button></Tooltip>)}
       <div className="nb-block-format-actions" role="group" aria-label="列表与内容格式">
-      {([{ label:'无序列表', Icon:List, command:'toggleBulletList', shortcut: 'Ctrl+Shift+8', helpKey: 'list.bullet' }, { label:'有序列表', Icon:ListOrdered, command:'toggleOrderedList', shortcut: 'Ctrl+Shift+7', helpKey: 'list.ordered' },
+      <Tooltip content="无序列表" shortcut="Ctrl+Shift+8" helpKey="list.bullet" side="right"><button type="button" aria-label="无序列表" onClick={() => action(() => formatBlock(editor, pos, chain => chain.toggleBulletList()))}><List size={17}/></button></Tooltip>
+      <NumberingControl editor={editor} targetPos={pos} variant="block" active={type === 'orderedList' || type === 'listItem' && editor.state.doc.resolve(pos).parent.type.name === 'orderedList'} onDone={close}
+        onToggle={() => action(() => { prepareNumberingTarget(editor, pos); editor.chain().focus().toggleOrderedList().run(); })}/>
+      {([
         { label:'待办', Icon:CheckSquare, command:'toggleTaskList', shortcut: 'Ctrl+Shift+9', helpKey: 'list.task' }, { label:'代码块', Icon:Braces, command:'toggleCodeBlock', shortcut: 'Ctrl+Alt+C', helpKey: 'block.code' },
         { label:'引用', Icon:Quote, command:'toggleBlockquote', shortcut: undefined, helpKey: 'block.quote' }] as const).map(({ label, Icon, command, shortcut, helpKey }) =>
         <Tooltip key={command} content={label} shortcut={shortcut} helpKey={helpKey} side="right"><button type="button" aria-label={label} onClick={() => action(() => formatBlock(editor, pos, chain => chain[command]()))}><Icon size={17}/></button></Tooltip>)}
@@ -98,6 +101,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
       <Tooltip content="超链接" helpKey="text.link" shortcut="Ctrl+K" side="right"><button type="button" aria-label="超链接" onClick={() => { close(); editBlockLink(editor, pos); }}><Link2 size={17}/></button></Tooltip>
       </div>
     </div>}
+    {text && <BlockContinueNumbering editor={editor} pos={pos} close={close}/>}
     {native && type === 'image' && <div className="nb-block-style-row nb-block-position-row" role="group" aria-label="图片位置">
       <span>图片位置</span>
       {([{ value: 'left', label: '图片左对齐', Icon: AlignLeft }, { value: 'center', label: '图片居中', Icon: AlignCenter },

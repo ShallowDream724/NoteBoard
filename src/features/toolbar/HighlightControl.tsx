@@ -5,6 +5,7 @@ import { rememberTextStyle, useTextStylePreference, type TextStylePair } from '.
 import { ColorSwatches } from '../document-style/ColorSwatches';
 import './highlightControl.css';
 import { useHoverMenu } from '../../components/useHoverMenu';
+import { useEditorMenuPortalContainer } from '../../components/EditorMenuScope';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
 
 interface Props {
@@ -22,6 +23,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
   const menuId = useId();
   const menu = useRef<HTMLDivElement>(null);
   const hover = useHoverMenu(open, onOpenChange);
+  const portalContainer = useEditorMenuPortalContainer();
   const { cancel, leave, keyboard: keyboardOpen } = hover;
   const apply = (color: string | null) => { rememberTextStyle({ background: color }); if (color) onApply(color); else onRemove(); };
   const applyPair = (pair: TextStylePair) => {
@@ -50,7 +52,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
           onClick={() => { hover.change(true); }}
           onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); cancel(); keyboardOpen.current = true; onOpenChange(true); } }}><ChevronDown size={12}/></button>
       </div></Popover.Anchor>
-      <Popover.Portal><Popover.Content {...hover.contentProps} ref={menu} id={menuId} role="dialog" aria-label="文字颜色与高亮" className="nb-highlight-menu" align="start" sideOffset={6} collisionPadding={8}
+      <Popover.Portal container={portalContainer}><Popover.Content {...hover.contentProps} ref={menu} id={menuId} role="dialog" aria-label="文字颜色与高亮" className="nb-highlight-menu" align="start" sideOffset={6} collisionPadding={8}
         onPointerEnter={() => { hover.keepAlive(); keyboardOpen.current = false; }} onPointerLeave={leave}
         onOpenAutoFocus={event => { event.preventDefault(); if (keyboardOpen.current) menu.current?.querySelector<HTMLButtonElement>('[aria-pressed=true],button')?.focus(); }}
         onKeyDown={event => {

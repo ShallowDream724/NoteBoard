@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { documentColor } from './colors';
 import { BLOCK_COLOR_FIELDS, BLOCK_COLOR_TYPES } from './blockAppearanceSchema';
+import { normalizeNumberingStyle } from '../editor-md/numbering/styles';
 
 const PREFIX = '<!-- noteboard-styles ';
 const MAX_BYTES = 2_000_000, MAX_RECORDS = 20_000;
@@ -45,6 +46,10 @@ function presentationAttrs(node: JSONContent): Attributes {
   if (node.type === 'mathBlock') for (const key of ['textColor', 'background']) {
     const color = documentColor(source[key]); if (color) attrs[key] = color;
   }
+  if (node.type === 'orderedList') {
+    if (typeof source.numberStyle === 'string' && normalizeNumberingStyle(source.numberStyle) === source.numberStyle) attrs.numberStyle = source.numberStyle;
+    if (source.numbering === 'continue' || source.numbering === 'restart') attrs.numbering = source.numbering;
+  }
   return attrs;
 }
 function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSONContent {
@@ -66,6 +71,7 @@ function extract(node: JSONContent, path: number[], records: RecordEntry[]): JSO
   if (indentBlocks.has(node.type!)) delete cleanAttrs.indent;
   if (cells.has(node.type!)) { delete cleanAttrs.align; delete cleanAttrs.textAlign; delete cleanAttrs.verticalAlign; }
   if (node.type === 'mathBlock') { delete cleanAttrs.textColor; delete cleanAttrs.background; delete cleanAttrs.textAlign; }
+  if (node.type === 'orderedList') { delete cleanAttrs.numberStyle; delete cleanAttrs.numbering; }
   return { ...node, ...(node.attrs ? { attrs: cleanAttrs } : {}),
     ...(node.marks ? { marks: node.marks.filter(mark => mark.type !== 'highlight' && mark.type !== 'textColor') } : {}),
     ...(node.content ? { content: node.content.map((child, index) => extract(child, [...path, index], records)) } : {}) };

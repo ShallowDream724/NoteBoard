@@ -11,6 +11,7 @@ import { DeferredMarkdownToolbar } from './DeferredMarkdownToolbar';
 import { CodeToolbar } from './CodeToolbar';
 import { FloatingExpandHandle } from './FloatingExpandHandle';
 import { ToolbarButton } from './ToolbarComponents';
+import { EditorMenuScope } from '../../components/EditorMenuScope';
 
 interface EditorToolbarProps {
   activeTab: Tab | null;
@@ -41,7 +42,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
 
   // 2. 操作栏处于展开状态：渲染顶层工具栏容器
   return (
-    <div
+    <EditorMenuScope editor={activeEditor}><div
       inert={transferring || undefined}
       style={{
         height: 36,
@@ -82,7 +83,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
           onClick={() => setEditorToolbarVisible(false)}
         />
       </div>
-    </div>
+    </div></EditorMenuScope>
   );
 }
 import { isRichDocument } from '../../core/docKind';

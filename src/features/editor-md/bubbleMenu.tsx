@@ -28,6 +28,7 @@ import {
 import { handleLinkClick } from './linkHandler';
 import { useWindowStore } from '../../stores/windowStore';
 import { Tooltip, TooltipDetailProvider } from '../../components/Tooltip';
+import { EDITOR_MENU_ACTIVITY, isEditorToolbarMenuOpen } from '../../components/EditorMenuScope';
 import { TableAppearanceMenu } from './TableAppearanceMenu';
 import { HighlightControl } from '../toolbar/HighlightControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
@@ -216,7 +217,7 @@ export function EditorBubbleMenu({
   }) => {
     const { selection } = state;
     if (currentEditor.isDestroyed) return false;
-    if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || isEditorDragging(currentEditor.view) || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
+    if (dismissed.current || !enabledRef.current || !currentEditor.view.dom.isConnected || isEditorDragging(currentEditor.view) || isEditorToolbarMenuOpen(currentEditor.view.dom) || currentEditor.view.dom.classList.contains('nb-block-menu-open') || selection.empty || !(selection instanceof TextSelection) || isEmbeddedEditing(currentEditor)) return false;
     if (!currentEditor.view.hasFocus()) return false;
     if (!selectionAllowsAuxiliaryControls(selection)) return false;
     if (!currentEditor.state.doc.textBetween(selection.from, selection.to).trim()) return false;
@@ -226,6 +227,18 @@ export function EditorBubbleMenu({
     if (isCellSelection(selection)) return false;
     return true;
   }, []);
+  useEffect(() => {
+    const menuActivity = () => {
+      if (editor.isDestroyed) return;
+      const open = isEditorToolbarMenuOpen(editor.view.dom);
+      if (open) { setShowColorPicker(false); setShowResetMenu(false); }
+      const show = !open && shouldShow({ editor, state: editor.state });
+      editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', show ? 'show' : 'hide').setMeta('addToHistory', false));
+      if (show) editor.view.dispatch(editor.state.tr.setMeta('bubbleMenu', 'updatePosition').setMeta('addToHistory', false));
+    };
+    editor.view.dom.addEventListener(EDITOR_MENU_ACTIVITY, menuActivity);
+    return () => editor.view.dom.removeEventListener(EDITOR_MENU_ACTIVITY, menuActivity);
+  }, [editor, shouldShow]);
   const bubbleMenuOptions = useMemo(() => ({
     strategy: 'fixed' as const,
     placement: preferredPosition === 'above' ? 'top-end' as const : 'bottom-end' as const,

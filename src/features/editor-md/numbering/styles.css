@@ -1,0 +1,48 @@
+@counter-style nb-parenthesized-decimal {
+  system: extends decimal;
+  prefix: '(';
+  suffix: ') ';
+}
+@counter-style nb-chinese {
+  system: extends simp-chinese-informal;
+  range: 1 9999;
+  suffix: '、 ';
+  fallback: decimal;
+}
+
+/* The attribute belongs to this list only. Explicit styles override depth-based
+ * defaults while an unstyled nested list keeps the editor's native hierarchy. */
+ol[data-number-style='decimal'] > li { list-style-type: decimal; }
+ol[data-number-style='upper-alpha'] > li { list-style-type: upper-alpha; }
+ol[data-number-style='lower-alpha'] > li { list-style-type: lower-alpha; }
+ol[data-number-style='upper-roman'] > li { list-style-type: upper-roman; }
+ol[data-number-style='lower-roman'] > li { list-style-type: lower-roman; }
+ol[data-number-style='chinese'] > li { list-style-type: nb-chinese; }
+ol[data-number-style='paren'] > li { list-style-type: nb-parenthesized-decimal; }
+
+/* Use the native list-item counter: it respects ol[start], nested list scopes
+ * and pagination without per-row DOM data or a separate numbering algorithm. */
+ol:is([data-number-style='circle'], [data-number-style='box']) > li {
+  position: relative;
+  list-style-type: none;
+}
+ol:is([data-number-style='circle'], [data-number-style='box']) > li::before {
+  content: counter(list-item);
+  position: absolute;
+  inset-inline-end: calc(100% + .45em);
+  top: .5lh;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: max-content;
+  min-width: 1.35em;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  padding: .12em;
+  border: 1px solid currentColor;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+ol[data-number-style='circle'] > li::before { border-radius: 50%; }
+ol[data-number-style='box'] > li::before { border-radius: .1em; }

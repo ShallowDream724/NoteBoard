@@ -1,6 +1,7 @@
 import { Fragment, type Node } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { isList } from './listKinds';
+import { orderedSegmentAttrs, startOf } from './numbering/model';
 
 /** Only item boundaries qualify. Text/cell/code positions remain invalid. */
 function boundary(doc: Node, pos: number) {
@@ -23,8 +24,8 @@ export function canInsertAtListBoundary(doc: Node, pos: number, content: Fragmen
   return target.parent.canReplace(target.slot, target.slot + 1, Fragment.fromArray(nodes));
 }
 
-/** Partition once on drop, outside the list shell. A new ordered section starts
- * at 1; a wrapper explanation belongs to the first retained section only. */
+/** Partition once on drop. Both ordered fragments remain one sequence; media
+ * between them consumes no ordinal. Wrapper explanations stay with the prefix. */
 export function insertAtListBoundary(tr: Transaction, pos: number, content: Fragment): number | null {
   const target = boundary(tr.doc, pos);
   if (!target || !canInsertAtListBoundary(tr.doc, pos, content)) return null;
@@ -34,11 +35,18 @@ export function insertAtListBoundary(tr: Transaction, pos: number, content: Frag
     const prefix = target.list.copy(target.list.content.cut(0, offset));
     nodes.push(prefix); inserted += prefix.nodeSize;
   }
-  content.forEach(node => nodes.push(node));
+  let insertedOrdered = 0;
+  content.forEach(node => {
+    if (target.list.type.name === 'orderedList' && node.type.name === 'orderedList') {
+      nodes.push(node.type.create({ ...node.attrs, start: startOf(target.list) + target.index + insertedOrdered,
+        numbering: target.index || insertedOrdered ? 'continue' : target.list.attrs.numbering }, node.content, node.marks));
+      insertedOrdered += node.childCount;
+    } else nodes.push(node);
+  });
   if (target.index < target.list.childCount) {
     const attrs = { ...target.list.attrs };
-    if (target.index) {
-      if (target.list.type.name === 'orderedList') attrs.start = 1;
+    if (target.index || insertedOrdered) {
+      if (target.list.type.name === 'orderedList') Object.assign(attrs, orderedSegmentAttrs(target.list, target.index + insertedOrdered));
       if (Object.hasOwn(attrs, 'annotationId')) attrs.annotationId = null;
     }
     nodes.push(target.list.type.create(attrs, target.list.content.cut(offset), target.list.marks));

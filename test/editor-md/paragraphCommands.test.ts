@@ -43,7 +43,7 @@ describe('restore paragraph structure', () => {
     const editor = create('<ol start="5"><li>before</li><li><b>target</b><a href="https://example.com">link</a></li><li>after</li></ol>');
     caret(editor, 'targetlink', 2); const before = editor.getJSON(); restore(editor);
     expect(types(editor)).toEqual(['orderedList', 'paragraph', 'orderedList']);
-    expect(editor.state.doc.child(0).attrs.start).toBe(5); expect(editor.state.doc.child(2).attrs.start).toBe(7);
+    expect(editor.state.doc.child(0).attrs.start).toBe(5); expect(editor.state.doc.child(2).attrs.start).toBe(6);
     expect(editor.state.doc.child(1).firstChild?.marks[0].type.name).toBe('bold');
     expect(editor.state.doc.child(1).lastChild?.marks[0].attrs.href).toBe('https://example.com');
     expect(editor.state.selection.$from.parent.textContent).toBe('targetlink'); expect(editor.state.selection.$from.parentOffset).toBe(2);
@@ -55,7 +55,7 @@ describe('restore paragraph structure', () => {
     range(editor, 'first', 'last', true); restore(editor);
     expect(types(editor)).toEqual(['bulletList', 'paragraph', 'paragraph', 'paragraph', 'paragraph', 'orderedList']);
     expect(editor.state.doc.firstChild?.textContent).toBe('before'); expect(editor.state.doc.child(5).textContent).toBe('after');
-    expect(editor.state.doc.child(5).attrs.start).toBe(4);
+    expect(editor.state.doc.child(5).attrs.start).toBe(3);
     expect(editor.state.selection.anchor).toBeGreaterThan(editor.state.selection.head);
     expect(editor.state.selection.$anchor.parent.textContent).toBe('last'); expect(editor.state.selection.$head.parent.textContent).toBe('first');
   });
