@@ -1,9 +1,10 @@
-.nb-numbering-control { display:inline-flex; align-items:center; flex:none; border:1px solid transparent; border-radius:5px; height:28px; color:var(--editor-text-secondary,var(--editor-text)); }
+.nb-numbering-control { display:inline-flex; align-items:center; flex:none; border:1px solid transparent; border-radius:5px; height:28px; overflow:hidden; color:var(--editor-text-secondary,var(--editor-text)); }
 .nb-numbering-control button { display:inline-flex; align-items:center; justify-content:center; border:0; background:transparent; color:inherit; font:inherit; cursor:pointer; height:100%; border-radius:4px; }
 .nb-numbering-control .nb-numbering-main { width:27px; padding:0 4px; gap:8px; }
 .nb-numbering-control .nb-numbering-arrow { width:16px; flex:none; padding:0; }
 .nb-numbering-control[data-active] { background:var(--editor-selection-background); color:var(--editor-accent,var(--accent-500)); border-color:var(--editor-border-focus,transparent); }
-.nb-numbering-control button:hover,.nb-numbering-control button[data-state="open"] { background:var(--toolbar-hover); }
+.nb-numbering-control:not([data-active]):has(button:hover),.nb-numbering-control:not([data-active]):has(button[data-state="open"]) { background:var(--toolbar-hover); }
+.nb-numbering-control button:hover,.nb-numbering-control button[data-state="open"],.nb-block-context-menu .nb-numbering-control button:hover,.nb-block-context-menu .nb-numbering-control button[aria-pressed="true"] { background:transparent; }
 .nb-numbering-control button:active { background:var(--toolbar-active); }
 .nb-numbering-control button:disabled { opacity:.38; cursor:not-allowed; }
 .nb-numbering-control button:focus-visible,.nb-numbering-menu button:focus-visible,.nb-numbering-style-menu button:focus-visible { outline:2px solid var(--editor-accent); outline-offset:-2px; }
@@ -27,15 +28,15 @@
 .nb-numbering-style-current { margin-left:auto; font-size:11px; color:var(--editor-text-muted); }
 .nb-numbering-row > svg:last-child { margin-left:auto; }
 .nb-numbering-style-trigger > svg:last-child { margin-left:0; }
-.nb-numbering-style-menu { display:grid; grid-template-columns:repeat(3,56px); gap:4px; padding:7px; }
-.nb-numbering-style-menu button { display:grid; place-items:center; width:56px; height:54px; padding:6px; color:var(--editor-text); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; }
+.nb-numbering-style-menu { display:grid; grid-template-columns:repeat(3,60px); gap:4px; padding:7px; }
+.nb-numbering-style-menu button { box-sizing:border-box; display:grid; place-items:center; width:60px; height:60px; padding:7px; color:var(--editor-text); background:transparent; border:1px solid transparent; border-radius:5px; cursor:pointer; }
 .nb-numbering-style-menu button:hover { background:var(--toolbar-hover); }
 .nb-numbering-style-menu button[aria-checked="true"] { border-color:var(--editor-accent); background:var(--editor-selection-background); }
-.nb-numbering-style-sample { display:flex; flex-direction:column; width:100%; gap:5px; }
-.nb-numbering-style-sample > span { display:flex; align-items:center; gap:4px; }
-.nb-numbering-style-sample b { width:21px; text-align:right; font:500 10px/1 var(--ui-font-family); color:inherit; }
+.nb-numbering-style-sample { display:flex; flex-direction:column; width:100%; gap:4px; }
+.nb-numbering-style-sample > span { display:grid; grid-template-columns:24px 1fr; align-items:center; gap:4px; height:12px; }
+.nb-numbering-style-sample b { justify-self:end; text-align:right; white-space:nowrap; font:500 10px/12px var(--ui-font-family); color:inherit; }
 .nb-numbering-style-sample i { display:block; flex:1; height:2px; background:currentColor; border-radius:1px; opacity:.35; }
-.nb-numbering-style-sample[data-numbering-style="circle"] b,.nb-numbering-style-sample[data-numbering-style="box"] b { width:12px; height:12px; box-sizing:border-box; margin-left:9px; border:1px solid currentColor; display:grid; place-items:center; text-align:center; font-size:8px; }
+.nb-numbering-style-sample[data-numbering-style="circle"] b,.nb-numbering-style-sample[data-numbering-style="box"] b { width:12px; height:12px; box-sizing:border-box; border:1px solid currentColor; display:grid; place-items:center; text-align:center; font-size:8px; line-height:1; }
 .nb-numbering-style-sample[data-numbering-style="circle"] b { border-radius:50%; }
 .nb-numbering-preview-line[data-numbering-style="circle"] > span,.nb-numbering-preview-line[data-numbering-style="box"] > span { min-width:17px; height:17px; display:grid; place-items:center; border:1px solid currentColor; box-sizing:border-box; text-align:center; font-size:10px; }
 .nb-numbering-preview-line[data-numbering-style="circle"] > span { border-radius:50%; }

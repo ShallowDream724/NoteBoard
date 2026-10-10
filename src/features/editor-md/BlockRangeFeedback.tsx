@@ -5,6 +5,7 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { findTopLevelBlockElement } from './blockReorder';
 import { listItemHorizontalBounds, releaseListMarkerGeometry } from './listMarkerGeometry';
 import './blockRangeFeedback.css';
+import { mapMenuTarget } from './menuPreview';
 
 /** A UI-owned overlay: hovering never changes selection, history or editable DOM.
  * Only the current block is measured; large documents require no block traversal. */
@@ -62,12 +63,7 @@ export function BlockRangeFeedback({ editor, pos, to, className = '' }: { editor
     const onTransaction = ({ transaction }: { transaction: Transaction }) => {
       if (!transaction.docChanged) return;
       if (currentPos !== null) {
-        const mapped = transaction.mapping.mapResult(currentPos, 1);
-        const before = transaction.before.nodeAt(currentPos), after = transaction.doc.nodeAt(mapped.pos);
-        // Attribute-only replacements may map a boundary as deleted. Preserve
-        // that same content, but never move feedback onto the following block.
-        const replaced = before?.type === after?.type && before?.content === after?.content;
-        currentPos = mapped.deletedAcross || mapped.deleted && !replaced ? null : mapped.pos;
+        currentPos = mapMenuTarget(transaction, currentPos);
       }
       if (currentEnd !== undefined) currentEnd = transaction.mapping.map(currentEnd, -1);
       schedule();

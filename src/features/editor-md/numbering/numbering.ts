@@ -8,6 +8,7 @@ import { NUMBERING_OPERATION } from './extension';
 import { isOrdered, linkedGroup, normalizeNumbering, orderedAt, orderedSegmentAttrs, orderedSiblings, preserveListSelection, splitOrderedAt, startOf, validStart } from './model';
 import { normalizeNumberingStyle, type NumberingStyle } from './styles';
 import { ownNumberingDraft, settleNumberingDraft } from './session';
+import { EDITOR_MENU_PREVIEW_META } from '../menuPreview';
 
 export interface NumberingContext {
   available: boolean; style: NumberingStyle; start: number; next: number | null;
@@ -139,13 +140,13 @@ export function createNumberingDraft(editor: Editor) {
     const first = tr.steps.length;
     if (!startTransaction(tr, tr.selection, value, false)) return false;
     inverse = tr.steps.slice(first).map((step, index) => step.invert(tr.docs[first + index])).reverse(); last = value;
-    editor.view.dispatch(tr.setMeta('preventUpdate', true).setMeta('addToHistory', false)); expected = editor.state.doc;
+    editor.view.dispatch(tr.setMeta(EDITOR_MENU_PREVIEW_META, true).setMeta('preventUpdate', true).setMeta('addToHistory', false)); expected = editor.state.doc;
     return true;
   }
   function cancel() {
     if (owns() && inverse.length) {
       const tr = editor.state.tr; rollback(tr);
-      editor.view.dispatch(tr.setMeta(NUMBERING_OPERATION, true).setMeta('preventUpdate', true).setMeta('addToHistory', false));
+      editor.view.dispatch(tr.setMeta(NUMBERING_OPERATION, true).setMeta(EDITOR_MENU_PREVIEW_META, true).setMeta('preventUpdate', true).setMeta('addToHistory', false));
     }
     release();
   }
@@ -153,7 +154,7 @@ export function createNumberingDraft(editor: Editor) {
     if (!owns() || !originalSelection || last === null) { release(); return; }
     const value = last;
     const tr = editor.state.tr; rollback(tr);
-    editor.view.dispatch(tr.setMeta(NUMBERING_OPERATION, true).setMeta('preventUpdate', true).setMeta('addToHistory', false));
+    editor.view.dispatch(tr.setMeta(NUMBERING_OPERATION, true).setMeta(EDITOR_MENU_PREVIEW_META, true).setMeta('preventUpdate', true).setMeta('addToHistory', false));
     release(); restartNumbering(editor, value);
   }
   return { update, commit, cancel, destroy: commit };

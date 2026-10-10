@@ -20,6 +20,12 @@ ol[data-number-style='lower-roman'] > li { list-style-type: lower-roman; }
 ol[data-number-style='chinese'] > li { list-style-type: nb-chinese; }
 ol[data-number-style='paren'] > li { list-style-type: nb-parenthesized-decimal; }
 
+/* Changing type/style splits a list into adjacent wrappers, not paragraphs.
+ * Keep the same row rhythm across those boundaries. */
+:is(.ProseMirror, article[data-export-mode]) :is(ol, ul):has(+ :is(ol, ul)) { margin-block-end: .25em !important; }
+:is(.ProseMirror, article[data-export-mode]) :is(ol, ul) + :is(ol, ul) { margin-block-start: 0 !important; }
+:is(.ProseMirror, article[data-export-mode]) :is(ol, ul) > li:last-child { margin-block-end: 0; }
+
 /* Use the native list-item counter: it respects ol[start], nested list scopes
  * and pagination without per-row DOM data or a separate numbering algorithm. */
 ol:is([data-number-style='circle'], [data-number-style='box']) > li {
@@ -30,19 +36,20 @@ ol:is([data-number-style='circle'], [data-number-style='box']) > li::before {
   content: counter(list-item);
   position: absolute;
   inset-inline-end: calc(100% + .45em);
-  top: .5lh;
+  top: calc(.5em * var(--content-line-height, var(--export-line, 1.7)));
   transform: translateY(-50%);
   display: grid;
   place-items: center;
   width: max-content;
   min-width: 1.35em;
-  aspect-ratio: 1;
+  height: 1.35em;
   box-sizing: border-box;
-  padding: .12em;
+  padding-inline: .12em;
   border: 1px solid currentColor;
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
 }
-ol[data-number-style='circle'] > li::before { border-radius: 50%; }
+ol[data-number-style='circle'] > li::before { border-radius: 999px; }
 ol[data-number-style='box'] > li::before { border-radius: .1em; }
+ol:is([data-number-style='circle'], [data-number-style='box']) > li > p:first-child { margin-block-start: 0; }

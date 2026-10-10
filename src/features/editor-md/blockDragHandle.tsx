@@ -37,6 +37,7 @@ import { isEmptyParagraph } from './blockInteractionScope';
 import { createDragEdgeScroller, type DragEdgeScroller } from './dragEdgeScroll';
 import { releaseListMarkerGeometry } from './listMarkerGeometry';
 import { beginEditorDrag, isEditorDragging } from './editorDragActivity';
+import { EDITOR_MENU_PREVIEW_META, mapMenuTarget } from './menuPreview';
 
 /** 超过此位移才进入拖动，避免单击把手时误触排序。 */
 const DRAG_START_DISTANCE = 4;
@@ -313,12 +314,13 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     const refreshHover = () => { if (!hoverFrame) hoverFrame = requestAnimationFrame(updateHover); };
     refreshHoverRef.current = refreshHover;
     const handleDocumentChange = ({ transaction }: { transaction: Transaction }) => {
+      const menuPreview = menuOpenRef.current && !!transaction.getMeta(EDITOR_MENU_PREVIEW_META);
       if (transaction.docChanged || transaction.selectionSet) {
         const previousSelection = selectionRef.current;
         selectionRef.current = resolveBlockSelection(editor.state);
         if (transaction.selectionSet) {
           selectionChanged = true;
-          if (previousSelection && !previousSelection.selection.eq(editor.state.selection)) menuControllerRef.current.change(false);
+          if (!menuPreview && previousSelection && !previousSelection.selection.eq(editor.state.selection)) menuControllerRef.current.change(false);
           setState(current => current.selection === selectionRef.current ? current : { ...current, selection: selectionRef.current });
         }
         refreshHover();
@@ -326,9 +328,11 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       if (!transaction.docChanged) return;
       // A replaced/undone target must never leave an invisible open popover
       // blocking all future hit tests. A menu owns no persistent model selection.
-      menuControllerRef.current.change(false);
-      isHoveringHandleRef.current = false;
-      setIsHoveringHandle(false);
+      if (!menuPreview) {
+        menuControllerRef.current.change(false);
+        isHoveringHandleRef.current = false;
+        setIsHoveringHandle(false);
+      }
       // Drop coordinates belong to the document captured on pointer-down. A
       // concurrent edit/undo cancels the gesture rather than moving a new node.
       if (dragSessionRef.current) {
@@ -339,12 +343,12 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
       }
       setState(current => {
         if (!current.visible || current.nodePos === null) return current.selection ? { ...current, selection: null } : current;
-        const mapped = transaction.mapping.mapResult(current.nodePos, 1);
-        if (mapped.deletedAcross || mapped.pos >= transaction.doc.content.size) return { ...current, visible: false, selection: null };
-        const node = transaction.doc.nodeAt(mapped.pos);
+        const pos = mapMenuTarget(transaction, current.nodePos);
+        if (pos === null || pos >= transaction.doc.content.size) return { ...current, visible: false, selection: null };
+        const node = transaction.doc.nodeAt(pos);
         if (!node?.isBlock) return { ...current, visible: false, selection: null };
         const empty = isEmptyParagraph(node);
-        return { ...current, nodePos: mapped.pos, nodeType: node.type.name, empty, selection: null };
+        return { ...current, nodePos: pos, nodeType: node.type.name, empty, selection: menuPreview ? selectionRef.current : null };
       });
       refreshHover();
     };
