@@ -13,13 +13,14 @@ import {TooltipProvider} from '../../src/components/Tooltip'; import {useLayoutS
 import {addBookmark} from '../../src/features/bookmarks/commands'; import {bookmarkKey} from '../../src/features/bookmarks/extension';
 import {navigateBookmark} from '../../src/features/bookmarks/navigation';
 import {BookmarkMarkerLayer} from '../../src/features/bookmarks/BookmarkMarkerLayer';
+import {toggleHeadingFold} from '../../src/features/editor-md/headingFolding';
 import '../../src/styles/globals.css'; import '../../src/components/appShell.css';
 const p=(text,marks=[])=>({type:'paragraph',content:[{type:'text',text,marks}]});
-const editor=new Editor({extensions:buildExtensions(),content:{type:'doc',content:[p('文档前言：留出精准选择的位置。'),p('保留加粗和斜体，不带正文底色。',[{type:'bold'},{type:'italic'}]),{type:'mathBlock',attrs:{latex:'E=mc^2'}},p('最后一段，供连续批量删除验证。')]}});
+const editor=new Editor({extensions:buildExtensions(),content:{type:'doc',content:[{...p('文档前言：留出精准选择的位置。'),type:'heading',attrs:{level:3}},p('保留加粗和斜体，不带正文底色。',[{type:'bold'},{type:'italic'}]),{type:'mathBlock',attrs:{latex:'E=mc^2'}},p('最后一段，供连续批量删除验证。')]}});
 let pos=0;editor.state.doc.forEach(n=>{addBookmark(editor,pos);pos+=n.nodeSize;});
 useLayoutStore.setState({navigationTab:'bookmarks',outlineWidth:300});
 createRoot(document.querySelector('#root')).render(<TooltipProvider><div className="nb-document-stage" data-navigation-mode="docked" data-outline="" style={{display:'flex',height:650,width:900,margin:20,border:'1px solid var(--editor-border)'}}><div data-editor-scroll="markdown" style={{flex:1,minWidth:0,overflow:'auto',padding:28}}><EditorContent editor={editor}/><BookmarkMarkerLayer editor={editor}/></div><OutlinePanel editor={editor}/></div></TooltipProvider>);
-window.fixture={editor,records:()=>bookmarkKey.getState(editor.state),add:()=>addBookmark(editor),navigate:r=>navigateBookmark(editor,r)};
+window.fixture={editor,records:()=>bookmarkKey.getState(editor.state),add:()=>addBookmark(editor),navigate:r=>navigateBookmark(editor,r),fold:()=>toggleHeadingFold(editor.state,tr=>editor.view.dispatch(tr),0)};
 `);
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--no-proxy-server'] });
 const page = await browser.newPage({ viewport: { width: 1040, height: 760 } }); const errors = [];
@@ -49,6 +50,10 @@ try {
   assert(geometry.gap>=-3 && geometry.gap<=1 && geometry.rise>2,JSON.stringify(geometry));
   await page.locator('.nb-bookmark-block-marker .nb-bookmark-button').click({button:'right'});
   assert.equal(await page.getByRole('menuitem',{name:'删除书签'}).count(),1); await page.keyboard.press('Escape');
+  await page.evaluate(() => window.fixture.fold());
+  await page.waitForFunction(() => { const marker=document.querySelector('.nb-bookmark-block-marker'); return marker && getComputedStyle(marker).visibility==='hidden'; });
+  await page.evaluate(() => window.fixture.fold());
+  await page.locator('.nb-bookmark-block-marker .nb-bookmark-button').waitFor({state:'visible'});
   await page.locator('.nb-bookmark-color').nth(1).click(); await page.getByRole('menuitemradio', { name: '绿色' }).click();
   assert.equal(await page.evaluate(() => window.fixture.records()[1].color), 'green');
   assert.equal(await page.locator('.nb-bookmark-target strong em').count(), 1);

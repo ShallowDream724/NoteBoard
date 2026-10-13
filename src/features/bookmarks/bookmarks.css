@@ -3,7 +3,7 @@
 .nb-bookmark-marker > .nb-bookmark-anchor::before { content:"\2060\200b"; }
 .nb-bookmark-marker::after { content:" "; font-size:0; word-spacing:19px; white-space:normal; }
 .nb-bookmark-button { position:absolute; z-index:3; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; padding:0; margin:0; border:0; border-radius:4px; color:inherit; background:transparent; font:inherit; cursor:pointer; user-select:none; }
-.nb-bookmark-marker .nb-bookmark-button { left:-2px; bottom:.85em; }
+.nb-bookmark-marker .nb-bookmark-button { left:-2px; top:0; transform:translateY(-35%); }
 .nb-bookmark-button svg { display:block; pointer-events:none; }
 .nb-bookmark-button:hover { background:color-mix(in srgb,currentColor 10%,transparent); }
 .nb-bookmark-button:focus-visible { outline:1px solid currentColor; outline-offset:1px; }

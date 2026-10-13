@@ -37,10 +37,10 @@ test('adds exact selections idempotently with feedback and no permanent delete b
   editor.commands.setTextSelection({ from: 7, to: 16 });
   await act(async () => root.render(<BookmarkPanel editor={editor}/>));
   await click(button('添加书签'));
-  expect(records()).toHaveLength(1); expect(host.textContent).toContain('已添加书签');
+  expect(records()).toHaveLength(1); expect(host.querySelector('.nb-bookmark-message')).toBeNull();
   expect(host.querySelector('.nb-bookmark-remove')).toBeNull();
   await click(button('添加书签'));
-  expect(records()).toHaveLength(1); expect(host.textContent).toContain('此处已有书签');
+  expect(records()).toHaveLength(1); expect(host.querySelector('.nb-bookmark-message')).toBeNull();
   expect(host.querySelector('.nb-bookmark-preview')?.textContent).toBe('paragraph');
 });
 

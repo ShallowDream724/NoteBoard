@@ -13,6 +13,7 @@ const icon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke
 export function createBookmarkPresentation(recordsFor: (state: EditorState) => readonly DocumentBookmark[]) {
   let lastDoc: EditorState['doc'] | undefined, lastRecords: readonly DocumentBookmark[] | undefined;
   let lastFlash: Flash | null | undefined, cached = DecorationSet.empty, stamp = 0;
+  const blockWidgets = new Map<string, HTMLElement>();
   return new Plugin<Flash | null>({
     key: presentationKey,
     state: { init: () => null, apply: (tr, previous) => {
@@ -42,8 +43,10 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
             button.setAttribute('aria-label', `查看书签：${record.label}`); button.setAttribute('aria-controls', 'nb-navigation-bookmarks');
             button.title = `查看书签：${record.label}`; button.innerHTML = icon;
             anchor.append(button); marker.append(anchor);
+            if (!inline) blockWidgets.set(record.id, marker);
             return marker;
-          }, { key: `bookmark-${record.id}-${color}-${inline}-${record.label}`, side: -1, stopEvent: () => true }));
+          }, { key: `bookmark-${record.id}-${color}-${inline}-${record.label}`, side: -1, stopEvent: () => true,
+            destroy(dom) { if (blockWidgets.get(record.id) === dom) blockWidgets.delete(record.id); } }));
         }
         if (!inline) {
           decorations.push(Decoration.node(record.pos, record.pos + record.size, {
@@ -63,7 +66,7 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
     } },
     view(view) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const layout = bindBlockBookmarkLayout(view, recordsFor);
+      const layout = bindBlockBookmarkLayout(view, recordsFor, blockWidgets);
       return {
         update(current, previous) {
           if (current.state.doc !== previous.doc || recordsFor(current.state) !== recordsFor(previous)) layout.refresh();
@@ -76,7 +79,7 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
             }
           }, 1100);
         },
-        destroy() { layout.destroy(); clearTimeout(timer); cached = DecorationSet.empty; lastDoc = undefined; lastRecords = undefined; },
+        destroy() { layout.destroy(); blockWidgets.clear(); clearTimeout(timer); cached = DecorationSet.empty; lastDoc = undefined; lastRecords = undefined; },
       };
     },
   });

@@ -86,7 +86,7 @@ export function BookmarkPanel({ editor }: { editor: Editor | null }) {
       <button type="button" className="nb-bookmark-add" disabled={!editor} onPointerDown={event => event.preventDefault()} onClick={() => {
         if (!editor) return;
         const record = addBookmark(editor);
-        setMessage(record ? records.some(previous => previous.id === record.id) ? '此处已有书签' : '已添加书签'
+        setMessage(record ? null
           : records.length >= MAX_DOCUMENT_BOOKMARKS ? `每篇文档最多 ${MAX_DOCUMENT_BOOKMARKS} 个书签，请先移除不用的书签。` : '先在正文中选择一个位置。');
       }}><BookmarkPlus size={14}/><span>添加书签</span></button>
       <span className="nb-bookmark-count" aria-label={`按文档顺序排列，共 ${records.length} 个书签`}>{records.length || ''}</span>
