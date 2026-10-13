@@ -4,6 +4,7 @@ import { isHistoryTransaction } from '@tiptap/pm/history';
 import { StepMap } from '@tiptap/pm/transform';
 
 import type { DocumentBookmark } from './types';
+import { rangeMatches, rangeQuote, recoverRangeBookmarks } from './rangeAnchors';
 export { MAX_DOCUMENT_BOOKMARKS, type DocumentBookmark } from './types';
 export interface BookmarkTarget { pos: number; node: PMNode }
 
@@ -68,6 +69,13 @@ function signature(type: string, quote: string, before?: string, after?: string)
 /** One temporary index per recovery; repeated quotes deliberately remain unresolved. */
 export function recoverBookmarks(doc: PMNode, records: readonly DocumentBookmark[], restoreMissing = false): DocumentBookmark[] {
   if (!records.length) return [];
+  const ranges = records.filter(record => record.kind === 'range');
+  if (ranges.length) {
+    const recovered = [...recoverRangeBookmarks(doc, ranges, restoreMissing),
+      ...recoverBookmarks(doc, records.filter(record => record.kind !== 'range'), restoreMissing)];
+    const byId = new Map(recovered.map(record => [record.id, record]));
+    return records.map(record => byId.get(record.id)!);
+  }
   const eligible = records.filter(record => !record.missing || restoreMissing);
   if (!eligible.length) return records.map(record => ({ ...record }));
   const wanted = new Set(eligible.map(record => signature(record.nodeType, record.quote, record.contextBefore, record.contextAfter)));
@@ -119,6 +127,16 @@ export function mapBookmarks(tr: Transaction, previous: readonly DocumentBookmar
     const move = moves.find(range => record.pos >= range.from && record.pos < range.to);
     const from = mapping.mapResult(record.pos, 1), to = mapping.map(record.pos + record.size, -1);
     const pos = move ? move.inserted + record.pos - move.from : from.pos;
+    if (record.kind === 'range') {
+      const history = replacement === 'history' || isHistoryTransaction(tr);
+      const start = move ? pos : history ? mapping.map(record.pos, -1) : pos;
+      const end = move && record.pos + record.size <= move.to ? start + record.size
+        : history ? mapping.map(record.pos + record.size, 1) : to;
+      if (end <= start || end > tr.doc.content.size) return { ...record, pos: start, missing: true };
+      const quote = rangeQuote(tr.doc, start, end);
+      return start === record.pos && end - start === record.size && quote === record.quote ? record
+        : { ...record, pos: start, size: end - start, quote, missing: false };
+    }
     if (!move && (from.deletedAcross || to <= from.pos)) return { ...record, pos, missing: true };
     const node = tr.doc.nodeAt(pos);
     if (!node?.isBlock) return { ...record, pos, missing: true };
@@ -153,6 +171,11 @@ export function mapBookmarks(tr: Transaction, previous: readonly DocumentBookmar
     }));
     const restored = mapped.map(record => {
       if (!record.missing || !previouslyMissing.has(record.id) || !insertions.some(range => record.pos >= range.from && record.pos < range.to)) return record;
+      if (record.kind === 'range') {
+        if (rangeMatches(tr.doc, record)) return { ...record, missing: false };
+        const recovered = recoverRangeBookmarks(tr.doc, [record], true)[0];
+        return !recovered.missing && insertions.some(range => recovered.pos >= range.from && recovered.pos < range.to) ? recovered : record;
+      }
       const node = tr.doc.nodeAt(record.pos);
       return node?.type.name === record.nodeType && bookmarkPreview(node) === record.quote
         ? { ...record, size: node.nodeSize, missing: false } : record;

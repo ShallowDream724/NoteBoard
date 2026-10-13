@@ -30,7 +30,7 @@
 .nb-navigation-tab[aria-selected="true"] { color:var(--editor-text); background:var(--toolbar-hover); font-weight:600; }
 .nb-navigation-tab:hover { color:var(--editor-text); }
 .nb-navigation-tab:active { background:var(--editor-selection-background); }
-.nb-navigation-tab:focus-visible,.nb-bookmark-add:focus-visible,.nb-bookmark-target:focus-visible,.nb-bookmark-remove:focus-visible { outline:1px solid var(--editor-accent); outline-offset:-1px; }
+.nb-navigation-tab:focus-visible,.nb-bookmark-add:focus-visible,.nb-bookmark-target:focus-visible,.nb-bookmark-remove:focus-visible,.nb-bookmark-color:focus-visible { outline:1px solid var(--editor-accent); outline-offset:-1px; }
 .nb-outline-panel,.nb-bookmark-panel { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 .nb-navigation-empty { padding:20px 10px; font-size:12px; color:var(--editor-text-muted); text-align:center; line-height:1.7; }
 .nb-bookmark-actions { display:flex; align-items:center; gap:4px; padding:2px 0 8px; flex-shrink:0; }
@@ -47,6 +47,18 @@
 .nb-bookmark-target:disabled { color:var(--editor-text-muted); cursor:default; }
 .nb-bookmark-remove { display:grid; place-items:center; flex-shrink:0; width:24px; height:24px; padding:0; border:0; border-radius:4px; background:transparent; color:var(--editor-text-muted); cursor:pointer; }
 .nb-bookmark-remove:hover,.nb-bookmark-remove:active { background:var(--toolbar-hover); color:var(--editor-text); }
+.nb-bookmark-color { display:grid; place-items:center; flex-shrink:0; width:24px; height:26px; padding:0; border:0; border-radius:4px; background:transparent; cursor:pointer; }
+.nb-bookmark-color:hover { background:var(--toolbar-hover); }
+.nb-bookmark-preview { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nb-bookmark-preview code { padding:0 2px; border-radius:2px; background:var(--toolbar-hover); font-size:.92em; }
+.nb-bookmark-math { display:inline-block; max-width:100%; vertical-align:middle; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nb-bookmark-math .katex { font-size:1em; }
+.nb-bookmark-menu { position:fixed; z-index:1400; min-width:156px; padding:5px; border:1px solid var(--editor-border); border-radius:8px; background:var(--editor-surface); color:var(--editor-text); box-shadow:var(--shadow-lg); font:12px/1.5 var(--ui-font-family); }
+.nb-bookmark-menu > button { display:flex; align-items:center; gap:8px; width:100%; padding:7px 9px; border:0; border-radius:4px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.nb-bookmark-menu > button:hover,.nb-bookmark-menu > button:focus-visible { background:var(--toolbar-hover); outline:none; }
+.nb-bookmark-menu > button:disabled { color:var(--editor-text-muted); cursor:default; }
+.nb-bookmark-menu > button[aria-checked="true"] { background:var(--editor-selection-background); }
+.nb-bookmark-menu > [role="separator"] { height:1px; margin:4px 3px; background:var(--editor-border); }
 .nb-bookmark-message { margin:0 4px 8px; color:var(--editor-text-secondary); font-size:11px; line-height:1.5; }
 .nb-outline-toggle { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; }
 .nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }
@@ -62,6 +74,8 @@
 .nb-navigation-resize { position:absolute; inset:0 auto 0 -4px; width:9px; cursor:col-resize; touch-action:none; z-index:2; outline:none; }
 .nb-navigation-resize::after { content:""; position:absolute; top:8px; bottom:8px; left:4px; width:2px; border-radius:2px; background:transparent; }
 .nb-navigation-resize:hover::after,.nb-navigation-resize:focus-visible::after,.nb-document-outline[data-resizing] > .nb-navigation-resize::after { background:var(--editor-accent); }
+.nb-document-stage[data-navigation-mode="docked"] > .nb-document-outline > .nb-navigation-resize { left:-5px; }
+.nb-document-stage[data-navigation-mode="docked"] > .nb-document-outline > .nb-navigation-resize::after { top:0; bottom:0; border-radius:0; }
 .nb-outline-item:hover > .nb-outline-label { background:var(--toolbar-hover); }
 .nb-outline-item[data-active] > .nb-outline-label { color:var(--editor-accent); background:var(--editor-selection-background); font-weight:600; }
 .nb-outline-item:focus-visible { outline:none; }

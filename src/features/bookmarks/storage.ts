@@ -1,4 +1,4 @@
-import { MAX_DOCUMENT_BOOKMARKS, type DocumentBookmark } from './types';
+import { BOOKMARK_COLORS, MAX_DOCUMENT_BOOKMARKS, type DocumentBookmark } from './types';
 
 const LEGACY_KEY = 'noteboard.document-bookmarks.v1';
 const DOCUMENT_PREFIX = 'noteboard.document-bookmarks.v2:';
@@ -26,7 +26,9 @@ function validRecord(value: unknown): value is DocumentBookmark {
     Number.isSafeInteger(record.size) && record.size > 0 && typeof record.nodeType === 'string' && record.nodeType.length <= 80 &&
     typeof record.quote === 'string' && record.quote.length <= 160 && typeof record.label === 'string' && record.label.length <= 80 && typeof record.missing === 'boolean' &&
     (record.contextBefore === undefined || typeof record.contextBefore === 'string' && record.contextBefore.length <= 64) &&
-    (record.contextAfter === undefined || typeof record.contextAfter === 'string' && record.contextAfter.length <= 64);
+    (record.contextAfter === undefined || typeof record.contextAfter === 'string' && record.contextAfter.length <= 64) &&
+    (record.kind === undefined || record.kind === 'range') &&
+    (record.color === undefined || BOOKMARK_COLORS.some(color => color.value === record.color));
 }
 function storageKey(docKey: string) { return DOCUMENT_PREFIX + encodeURIComponent(docKey); }
 function parseEntry(value: unknown): Entry | undefined {

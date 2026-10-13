@@ -1,0 +1,8 @@
+.nb-bookmark-marker { display:inline-flex; vertical-align:baseline; align-items:center; justify-content:center; width:16px; height:16px; margin-inline:3px 1px; user-select:none; line-height:1; }
+.nb-bookmark-marker svg { display:block; }
+.nb-bookmarked-block { position:relative; }
+.nb-bookmarked-block::after { content:""; position:absolute; right:6px; top:6px; width:14px; height:16px; background:var(--bookmark-color,#d97706); mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17l-6-4-6 4z' fill='none' stroke='black' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat; pointer-events:none; }
+.nb-bookmark-flash { animation:nb-bookmark-reveal 1s ease-out both; box-decoration-break:clone; border-radius:2px; }
+@keyframes nb-bookmark-reveal { 0%,25% { background-color:rgb(245 158 11 / 34%); } 100% { background-color:transparent; } }
+@media(prefers-reduced-motion:reduce) { .nb-bookmark-flash { animation:none; background-color:rgb(245 158 11 / 24%); } }
+@media print { .nb-bookmark-marker,.nb-bookmarked-block::after { display:none!important; } .nb-bookmark-flash { animation:none!important; background:transparent!important; } }

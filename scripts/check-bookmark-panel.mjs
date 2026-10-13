@@ -1,0 +1,60 @@
+/* global window, document, getComputedStyle */
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE || 'C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const base = process.argv.find(arg => arg.startsWith('--base-url='))?.slice(11) || 'http://127.0.0.1:26357';
+await fs.mkdir('.tmp/bookmark-panel', { recursive: true });
+await fs.writeFile('.tmp/bookmark-panel/index.html', '<html data-theme="chen-guang"><meta charset="utf-8"><body><div id="root"></div><script type="module" src="./entry.tsx"></script></body></html>');
+await fs.writeFile('.tmp/bookmark-panel/entry.tsx', `
+import React from 'react'; import {createRoot} from 'react-dom/client'; import {Editor,EditorContent} from '@tiptap/react';
+import {buildExtensions} from '../../src/features/editor-md/extensions'; import {OutlinePanel} from '../../src/features/outline/OutlinePanel';
+import {TooltipProvider} from '../../src/components/Tooltip'; import {useLayoutStore} from '../../src/stores/layoutStore';
+import {addBookmark} from '../../src/features/bookmarks/commands'; import {bookmarkKey} from '../../src/features/bookmarks/extension';
+import {navigateBookmark} from '../../src/features/bookmarks/navigation';
+import '../../src/styles/globals.css'; import '../../src/components/appShell.css';
+const p=(text,marks=[])=>({type:'paragraph',content:[{type:'text',text,marks}]});
+const editor=new Editor({extensions:buildExtensions(),content:{type:'doc',content:[p('文档前言：留出精准选择的位置。'),p('保留加粗和斜体，不带正文底色。',[{type:'bold'},{type:'italic'}]),{type:'mathBlock',attrs:{latex:'E=mc^2'}},p('最后一段，供连续批量删除验证。')]}});
+let pos=0;editor.state.doc.forEach(n=>{addBookmark(editor,pos);pos+=n.nodeSize;});
+useLayoutStore.setState({navigationTab:'bookmarks',outlineWidth:300});
+createRoot(document.querySelector('#root')).render(<TooltipProvider><div className="nb-document-stage" data-navigation-mode="docked" data-outline="" style={{display:'flex',height:650,width:900,margin:20,border:'1px solid var(--editor-border)'}}><div data-editor-scroll="markdown" style={{flex:1,minWidth:0,overflow:'auto',padding:28}}><EditorContent editor={editor}/></div><OutlinePanel editor={editor}/></div></TooltipProvider>);
+window.fixture={editor,records:()=>bookmarkKey.getState(editor.state),add:()=>addBookmark(editor),navigate:r=>navigateBookmark(editor,r)};
+`);
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--no-proxy-server'] });
+const page = await browser.newPage({ viewport: { width: 1040, height: 760 } }); const errors = [];
+page.on('pageerror', error => errors.push(error.stack || String(error)));
+try {
+  await page.goto(base + '/.tmp/bookmark-panel/index.html', { waitUntil: 'commit' });
+  await page.waitForFunction(() => window.fixture, null, { timeout: 120000 });
+  await page.locator('.nb-bookmark-preview .katex').waitFor();
+  assert.equal(await page.locator('.nb-bookmark-remove').count(), 0);
+  const panel = page.locator('.nb-document-outline'), handle = page.locator('.nb-navigation-resize');
+  await handle.hover();
+  const line = await handle.evaluate(element => { const rect = element.getBoundingClientRect(), style = getComputedStyle(element, '::after'); return { left: rect.left + parseFloat(style.left), top: rect.top + parseFloat(style.top), bottom: rect.bottom - parseFloat(style.bottom) }; });
+  const bounds = await panel.boundingBox();
+  assert(Math.abs(line.left - bounds.x) < 1); assert(Math.abs(line.top - bounds.y) < 1); assert(Math.abs(line.bottom - bounds.y - bounds.height) < 1);
+  await page.locator('.nb-bookmark-color').nth(1).click(); await page.getByRole('menuitemradio', { name: '绿色' }).click();
+  assert.equal(await page.evaluate(() => window.fixture.records()[1].color), 'green');
+  assert.equal(await page.locator('.nb-bookmark-target strong em').count(), 1);
+  await page.locator('.nb-bookmark-item').nth(1).click({ button: 'right' }); await page.getByRole('menuitem', { name: '批量删除' }).click();
+  assert.equal(await page.locator('.nb-bookmark-remove').count(), 4);
+  await page.locator('.nb-bookmark-remove').last().click(); assert.equal(await page.locator('.nb-bookmark-remove').count(), 3);
+  await page.locator('.nb-bookmark-panel').click({ position: { x: 150, y: 10 } }); assert.equal(await page.locator('.nb-bookmark-remove').count(), 0);
+  await page.screenshot({ path: '.tmp/bookmark-panel/light.png', fullPage: true });
+  await page.evaluate(() => document.documentElement.dataset.theme = 'mo-ye');
+  await page.locator('.nb-bookmark-color').first().click();
+  await page.screenshot({ path: '.tmp/bookmark-panel/dark.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  const exact = await page.evaluate(() => {
+    const {editor,add}=window.fixture;
+    editor.commands.setContent({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'前文'.repeat(2500)+'TARGET'+'后文'.repeat(2500)}]}]});
+    editor.commands.setTextSelection({from:5001,to:5007}); return add();
+  });
+  await page.locator(`.nb-bookmark-item[data-bookmark-id="${exact.id}"] .nb-bookmark-target`).click();
+  assert.equal(await page.locator('.nb-bookmark-flash').textContent(),'TARGET');
+  const position=await page.evaluate(()=>{const {editor}=window.fixture;const scroller=document.querySelector('[data-editor-scroll]'),box=scroller.getBoundingClientRect(),at=editor.view.coordsAtPos(5001);return{delta:Math.abs((at.top+at.bottom)/2-(box.top+box.height/2)),empty:editor.state.selection.empty,pos:editor.state.selection.from};});
+  assert(position.delta<30,JSON.stringify(position));assert(position.empty);assert.equal(position.pos,5001);
+  await page.screenshot({path:'.tmp/bookmark-panel/exact-range.png',fullPage:true});
+  await page.waitForTimeout(1150);assert.equal(await page.locator('.nb-bookmark-flash').count(),0);
+  assert.deepEqual(errors, []); console.log('Passed: precise docked resize line, real formula and rich preview, color choice, context-menu batch deletion, blank dismissal.');
+} finally { await browser.close(); }

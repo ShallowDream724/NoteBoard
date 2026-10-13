@@ -6,6 +6,7 @@ import { useMenuBounds } from '../../components/useMenuBounds';
 import { showToast } from '../../stores/toastStore';
 import { pasteFromSystemClipboard } from './clipboard/systemClipboard';
 import './editorContextMenu.css';
+import { BookmarkMenuItem } from '../bookmarks/BookmarkMenuItem';
 
 interface EditorContextMenuProps {
   editor: Editor;
@@ -14,7 +15,7 @@ interface EditorContextMenuProps {
   onClose: () => void;
 }
 
-/** Clipboard actions only. Formatting belongs to the selection toolbar and block menu. */
+/** Clipboard and local navigation actions; formatting stays in dedicated menus. */
 export function EditorContextMenu({ editor, position, hasSelection, onClose }: EditorContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   useMenuBounds(menuRef, true, position.x, position.y);
@@ -80,5 +81,7 @@ export function EditorContextMenu({ editor, position, hasSelection, onClose }: E
     <button type="button" role="menuitem" onClick={() => run(() => pasteFromSystemClipboard(editor, true))}><ClipboardType size={16}/><span>仅粘贴文本</span><kbd>Ctrl+Shift+V</kbd></button>
     <div role="separator"/>
     <button type="button" role="menuitem" onClick={() => run(() => editor.commands.selectAll())}><TextSelect size={16}/><span>全选</span><kbd>Ctrl+A</kbd></button>
+    <div role="separator"/>
+    <BookmarkMenuItem editor={editor} run={run}/>
   </div>, document.body);
 }
