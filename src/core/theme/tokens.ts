@@ -30,6 +30,7 @@ export const REQUIRED_TOKENS: readonly string[] = [
   '--editor-quote-bg', '--editor-selection', '--editor-code-bg',
   '--code-inline-bg', '--code-inline-text',
   '--code-block-bg', '--code-block-container-bg', '--code-block-text',
+  '--code-language-text', '--save-pending-text', '--save-error-text',
 
   // 语法高亮（17 个）
   '--hljs-comment', '--hljs-keyword', '--hljs-string', '--hljs-number',
@@ -79,6 +80,9 @@ export const TEXT_PAIRS: readonly [string, string][] = [
   ['--editor-link', '--editor-bg'],
   ['--code-inline-text', '--code-inline-bg'],
   ['--code-block-text', '--code-block-bg'],
+  ['--code-language-text', '--editor-surface'],
+  ['--save-pending-text', '--statusbar-bg'],
+  ['--save-error-text', '--statusbar-bg'],
   // 17 个 hljs token on code-block-bg
   ['--hljs-comment', '--code-block-bg'],
   ['--hljs-keyword', '--code-block-bg'],

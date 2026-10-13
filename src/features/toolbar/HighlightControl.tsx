@@ -7,6 +7,7 @@ import './highlightControl.css';
 import { useHoverMenu } from '../../components/useHoverMenu';
 import { useEditorMenuPortalContainer } from '../../components/EditorMenuScope';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
+import { readableInkVariables } from '../document-style/readableInk';
 
 interface Props {
   active: boolean; currentColor?: string; open: boolean; onOpenChange: (open: boolean) => void;
@@ -44,7 +45,7 @@ export function HighlightControl({ active, currentColor, open, onOpenChange, onA
             if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); applyPair(lastStyle); }
             if (event.key === 'ArrowDown') { event.preventDefault(); keyboardOpen.current = true; onOpenChange(true); }
           }}>
-          <span aria-hidden="true" className="nb-text-style-preview" style={{ color: lastStyle.color ?? 'var(--editor-text)', backgroundColor: lastStyle.background ?? 'transparent' }}>A</span>
+          <span aria-hidden="true" className={`nb-text-style-preview${lastStyle.color || lastStyle.background ? ' nb-readable-ink' : ''}`} style={{ color: lastStyle.color ?? 'var(--editor-text)', backgroundColor: lastStyle.background ?? 'transparent', ...readableInkVariables(lastStyle.color, lastStyle.background) }}>A</span>
         </button>
         <button {...hover.triggerProps} type="button" className="nb-text-style-expand" title="选择文字颜色与高亮" aria-label="选择文字颜色与高亮" aria-haspopup="dialog" aria-expanded={open}
           aria-controls={open ? menuId : undefined}

@@ -1,0 +1,10 @@
+/* These are view decorations, never authored colors. Keep print/export true to
+   the document while the screen theme compensates for its own dark surface. */
+@media screen {
+  .nb-readable-ink { color:var(--nb-ink-light) !important; }
+  [data-theme="mo-ye"] .nb-readable-ink { color:var(--nb-ink-dark) !important; }
+  .nb-readable-ink :is([data-text-color],code,a) { color:inherit !important; }
+  /* Inline code retains its typeface but must not paint a second surface over
+     an explicit highlight/fill whose ink was matched to that surface. */
+  :is(.ProseMirror,.nb-embedded-prose) :is(mark,[data-block-background],[data-cell-background],[data-callout-background-color]) code { background-color:transparent; }
+}

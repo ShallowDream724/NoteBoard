@@ -249,7 +249,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontWeight: 600, color: 'var(--editor-accent, #3b82f6)' }}>PlantUML</span>
+            <span style={{ fontWeight: 600, color: 'var(--code-language-text)' }}>PlantUML</span>
             {loading && <span>渲染中</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

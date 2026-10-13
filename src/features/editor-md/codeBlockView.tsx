@@ -178,7 +178,7 @@ function CodeBlockComponent({ node, updateAttributes, editor, getPos, decoration
           }}
         >
           <button type="button" className="nb-code-block-language" aria-label="选择代码语言" aria-expanded={showDropdown} onClick={() => setShowDropdown(!showDropdown)}>
-          <span style={{ fontWeight: 600, color: 'var(--editor-accent, #3b82f6)' }}>
+          <span style={{ fontWeight: 600, color: 'var(--code-language-text)' }}>
             {getCodeLanguage(language)?.label ?? language}
           </span>
           <ChevronDown size={12} />

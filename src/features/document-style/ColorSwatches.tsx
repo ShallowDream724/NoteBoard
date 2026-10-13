@@ -1,5 +1,6 @@
 import { BACKGROUND_COLORS, TEXT_COLORS } from './colors';
 import './colorSwatches.css';
+import { readableInkVariables } from './readableInk';
 
 /** A shared compact palette for text and cells; scope and commands belong to the caller. */
 export function ColorSwatches({ kind, value, onChange, label }: {
@@ -21,7 +22,7 @@ export function ColorSwatches({ kind, value, onChange, label }: {
       data-kind={kind} data-clear={kind === 'background' && item.color === null || undefined}
       style={kind === 'text' ? { color: item.color ?? 'var(--editor-text)' } : { backgroundColor: item.color ?? (kind === 'border' ? 'var(--editor-border)' : 'var(--editor-bg)') }}
       onPointerDown={event => event.preventDefault()} onClick={() => onChange(item.color)}>
-      {kind === 'text' ? <span aria-hidden="true">A</span> : null}
+      {kind === 'text' ? <span aria-hidden="true" className={item.color ? 'nb-readable-ink' : undefined} style={readableInkVariables(item.color)}>A</span> : null}
     </button>)}
   </div>;
 }

@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DOMSerializer, type DOMOutputSpec } from '@tiptap/pm/model';
 import { documentColor } from '../document-style/colors';
 import { TEXT_STYLE_MARKS } from './textStylePolicy';
+import { readableInkStyle } from '../document-style/readableInk';
 
 export const FIGURE_CAPTION_MAX_LENGTH = 10_000;
 export function normalizeFigureCaption(value: unknown): string | null {
@@ -61,10 +62,14 @@ export function clearedFigureCaption(attrs: Record<string, unknown>): JSONConten
 export function figureCaptionText(content: JSONContent[]): string | null {
   return normalizeFigureCaption(content.map(item => item.type === 'hardBreak' ? '\n' : item.text ?? '').join(''));
 }
-export function figureCaptionDOM(value: unknown, rich?: unknown): Array<DOMOutputSpec | string> {
+export function figureCaptionDOM(value: unknown, rich?: unknown, screen = false): Array<DOMOutputSpec | string> {
   if (rich == null) return [normalizeFigureCaption(value) ?? ''];
   return figureCaptionContent(value, rich).map(item => {
     let output: DOMOutputSpec | string = item.type === 'hardBreak' ? ['br'] : item.text!;
+    const text = item.marks?.find(mark => mark.type === 'textColor');
+    const highlight = item.marks?.find(mark => mark.type === 'highlight');
+    const ink = screen ? readableInkStyle(text?.attrs?.color, highlight ? highlight.attrs?.color ?? '#fef08a' : null) : '';
+    if (ink && item.type === 'text') output = ['span', { class: 'nb-readable-ink', style: ink }, output];
     for (const mark of [...(item.marks ?? [])].reverse()) {
       const tag = ({ bold: 'strong', italic: 'em', underline: 'u', strike: 's', code: 'code' } as Record<string, string>)[mark.type];
       if (tag) output = [tag, {}, output];
@@ -81,5 +86,5 @@ export function parseFigureCaptionContent(element: Element | null): JSONContent[
   try { const content: unknown = JSON.parse(encoded); validateFigureCaptionContent(content); return content as JSONContent[] | null; } catch { return null; }
 }
 export function renderFigureCaption(element: HTMLElement, caption: unknown, rich?: unknown) {
-  element.replaceChildren(...figureCaptionDOM(caption, rich).map(spec => typeof spec === 'string' ? element.ownerDocument.createTextNode(spec) : DOMSerializer.renderSpec(element.ownerDocument, spec).dom));
+  element.replaceChildren(...figureCaptionDOM(caption, rich, true).map(spec => typeof spec === 'string' ? element.ownerDocument.createTextNode(spec) : DOMSerializer.renderSpec(element.ownerDocument, spec).dom));
 }

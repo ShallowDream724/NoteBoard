@@ -1,5 +1,6 @@
 import Highlight from '@tiptap/extension-highlight';
 import { pairedFormattingTokenizer } from './inlineFormattingMask';
+import { createReadableInkPlugin } from '../document-style/readableInkPlugin';
 
 // Fixed markup and a restricted CSS color value keep Markdown roundtrips independent
 // of browser HTML parsing without accepting arbitrary attributes, styles or URLs.
@@ -27,6 +28,7 @@ function closingMark(source: string, start: number): number {
 }
 
 export const MarkdownHighlight = Highlight.extend({
+  addProseMirrorPlugins() { return [createReadableInkPlugin()]; },
   markdownTokenizer: {
     ...tokenizer,
     start(source) {

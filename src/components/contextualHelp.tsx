@@ -170,7 +170,7 @@ function CodePreview() {
   return <div className="nb-code-block" data-wrap="false" data-collapsed="false" style={{ position: 'relative', borderRadius: 'var(--radius-md)', overflow: 'visible', border: '1px solid var(--editor-border)', background: 'var(--code-block-bg)' }}>
     <div className="nb-code-block-toolbar" contentEditable={false} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 8px', background: 'var(--editor-surface)', borderBottom: '1px solid var(--editor-border)', borderTopLeftRadius: 'calc(var(--radius-md) - 1px)', borderTopRightRadius: 'calc(var(--radius-md) - 1px)', fontSize: 12, color: 'var(--editor-text-muted)' }}>
       <div className="nb-code-block-leading"><button type="button" className="nb-code-block-heading" aria-label="折叠代码块" aria-expanded tabIndex={-1}><DisclosureTriangle expanded size={12}/></button>
-        <button type="button" className="nb-code-block-language" aria-label="选择代码语言" aria-expanded={false} tabIndex={-1}><span style={{ fontWeight: 600, color: 'var(--editor-accent)' }}>JavaScript</span><ChevronDown size={12}/></button></div>
+        <button type="button" className="nb-code-block-language" aria-label="选择代码语言" aria-expanded={false} tabIndex={-1}><span style={{ fontWeight: 600, color: 'var(--code-language-text)' }}>JavaScript</span><ChevronDown size={12}/></button></div>
       <div className="nb-code-block-actions"><button type="button" className="nb-code-block-icon" aria-label="自动换行" aria-pressed={false} tabIndex={-1}><WrapText size={14}/></button>
         <div className="nb-annotation-toolbar-actions"><button type="button" aria-label="复制代码内容" className="nb-help-code-copy" tabIndex={-1}><Copy size={13}/><span>复制</span></button></div></div>
     </div>

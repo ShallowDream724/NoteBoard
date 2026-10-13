@@ -21,7 +21,7 @@ describe('block color defaults and independent inline color', () => {
     try {
       const heading = editor.view.dom.querySelector('h2')!;
       expect(heading.style.color).toBe('rgb(24, 32, 43)');
-      expect(heading.querySelector('span')!.style.color).toBe('rgb(220, 38, 38)');
+      expect(heading.querySelector<HTMLElement>('[data-text-color]')!.style.color).toBe('rgb(220, 38, 38)');
       expect(editor.state.doc.firstChild!.attrs.blockTextColor).toBeNull();
       const restored = create(editor.getHTML());
       try { expect(restored.state.doc.toJSON()).toEqual(editor.state.doc.toJSON()); } finally { restored.destroy(); }

@@ -21,6 +21,7 @@ import { normalizeFigureCaption, renderFigureCaption } from '../figureCaption';
 import { handleTextStyleShortcut } from '../textStyleShortcuts';
 import { clearDraftTextFormatting, runDraftCommand } from './bodyFormatting';
 import { createProseLinkReplacementPlugin } from '../proseLink';
+import { createReadableInkPlugin } from '../../document-style/readableInkPlugin';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
@@ -42,6 +43,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
   const docKey = String(editor.extensionManager.extensions.find(extension => extension.name === 'image')?.options.docKey ?? '');
   const tables = !!schema.nodes.table && !!schema.nodes.tableRow && !!schema.nodes.tableCell;
   const plugins = [
+    createReadableInkPlugin(),
     ...(editable ? [
       createClipboardImportPlugin({ docKey, ownerCurrent: () => !editor.isDestroyed, stripAnnotations: true }),
       createMediaEditingPlugin(), history(), keymap(bindings), keymap(baseKeymap),

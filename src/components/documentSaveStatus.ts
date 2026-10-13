@@ -16,9 +16,9 @@ export function documentSaveStatus(doc: SaveMetadata | undefined, detached: bool
   if (saving) {
     state = 'saving'; label = '正在保存'; color = 'var(--accent-strong)'; description = '正在写入文件';
   } else if (activity?.error) {
-    state = 'error'; label = '保存失败'; color = 'var(--error-500)'; description = activity.error;
+    state = 'error'; label = '保存失败'; color = 'var(--save-error-text)'; description = activity.error;
   } else if (doc?.isDirty || needsPath) {
-    state = 'unsaved'; label = '未保存'; color = 'var(--warning-600)';
+    state = 'unsaved'; label = '未保存'; color = 'var(--save-pending-text)';
     description = needsPath ? '选择文件位置以保存文档' : doc?.savePolicy === 'auto' ? '修改尚未写入，自动保存已启用' : '有未保存的修改，按 Ctrl+S 保存';
   }
   return { visible, disabled: !visible || Boolean(doc?.readonly) || saving, state, label, color, description };
