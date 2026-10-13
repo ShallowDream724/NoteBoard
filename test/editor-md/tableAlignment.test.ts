@@ -136,5 +136,7 @@ describe('whole-table alignment', () => {
       expect(editor.view.dom.querySelectorAll('td > p').length).toBeLessThan(100);
       console.info(`10k-row table alignment transaction: ${elapsed.toFixed(1)} ms`);
     } finally { layout.mockRestore(); editor.destroy(); }
-  });
+  // Allow the 10k-row jsdom fixture to initialize under parallel suite load.
+  // The assertions above still forbid a row-layout rebuild or full cell mounting.
+  }, 15_000);
 });
