@@ -1,4 +1,5 @@
 import Highlight from '@tiptap/extension-highlight';
+import type { Attributes } from '@tiptap/core';
 import { pairedFormattingTokenizer } from './inlineFormattingMask';
 import { createReadableInkPlugin } from '../document-style/readableInkPlugin';
 import { createHighlightMarkView } from '../document-style/highlightMarkView';
@@ -30,7 +31,7 @@ function closingMark(source: string, start: number): number {
 
 export const MarkdownHighlight = Highlight.extend({
   addAttributes() {
-    const attributes = this.parent?.() ?? {};
+    const attributes: Attributes = this.parent?.() ?? {};
     if (!attributes.color) return attributes;
     const parseColor = attributes.color.parseHTML;
     return { ...attributes, color: { ...attributes.color,
