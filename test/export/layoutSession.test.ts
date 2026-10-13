@@ -28,7 +28,7 @@ it('single-formula changes only recheck their containing prose and preserve unre
   const scan = vi.spyOn(root, 'querySelectorAll');
   width = 500;
   const local = await session.update({ ...DEFAULT_PDF, items: { 'formula-1': 'fit' } });
-  expect(affectedRead).toHaveBeenCalledTimes(1); expect(quoteRead).toHaveBeenCalledTimes(1);
+  expect(affectedRead).toHaveBeenCalledTimes(1); expect(quoteRead).toHaveBeenCalledTimes(2); // overflow + container pagination
   expect(otherReads.every(read => read.mock.calls.length === 0)).toBe(true);
   expect(scan).not.toHaveBeenCalled();
   expect(local.issues.some(issue => !issue.id && issue.blocking)).toBe(true);

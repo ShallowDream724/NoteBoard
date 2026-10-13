@@ -6,6 +6,7 @@ import { createProseOverflowCheck } from './proseOverflow';
 import { allocateTableWidths, captureTablePresentation, markTableEdges, measureTableWidths, restoreTablePresentation, setAutomaticTableWidths, tableColumnWidths, type TablePresentation } from './tableLayout';
 import { continueTableRows } from './tableContinuation';
 import { addItemLocations, clearItemLocations } from './itemLocations';
+import { fitPageImages, updateContainerPagination } from './containerPagination';
 
 function extent(element: HTMLElement) {
   return Math.max(element.scrollWidth * renderedScale(element), element.getBoundingClientRect().width);
@@ -286,7 +287,7 @@ export function createLayoutSession(root: HTMLElement) {
       if (result.unsupported) issue(id, '此表含跨行合并或不可拆分的超高内容，续页保留原结构；请检查分页。', false);
     }
     if (global) {
-      for (const image of root.querySelectorAll('img')) { image.style.maxHeight = `${pageHeight}px`; image.style.objectFit = 'contain'; if (!image.complete || !image.naturalWidth) issue('', '有图片未能加载，请检查图片路径'); }
+      for (const image of fitPageImages(root, pageHeight)) if (!image.complete || !image.naturalWidth) issue('', '有图片未能加载，请检查图片路径');
     }
     for (const id of changed) for (const diagram of elements(id).filter(element => element.classList.contains('export-diagram'))) {
       if (diagram.dataset.diagramError) { issue(id, `${diagram.dataset.diagramError}。已保留源码供检查。`, false); continue; }
@@ -309,6 +310,7 @@ export function createLayoutSession(root: HTMLElement) {
     // Final geometry includes prose, headings, code, and imported block markup.
     // A clipping boundary is never itself evidence that a document fits.
     const changedElements = [...changed].flatMap(elements);
+    updateContainerPagination(root, pageHeight, global ? undefined : changedElements);
     if (checkProseOverflow(!!global, changedElements)) issues.set('document-overflow', [{ id: '', message: '有正文或代码超出页面边界，请调整内容或页面设置。', blocking: true }]);
     else issues.delete('document-overflow');
     addItemLocations(changedElements, adjustable);

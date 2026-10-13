@@ -86,3 +86,14 @@ tr { break-inside: avoid; } tr.export-tall-row { break-inside: auto; }
 .hljs-title,.hljs-section,.hljs-built_in { color: #2467b0; }
 .hljs-comment,.hljs-quote { color: #6c7a8d; font-style: italic; }
 .hljs-attr,.hljs-variable,.hljs-template-variable { color: #995322; }
+
+/* Browser printing can keep a small container without a layout session too;
+ * over-page content still fragments. PDF layout refines this by actual height
+ * so a long, page-sized prose box does not leave most of a page empty. */
+:is(.github-alert,.export-disclosure,blockquote,pre) { break-inside: avoid; }
+#document [data-export-pagination="keep"] { break-inside: avoid; }
+#document [data-export-pagination="split"] { break-inside: auto; }
+@media print {
+  .export-disclosure { overflow: visible; }
+  :is(.github-alert,.export-disclosure,blockquote,pre) { box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+}
