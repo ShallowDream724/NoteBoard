@@ -155,6 +155,25 @@ describe('rich block writing boundaries', () => {
     button.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
     expect(view.state.doc.child(1).type.name).toBe('paragraph');
   });
+  it('keeps a finite hover path to the external button and releases it immediately outside the boundary', () => {
+    const view = create([table(), table()]), second = view.state.doc.firstChild!.nodeSize;
+    geometry(view, [0, second]);
+    const button = document.querySelector<HTMLButtonElement>('.nb-block-boundary-insert')!;
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(box(115, 145, 40, 70));
+    view.dom.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 130, bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('mousemove', { clientX: 85, clientY: 130, bubbles: true }));
+    expect(button.hidden).toBe(false);
+    const rail = document.createElement('button'); rail.className = 'nb-table-select-column'; document.body.append(rail);
+    rail.dispatchEvent(new MouseEvent('mousemove', { clientX: 180, clientY: 130, bubbles: true }));
+    expect(button.hidden).toBe(false);
+    // Crossing a selection rail does not claim its pointer event or selection.
+    const selection = view.state.selection;
+    rail.dispatchEvent(new MouseEvent('pointerdown', { clientX: 180, clientY: 130, bubbles: true }));
+    expect(button.hidden).toBe(true); expect(view.state.selection).toBe(selection);
+    view.dom.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 130, bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('mousemove', { clientX: 85, clientY: 180, bubbles: true }));
+    expect(button.hidden).toBe(true);
+  });
   it('provides one IME context at a boundary and preserves the typed character', () => {
     const view = create([table(), table()]), pos = view.state.doc.firstChild!.nodeSize;
     view.dispatch(view.state.tr.setSelection(new BlockBoundarySelection(view.state.doc.resolve(pos))));

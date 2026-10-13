@@ -210,13 +210,31 @@ export const TableSelectionHandles = Extension.create({
       overlay.hidden = false;
     }
     const schedule = () => { if (!frame && visible) frame = requestAnimationFrame(paint); };
+    function nearbyCell(event: PointerEvent): HTMLTableCellElement | null {
+      const target = event.target as Element;
+      const direct = target.closest<HTMLTableCellElement>('td,th');
+      if (direct && view.dom.contains(direct)) return direct;
+      // A rail must be discoverable from outside the table, without first
+      // visiting a cell. Probe only the neighboring 22px band, never all tables
+      // or rows; ordinary content and other controls keep their own pointer area.
+      const editorHost = target.contains(view.dom) && scroll.contains(target);
+      if (target !== view.dom && !editorHost && !(target.matches('.tableWrapper, .nb-table-accessories') && view.dom.contains(target))) return null;
+      for (const [dx, dy] of [[RAIL_OUTSET, 0], [-RAIL_OUTSET, 0], [0, RAIL_OUTSET], [0, -RAIL_OUTSET]]) {
+        const cell = host.elementFromPoint?.(event.clientX + dx, event.clientY + dy)?.closest<HTMLTableCellElement>('td,th');
+        if (cell && view.dom.contains(cell)) return cell;
+      }
+      return null;
+    }
     const move = (event: PointerEvent) => {
       if (gesture || event.buttons || isEditorDragging(view) || !(event.target instanceof Element)) return;
-      if (event.target.closest('.nb-table-accessories') && (!paintedBounds
-        || event.clientY >= paintedBounds.bottom + BOTTOM_GUTTER
-        || event.target.closest('.nb-table-caption'))) { hide(); return; }
-      if (overlay.contains(event.target)) { cancelHide(); return; }
-      const nextCell = event.target.closest<HTMLTableCellElement>('td,th'), next = nextCell?.closest('table');
+      const accessories = event.target.closest('.nb-table-accessories');
+      if (accessories) {
+        const owner = accessories.closest('table'), rows = owner?.rows;
+        const bottom = rows?.length ? rows[rows.length - 1].getBoundingClientRect().bottom : -Infinity;
+        if (event.clientY >= bottom + BOTTOM_GUTTER || event.target.closest('.nb-table-caption')) { hide(); return; }
+      }
+      if (overlay.contains(event.target)) { cancelHide(); pointerX = event.clientX; pointerY = event.clientY; schedule(); return; }
+      const nextCell = nearbyCell(event), next = nextCell?.closest('table');
       if (nextCell && next && view.dom.contains(next)) {
         cancelHide();
         const bounds = paintedBounds;

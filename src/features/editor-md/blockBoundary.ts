@@ -175,11 +175,6 @@ export function createBlockBoundaryPlugin(): Plugin {
           if (event.inputType === 'insertCompositionText' && view.state.selection instanceof BlockBoundarySelection) insertBoundaryParagraph(view);
           return false;
         },
-        mousemove(view, event) {
-          if (event.buttons) { show(null); return false; }
-          show(blockBoundaryAtPoint(view, event.clientX, event.clientY, event.target)); return false;
-        },
-        mouseleave(_view, event) { if (!(event.relatedTarget instanceof HTMLElement) || !event.relatedTarget.closest('.nb-block-boundary-insert')) show(null); return false; },
         mousedown(view, event) {
           press = null; acceptedClick = false;
           if (event.button || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
@@ -213,15 +208,39 @@ export function createBlockBoundaryPlugin(): Plugin {
         event.preventDefault(); const pos = hover.pos; show(null); insertBoundaryParagraph(view, pos);
       };
       const clear = () => { press = null; show(null); };
+      // The button lives outside ProseMirror. Track the short, empty gutter to
+      // it in the document instead of hiding on the editor's mouseleave. The
+      // bridge only preserves an existing target; it never takes text input,
+      // resize borders or another control's hit area.
+      const move = (event: MouseEvent) => {
+        if (!hover && (!(event.target instanceof Element) || event.target.closest('.ProseMirror') !== view.dom)) return;
+        if (event.buttons || !available(view) || isEditorDragging(view)) { clear(); return; }
+        if (button.contains(event.target as globalThis.Node | null)) return;
+        const target = blockBoundaryAtPoint(view, event.clientX, event.clientY, event.target);
+        if (target) { show(target); return; }
+        if (hover && event.target instanceof HTMLElement
+          && (event.target.closest('.nb-table-select-column')
+            || !event.target.closest('button, input, textarea, [contenteditable="false"], td, th, p, h1, h2, h3, h4, h5, h6, pre'))) {
+          const box = button.getBoundingClientRect();
+          if (event.clientX >= Math.min(box.left, hover.left) - 3 && event.clientX <= Math.max(box.right, hover.right) + 3
+            && event.clientY >= box.top - 3 && event.clientY <= box.bottom + 3) return;
+        }
+        show(null);
+      };
+      const leave = (event: MouseEvent) => { if (!event.relatedTarget) clear(); };
+      const dismissOnPress = (event: MouseEvent) => { if (!button.contains(event.target as globalThis.Node | null)) show(null); };
       button.addEventListener('pointerdown', insert);
       button.addEventListener('click', event => { if (!event.detail) insert(event); });
+      view.dom.ownerDocument.addEventListener('mousemove', move, { passive: true });
+      view.dom.ownerDocument.addEventListener('mouseout', leave);
+      view.dom.ownerDocument.addEventListener('pointerdown', dismissOnPress, true);
       view.dom.addEventListener(EDITOR_DRAG_ACTIVITY, clear);
       view.dom.addEventListener(activityEvent, clear);
       view.dom.ownerDocument.addEventListener('scroll', clear, true);
       view.dom.ownerDocument.defaultView?.addEventListener('blur', clear);
       return {
         update(_view, previous) { if (hover && (previous.doc !== view.state.doc || !view.editable)) clear(); },
-        destroy() { activity.delete(view); button.remove(); show = () => {}; view.dom.removeEventListener(activityEvent, clear); view.dom.removeEventListener(EDITOR_DRAG_ACTIVITY, clear); view.dom.ownerDocument.removeEventListener('scroll', clear, true); view.dom.ownerDocument.defaultView?.removeEventListener('blur', clear); },
+        destroy() { activity.delete(view); button.remove(); show = () => {}; view.dom.ownerDocument.removeEventListener('mousemove', move); view.dom.ownerDocument.removeEventListener('mouseout', leave); view.dom.ownerDocument.removeEventListener('pointerdown', dismissOnPress, true); view.dom.removeEventListener(activityEvent, clear); view.dom.removeEventListener(EDITOR_DRAG_ACTIVITY, clear); view.dom.ownerDocument.removeEventListener('scroll', clear, true); view.dom.ownerDocument.defaultView?.removeEventListener('blur', clear); },
       };
     },
   });

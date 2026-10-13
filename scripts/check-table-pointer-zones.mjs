@@ -15,6 +15,7 @@ if (!baseUrl) {
 const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--no-proxy-server'] });
 try {
   const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
+  if (baseUrl) await page.routeWebSocket('**', socket => socket.close());
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto(`${baseUrl || `http://127.0.0.1:${server.httpServer.address().port}`}/test/browser/tablePointerZones.html`, { waitUntil: 'commit' });
   await page.waitForFunction(() => window.tablePointerQA, undefined, { timeout: 120_000 });

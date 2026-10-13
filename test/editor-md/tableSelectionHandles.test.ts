@@ -92,6 +92,19 @@ describe('table selection handles', () => {
     expect([row.style.left, column.style.top]).toEqual(['406px', '206px']);
     expect(row.parentElement?.hidden).toBe(false);
   });
+  it('discovers a top or left rail directly from its outer band without first hovering a cell', async () => {
+    const { editor, cells, hover } = create();
+    const original = document.elementFromPoint;
+    document.elementFromPoint = vi.fn((x, y) => x >= 200 && x <= 400 && y >= 100 && y <= 200 ? cells[0] : editor.view.dom);
+    try {
+      const [row, column] = await hover(editor.view.dom, 230, 86);
+      expect(column.parentElement?.hidden).toBe(false); expect(column.style.top).toBe('78px');
+      await hover(editor.view.dom.parentElement!, 186, 120);
+      expect(row.parentElement?.hidden).toBe(false); expect(row.style.left).toBe('178px');
+      expect(document.elementFromPoint).toHaveBeenCalledTimes(4);
+      row.click(); expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true);
+    } finally { document.elementFromPoint = original; }
+  });
 
   it('keeps the right and bottom rails usable when the scroll viewport clips the table', async () => {
     const { cells, scroll, hover } = create();
