@@ -14,6 +14,55 @@ function fixture(html: string) {
   return root;
 }
 
+function scaledBox(element: HTMLElement, width: number, ancestorScale = () => 1) {
+  Object.defineProperties(element, {
+    offsetWidth: { configurable: true, get: () => width },
+    clientWidth: { configurable: true, get: () => width },
+    scrollWidth: { configurable: true, get: () => width },
+  });
+  measure(element, () => width * (parseFloat(element.style.zoom) || 1) * ancestorScale());
+}
+
+it('validates the visible width after explicit fit and restores original overflow', async () => {
+  const root = fixture('<table data-export-item="table-1" style="width:1400px"><tbody><tr><td>A</td><td>B</td></tr></tbody></table>');
+  const table = root.querySelector('table')!;
+  scaledBox(table, 1400);
+  Array.from(table.rows[0].cells).forEach(cell => scaledBox(cell, 700, () => parseFloat(table.style.zoom) || 1));
+  const session = createLayoutSession(root);
+  const fitted = await session.update({ ...DEFAULT_PDF, items: { 'table-1': 'fit' } });
+  expect(parseFloat(table.style.zoom)).toBeLessThan(1);
+  expect(fitted.issues).toEqual([]);
+  const original = await session.update({ ...DEFAULT_PDF, items: { 'table-1': 'original' } });
+  expect(original.issues.some(issue => issue.id === 'table-1' && issue.blocking)).toBe(true);
+});
+
+it('accepts an automatic table kept in one scaled band', async () => {
+  const root = fixture('<table data-export-item="table-1"><tbody><tr><td>A</td><td>B</td><td>C</td></tr></tbody></table>');
+  const table = root.querySelector('table')!;
+  scaledBox(table, 720);
+  Array.from(table.rows[0].cells).forEach(cell => scaledBox(cell, 240, () => parseFloat(table.style.zoom) || 1));
+  const report = await createLayoutSession(root).update(DEFAULT_PDF);
+  expect(parseFloat(table.style.zoom)).toBeLessThan(1);
+  expect(root.querySelectorAll('table')).toHaveLength(1);
+  expect(report.issues).toEqual([]);
+});
+
+it('compares nested fitted tables with their scaled cell and still detects nested overflow', async () => {
+  const root = fixture('<table data-export-item="parent" style="width:1400px"><tbody><tr><td>A</td><td style="padding:10px"><table data-export-item="child" style="width:1200px"><tbody><tr><td>B</td><td>C</td></tr></tbody></table></td></tr></tbody></table>');
+  const parent = root.querySelector('table')!, child = parent.querySelector('table')!;
+  const parentScale = () => parseFloat(parent.style.zoom) || 1;
+  scaledBox(parent, 1400);
+  Array.from(parent.rows[0].cells).forEach(cell => scaledBox(cell, 700, parentScale));
+  scaledBox(child, 1200, parentScale);
+  Array.from(child.rows[0].cells).forEach(cell => scaledBox(cell, 600, () => parentScale() * (parseFloat(child.style.zoom) || 1)));
+  const session = createLayoutSession(root);
+  expect((await session.update({ ...DEFAULT_PDF, items: { parent: 'fit', child: 'fit' } })).issues).toEqual([]);
+  expect(parseFloat(parent.style.zoom)).toBeLessThan(1);
+  expect(parseFloat(child.style.zoom)).toBeLessThan(1);
+  const overflow = await session.update({ ...DEFAULT_PDF, items: { parent: 'fit', child: 'original' } });
+  expect(overflow.issues.some(issue => issue.id === 'child' && issue.blocking)).toBe(true);
+});
+
 it('single-formula changes only recheck their containing prose and preserve unrelated overflow', async () => {
   const root = fixture('<blockquote><p><span class="export-math" data-export-item="formula-1"><span class="katex-html">x</span></span></p></blockquote>' + '<p>unrelated</p>'.repeat(1000));
   const containing = root.querySelector('p')!, quote = root.querySelector('blockquote')!;

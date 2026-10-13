@@ -17,9 +17,9 @@ function fit(element: HTMLElement, width: number, measured: number) {
 }
 function availableWidth(element: HTMLElement, width: number) {
   const cell = element.closest<HTMLElement>('th,td');
-  return cell ? Math.max(1, (cell.clientWidth - parseFloat(getComputedStyle(cell).paddingLeft) - parseFloat(getComputedStyle(cell).paddingRight)) * renderedScale(cell)) : width;
+  return cell ? tableAvailableWidth(element, width) * renderedScale(cell) : width;
 }
-function tableAvailableWidth(table: HTMLTableElement, width: number) {
+function tableAvailableWidth(table: HTMLElement, width: number) {
   const cell = table.closest<HTMLElement>('th,td');
   if (!cell) return width;
   const style = getComputedStyle(cell);
@@ -269,8 +269,10 @@ export function createLayoutSession(root: HTMLElement) {
       if (math && mathContentWidth(math) > available + 1) issue(id, '换行后仍超宽，继续缩小会影响阅读；可手动选择适宽缩放。');
       if (element.getBoundingClientRect().height > pageHeight && !(element.classList.contains('wrap') && measures[i].canContinue)) issue(id, '此公式整体高于一页，需分段排版或调整源码。');
     });
+    // Compare final visible geometry, retaining the table's own fit scale.
+    // A nested table's cell limit includes the containing tables' scale too.
     for (const id of changed) for (const table of elements(id).filter((element): element is HTMLTableElement => element.tagName === 'TABLE'))
-      if (extent(table) / renderedScale(table) > tableAvailableWidth(table, width) + 1) issue(id, options.items[id] === 'original'
+      if (extent(table) > availableWidth(table, width) + 1) issue(id, options.items[id] === 'original'
         ? '原列宽超出正文宽度，打印会截断；请选择视觉最优、单表换行或缩到正文宽度'
         : '表格仍超出正文宽度，可选择缩放');
     for (const id of changed) for (const table of elements(id).filter((element): element is HTMLTableElement => element.tagName === 'TABLE')) {
