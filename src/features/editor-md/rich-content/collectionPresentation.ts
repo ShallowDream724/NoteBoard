@@ -3,8 +3,9 @@ export const isCollectionWidth = (value: unknown): value is string => typeof val
 export const isCollectionAlign = (value: unknown): value is 'left' | 'center' | 'right' => value === 'left' || value === 'center' || value === 'right';
 
 /** Shared by the editor, clipboard HTML and print/HTML serializers. */
-export function collectionPresentation(attrs: { width?: unknown; align?: unknown; layout?: unknown }) {
+export function collectionPresentation(attrs: { width?: unknown; align?: unknown; layout?: unknown; columns?: unknown }) {
   const width = isCollectionWidth(attrs.width) ? attrs.width : '100%';
   const align = attrs.layout === 'carousel' ? 'center' : isCollectionAlign(attrs.align) ? attrs.align : 'center';
-  return { width, align, style: `width:${width};margin-left:${align === 'left' ? '0' : 'auto'};margin-right:${align === 'right' ? '0' : 'auto'}` };
+  return { width, align, style: `width:${width};margin-left:${align === 'left' ? '0' : 'auto'};margin-right:${align === 'right' ? '0' : 'auto'};--nb-image-columns:${imageGridColumns(attrs.columns)}` };
 }
+import { imageGridColumns } from '../../../core/document/imageGrid';

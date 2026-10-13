@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { imageGridColumns } from '../../core/document/imageGrid';
 import { figureCaptionContent, normalizeFigureCaption } from '../editor-md/figureCaption';
 
 export type ExportProjection = 'portable' | 'html' | 'print';
@@ -76,7 +77,7 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
     if (mode === 'portable' && value.type === 'imageSlot') {
       result = [{ type: 'tableCell', content: content.length ? content : [paragraph()] }];
     } else if (mode === 'portable' && value.type === 'imageCollection') {
-      const columns = value.attrs?.columns === 3 ? 3 : 2, rows: JSONContent[] = [];
+      const columns = imageGridColumns(value.attrs?.columns), rows: JSONContent[] = [];
       for (let start = 0; start < content.length; start += columns) {
         const cells = content.slice(start, start + columns);
         while (cells.length < columns) cells.push({ type: 'tableCell', content: [paragraph()] });

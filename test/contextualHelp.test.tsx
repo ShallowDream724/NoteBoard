@@ -161,7 +161,7 @@ it('shows each image template with the real slot count, column layout, and local
     expect(preview.querySelectorAll('.nb-image-slot')).toHaveLength(recipe.content!.length);
     expect((preview.querySelector('.nb-image-slots') as HTMLElement).style.gridTemplateColumns).toBe(`repeat(${recipe.attrs!.columns},minmax(0,1fr))`);
     expect(Array.from(preview.querySelectorAll('img')).every(image => image.src.startsWith('data:image/svg+xml,'))).toBe(true);
-    expect(document.querySelector('.nb-help-preview-label')?.textContent).toBe('添加图片后的效果');
+    expect(document.querySelector('.nb-help-preview-label')?.textContent).toBe(template === 2 ? '左右对比' : template === 'vertical2' ? '上下排列' : '添加图片后的效果');
     expect(preview.closest('[inert][aria-hidden="true"]')).not.toBeNull();
     if (template === 'carousel') {
       expect(preview.querySelectorAll('.nb-image-pagination .nb-image-dot')).toHaveLength(3);

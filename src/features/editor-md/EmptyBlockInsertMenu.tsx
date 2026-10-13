@@ -1,6 +1,6 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { BarChart3, Braces, GalleryHorizontalEnd, Grid2X2, Image, Link2, List, CheckSquare, Minus, PanelTop, PanelTopClose, Quote, Table2, Type, Workflow } from 'lucide-react';
+import { BarChart3, Braces, Image, Link2, List, CheckSquare, Minus, PanelTop, PanelTopClose, Quote, Table2, Type, Workflow } from 'lucide-react';
 import { InlineFormulaIcon, BlockFormulaIcon } from '../../components/FormulaIcons';
 import { OrderedListIcon } from '../../components/OrderedListIcon';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
@@ -67,7 +67,7 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
       <div className="nb-empty-block-grid">
         {item('本地图片', <Image size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'local'))}
         {item('图片链接', <Link2 size={16}/>, () => insertEmptyParagraphImage(editor, pos, 'url'))}
-        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, template === 'carousel' ? <GalleryHorizontalEnd size={16}/> : <Grid2X2 size={16}/>, imageCollectionTemplate(template), 'gallery', { helpKey: IMAGE_TEMPLATE_HELP_KEYS[template] }))}
+        {native && IMAGE_TEMPLATES.map(({ template, label }) => block(label, <ImageTemplateIcon template={template} size={16}/>, imageCollectionTemplate(template), 'gallery', { helpKey: IMAGE_TEMPLATE_HELP_KEYS[template] }))}
       </div>
     </div>
     <div className="nb-empty-block-group" role="group" aria-label="公式与图表">
@@ -81,3 +81,4 @@ export function EmptyBlockInsertMenu({ editor, pos, close }: { editor: Editor; p
     </div>
   </div>;
 }
+import { ImageTemplateIcon } from '../../components/ImageGridIcon';

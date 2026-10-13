@@ -124,7 +124,7 @@ export function pandocSource(source: string | DocumentNode, baseDirectory = ''):
       }
       case 'disclosure': return [node('Para', [node('Strong', words(String(value.attrs.title || '折叠内容')))]), ...children(value, block)];
       case 'imageCollection': {
-        const columns = value.attrs.columns === 3 ? 3 : 2, rows: unknown[] = [];
+        const columns = imageGridColumns(value.attrs.columns), rows: unknown[] = [];
         for (let start = 0; start < value.childCount; start += columns) {
           const cells: unknown[] = [];
           for (let column = 0; column < columns; column++) {
@@ -175,3 +175,4 @@ export function pandocSource(source: string | DocumentNode, baseDirectory = ''):
   for (const id of bodies.keys()) if (!usedNotes.has(id)) blocks.push(node('Para', [note(id)]));
   return JSON.stringify({ blocks, meta: {} });
 }
+import { imageGridColumns } from '../../core/document/imageGrid';

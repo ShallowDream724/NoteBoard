@@ -78,15 +78,14 @@ it('gives all image templates the same help key in both insertion menus and pres
   expect(collection.attrs.columns).toBe(2); expect(close).toHaveBeenCalledOnce();
 });
 
-it('explains image layout conversion and preserves the existing collection while changing columns', async () => {
+it('explains layout conversion and resizes grid columns without closing its controls', async () => {
   const instance = editor({ type: 'doc', content: [imageCollectionTemplate(9)] }), close = vi.fn();
   await act(async () => root.render(<BlockContextMenu editor={instance} pos={0} close={close}/>));
-  expect(help('两列拼图')).toBe('image.collection.columns.2');
-  expect(help('三列拼图')).toBe('image.collection.columns.3');
-  expect(help('图片轮播')).toBe('image.collection.layout.carousel');
-  await act(async () => (entry('两列拼图') as HTMLElement).click());
-  expect(instance.state.doc.firstChild!.childCount).toBe(9);
-  expect(instance.state.doc.firstChild!.attrs.columns).toBe(2); expect(close).toHaveBeenCalledOnce();
+  expect(help('改为图片轮播')).toBe('image.collection.layout.carousel');
+  await act(async () => (document.querySelector('[aria-label="删除最右一列"]') as HTMLElement).click());
+  expect(instance.state.doc.firstChild!.childCount).toBe(6);
+  expect(instance.state.doc.firstChild!.attrs.columns).toBe(2); expect(close).not.toHaveBeenCalled();
+  instance.commands.undo();expect(instance.state.doc.firstChild!.childCount).toBe(9);
 });
 
 it('exposes the matching format help and existing shortcuts from the top toolbar', async () => {

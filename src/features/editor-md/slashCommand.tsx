@@ -39,8 +39,6 @@ import {
   ChevronRight,
   Boxes,
   BarChart3,
-  GalleryHorizontalEnd,
-  Grid2X2,
   PanelTopClose,
 } from 'lucide-react';
 import { insertLocalImageWithDialog } from './imagePaste';
@@ -504,7 +502,7 @@ const IMAGE_COLLECTION_LEAFS: LeafCommandItem[] = IMAGE_TEMPLATES.map(({ templat
   groupId: 'images',
   groupLabel: '图片',
   shortcutHint: template === 'carousel' ? '/carousel' : `/grid${template}`,
-  icon: template === 'carousel' ? <GalleryHorizontalEnd size={17} /> : <Grid2X2 size={17} />,
+  icon: <ImageTemplateIcon template={template} size={17}/>,
   aliases: template === 'carousel' ? ['carousel', 'lunbo', 'lb'] : [`grid${template}`, `gongge${template}`, 'grid'],
   keywords: `图片 相册 拼图 宫格 轮播 gallery image ${label}`,
   action: (editor, range) => {
@@ -1421,3 +1419,4 @@ export const slashSuggestion = {
 };
 
 
+import { ImageTemplateIcon } from '../../components/ImageGridIcon';

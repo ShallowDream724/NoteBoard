@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Editor } from '@tiptap/core';
-import { Image, Grid2X2, GalleryHorizontalEnd, MoreHorizontal, EyeOff, CircleHelp, X } from 'lucide-react';
+import { Image, MoreHorizontal, EyeOff, CircleHelp, X } from 'lucide-react';
+import { ImageTemplateIcon } from '../../../components/ImageGridIcon';
 import { ToolbarButton, ToolbarDropdown, ToolbarDropdownItem } from '../../toolbar/ToolbarComponents';
 import { useNativeFeatureVisibility } from '../../document-format/featureGate';
 import { IMAGE_TEMPLATES, imageCollectionTemplate, insertImageCollection, selectionConcealed, toggleConceal } from './commands';
@@ -13,7 +14,7 @@ export function ImageInsertItems({ editor, onLocal, onNetwork, onDone }: { edito
     <ToolbarDropdownItem icon={<Image size={14}/>} label="插入图片" onClick={() => { onDone(); onLocal(); }}/>
     <ToolbarDropdownItem icon={<Image size={14}/>} label="从链接插入" onClick={() => { onDone(); onNetwork(); }}/>
     {visible && editor && <div className="nb-rich-menu-divider"/>}
-    {visible && editor && IMAGE_TEMPLATES.map(({ template, label }) => <ToolbarDropdownItem key={template} icon={template === 'carousel' ? <GalleryHorizontalEnd size={14}/> : <Grid2X2 size={14}/>} label={label} helpKey={IMAGE_TEMPLATE_HELP_KEYS[template]} onClick={() => { onDone(); insertImageCollection(editor, template); }}/>) }
+    {visible && editor && IMAGE_TEMPLATES.map(({ template, label }) => <ToolbarDropdownItem key={template} icon={<ImageTemplateIcon template={template} size={14}/>} label={label} helpKey={IMAGE_TEMPLATE_HELP_KEYS[template]} onClick={() => { onDone(); insertImageCollection(editor, template); }}/>) }
   </>;
 }
 export function ImageInsertMenu(props: Omit<Parameters<typeof ImageInsertItems>[0], 'onDone'> & { collapsePriority?: number; overflowId?: string }) {

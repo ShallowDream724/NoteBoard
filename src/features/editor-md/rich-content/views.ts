@@ -12,6 +12,8 @@ import { continueContainerWriting, handleContainerTailKey, needsContainerTail } 
 import { observeImageViewport } from './imageVisibility';
 import { COLLECTION_STEP_EVENT } from './collectionNavigation';
 import { DisclosureEditing, deleteEmptyDisclosure } from './disclosureEditing';
+import { resizeImageGrid } from './gridEditing';
+import { imageGridColumns, IMAGE_GRID_MAX_CELLS, IMAGE_GRID_MAX_COLUMNS } from '../../../core/document/imageGrid';
 import './richContent.css';
 import './carousel.css';
 import '../captionAddControl.css';
@@ -34,6 +36,7 @@ class CollectionView implements NodeView {
   private target: number | null = null; private scrollFrame = 0; private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private resize: ResizeObserver | undefined; private width = 0; private nearby = new Set<HTMLElement>();
   private annotation: HTMLSpanElement;
+  private addColumn: HTMLButtonElement; private addRow: HTMLButtonElement;
   private inViewport = false; private stopViewport: () => void;
   constructor(private node: Node, private editor: Editor, private getPos: () => number | undefined, decorations: readonly Decoration[]) {
     this.dom.className = 'nb-image-collection'; this.contentDOM.className = 'nb-image-slots';
@@ -49,12 +52,19 @@ class CollectionView implements NodeView {
       this.show(this.node.childCount - 1);
       this.editor.view.focus();
     }, '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>');
+    const grow = (axis: 'row' | 'column') => {
+      const pos=this.getPos();if(pos===undefined)return;
+      const columns=imageGridColumns(this.node.attrs.columns),rows=Math.ceil(this.node.childCount/columns);
+      resizeImageGrid(this.editor,pos,columns+(axis==='column'?1:0),rows+(axis==='row'?1:0));
+    };
+    this.addColumn=button('在右侧加一列','nb-image-grid-grow',()=>grow('column'));this.addColumn.textContent='+ 加列';
+    this.addRow=button('在下方加一行','nb-image-grid-grow',()=>grow('row'));this.addRow.textContent='+ 加行';
     // Keep live regions out of the editable tree: modal aria isolation would
     // otherwise mutate all sibling blocks and force ProseMirror to reparse them.
     this.counter.className = 'nb-image-counter';
     this.pagination.append(this.dots, this.counter);
     this.annotation = createAnnotationMarker(annotationMarkerId(decorations), 'edge');
-    this.footer.append(this.previous, this.pagination, this.next, add); this.viewport.append(this.contentDOM); this.dom.append(this.viewport, this.footer, this.annotation);
+    this.footer.append(this.previous, this.pagination, this.next, add, this.addColumn, this.addRow); this.viewport.append(this.contentDOM); this.dom.append(this.viewport, this.footer, this.annotation);
     this.viewport.addEventListener('scroll', this.onScroll, { passive: true });
     this.viewport.addEventListener('wheel', this.onWheel, { passive: true });
     this.viewport.addEventListener('pointerdown', this.onPointerDown, { passive: true });
@@ -70,6 +80,9 @@ class CollectionView implements NodeView {
     this.dom.dataset.layout = this.node.attrs.layout;
     this.dom.style.cssText = collectionPresentation(this.node.attrs).style;
     this.contentDOM.style.gridTemplateColumns = `repeat(${this.node.attrs.columns},minmax(0,1fr))`;
+    const columns=imageGridColumns(this.node.attrs.columns),rows=Math.ceil(this.node.childCount/columns);
+    this.addColumn.disabled=columns>=IMAGE_GRID_MAX_COLUMNS||(columns+1)*rows>IMAGE_GRID_MAX_CELLS;
+    this.addRow.disabled=columns*(rows+1)>IMAGE_GRID_MAX_CELLS;
     this.active = Math.min(this.active, this.node.childCount - 1);
     cancelAnimationFrame(this.frame); this.frame = requestAnimationFrame(() => { this.frame = 0; this.show(this.active, false); });
   }

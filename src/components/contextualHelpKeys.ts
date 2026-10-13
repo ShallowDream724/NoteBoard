@@ -3,6 +3,8 @@ import type { ImageTemplate } from '../features/editor-md/rich-content/commands'
 
 /** UI identities stay separate from the document's public insertion recipes. */
 export const IMAGE_TEMPLATE_HELP_KEYS = {
+  2: 'image.collection.2',
+  vertical2: 'image.collection.vertical2',
   4: 'image.collection.4',
   6: 'image.collection.6',
   9: 'image.collection.9',

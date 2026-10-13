@@ -16,7 +16,7 @@ import '../features/editor-md/formulaSourceEditor.css';
 import '../features/editor-md/documentReadingView.css';
 import './contextualHelp.css';
 
-type ImageIllustration = `image-grid-${4 | 6 | 9}` | `image-columns-${2 | 3}` | 'image-carousel';
+type ImageIllustration = `image-grid-${2 | 4 | 6 | 9}` | `image-columns-${2 | 3}` | 'image-vertical2' | 'image-carousel';
 type Illustration = 'inline-code' | 'table-position' | `table-position-${'left' | 'center' | 'right'}` | 'cell-align' | `cell-align-${'left' | 'center' | 'right'}` | 'cell-vertical' | `cell-vertical-${'top' | 'middle' | 'bottom'}` | 'header-row' | 'header-column' | 'header-row-clear' | 'header-column-clear' | 'three-line' | 'table' | 'table-expand' | 'table-scroll' | 'formula-expand' | 'formula-wrap' | 'formula-scroll' | 'figure-caption' | 'table-caption' | 'annotation' | 'disclosure' | 'callout' | 'callout-wrap' | `callout-${AlertKind}` | 'inline-formula' | 'block-formula' | ImageIllustration | 'bullet-list' | 'ordered-list' | 'task-list' | 'code-block' | 'quote' | 'divider' | 'paragraph' | 'format-clear' | 'format-restore' | 'link' | `heading-${1 | 2 | 3 | 4 | 5 | 6}`;
 interface HelpEntry { description: string; illustration: Illustration; scope?: string; previewLabel?: string }
 
@@ -39,12 +39,15 @@ export const contextualHelp = {
   'block.code': { description: '集中放置多行代码，保留缩进并按语言显示颜色。可在顶部选择语言、折叠或复制代码。', illustration: 'code-block', previewLabel: '输入代码后的效果' },
   'block.quote': { description: '突出引用原话或参考内容，让它与自己的正文容易区分。', illustration: 'quote' },
   'block.divider': { description: '用一条横线分隔内容，适合在话题或章节之间留出清楚的边界。', illustration: 'divider' },
+  'image.collection.2': { description: '两张图片左右并排，适合对比修改前后。可继续增加行或列。', illustration: 'image-grid-2', previewLabel: '左右对比' },
+  'image.collection.vertical2': { description: '两张图片上下排列，适合较宽的截图或连续步骤。可继续增加行或列。', illustration: 'image-vertical2', previewLabel: '上下排列' },
   'image.collection.4': { description: '插入两列、四格的图片组合，适合并排比较。点击空格添加自己的图片。', illustration: 'image-grid-4', previewLabel: '添加图片后的效果' },
   'image.collection.6': { description: '插入三列、六格的图片组合，适合展示一组照片。点击空格添加自己的图片。', illustration: 'image-grid-6', previewLabel: '添加图片后的效果' },
   'image.collection.9': { description: '插入三列、九格的图片组合，适合集中浏览更多图片。点击空格添加自己的图片。', illustration: 'image-grid-9', previewLabel: '添加图片后的效果' },
   'image.collection.carousel': { description: '每次展示一张图片，用下方箭头或圆点逐张切换。新建时提供三个空格，点击空格添加图片。', illustration: 'image-carousel', previewLabel: '添加图片后的效果' },
   'image.collection.layout.carousel': { description: '将现有图片组合改为逐张展示，保留图片和图注。用下方箭头或圆点切换查看。', illustration: 'image-carousel', scope: '当前图片组合' },
   'image.collection.columns.2': { description: '将现有图片按两列重新排列，单张图片更大，保留全部图片和图注。', illustration: 'image-columns-2', scope: '当前图片组合' },
+  'image.collection.layout.grid': { description: '同时显示组合里的图片，保留全部图片和图注。可在宫格设置里增减行列。', illustration: 'image-grid-4', scope: '当前图片组合' },
   'image.collection.columns.3': { description: '将现有图片按三列重新排列，同一行可浏览更多图片，保留全部图片和图注。', illustration: 'image-columns-3', scope: '当前图片组合' },
   'table.position': { description: '调整整张表格在页面中的位置。单元格里的文字位置保持原样。', illustration: 'table-position', scope: '当前表格' },
   'table.position.left': { description: '将整张表格放在页面左侧，单元格里的文字位置保持原样。', illustration: 'table-position-left', scope: '当前表格' },
@@ -119,8 +122,8 @@ function imageScene(index: number) {
 
 function ImageCollectionPreview({ kind }: { kind: ImageIllustration }) {
   const carousel = kind === 'image-carousel';
-  const columns = kind === 'image-grid-4' || kind === 'image-columns-2' || carousel ? 2 : 3;
-  const count = carousel ? 3 : kind.startsWith('image-grid-') ? Number(kind.slice(11)) : 6;
+  const columns = kind === 'image-vertical2' ? 1 : kind === 'image-grid-2' || kind === 'image-grid-4' || kind === 'image-columns-2' || carousel ? 2 : 3;
+  const count = carousel ? 3 : kind === 'image-vertical2' ? 2 : kind.startsWith('image-grid-') ? Number(kind.slice(11)) : 6;
   const [active, setActive] = useState(0);
   useEffect(() => {
     if (!carousel) return;
