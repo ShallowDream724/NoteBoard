@@ -14,6 +14,8 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { HeadingGeometry } from './headingGeometry';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { revealEditorBlock } from '../editor-md/editorViewport';
+import { BookmarkPanel } from '../bookmarks/BookmarkPanel';
+import { headingFoldingKey } from '../editor-md/headingFolding';
 import './outlinePanel.css';
 
 interface OutlinePanelProps {
@@ -34,6 +36,8 @@ function getIndent(level: number): number {
 export function OutlinePanel({ editor }: OutlinePanelProps) {
   const { headings, activeId, setActiveId } = useHeadings(editor);
   const toggleOutline = useLayoutStore(state => state.toggleOutline);
+  const tab = useLayoutStore(state => state.navigationTab);
+  const setTab = useLayoutStore(state => state.setNavigationTab);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -157,7 +161,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
 
   // 滚动联动：编辑区滚动 → 大纲当前项跟随
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || tab !== 'outline') return;
 
     const scrollContainer = findScrollContainer(editor.view.dom);
     const editorRoot = editor.view.dom;
@@ -198,7 +202,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
       geometry.destroy();
       cancelAnimationFrame(frame);
     };
-  }, [editor, setActiveId]);
+  }, [editor, setActiveId, tab]);
 
   // 大纲面板自身跟随当前项滚动
   useEffect(() => {
@@ -227,16 +231,23 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   }, []);
 
   return (
-    <nav className="nb-document-outline" aria-label="文档大纲">
+    <nav className="nb-document-outline" aria-label="文档导航">
       <div className="nb-outline-header">
-        <Tooltip content="收起大纲" shortcut="Ctrl+Alt+B" side="left">
-          <button className="nb-outline-toggle" type="button" aria-label="收起大纲" onClick={toggleOutline}><ChevronsRight size={18}/></button>
+        <Tooltip content="收起导航面板" shortcut="Ctrl+Alt+B" side="left">
+          <button className="nb-outline-toggle" type="button" aria-label="收起导航面板" aria-expanded="true" onClick={toggleOutline}><ChevronsRight size={18}/></button>
         </Tooltip>
-        <span className="nb-outline-title">大纲</span>
+        <div className="nb-navigation-tabs" role="tablist" aria-label="文档导航分类">
+          {(['outline', 'bookmarks'] as const).map(value => <button key={value} type="button" role="tab" id={`nb-navigation-tab-${value}`} aria-controls={`nb-navigation-${value}`} aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} className="nb-navigation-tab" onClick={() => setTab(value)} onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const next = event.key === 'Home' ? 'outline' : event.key === 'End' ? 'bookmarks' : value === 'outline' ? 'bookmarks' : 'outline';
+            setTab(next); document.getElementById(`nb-navigation-tab-${next}`)?.focus();
+          }}>{value === 'outline' ? '大纲' : '书签'}</button>)}
+        </div>
       </div>
 
       {/* 标题列表 */}
-      {headings.length === 0 ? (
+      {tab === 'bookmarks' ? <BookmarkPanel editor={editor}/> : <div className="nb-outline-panel" role="tabpanel" id="nb-navigation-outline" aria-labelledby="nb-navigation-tab-outline">{headings.length === 0 ? (
         <div
           style={{
             padding: '24px 16px',
@@ -357,8 +368,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
             })}
           </div>
         </div>
-      )}
+      )}</div>}
     </nav>
   );
 }
-import { headingFoldingKey } from '../editor-md/headingFolding';

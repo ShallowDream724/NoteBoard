@@ -26,7 +26,7 @@ vi.mock('@/core/ipc/commands', () => ({
   pathExists: vi.fn(),
   isPerfSpansEnabled: vi.fn().mockResolvedValue(false),
 }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), discardStagedDocuments: vi.fn(), stashPendingDocuments: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), discardStagedDocuments: vi.fn(), stashPendingDocuments: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 
 // 无关 UI 组件替身（保持 AppShell 结构）

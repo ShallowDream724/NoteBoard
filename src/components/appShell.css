@@ -46,6 +46,32 @@
   container: document-content / inline-size;
   width: 100%;
 }
+.nb-document-editors {
+  container: document-pane / inline-size;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+/* Docking allocates a separate lane; each block retains its own overflow policy. */
+.nb-document-stage[data-navigation-mode="docked"][data-outline] > .nb-document-outline {
+  position: relative;
+  top: auto;
+  right: auto;
+  flex: 0 0 auto;
+  width: clamp(144px, 22cqi, 232px);
+  max-width: 45%;
+  max-height: none;
+  height: 100%;
+  border-left: 1px solid var(--editor-border);
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  background: var(--editor-bg);
+  padding: 12px 10px;
+}
 .nb-markdown-source .cm-scroller {
   box-sizing: border-box;
   padding-right: var(--document-outline-space, 0px);
@@ -75,6 +101,12 @@
     --document-outline-inset: 20px;
   }
   .nb-document-stage .nb-block-grip { display: none; }
+  .nb-document-stage[data-navigation-mode="docked"] .nb-document-content {
+    --document-top-space: 2.8em;
+    --document-gutter: 64px;
+    --document-block-handle-width: 30px;
+    --document-reading-width: 100%;
+  }
 }
 
 /* At narrow pane sizes a bounded floating navigator leaves editing width intact. */
@@ -83,7 +115,7 @@
     --document-outline-width: min(220px, calc(100cqi - 48px));
     --document-outline-space: 0px;
   }
-  .nb-document-stage .nb-document-outline {
+  .nb-document-stage[data-navigation-mode="floating"] .nb-document-outline {
     max-height: min(440px, calc(100% - 96px));
   }
 }

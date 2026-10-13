@@ -112,7 +112,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
         const id = crypto.randomUUID(); current.pandoc = id;
         await invoke('begin_pandoc', { id }); signal.throwIfAborted();
         const { preparePandoc } = await import('./documentConversion');
-        const source = await preparePandoc(document.source ?? document.markdown, signal, document.inputFormat); signal.throwIfAborted();
+        const source = await preparePandoc(document.source ?? document.markdown, signal, document.inputFormat, document.baseDirectory); signal.throwIfAborted();
         warnings = await invoke<string>('pandoc_export', { id, path, format, source, directory: document.baseDirectory, destination });
       }
       onClose();
@@ -159,7 +159,7 @@ export function ExportModal({ docKey, onClose }: { docKey: string; onClose: () =
           {pdf.receipt.adjustable.length > 20 && <input aria-label="搜索超宽内容" placeholder="搜索公式或表格" value={itemSearch} onChange={e => setItemSearch(e.target.value)}/>}
           <div className="export-item-list" aria-label="需要调整的内容">{visibleItems.map(value => <button key={value.id} title={value.label} className={(value.id === item ? 'selected ' : '') + (issueIds.has(value.id) ? 'has-error' : '')} onClick={() => navigateToItem(value.id)}>{value.label}</button>)}</div>
           {currentItem && <label className="export-field">排版方式<select value={options.items[item] ?? 'auto'} onChange={e => updateItem(item, e.target.value as ItemMode)}>
-            <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option></>}
+            <option value="auto">视觉最优</option><option value="fit">缩到正文宽度</option>{currentItem.kind === 'table' && <><option value="wrap">单表换行</option><option value="columns">分栏续表（重复首列）</option><option value="original">保留原列宽</option></>}
           </select></label>}
         </section>}
       </> : <p className="export-note">{format === 'md' ? '保留正文、链接和表格内容，移除专用样式。复杂表格使用标准 HTML 保留单元格内的内容。' : format === 'noteboard' ? document?.inputFormat === 'noteboard' ? '另存一个可继续编辑的 .nb 副本；当前打开的文件不会切换到副本。' : '将当前 Markdown 转为可在 NoteBoard 继续编辑的 .nb 文档。' : format === 'html5' ? '保留图片轮播、折叠与模糊揭示。打印时显示全部内容。本地图片随文件保存，可直接分享；网络图片保留链接。' : '由本机 Pandoc 转换。Word 的分页会随打开它的软件变化。'}</p>}

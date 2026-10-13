@@ -5,7 +5,8 @@ import { dispatchDiscreteEdit } from './discreteEdit';
 import type { EditorView } from '@tiptap/pm/view';
 import { SizedTableRow } from './markdownTable';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
-import { columnWidthsStep, resizedColumnPair } from './tableColumnWidths';
+import { columnWidthsStep, resizedColumnWidth, resizedColumnPair } from './tableColumnWidths';
+import type { EditorSettings } from '../../core/ipc/types';
 import { tableGesturePreview } from './tableGesturePreview';
 import { createTableRowView } from './tableRowView';
 import { runWithDocumentCapability } from '../document-format/featureGate';
@@ -21,9 +22,10 @@ export const ResizableTableRow = SizedTableRow.extend({
 });
 
 interface Edge { axis: 'row' | 'column'; side?: 'left' | 'right'; row: HTMLTableRowElement; cell: HTMLTableCellElement; table: HTMLTableElement }
-interface Pending extends Edge { pos: number; column: number; pointer: number; origin: number }
+type ColumnResizeMode = NonNullable<EditorSettings['tableColumnResizeMode']>;
+interface Pending extends Edge { pos: number; column: number; pointer: number; origin: number; resizeMode: ColumnResizeMode }
 interface Drag extends Edge {
-  pos: number; pointer: number; origin: number; start: number; next: number; adjacent?: number;
+  pos: number; pointer: number; origin: number; start: number; next: number; adjacent?: number; resizeMode: ColumnResizeMode;
   column: number; scale: number; guideOrigin: number;
   preview: NonNullable<ReturnType<typeof tableGesturePreview>>;
   endActivity?: () => void;
@@ -98,7 +100,7 @@ export const TableSizing = Extension.create({
     const paint = () => {
       frame = 0; if (!drag) return;
       if (drag.axis === 'row') drag.preview.rowHeight(drag.next);
-      else drag.preview.columns(drag.column, drag.next, drag.adjacent);
+      else drag.preview.columnWidth(drag.column, drag.next, drag.adjacent);
       if (guide) guide.style.setProperty(drag.axis === 'row' ? 'top' : 'left', `${drag.guideOrigin + (drag.next - drag.start) * drag.scale - 2}px`);
     };
     const finish = (editor: EditorView, commit: boolean) => {
@@ -152,7 +154,8 @@ export const TableSizing = Extension.create({
             if (event.pointerId !== drag.pointer) return false;
             const delta = ((drag.axis === 'row' ? event.clientY : event.clientX) - drag.origin) / drag.scale;
             if (drag.axis === 'row') drag.next = Math.max(24, Math.min(10000, Math.round(drag.start + delta)));
-            else [drag.next, drag.adjacent] = resizedColumnPair(drag.preview.widths, drag.column, delta);
+            else if (drag.resizeMode === 'adjacent') [drag.next, drag.adjacent] = resizedColumnPair(drag.preview.widths, drag.column, delta);
+            else drag.next = resizedColumnWidth(drag.start, delta);
             if (!frame) frame = requestAnimationFrame(paint);
             event.preventDefault(); return true;
           }
@@ -170,7 +173,11 @@ export const TableSizing = Extension.create({
           const edge = edgeAt(editor, event); if (!edge) return false;
           const position = modelPosition(editor, edge); if (!position) return false;
           // A press is not a resize. Preserve automatic layout until actual movement.
-          pending = { ...edge, ...position, pointer: event.pointerId, origin: edge.axis === 'row' ? event.clientY : event.clientX };
+          pending = { ...edge, ...position, pointer: event.pointerId, origin: edge.axis === 'row' ? event.clientY : event.clientX,
+            resizeMode: useSettingsStore.getState().settings.editor.tableColumnResizeMode ?? 'grow' };
+          // preventDefault below suppresses native focus. Keep Escape and editor
+          // keyboard cancellation available even when resizing an unfocused table.
+          editor.focus();
           editor.dom.setPointerCapture(event.pointerId);
           showGuide(edge); event.preventDefault(); return true;
         },

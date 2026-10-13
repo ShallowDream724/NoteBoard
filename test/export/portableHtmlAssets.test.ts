@@ -78,3 +78,21 @@ it('surfaces asset transport failures with the source path', async () => {
   fetchAsset.mockRejectedValueOnce(new TypeError('Failed to fetch'));
   await expect(portableHtmlAssetUrls(['C:/missing.png'])).rejects.toThrow('C:/missing.png”：Failed to fetch');
 });
+
+it('rejects direct UNC and encoded aliases before conversion or fetch', async () => {
+  for (const path of [String.raw`\\server\share\a.png`, '%5c%5cserver%5cshare%5ca.png', 'file://server/share/a.png',
+    'http://asset.localhost/%5c%5cserver%5cshare%5ca.png']) {
+    await expect(portableHtmlAssetUrls([path])).rejects.toThrow('网络共享图片未获准自动加载');
+  }
+  expect(convertFileSrc).not.toHaveBeenCalled(); expect(fetchAsset).not.toHaveBeenCalled();
+});
+
+it('embeds a relative image from the explicitly opened share after checking its provenance', async () => {
+  fetchAsset.mockResolvedValue(assetResponse(new Uint8Array([1, 2, 3])));
+  const path = String.raw`\\server\share\notes\a.png`, directory = String.raw`\\server\share\notes`;
+  expect(await portableHtmlAssetUrls([path], undefined, { directory, references: ['./a.png'] })).toEqual(['data:image/png;base64,AQID']);
+  expect(convertFileSrc).toHaveBeenCalledExactlyOnceWith(path);
+  fetchAsset.mockClear(); vi.mocked(convertFileSrc).mockClear();
+  await expect(portableHtmlAssetUrls([String.raw`\\other\share\a.png`], undefined, { directory, references: ['./a.png'] })).rejects.toThrow('未获准');
+  expect(fetchAsset).not.toHaveBeenCalled(); expect(convertFileSrc).not.toHaveBeenCalled();
+});

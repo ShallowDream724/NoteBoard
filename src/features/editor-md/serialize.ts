@@ -7,6 +7,7 @@
 
 import type { Editor, JSONContent } from '@tiptap/core';
 import { reconcileDocumentHistory } from './documentReconciliation';
+import { markDocumentReplacement } from './documentReplacement';
 import { escapeMarkdownText } from './markdownTextEscape';
 
 // Unicode 标点与符号类别用于发现“可能是转义前缀”的反斜杠，不按具体字符逐项维护。
@@ -419,8 +420,7 @@ function replaceEditorContent(
   // 文件初始化、历史导航和模式同步属于程序行为，不允许污染用户的局部撤销栈
   replace
     .command(({ tr }) => {
-      tr.setMeta('addToHistory', false);
-      tr.setMeta('noteboard-document-replacement', origin);
+      markDocumentReplacement(tr, origin);
       return true;
     })
     .run();

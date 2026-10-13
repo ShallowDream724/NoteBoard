@@ -1,14 +1,8 @@
 import type { DiagramRequest, DiagramResult } from './diagramRendering';
 
 async function plantUml(code: string, signal?: AbortSignal) {
-  const controller = new AbortController();
-  const cancel = () => controller.abort(signal?.reason);
-  signal?.addEventListener('abort', cancel, { once: true });
-  const timeout = setTimeout(() => controller.abort(new Error('PlantUML 渲染超时，请检查网络连接。')), 20000);
-  try {
-    signal?.throwIfAborted();
-    return await (await import('../plantuml/plantumlEncoder')).renderPlantUmlToSvg(code, controller.signal);
-  } finally { clearTimeout(timeout); signal?.removeEventListener('abort', cancel); }
+  // Export only reuses previously authorized, sanitized results. It never uploads source.
+  return (await import('../plantuml/plantumlEncoder')).renderPlantUmlToSvg(code, signal, { allowNetwork: false });
 }
 
 /** Runs in a real browser, outside the conversion worker. Every target uses

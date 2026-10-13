@@ -6,6 +6,8 @@ import { TooltipProvider } from '../../src/components/Tooltip';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
 import { emit } from '../../src/core/emitter';
+import { saveDocument } from '../../src/features/editor-code/orchestration/saveDocument';
+import { recordSaveError, trackDocumentSave } from '../../src/stores/saveActivityStore';
 
 vi.mock('../../src/features/editor-code/orchestration/saveDocument', () => ({ saveDocument: vi.fn() }));
 vi.mock('../../src/core/emitter', () => ({ emit: vi.fn() }));
@@ -74,6 +76,33 @@ describe('document status information', () => {
     expect(container.textContent).toContain('CRLF');
     expect(container.textContent).not.toContain('行 1, 列 1');
     if (kind === 'markdown') expect(container.querySelector('button')?.textContent).toBe('Markdown (源码)');
-    else expect(container.querySelector('button')).toBeNull();
+    expect(container.querySelector('button[aria-label="保存当前文档"]')).not.toBeNull();
+  });
+
+  it('offers a keyboard-accessible save button even for a clean untitled document', () => {
+    openText('code', 'Hello');
+    act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
+    expect(container.textContent).toContain('未保存');
+    const save = container.querySelector<HTMLButtonElement>('button[aria-label="保存当前文档"]')!;
+    expect(save.disabled).toBe(false);
+    act(() => save.click());
+    expect(saveDocument).toHaveBeenCalledWith('untitled:status-test');
+  });
+
+  it('distinguishes waiting auto-save, actual activity and failure', async () => {
+    openText('code', 'Hello');
+    const key = 'untitled:status-test', doc = useDocumentStore.getState().getDocument(key)!;
+    useDocumentStore.setState({ documents: new Map([[key, { ...doc, isDirty: true, savePolicy: 'auto' }]]) });
+    act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
+    expect(container.textContent).toContain('未保存');
+    expect(container.textContent).not.toContain('正在保存');
+    let finish!: () => void, saving!: Promise<void>;
+    act(() => { saving = trackDocumentSave(key, () => new Promise<void>(resolve => { finish = resolve; })); });
+    expect(container.textContent).toContain('正在保存');
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="保存当前文档"]')!.disabled).toBe(true);
+    await act(async () => { recordSaveError(key, '磁盘空间不足'); finish(); await saving; });
+    expect(container.textContent).toContain('保存失败');
+    expect(container.textContent).not.toContain('已保存');
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="保存当前文档"]')!.disabled).toBe(false);
   });
 });

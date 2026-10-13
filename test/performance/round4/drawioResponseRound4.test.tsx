@@ -28,8 +28,9 @@ it('D07：Drawio 请求 A 超时后发起 B，A 的迟到回包不能被 B 接�
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   try {
     await act(async () => root.render(<DrawioEditor docKey={key} />));
+    await act(async () => host.querySelector<HTMLButtonElement>('.nb-btn-primary')!.click());
     const frame = host.querySelector('iframe')!;
-    const send = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify(data) }));
+    const send = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { origin: 'https://embed.diagrams.net', source: frame.contentWindow, data: JSON.stringify(data) }));
     await act(async () => send({ event:'init' }));
     const oldWork = getEditorCapabilities(key)!.flush('evict');
     await act(async () => { await vi.advanceTimersByTimeAsync(3001); });

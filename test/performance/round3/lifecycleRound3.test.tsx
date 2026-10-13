@@ -16,6 +16,12 @@ function seed(key: string): void {
   useDocumentStore.getState().upsertFromPayload({ key, displayName: 'review.drawio', dirPath: 'C:/round3', kind: 'drawio', language: 'xml', content: '<mxfile>old-mirror</mxfile>', encoding: 'utf8', eol: 'lf', size: 10, mtime: 0, readonly: false });
   useWindowStore.getState().openTab({ key, path: key, displayName: 'review.drawio', kind: 'drawio', language: 'xml', isDirty: false, isPreview: false, viewMode: null, externalStatus: null, isDetached: false });
 }
+function enableOnline(host: HTMLElement): void {
+  expect(host.querySelector('iframe')).toBeNull();
+  const enable = Array.from(host.querySelectorAll('button')).find(button => button.textContent === '启用在线编辑');
+  expect(enable).toBeDefined();
+  enable!.click();
+}
 beforeEach(() => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
   useDocumentStore.setState({ documents: new Map() }); useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [] });
@@ -28,8 +34,9 @@ it('C10：Drawio 导出超时未确认最新 XML 时不得批准回收', async (
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   try {
     await act(async () => root.render(<DrawioEditor docKey={key} />));
+    await act(async () => enableOnline(host));
     const frame = host.querySelector('iframe')!;
-    await act(async () => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify({ event: 'init' }) })));
+    await act(async () => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'https://embed.diagrams.net', data: JSON.stringify({ event: 'init' }) })));
     expect(getEditorCapabilities(key)!.canSuspend()).toBe(true);
     const suspension = suspendEditorInstance(key);
     await act(async () => { await vi.advanceTimersByTimeAsync(3001); });
@@ -42,13 +49,17 @@ it('C11：Drawio 已超时请求的迟到 XML 不得覆盖后来的 autosave 正
   const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
   try {
     await act(async () => root.render(<DrawioEditor docKey={key} />));
+    await act(async () => enableOnline(host));
     const frame = host.querySelector('iframe')!;
-    const message = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify(data) }));
+    const send = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const message = (data: unknown) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, origin: 'https://embed.diagrams.net', data: JSON.stringify(data) }));
     await act(async () => message({ event: 'init' }));
     const pending = getEditorCapabilities(key)!.flush('evict');
-    await act(async () => { await vi.advanceTimersByTimeAsync(3001); }); await pending;
+    const request = JSON.parse(send.mock.calls.at(-1)![0] as string);
+    expect(request).toMatchObject({ action: 'export', format: 'xml', requestId: expect.any(String) });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3001); }); expect(await pending).toBeNull();
     await act(async () => message({ event: 'autosave', xml: '<mxfile>new-edit</mxfile>' }));
-    await act(async () => message({ event: 'export', format: 'xml', data: '<mxfile>old-export</mxfile>' }));
+    await act(async () => message({ event: 'export', format: 'xml', message: request, xml: '<mxfile>old-export</mxfile>' }));
     expect(useDocumentStore.getState().getDocument(key)?.content).toBe('<mxfile>new-edit</mxfile>');
   } finally { await act(async () => root.unmount()); host.remove(); }
 });

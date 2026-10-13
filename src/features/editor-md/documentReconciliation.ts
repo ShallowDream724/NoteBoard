@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { NodeAttributesStep } from './nodeAttributesStep';
 import { ReplaceStep } from '@tiptap/pm/transform';
+import { markDocumentReplacement } from './documentReplacement';
 
 /** Snapshot history changes only the differing slice. Untouched node views,
  * syntax decorations and decoded media keep their existing lifetimes. */
@@ -18,7 +19,7 @@ export function reconcileDocumentHistory(editor: Editor, target: Node): void {
     // Use the same zero-width maps for every node kind, including containers.
     const attrs = editor.state.tr.step(new NodeAttributesStep(start, after.attrs));
     if (attrs.doc.eq(target)) {
-      attrs.setMeta('addToHistory', false).setMeta('noteboard-document-replacement', 'history');
+      markDocumentReplacement(attrs, 'history');
       editor.view.dispatch(attrs);
       return;
     }
@@ -42,6 +43,6 @@ export function reconcileDocumentHistory(editor: Editor, target: Node): void {
     tr = editor.state.tr.replaceWith(from, to, target.content.cut(targetFrom, targetTo));
     if (!tr.doc.eq(target)) throw new Error('History restoration changed document structure');
   }
-  tr.setMeta('addToHistory', false).setMeta('noteboard-document-replacement', 'history');
+  markDocumentReplacement(tr, 'history');
   editor.view.dispatch(tr);
 }

@@ -42,7 +42,7 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
 
   // 2. 操作栏处于展开状态：渲染顶层工具栏容器
   return (
-    <EditorMenuScope editor={activeEditor}><div
+    <EditorMenuScope key={activeTab.key} editor={activeEditor}><div
       inert={transferring || undefined}
       style={{
         height: 36,

@@ -23,7 +23,7 @@ vi.mock('../../src/core/ipc/commands', () => ({ readDocument: vi.fn(), writeDocu
 vi.mock('../../src/features/export/documentConversion', () => ({ prepareTextExport: vi.fn() }));
 vi.mock('../../src/features/document-format/linkedMarkdownUpdates', () => ({ getAcceptedLinkedMarkdownHash: vi.fn(), checkLinkedMarkdownUpdates: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../src/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('../../src/features/editor-code/orchestration/saveDocument', () => ({ showWriteError: vi.fn() }));
 vi.mock('../../src/features/editor-md/editorInstances', () => ({ getMdTipTapEditor: () => null, getMdSourceView: vi.fn(() => null) }));
@@ -94,6 +94,17 @@ describe('native linked-save boundary', () => {
     expect(getBaseline(NB).getBaseline()).toBe(baseline);
     expect(getBaseline(MD).getBaseline()).toBe(markdown);
     expect(ipc.writeDocument).not.toHaveBeenCalled();
+  });
+
+  it('recreates a deleted NB using create-only while retaining the linked Markdown version condition', async () => {
+    const { baseline, markdown, source } = await seed();
+    useDocumentStore.getState().setContent(NB, source);
+    vi.mocked(saveNativeBundle).mockResolvedValue({ ok: false, error: { code: 'conflict', message: 'Target was recreated externally' } });
+    expect(await writeDocumentWithBarrier(NB, source, { createOnly: true })).toBe(false);
+    expect(saveNativeBundle).toHaveBeenCalledWith(expect.objectContaining({ path: NB, expectedHash: undefined, createOnly: true,
+      markdown: expect.objectContaining({ path: MD, expectedHash: await documentTextHash(markdown) }) }));
+    expect(useDocumentStore.getState().getDocument(NB)).toMatchObject({ persistedContent: baseline, baselineContent: baseline, content: source, isDirty: true });
+    expect(useDocumentStore.getState().getDocument(MD)?.baselineContent).toBe(markdown);
   });
 
   it('commits only the link receipt when native and linked text both change during I/O', async () => {

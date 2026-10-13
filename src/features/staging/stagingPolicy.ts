@@ -3,6 +3,7 @@
 
 import { useDocumentStore, type Document } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
+import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 
 /** 判断标签是否包含值得保存或暂存的内容。空字符串不算，用户输入的空格会因脏态而保留。 */
 export function hasUnsavedWork(key: string): boolean {
@@ -14,6 +15,6 @@ export function hasUnsavedWork(key: string): boolean {
 /** Batch callers already know the tab; avoid an O(tabs) lookup for each item. */
 export function hasUnsavedContent(document: Pick<Document, 'key' | 'isDirty' | 'content'> | undefined, tab: { isDirty: boolean } | null | undefined): boolean {
   if (!document || !tab) return false;
-  if (document.isDirty || tab.isDirty) return true;
+  if (document.isDirty || tab.isDirty || getEditorCapabilities(document.key)?.hasExplicitDraft?.()) return true;
   return document.key.startsWith('untitled:') && (document.content?.length ?? 0) > 0;
 }

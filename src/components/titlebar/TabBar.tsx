@@ -154,11 +154,13 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           role="tab"
           aria-selected={isActive}
           data-last-tab={currentIndex === tabs.length - 1 ? 'true' : undefined}
-          aria-label={tab.displayName}
+          aria-label={`${tab.displayName}${tab.isDirty ? '，有未保存的修改' : ''}`}
         >
           {/* 未保存圆点 */}
           {tab.isDirty && (
             <span
+              title="有未保存的修改"
+              aria-hidden="true"
               style={{
                 width: 6,
                 height: 6,

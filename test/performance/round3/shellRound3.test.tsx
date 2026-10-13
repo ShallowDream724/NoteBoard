@@ -53,7 +53,7 @@ vi.mock('@/features/editor-code/orchestration/saveDocument', () => ({
   saveDocument: vi.fn(), takeLastSaveIdentityMove: vi.fn(() => null),
 }));
 vi.mock('@/features/window/windowManager', () => ({ performWindowClose: vi.fn() }));
-vi.mock('@/features/staging/stagingManager', () => ({
+vi.mock('@/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(),
   discardStagedDocuments: vi.fn(), stashPendingDocuments: vi.fn(),
 }));
 vi.mock('@/features/session/closedWindowSession', () => ({

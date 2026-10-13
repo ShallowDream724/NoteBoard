@@ -1,0 +1,9 @@
+.nb-block-boundary-insert { position:fixed; z-index:35; translate:-50% -50%; width:20px; height:20px; padding:0; border:1px solid var(--editor-border,#d8dee7); border-radius:50%; background:var(--editor-bg,#fff); color:var(--editor-text-muted,#64748b); font:16px/1 sans-serif; cursor:pointer; }
+.nb-block-boundary-insert[hidden] { display:none; }
+.nb-block-boundary-insert:hover { color:var(--editor-accent); border-color:var(--editor-accent); }
+.ProseMirror-gapcursor { display:none; pointer-events:none; position:absolute; }
+.ProseMirror-gapcursor:after { content:""; display:block; position:absolute; top:-2px; width:20px; border-top:1px solid var(--editor-text,#222); animation:nb-boundary-caret 1.1s steps(2,start) infinite; }
+.ProseMirror-focused .ProseMirror-gapcursor { display:block; }
+@keyframes nb-boundary-caret { to { visibility:hidden; } }
+@media (prefers-reduced-motion:reduce) { .ProseMirror-gapcursor:after { animation:none; } }
+@media print { .nb-block-boundary-insert, .ProseMirror-gapcursor { display:none!important; } }

@@ -201,11 +201,23 @@ impl Default for TypographySettings {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum NavigationPanelMode { #[default] Floating, Docked }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum TableColumnResizeMode { #[default] Grow, Adjacent }
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorSettings {
     #[serde(default)]
     pub pure_markdown: bool,
+    #[serde(default)]
+    pub navigation_panel_mode: NavigationPanelMode,
+    #[serde(default)]
+    pub table_column_resize_mode: TableColumnResizeMode,
     #[serde(default = "default_selection_toolbar_position")]
     pub selection_toolbar_position: String,
     #[serde(default = "default_view_mode")]
@@ -240,6 +252,8 @@ impl Default for EditorSettings {
     fn default() -> Self {
         Self {
             pure_markdown: false,
+            navigation_panel_mode: NavigationPanelMode::Floating,
+            table_column_resize_mode: TableColumnResizeMode::Grow,
             selection_toolbar_position: default_selection_toolbar_position(),
             default_view_mode: "visual".to_string(),
             soft_wrap: true,
@@ -592,6 +606,30 @@ mod tests {
             .expect("旧版设置应能补全新字段");
         assert_eq!(settings.file.image_dir_name, "images");
         assert_eq!(settings.file.staging_directory, default_staging_directory());
+    }
+
+    #[test]
+    fn navigation_mode_defaults_and_round_trips_without_losing_other_editor_fields() {
+        let old = parse_settings(r#"{"editor":{"softWrap":false}}"#).unwrap();
+        assert_eq!(old.editor.navigation_panel_mode, NavigationPanelMode::Floating);
+        let docked = patched(&old, &serde_json::json!({"editor":{"navigationPanelMode":"docked"}})).unwrap();
+        assert_eq!(docked.editor.navigation_panel_mode, NavigationPanelMode::Docked);
+        assert!(!docked.editor.soft_wrap);
+        let restored = parse_settings(&serde_json::to_string(&docked).unwrap()).unwrap();
+        assert_eq!(restored.editor.navigation_panel_mode, NavigationPanelMode::Docked);
+        assert!(patched(&old, &serde_json::json!({"editor":{"navigationPanelMode":"other"}})).is_err());
+    }
+
+    #[test]
+    fn table_column_resize_mode_defaults_and_validates_saved_choice() {
+        let old = parse_settings(r#"{"editor":{"softWrap":false}}"#).unwrap();
+        assert_eq!(old.editor.table_column_resize_mode, TableColumnResizeMode::Grow);
+        let adjacent = patched(&old, &serde_json::json!({"editor":{"tableColumnResizeMode":"adjacent"}})).unwrap();
+        assert!(!adjacent.editor.soft_wrap);
+        assert_eq!(adjacent.editor.table_column_resize_mode, TableColumnResizeMode::Adjacent);
+        let restored = parse_settings(&serde_json::to_string(&adjacent).unwrap()).unwrap();
+        assert_eq!(restored.editor.table_column_resize_mode, TableColumnResizeMode::Adjacent);
+        assert!(patched(&old, &serde_json::json!({"editor":{"tableColumnResizeMode":"other"}})).is_err());
     }
 
     #[test]

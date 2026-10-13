@@ -1,0 +1,81 @@
+/* global window, requestAnimationFrame */
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { createServer } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+const require = createRequire(import.meta.url);
+const { chromium } = require('C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const root = process.cwd(), dir = path.join(root, '.tmp/block-boundaries');
+await fs.mkdir(dir, { recursive: true });
+await fs.writeFile(path.join(dir, 'index.html'), '<html><head><meta charset="utf-8"></head><body><div id="root"></div><script type="module" src="./entry.tsx"></script></body></html>');
+await fs.writeFile(path.join(dir, 'entry.tsx'), `
+import React from 'react'; import {createRoot} from 'react-dom/client';
+import {Editor,EditorContent} from '@tiptap/react';
+import {buildExtensions} from '../../src/features/editor-md/extensions';
+import {NodeSelection,TextSelection} from '@tiptap/pm/state';
+import {TooltipProvider} from '../../src/components/Tooltip';
+import '../../src/styles/globals.css'; import 'katex/dist/katex.min.css';
+const host=document.querySelector('#root'); host.style.cssText='width:900px;height:800px;overflow:auto;margin:24px;padding:24px';
+let editor,reactRoot;const p=text=>({type:'paragraph',content:text?[{type:'text',text}]:[]});
+const table=()=>({type:'table',content:[{type:'tableRow',content:[{type:'tableCell',content:[p('cell')]}]}]});
+window.boundaryCheck={async mount(content=[table(),table()]){reactRoot?.unmount();editor?.destroy();editor=new Editor({extensions:buildExtensions(),content:{type:'doc',content},editorProps:{attributes:{class:'nb-prose'}}});reactRoot=createRoot(host);reactRoot.render(<TooltipProvider><EditorContent editor={editor}/></TooltipProvider>);window.ed=editor;}, snapshot(){return {types:editor.state.doc.content.toJSON().map(n=>n.type),selection:editor.state.selection.toJSON(),source:editor.state.doc.toJSON()};}, select(pos){editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc,pos)));editor.view.focus();}, node(pos){editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc,pos)));editor.view.focus();}, undo(){editor.commands.undo();}};
+`);
+const suppliedUrl = process.argv.find(arg => arg.startsWith('--base-url='))?.slice('--base-url='.length);
+const server = suppliedUrl ? null : await createServer({ configFile: false, root, plugins: [react(), tailwindcss()], server: { host: '127.0.0.1', port: 0 }, optimizeDeps: { entries: ['.tmp/block-boundaries/index.html'] }, logLevel: 'error' });
+await server?.listen();
+const baseUrl = suppliedUrl ?? `http://127.0.0.1:${server.httpServer.address().port}`;
+const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--no-proxy-server'] });
+const page = await browser.newPage({ viewport: { width: 1200, height: 950 } });
+const errors = []; page.on('pageerror', error => errors.push(String(error)));
+await page.addInitScript(() => { window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'boundary' }, currentWebview: { label: 'boundary' } }, invoke: async () => null, transformCallback: () => 0, convertFileSrc: p => p }; });
+const frame = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+const snapshot = () => page.evaluate(() => window.boundaryCheck.snapshot());
+const mount = async () => { await page.evaluate(() => window.boundaryCheck.mount()); await page.waitForSelector('.ProseMirror table'); await frame(); };
+const geometry = () => page.evaluate(() => {
+  const view = window.ed.view, first=view.nodeDOM(0), second=view.nodeDOM(window.ed.state.doc.firstChild.nodeSize);
+  const a=first.getBoundingClientRect(), b=second.getBoundingClientRect();
+  return { x:a.left+Math.min(80,a.width/2), start:a.top-8, gap:(a.bottom+b.top)/2, gapSize:b.top-a.bottom, end:b.bottom+8 };
+});
+const results = {};
+try {
+  await page.goto(`${baseUrl.replace(/\/$/, '')}/.tmp/block-boundaries/index.html`, { waitUntil: 'commit', timeout: 30000 });
+  await page.waitForFunction(() => window.boundaryCheck, null, { timeout: 120000 });
+  await mount();
+  const before = await snapshot(), box = await geometry();
+  assert.deepEqual(before.types, ['table', 'table']);
+  await page.mouse.click(box.x, box.start); await frame();
+  assert.equal((await snapshot()).selection.type, 'nbBlockBoundary');
+  assert.deepEqual((await snapshot()).types, ['table', 'table']);
+  await page.keyboard.press('Enter'); await frame();
+  assert.deepEqual((await snapshot()).types, ['paragraph', 'table', 'table']);
+  await page.evaluate(() => window.boundaryCheck.undo()); await frame();
+  assert.deepEqual((await snapshot()).types, ['table', 'table']); results.start = true;
+  await mount(); const middle = await geometry();
+  assert.ok(middle.gapSize > 0, `adjacent tables require visible whitespace: ${JSON.stringify(middle)}`);
+  await page.mouse.click(middle.x, middle.gap); await frame();
+  assert.equal((await snapshot()).selection.type, 'nbBlockBoundary');
+  assert.deepEqual((await snapshot()).types, ['table', 'table']);
+  await page.keyboard.type('between'); await frame();
+  assert.deepEqual((await snapshot()).types, ['table', 'paragraph', 'table']);
+  assert.equal((await snapshot()).source.content[1].content[0].text, 'between'); results.gap = middle.gapSize;
+  await mount(); const tail = await geometry();
+  await page.mouse.move(tail.x, tail.end); await frame();
+  await page.locator('.nb-block-boundary-insert:visible').click(); await frame();
+  assert.deepEqual((await snapshot()).types, ['table', 'table', 'paragraph']); results.plus = true;
+  await mount();
+  await page.evaluate(() => window.boundaryCheck.select(4));
+  await page.keyboard.press('ArrowUp'); await frame();
+  assert.equal((await snapshot()).selection.type, 'nbBlockBoundary');
+  await page.keyboard.press('Enter'); await frame();
+  assert.deepEqual((await snapshot()).types, ['paragraph', 'table', 'table']); results.keyboard = true;
+  await mount(); const drag = await geometry();
+  await page.mouse.move(drag.x, drag.gap); await page.mouse.down(); await page.mouse.move(drag.x+60, drag.gap+15); await page.mouse.up(); await frame();
+  assert.deepEqual((await snapshot()).types, ['table', 'table']);
+  assert.notEqual((await snapshot()).selection.type, 'nbBlockBoundary'); results.drag = true;
+  assert.deepEqual(errors, []); console.log(JSON.stringify(results, null, 2));
+} catch (error) { if (errors.length) console.error(JSON.stringify({ pageErrors: errors })); throw error; }
+finally { await browser.close(); await server?.close(); }

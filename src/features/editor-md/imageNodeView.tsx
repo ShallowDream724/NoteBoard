@@ -30,7 +30,7 @@ import { showToast } from '../../stores/toastStore';
 import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
 import { useExplorerStore } from '../explorer/explorerStore';
-import { resolveRelativeDocPath } from './linkHandler';
+import { resolveDocumentImageSource } from '../../core/documentImageSource';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { Tooltip } from '../../components/Tooltip';
 import { useImageVisibility } from './rich-content/imageVisibility';
@@ -276,6 +276,7 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
   const visibility = useImageVisibility();
   const [hovered, setHovered] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState('');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [resolvedDisplaySrc, setResolvedDisplaySrc] = useState<string>('');
   const [resolvedAbsPath, setResolvedAbsPath] = useState<string | null>(null);
@@ -305,47 +306,20 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
   // 动态解析图片真实 URL
   useEffect(() => {
     setLoadError(false);
-    if (!rawSrc) {
-      setResolvedDisplaySrc('');
-      setResolvedAbsPath(null);
-      return;
-    }
-
-    // 1. 网络 URL 或 Base64
-    if (
-      rawSrc.startsWith('http://') ||
-      rawSrc.startsWith('https://') ||
-      rawSrc.startsWith('data:') ||
-      rawSrc.startsWith('asset:')
-    ) {
-      setResolvedDisplaySrc(rawSrc);
-      setResolvedAbsPath(null);
-      return;
-    }
-
-    // 2. 本地相对路径或绝对路径
+    setBlockedMessage('');
+    setResolvedDisplaySrc('');
+    setResolvedAbsPath(null);
+    if (!rawSrc) return;
     const currentDoc = ownerKey ? useDocumentStore.getState().getDocument(ownerKey) : null;
-    const baseDir = currentDoc?.dirPath || useExplorerStore.getState().root;
-
-    if (baseDir) {
-      const absPath = resolveRelativeDocPath(baseDir, rawSrc);
-      setResolvedAbsPath(absPath);
-      try {
-        setResolvedDisplaySrc(convertFileSrc(absPath));
-      } catch {
-        setResolvedDisplaySrc(rawSrc);
-      }
-    } else if (/^[a-zA-Z]:[\\/]/.test(rawSrc)) {
-      setResolvedAbsPath(rawSrc);
-      try {
-        setResolvedDisplaySrc(convertFileSrc(rawSrc));
-      } catch {
-        setResolvedDisplaySrc(rawSrc);
-      }
-    } else {
-      setResolvedDisplaySrc(rawSrc);
-      setResolvedAbsPath(null);
-    }
+    // A network explorer root is not permission for an unrelated local document.
+    const fallbackRoot = useExplorerStore.getState().root;
+    const baseDir = currentDoc?.dirPath || (fallbackRoot && !/^[\\/]{2}/.test(fallbackRoot) ? fallbackRoot : '');
+    const source = resolveDocumentImageSource(rawSrc, baseDir ?? '');
+    if (source.kind === 'blocked') { setBlockedMessage(source.message); return; }
+    if (source.kind === 'url') { setResolvedDisplaySrc(source.url); return; }
+    setResolvedAbsPath(source.path);
+    try { setResolvedDisplaySrc(convertFileSrc(source.path)); }
+    catch { setLoadError(true); }
   }, [rawSrc, ownerKey]);
 
   useEffect(() => {
@@ -454,7 +428,7 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
         onClick={event => {
           const cancelled = previewGesture.current?.cancelled;
           previewGesture.current = null;
-          if (!cancelled && !loadError && event.button === 0 && !previewControl(event.target)) {
+          if (!cancelled && !loadError && !blockedMessage && displayPreviewSrc && event.button === 0 && !previewControl(event.target)) {
             event.stopPropagation(); setLightboxOpen(true);
           }
         }}
@@ -489,6 +463,7 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
                 type="button"
                 aria-label="查看大图 / 放大预览"
                 data-image-collection-action="preview"
+                disabled={!displayPreviewSrc || loadError || !!blockedMessage}
                 onClick={() => setLightboxOpen(true)}
                 style={actionBtnStyle}
               >
@@ -621,7 +596,7 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
         )}
 
         {/* 错误提示态 */}
-        {loadError ? (
+        {loadError || blockedMessage ? (
           <div
             style={{
               padding: '24px 16px',
@@ -638,11 +613,12 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
             }}
           >
             <AlertCircle size={24} color="#ef4444" />
-            <div style={{ fontWeight: 500 }}>图片加载失败</div>
+            <div style={{ fontWeight: 500 }}>{blockedMessage ? '网络共享图片未加载' : '图片加载失败'}</div>
+            {blockedMessage && <div style={{ fontSize: 12, textAlign: 'center' }}>{blockedMessage}</div>}
             <div style={{ fontSize: 11, color: 'var(--editor-text-muted)', wordBreak: 'break-all' }}>
               {rawSrc}
             </div>
-            <button
+            {!blockedMessage && <button
               type="button"
               onClick={() => {
                 setLoadError(false);
@@ -662,12 +638,12 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
             >
               <RefreshCw size={12} />
               <span>重新加载</span>
-            </button>
+            </button>}
           </div>
         ) : (
           /* 禁用 Referer 携带，防止防盗链拦截并支持跨域图片原生渲染 */
           <img
-            src={displayPreviewSrc}
+            src={displayPreviewSrc || undefined}
             alt={alt}
             loading={visibility.visible ? 'eager' : 'lazy'}
             decoding="async"
@@ -699,7 +675,7 @@ export function ImageComponent({ node, extension, editor, getPos, decorations }:
         )}
 
         {/* 拖拽缩放手柄（右下角） */}
-        {nativeFeaturesVisible && hovered && !loadError && (
+        {nativeFeaturesVisible && hovered && !loadError && !blockedMessage && (
           <Tooltip content="拖拽拉伸调节图片尺寸" side="left" sideOffset={6}>
             <div
               data-image-resize=""

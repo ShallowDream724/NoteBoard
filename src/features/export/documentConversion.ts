@@ -2,6 +2,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import type { ExportDocument, ExportInputFormat } from './model';
 import type { JSONContent } from '@tiptap/core';
 import type { DiagramRequest } from './diagramRendering';
+import { validateDocumentImageAsset } from '../../core/documentImageSource';
 
 /** One conversion per disposable worker; closing the dialog immediately releases its heap. */
 function convert<T>(markdown: string | JSONContent, title: string, directory: string, format: 'html' | 'standalone-html' | 'pandoc' | 'md' | 'noteboard', signal?: AbortSignal, inputFormat?: ExportInputFormat, imageSources?: Array<[string, string]>): Promise<T> {
@@ -19,11 +20,14 @@ function convert<T>(markdown: string | JSONContent, title: string, directory: st
     const fail = (error: unknown) => { if (close()) reject(error); };
     const abort = () => fail(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
     signal?.addEventListener('abort', abort, { once: true });
-    worker.onmessage = ({ data }: MessageEvent<{ type: 'assets'; paths: string[] } | { type: 'diagrams'; requests: DiagramRequest[] } | { type: 'result'; result: T } | { type: 'error'; error: string }>) => {
+    worker.onmessage = ({ data }: MessageEvent<{ type: 'assets'; paths: string[]; references?: string[] } | { type: 'diagrams'; requests: DiagramRequest[] } | { type: 'result'; result: T } | { type: 'error'; error: string }>) => {
       if (closed) return;
       if (data.type === 'assets') {
+        if (data.paths.some((path, index) => !validateDocumentImageAsset(path, data.references?.[index] ?? path, directory))) {
+          fail(new Error('网络共享图片未获准自动加载')); return;
+        }
         if (format === 'standalone-html') {
-          void import('./portableHtmlAssets').then(({ portableHtmlAssetUrls }) => portableHtmlAssetUrls(data.paths, rendering.signal))
+          void import('./portableHtmlAssets').then(({ portableHtmlAssetUrls }) => portableHtmlAssetUrls(data.paths, rendering.signal, { references: data.references, directory }))
             .then(urls => { if (!closed) worker.postMessage({ type: 'asset-urls', urls }); }).catch(fail);
         } else {
           try { worker.postMessage({ type: 'asset-urls', urls: data.paths.map(path => convertFileSrc(path)) }); }
@@ -45,8 +49,8 @@ export async function prepareDocument(content: string | JSONContent, title: stri
   const result = await convert<Pick<ExportDocument, 'html' | 'items' | 'markdown' | 'richSummary'>>(content, title, directory, 'html', signal, inputFormat);
   return { ...result, title, baseDirectory: directory };
 }
-export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal, inputFormat?: ExportInputFormat) {
-  return convert<string>(markdown, '', '', 'pandoc', signal, inputFormat);
+export function preparePandoc(markdown: string | JSONContent, signal?: AbortSignal, inputFormat?: ExportInputFormat, directory = '') {
+  return convert<string>(markdown, '', directory, 'pandoc', signal, inputFormat);
 }
 export function prepareTextExport(content: string | JSONContent, format: 'md' | 'noteboard', directory: string, signal?: AbortSignal, inputFormat?: ExportInputFormat, imageSources?: Array<[string, string]>) {
   return convert<string>(content, '', directory, format, signal, inputFormat, imageSources);

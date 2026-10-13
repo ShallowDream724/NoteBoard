@@ -16,6 +16,10 @@ import { onDocumentSaved } from '../../staging/stagingManager';
 import { showToast } from '../../../stores/toastStore';
 import { noteSelfWrite } from '../../explorer/directoryWatcher';
 import { normalizePath } from '../../explorer/pathUtils';
+import { getDocumentRevision, getEditorCapabilities } from '../../../core/editor/editorRegistry';
+import { clearSaveError, recordSaveError, trackDocumentSave } from '../../../stores/saveActivityStore';
+import { getWriteErrorMessage } from '../../../core/writeError';
+export { getWriteErrorMessage } from '../../../core/writeError';
 // 🔴 R01/N02：保存未加载的恢复标签前先按需加载正文；正文出口统一前置屏障
 import { ensureWritableContent } from '../../session/closedWindowSession';
 // 🔴 R3-02：无能力实例时保存前的 pending 物化（J2 未物化输入是正文权威）
@@ -48,7 +52,31 @@ function samePathIdentity(a: string, b: string): boolean {
   return normalizePath(a).toLowerCase() === normalizePath(b).toLowerCase();
 }
 
-export async function saveDocument(docKey: string): Promise<boolean> {
+const manualSaves = new Map<string, { generation: number; revision: number; content: string | null | undefined; saveAs: boolean; promise: Promise<boolean> }>();
+
+function requestSave(key: string, forceSaveAs: boolean, task: () => Promise<boolean>): Promise<boolean> {
+  const doc = useDocumentStore.getState().getDocument(key);
+  const generation = getSessionGeneration(key), revision = getDocumentRevision(key);
+  const content = getEditorCapabilities(key) ? undefined : doc?.content;
+  const saveAsRequest = forceSaveAs || key.startsWith('untitled:') || doc?.externalStatus === 'deleted'
+    || Boolean(useWindowStore.getState().getTab(key)?.isDetached);
+  const existing = manualSaves.get(key);
+  if (existing?.generation === generation && (existing.saveAs || (!saveAsRequest && existing.revision === revision && existing.content === content))) return existing.promise;
+  const request = { generation, revision, content, saveAs: saveAsRequest, promise: null as unknown as Promise<boolean> };
+  request.promise = trackDocumentSave(key, task).catch(error => {
+    if (getSessionGeneration(key) === generation) showWriteError({ kind: 'io', message: error instanceof Error ? error.message : String(error) });
+    return false;
+  }).finally(() => { if (manualSaves.get(key) === request) manualSaves.delete(key); });
+  manualSaves.set(key, request);
+  return request.promise;
+}
+
+export function saveDocument(docKey: string): Promise<boolean> {
+  return requestSave(docKey, false, () => performSaveDocument(docKey));
+}
+
+async function performSaveDocument(docKey: string): Promise<boolean> {
+  const generation = getSessionGeneration(docKey);
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
   if (!doc) {
@@ -59,8 +87,10 @@ export async function saveDocument(docKey: string): Promise<boolean> {
   // 🔴 N02：正文出口统一前置屏障——未加载的恢复标签正文未知（content=null），
   //    先按需加载；失败/未知一律中止，绝不用空占位镜像或 '' 补成合法空文件写盘
   const writable = await ensureWritableContent(docKey);
+  if (getSessionGeneration(docKey) !== generation) return false;
   if (writable === null) {
     showToast('正文尚未加载完成，未执行保存', 'warning');
+    recordSaveError(docKey, '正文尚未加载完成，未执行保存');
     return false;
   }
 
@@ -68,6 +98,7 @@ export async function saveDocument(docKey: string): Promise<boolean> {
   // 🔴 R3-02：无能力实例（source 首开尚未注册/内核替身环境）也必须先物化 pending——
   //    未物化的输入不能被旧镜像覆盖（J2 的 pending 是正文权威，与注册表无关）
   const captured = await flushDocument(docKey, 'save');
+  if (getSessionGeneration(docKey) !== generation) return false;
   let authoritativeContent: string | null = captured?.content ?? null;
   if (authoritativeContent === null) {
     // 无实例快照：按当前模式的 pending 物化（source/visual 分别尝试）
@@ -92,18 +123,19 @@ export async function saveDocument(docKey: string): Promise<boolean> {
   }
   if (authoritativeContent == null) {
     showToast('无法获取文档正文，未执行保存', 'warning');
+    recordSaveError(docKey, '无法获取文档正文，未执行保存');
     return false;
   }
 
   // 运行期间原文件被删除后，Ctrl+S 也必须转为另存为，禁止悄悄在旧路径重建文件。
   const detached = useWindowStore.getState().getTab(docKey)?.isDetached ?? false;
   if (updatedDoc.externalStatus === 'deleted' || detached) {
-    return saveAs(updatedDoc.key, authoritativeContent);
+    return performSaveAs(updatedDoc.key, authoritativeContent);
   }
 
   // 没有路径 → 另存为
   if (!updatedDoc.key || updatedDoc.key.startsWith('untitled:')) {
-    return saveAs(updatedDoc.key, authoritativeContent);
+    return performSaveAs(updatedDoc.key, authoritativeContent);
   }
 
   // 🔴 S09：每文档写队列内完成写盘（旧写入不得覆盖新内容）、基线更新为实际写入文本、
@@ -113,7 +145,10 @@ export async function saveDocument(docKey: string): Promise<boolean> {
     return await writeDocumentWithBarrier(docKey, authoritativeContent);
   } catch (e) {
     console.error('保存失败:', e);
-    showWriteError({ kind: 'io', message: e instanceof Error ? e.message : String(e) });
+    if (getSessionGeneration(docKey) === generation) {
+      showWriteError({ kind: 'io', message: e instanceof Error ? e.message : String(e) });
+      recordSaveError(docKey, e instanceof Error ? e.message : String(e));
+    }
     return false;
   }
 }
@@ -124,15 +159,21 @@ export async function saveDocument(docKey: string): Promise<boolean> {
  * 另存为（🔴 N03 事务：授权 → 快照 → 写盘 → 提交身份迁移）。
  * @param _content 兼容保留的旧参数——快照统一在取得目标授权后从编辑器捕获
  */
-export async function saveAs(originalKey: string, _content: string): Promise<boolean> {
+export function saveAs(originalKey: string, content: string): Promise<boolean> {
+  return requestSave(originalKey, true, () => performSaveAs(originalKey, content));
+}
+
+async function performSaveAs(originalKey: string, _content: string): Promise<boolean> {
   // 🔴 R3-04：会话身份必须在任何 await 之前捕获（含 ensureWritableContent 的
   //    按需加载）——对话框/加载期间源关闭重开（会话换代）时中止旧另存为（C06）
   const originalGeneration = getSessionGeneration(originalKey);
   // 🔴 N02：正文出口统一前置屏障——未加载的懒标签先按需加载（Ctrl+Shift+S
   //    直达入口同样受保护）；失败/未知一律中止，不用 '' 补成合法空文件
   const writable = await ensureWritableContent(originalKey);
+  if (getSessionGeneration(originalKey) !== originalGeneration) return false;
   if (writable === null) {
     showToast('正文尚未加载完成，未执行另存为', 'warning');
+    recordSaveError(originalKey, '正文尚未加载完成，未执行另存为');
     return false;
   }
   // 🔴 R3-04：加载 await 后会话身份校验（加载期间源被关闭/重开）
@@ -250,11 +291,16 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
     });
 
     if (!selectedPath) return false;
+    if (getSessionGeneration(originalKey) !== originalGeneration) return false;
 
     // 🔴 N03：目标等于原路径（规范化身份比较）→ 普通保存语义，
     //    避免重复标签与历史串线
     if (!originalKey.startsWith('untitled:') && samePathIdentity(selectedPath, originalKey)) {
-      return saveDocument(originalKey);
+      const current = useDocumentStore.getState().getDocument(originalKey);
+      if (current && (current.externalStatus === 'deleted' || useWindowStore.getState().getTab(originalKey)?.isDetached)) {
+        return recreateDeletedDocument(originalKey, originalGeneration);
+      }
+      return performSaveDocument(originalKey);
     }
 
     const encoding = doc?.encoding ?? 'utf8';
@@ -292,7 +338,10 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
       regResult = await ipc.registerDocument(label, selectedPath, kind);
     } catch (e) {
       console.error('另存为：注册目标所有权失败:', e);
-      showToast('无法取得目标文件的所有权，另存为已取消', 'error');
+      if (getSessionGeneration(originalKey) === originalGeneration) {
+        showToast('无法取得目标文件的所有权，另存为已取消', 'error');
+        recordSaveError(originalKey, '无法取得目标文件的所有权，未执行另存为');
+      }
       return false;
     }
     if (regResult.type === 'already-open') {
@@ -362,7 +411,9 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         noteSelfWrite(selectedPath);
         return writeResult;
       });
+      if (getSessionGeneration(originalKey) !== originalGeneration) return false;
       if (!result.ok) {
+        recordSaveError(originalKey, result.error ? getWriteErrorMessage(result.error) : '文件未能写入，请重试保存');
         if (result.error) showWriteError(result.error);
         return false;
       }
@@ -421,6 +472,7 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
         useWindowStore.getState().updateTabPath(originalKey, selectedPath, displayName);
         useWindowStore.getState().setTabDirty(selectedPath, finalContent !== saveContent);
       });
+      const savedGeneration = getSessionGeneration(selectedPath);
 
       // 🔴 N03：记录身份迁移——“保存并关闭”等调用方用实际新 key 继续后续流程
       lastSaveIdentityMove = { from: originalKey, to: selectedPath };
@@ -429,9 +481,11 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
       newlyOwned = false;
       if (nativeWritten) {
         const { commitNativeSaveMetadata } = await import('../../document-format/nativeSaveCommit');
+        if (getSessionGeneration(selectedPath) !== savedGeneration) return true;
         commitNativeSaveMetadata(selectedPath, nativeWritten);
       }
       await onDocumentSaved(selectedPath, saveContent);
+      if (getSessionGeneration(selectedPath) === savedGeneration) clearSaveError(selectedPath);
       return true;
     } finally {
       identityLease?.release();
@@ -458,32 +512,51 @@ export async function saveAs(originalKey: string, _content: string): Promise<boo
     }
   } catch (err) {
     console.error('另存为失败:', err);
-    showWriteError({ kind: 'io', message: err instanceof Error ? err.message : String(err) });
+    if (getSessionGeneration(originalKey) === originalGeneration) {
+      showWriteError({ kind: 'io', message: err instanceof Error ? err.message : String(err) });
+      recordSaveError(originalKey, err instanceof Error ? err.message : String(err));
+    }
   }
 
   return false;
 }
 
-// ── WriteError 分类提示 ──
-
-export function getWriteErrorMessage(error: WriteError): string {
-  switch (error.kind) {
-    case 'permission-denied':
-      return `没有权限写入文件：${error.path}`;
-    case 'disk-full':
-      return '磁盘空间不足，无法保存';
-    case 'file-locked':
-      return `文件被其他程序锁定：${error.path}`;
-    case 'readonly':
-      return `文件是只读的：${error.path}`;
-    case 'path-not-found':
-      return `路径不存在：${error.path}`;
-    case 'io':
-      return `写入出错：${error.message}`;
+/** Explicitly choosing a deleted document's own path recreates it once. Native
+ * create-only publication refuses a foreign file appearing after the check. */
+async function recreateDeletedDocument(key: string, generation: number): Promise<boolean> {
+  const doc = useDocumentStore.getState().getDocument(key);
+  if (!doc) return false;
+  const registration = await ipc.registerDocument(getCurrentWindow().label, key, doc.kind);
+  if (getSessionGeneration(key) !== generation) return false;
+  if (registration.type === 'already-open') {
+    recordSaveError(key, '原路径由其它窗口占用，请选择新文件位置');
+    showToast('原路径由其它窗口占用，请选择新文件位置', 'warning');
+    return false;
   }
+  const exists = await ipc.pathExists(key);
+  if (getSessionGeneration(key) !== generation) return false;
+  if (exists.exists) {
+    recordSaveError(key, '原路径已重新出现文件，请检查外部修改后再保存');
+    showToast('原路径已重新出现文件，请检查外部修改后再保存', 'warning');
+    return false;
+  }
+  const captured = await flushDocument(key, 'save');
+  if (getSessionGeneration(key) !== generation) return false;
+  const content = captured?.content ?? useDocumentStore.getState().getDocument(key)?.content;
+  if (content == null) return false;
+  const saved = await writeDocumentWithBarrier(key, content, { createOnly: true });
+  if (saved && getSessionGeneration(key) === generation) {
+    useDocumentStore.getState().setExternalStatus(key, 'clean');
+    useWindowStore.getState().setTabExternalStatus(key, 'clean');
+    useWindowStore.getState().setTabDetached(key, false);
+  }
+  return saved;
 }
+
+// ── WriteError 分类提示 ──
 
 export function showWriteError(error: WriteError): void {
   const msg = getWriteErrorMessage(error);
   console.error('保存错误:', msg);
+  showToast(msg, 'error');
 }

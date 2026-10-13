@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 
 it('exports standalone rich HTML from a native snapshot without Pandoc or desktop asset URLs', async () => {
-  const postMessage = vi.fn((message: { type: string; paths?: string[]; result?: string }) => {
+  const postMessage = vi.fn((message: { type: string; paths?: string[]; references?: string[]; result?: string }) => {
     if (message.type === 'assets') void scope.onmessage!({ data: { type: 'asset-urls', urls: message.paths!.map((_, index) => `data:image/png;base64,aW1hZ2Ut${index}`) } });
   });
   const scope = { postMessage, onmessage: undefined as undefined | ((event: { data: unknown }) => Promise<void>) };
@@ -53,5 +53,7 @@ it('exports standalone rich HTML from a native snapshot without Pandoc or deskto
   expect(message.result).toContain('data:font/woff2;base64,');
   expect(message.result).toContain('data-math-align="left"');
   expect(message.result).not.toContain('@import');
-  expect(postMessage).toHaveBeenCalledWith({ type: 'assets', paths: ['C:\\Notes\\img\\a #1.png', 'C:\\Notes\\中文 b.png'] });
+  const assets = postMessage.mock.calls.map(([message]) => message).filter(message => message.type === 'assets');
+  expect(assets).toEqual([{ type: 'assets', paths: ['C:\\Notes\\img\\a #1.png', 'C:\\Notes\\中文 b.png'],
+    references: ['img/a #1.png', 'file:///C:/Notes/%E4%B8%AD%E6%96%87%20b.png'] }]);
 });

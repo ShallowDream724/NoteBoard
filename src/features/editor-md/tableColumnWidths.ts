@@ -63,11 +63,22 @@ export function columnWidthsStep(pos: number, table: Node, widths: number[]): Ta
   return new TableColumnWidthsStep(pos, rows);
 }
 
-/** Interior boundaries redistribute space; the outer boundary changes table
- * width. This leaves room for neighbouring labels and lets formulas reflow. */
+/** Every boundary resizes its preceding logical column. The remaining columns
+ * keep their widths and move with the boundary, so table width follows the drag.
+ * Imported widths below the normal minimum must not jump on the first frame. */
+export function resizedColumnWidth(start: number, delta: number, minimum = 40): number {
+  const floor = Math.min(minimum, start);
+  return Math.round(Math.max(floor, Math.min(10000, start + delta)));
+}
+
+/** Optional fixed-total mode exchanges space with the following column. The
+ * final boundary still grows the table, and either column keeps its own floor. */
 export function resizedColumnPair(widths: readonly number[], index: number, delta: number, minimum = 40): [number, number | undefined] {
   const start = widths[index], next = widths[index + 1];
-  const floor = next === undefined ? minimum : Math.min(minimum, (start + next) / 2);
-  const value = Math.max(floor, Math.min(10000, next === undefined ? start + delta : Math.min(start + next - floor, start + delta)));
-  return [Math.round(value), next === undefined ? undefined : start + next - Math.round(value)];
+  if (next === undefined) return [resizedColumnWidth(start, delta, minimum), undefined];
+  const total = start + next;
+  const floor = Math.max(Math.min(minimum, start), total - 10000);
+  const ceiling = Math.min(10000, total - Math.min(minimum, next));
+  const value = Math.round(Math.max(floor, Math.min(ceiling, start + delta)));
+  return [value, total - value];
 }

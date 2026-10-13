@@ -27,9 +27,10 @@ it.each([false, true])('XML 回包无需 data；旧请求超时=%s 时新请求�
   const root = createRoot(host);
   try {
     await act(async () => root.render(<DrawioEditor docKey={key} />));
+    await act(async () => host.querySelector<HTMLButtonElement>('.nb-btn-primary')!.click());
     const frame = host.querySelector('iframe')!;
     const post = vi.spyOn(frame.contentWindow!, 'postMessage');
-    const send = (message: unknown) => window.dispatchEvent(new MessageEvent('message', { source: frame.contentWindow, data: JSON.stringify(message) }));
+    const send = (message: unknown) => window.dispatchEvent(new MessageEvent('message', { origin: 'https://embed.diagrams.net', source: frame.contentWindow, data: JSON.stringify(message) }));
     await act(async () => send({ event: 'init' }));
     // 直接读取真实出站请求；回包不在测试内另造一个可能与实现不一致的序号。
     const exportRequest = () => JSON.parse(String(post.mock.calls.at(-1)![0]));

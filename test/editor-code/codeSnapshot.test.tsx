@@ -48,7 +48,7 @@ vi.mock('@/features/editor-code/textAnalysisLifecycle', () => ({
 }));
 vi.mock('@/features/editor-code/languages', () => ({ loadLanguageExtension: async () => [] }));
 vi.mock('@/features/editor-code/lint', () => ({ getLinterForLanguage: () => null }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({
   setDocumentDirty: vi.fn().mockResolvedValue(undefined),

@@ -17,6 +17,7 @@ import { UnsupportedView } from './UnsupportedView';
 import { ToastContainer } from './Toast';
 import { FileDropOverlay } from './FileDropOverlay';
 import { useWindowStore } from '../stores/windowStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import {
   useLayoutStore,
   EXPLORER_MIN,
@@ -71,6 +72,7 @@ import { MissingFileDialog } from '../features/external/MissingFileDialog';
 import { checkActiveDocumentStillExists } from '../features/external/missingFileGuard';
 import { usePracticeStore } from '../features/learning/practiceStore';
 import { trackPracticeTab } from '../features/learning/practiceLifecycle';
+import { relinquishDocumentBookmarks } from '../features/bookmarks/storage';
 
 // ── AppShell ──
 const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
@@ -88,6 +90,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   const tabs = useWindowStore((s) => s.tabs);
   const activeKey = useWindowStore((s) => s.activeKey);
   const practiceSessionKey = usePracticeStore((s) => s.sessionKey);
+  const navigationPanelMode = useSettingsStore(s => s.settings.editor.navigationPanelMode ?? 'floating');
   // Session ownership survives hidden panels, including board presentation mode.
   useEffect(() => practiceSessionKey ? trackPracticeTab() : undefined, [practiceSessionKey]);
   // 🔴 迁移保护中的文档：阻断编辑输入（pointerEvents），避免迁移期间新修改无法同步到目标
@@ -155,8 +158,18 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     return tabs.filter((tab) => pendingCloseKeys.includes(tab.key) && hasUnsavedWork(tab.key));
   }, [pendingCloseKeys, tabs]);
 
+  const resumeExplicitDraft = (keys: string[]): boolean => {
+    const key = keys.find(key => getEditorCapabilities(key)?.hasExplicitDraft?.());
+    if (!key) return false;
+    clearPendingClose();
+    useWindowStore.getState().activateTab(key);
+    showToast('请先保存或取消说明草稿，再关闭文档', 'warning');
+    return true;
+  };
+
   // 保存并关闭
   const handleSaveAndClose = async (keys: string[]) => {
+    if (resumeExplicitDraft(keys)) return;
     // 🔴 N03：另存为会迁移文档身份——逐个保存后用实际新 key 检查脏态与关闭，
     //    不能继续按原 key 断言（原 key 的标签/文档已随迁移移除）
     const closeKeys: string[] = [];
@@ -210,6 +223,11 @@ export function AppShell(_props: { children?: React.ReactNode }) {
       showToast(`未能清理暂存副本，窗口尚未关闭：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
       return;
     }
+    const { discardDocumentBookmarks } = await import('../features/bookmarks/sourcePersistence');
+    for (const key of keys) {
+      if (!await discardDocumentBookmarks(key)) showToast('书签位置未能恢复到已保存内容；已有书签副本已保留', 'warning');
+      relinquishDocumentBookmarks(key);
+    }
     if (willCloseWindow) {
       try {
         // 明确丢弃的标签不进入最近文件，其余仍打开标签继续记录。
@@ -226,6 +244,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
 
   // 暂存：确认所有目标文档已写入用户设置的位置后才真正移除标签/关闭窗口。
   const handleStashAndClose = async (keys: string[]) => {
+    if (resumeExplicitDraft(keys)) return;
     try {
       await stashPendingDocuments({ keys, retain: true });
       const targetKeys = [...useWindowStore.getState().pendingCloseKeys];
@@ -561,7 +580,8 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 {tabs.length > 0 ? (
                   <div
                     className="nb-document-stage"
-                    data-outline={!isBoardPresentationMode && showOutline && outlineVisible || undefined}
+                    data-outline={!isBoardPresentationMode && practiceSessionKey !== activeKey && showOutline && outlineVisible || undefined}
+                    data-navigation-mode={navigationPanelMode}
                     style={{
                       flex: 1,
                       position: 'relative',
@@ -569,16 +589,18 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                       height: '100%',
                       overflow: 'hidden',
                       // 🔴 N08：Home 可见时隐藏编辑器容器（视觉隐藏而非卸载）
-                      display: !activeTab ? 'none' : 'block',
+                      display: !activeTab ? 'none' : 'flex',
                     }}
                   >
-                    {tabs.map((tab) => {
+                    <div className="nb-document-editors">{tabs.map((tab) => {
                       const isTabActive = tab.key === activeKey;
                       const isTransferring = transferringKeys.includes(tab.key);
 
                       return (
                         <div
                           key={tab.key}
+                          inert={!isTabActive}
+                          aria-hidden={!isTabActive}
                           style={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -639,13 +661,13 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                           )}
                         </div>
                       );
-                    })}
+                    })}</div>
                     {/* Temporarily clear the target area; keep the saved outline preference. */}
                     {!isBoardPresentationMode && practiceSessionKey !== activeKey && showOutline && (outlineVisible ? (
                       <OutlinePanel editor={activeEditor} />
                     ) : (
-                      <Tooltip content="展开大纲" shortcut="Ctrl+Alt+B" side="left">
-                        <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开大纲"
+                      <Tooltip content="展开导航面板" shortcut="Ctrl+Alt+B" side="left">
+                        <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开导航面板" aria-expanded="false"
                           onClick={() => useLayoutStore.getState().toggleOutline()}><List size={19}/></button>
                       </Tooltip>
                     ))}

@@ -8,6 +8,7 @@ import { dispatchDiscreteEdit, runDiscreteEdit } from './discreteEdit';
 import { clearSelectionTextFormatting, supportsBlockTextFormatting, hasCaptionTextFormatting } from './textFormatting';
 import { resolveBlockSelection, type BlockSelection } from './blockSelection';
 import { NumberingControl } from './numbering/NumberingControl';
+import { BookmarkMenuItem } from '../bookmarks/BookmarkMenuItem';
 import './blockContextMenu.css';
 
 /** A menu snapshot is usable only while its document is current. No cached
@@ -48,6 +49,7 @@ export function BlockSelectionMenu({ editor, selection: suppliedSelection, close
     <Tooltip content="清除文字样式" helpKey="format.clear" shortcut={'Ctrl+\\'} side="right"><button role="menuitem" type="button" disabled={!canClear} onClick={() => action(() => clearSelectionTextFormatting(editor))}><RemoveFormatting size={16}/>清除文字样式{clearShortcut && <kbd className="nb-block-menu-shortcut">{clearShortcut.split(' / ')[0]}</kbd>}</button></Tooltip>
     <Tooltip content="还原为正文" helpKey="format.restore" shortcut="Ctrl+0" side="right"><button role="menuitem" type="button" disabled={!canRestore} onClick={() => action(() => runDiscreteEdit(editor, chain => chain.restoreParagraph()))}><Type size={16}/>还原为正文{restoreShortcut && <kbd className="nb-block-menu-shortcut">{restoreShortcut.split(' / ')[0]}</kbd>}</button></Tooltip>
     <hr/>
+    <BookmarkMenuItem editor={editor} position={selection.selection.from} run={action}/>
     <button role="menuitem" type="button" onClick={() => copy(true)}><Scissors size={16}/>剪切</button>
     <button role="menuitem" type="button" onClick={() => copy(false)}><Copy size={16}/>复制</button>
     <button role="menuitem" type="button" onClick={() => action(() => { dispatchDiscreteEdit(editor.view, editor.state.tr.deleteSelection()); editor.view.focus(); })}><Trash2 size={16}/>删除所选内容</button>

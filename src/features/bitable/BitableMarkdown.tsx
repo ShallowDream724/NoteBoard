@@ -163,7 +163,7 @@ export function BitableMarkdown({
     if (!href) return;
     e.preventDefault();
     e.stopPropagation();
-    if (onOpenLink) onOpenLink(href);
+    if (onOpenLink && (e.button === 0 || e.button === 1)) onOpenLink(href);
   };
 
   if (!source) return null;
@@ -172,6 +172,7 @@ export function BitableMarkdown({
     <div
       className={`nb-bitable-md${density === 'compact' ? ' compact' : ''}`}
       onClick={handleClick}
+      onAuxClick={handleClick}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

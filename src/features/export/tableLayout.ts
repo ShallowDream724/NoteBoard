@@ -1,18 +1,25 @@
 export interface TableWidths { natural: number[]; minimum: number[] }
-export interface TablePresentation { style: string; columns: Element[] }
-/** Keep only column metadata, not another copy of every table cell. */
+import { renderedScale } from './layoutMetrics';
+
+export interface TablePresentation { style: string; columns: Element[]; rows: Array<{ height: string; minimum: string }> }
+/** Keep column metadata and row heights, not another copy of every cell. */
 export function captureTablePresentation(table: HTMLElement): TablePresentation {
-  return { style: table.style.cssText, columns: Array.from(table.querySelectorAll(':scope > colgroup'), group => group.cloneNode(true) as Element) };
+  return { style: table.style.cssText, columns: Array.from(table.querySelectorAll(':scope > colgroup'), group => group.cloneNode(true) as Element),
+    rows: Array.from((table as HTMLTableElement).rows, row => ({ height: row.style.height, minimum: row.style.minHeight })) };
 }
 export function restoreTablePresentation(table: HTMLElement, presentation: TablePresentation) {
   table.style.cssText = presentation.style;
   table.querySelectorAll(':scope > colgroup').forEach(group => group.remove());
   table.prepend(...presentation.columns.map(group => group.cloneNode(true)));
+  Array.from((table as HTMLTableElement).rows).forEach((row, index) => {
+    row.style.height = presentation.rows[index]?.height ?? ''; row.style.minHeight = presentation.rows[index]?.minimum ?? '';
+  });
 }
 export function tableColumnWidths(table: HTMLTableElement): number[] {
-  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>(':scope > colgroup > col'), column => column.getBoundingClientRect().width);
+  const scale = renderedScale(table);
+  const columns = Array.from(table.querySelectorAll<HTMLTableColElement>(':scope > colgroup > col'), column => column.getBoundingClientRect().width / scale);
   if (columns.length && columns.every(width => width > 0)) return columns;
-  return Array.from(table.rows[0]?.cells ?? []).flatMap(cell => Array(cell.colSpan).fill(cell.getBoundingClientRect().width / cell.colSpan));
+  return Array.from(table.rows[0]?.cells ?? []).flatMap(cell => Array(cell.colSpan).fill(cell.getBoundingClientRect().width / cell.colSpan / scale));
 }
 
 /** Preserve compact columns before distributing the remaining space. Long
@@ -36,19 +43,23 @@ export function allocateTableWidths({ natural, minimum }: TableWidths, available
   return result;
 }
 
-/** Measure only width-constrained automatic tables. Each bounded batch performs
+/** Measure only width-constrained tables, without their editor column widths.
+ * This also lets automatic printing reclaim unused space in manual columns.
+ * Each bounded batch performs
  * a natural-width read, then (only if useful) a minimum-width read. Grouping the
  * writes avoids forcing document layout twice for every table. Temporary DOM
  * is bounded by 10k nodes or one larger table, never a full document copy. */
-export function measureTableWidths(tables: readonly HTMLTableElement[], available: number): Map<HTMLTableElement, TableWidths> {
+export function measureTableWidths(tables: readonly HTMLTableElement[], available: number | ((table: HTMLTableElement) => number)): Map<HTMLTableElement, TableWidths> {
   const result = new Map<HTMLTableElement, TableWidths>();
   let batch: Array<{ table: HTMLTableElement; clone: HTMLTableElement }> = [], nodes = 0;
-  const widths = (table: HTMLTableElement) => Array.from(table.rows[0].cells, cell => Math.ceil(cell.getBoundingClientRect().width) + 2);
+  const widths = (table: HTMLTableElement) => Array.from(table.rows[0].cells, cell => Math.ceil(cell.getBoundingClientRect().width / renderedScale(table)) + 2);
   const flush = () => {
     try {
       const natural = batch.map(({ clone }) => widths(clone));
-      const needsMinimum = natural.map(columns => columns.reduce((sum, width) => sum + width, 0) > available
-        && columns.some(width => width > Math.min(available / 3, 160)));
+      const needsMinimum = natural.map((columns, index) => {
+        const limit = typeof available === 'number' ? available : available(batch[index].table);
+        return columns.reduce((sum, width) => sum + width, 0) > limit && columns.some(width => width > Math.min(limit / 3, 160));
+      });
       batch.forEach(({ clone }, index) => {
         if (needsMinimum[index]) { clone.style.width = 'min-content'; clone.classList.add('export-table-measure-min'); }
       });
@@ -69,7 +80,7 @@ export function measureTableWidths(tables: readonly HTMLTableElement[], availabl
       batch.push({ table, clone }); nodes += cost;
       clone.removeAttribute('data-export-item'); clone.classList.add('export-table-measure');
       clone.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;width:max-content;max-width:none;min-width:0;table-layout:auto;zoom:1';
-      clone.querySelectorAll('colgroup').forEach(group => group.remove());
+      clone.querySelectorAll(':scope > colgroup').forEach(group => group.remove());
       table.parentElement!.append(clone);
     }
     if (batch.length) flush();

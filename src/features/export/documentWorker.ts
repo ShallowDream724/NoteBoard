@@ -37,14 +37,14 @@ self.onmessage = async ({ data }: MessageEvent<Request>) => {
       const { pandocSource } = await import('./pandocDocument');
       const source = typeof content === 'string' ? content
         : (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content);
-      self.postMessage({ type: 'result', result: pandocSource(source) });
+      self.postMessage({ type: 'result', result: pandocSource(source, data.directory) });
       return;
     }
     const snapshot = typeof content === 'string' ? { markdown: content, doc: null }
       : { markdown: '', doc: (await import('../editor-md/documentExtensions')).documentParser().schema.nodeFromJSON(content) };
     const [{ renderDocument }, { renderMathMarkup }] = await Promise.all([import('./renderDocument'), import('../editor-md/mathEngine')]);
     const diagrams: DiagramRenderer = requests => new Promise(resolve => { receiveDiagrams = resolve; self.postMessage({ type: 'diagrams', requests }); });
-    const assetUrls = (paths: string[]) => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths }); });
+    const assetUrls = (paths: string[], references?: string[]) => new Promise<string[]>(resolve => { receiveAssetUrls = resolve; self.postMessage({ type: 'assets', paths, references }); });
     if (data.format === 'standalone-html') {
       const { standaloneHtml } = await import('./standaloneHtml');
       const result = await renderDocument(snapshot.markdown, data.title, data.directory, undefined, snapshot.doc, renderMathMarkup, assetUrls, 'html', diagrams);

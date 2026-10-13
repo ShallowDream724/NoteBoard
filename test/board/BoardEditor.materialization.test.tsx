@@ -111,3 +111,21 @@ it('keeps the final pointerup frame in the same undo group after a mid-gesture s
   await act(async () => { expect(redoDocumentHistory(key)).toBe(true); });
   expect(mock.scene!.elements[0].x).toBe(2);
 });
+
+it.each(['remote', 'invalid-json'])('does not mount an engine or overwrite a blocked %s board on flush or unmount', async kind => {
+  const blockedKey = 'untitled:blocked-board';
+  const scene = createEmptyScene(false);
+  scene.files = { a: { id: 'a', dataURL: 'asset://localhost/%5c%5cserver%5cshare%5ca.png', mimeType: 'image/png', created: 1 } };
+  const content = kind === 'remote' ? JSON.stringify(scene) : '{invalid-json';
+  useDocumentStore.getState().upsertFromPayload({ key: blockedKey, displayName: 'blocked board', dirPath: '', kind: 'board', language: 'plaintext', content, encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false });
+  useWindowStore.getState().openTab({ key: blockedKey, path: null, displayName: 'blocked board', kind: 'board', language: 'plaintext', isDirty: false, isPreview: false, viewMode: null, externalStatus: null, isDetached: false });
+  mock.props = null;
+  await act(async () => { root.render(<BoardEditor key="blocked" docKey={blockedKey} />); });
+  expect(mock.props).toBeNull(); expect(host.querySelector('[role="alert"]')?.textContent).toContain('原文件保持不变');
+  expect(getCurrentDocumentHistoryContent(blockedKey)).toBeNull();
+  expect(await getEditorCapabilities(blockedKey)!.flush('save')).toBeNull();
+  await act(async () => { vi.advanceTimersByTime(3_000); root.render(<div/>); });
+  expect(useDocumentStore.getState().getDocument(blockedKey)?.content).toBe(content);
+  expect(useWindowStore.getState().getTab(blockedKey)?.isDirty).toBe(false);
+  expect(queuedAutoSave).not.toHaveBeenCalled();
+});

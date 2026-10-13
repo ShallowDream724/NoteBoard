@@ -24,13 +24,13 @@ const move = (from: Element, to: Element) => {
 };
 const item = (label: string) => document.querySelector<HTMLElement>(`[role="menuitem"][aria-label="${label}"]`)!;
 
-function Menu({ editor = null }: { editor?: Editor | null }) {
-  const [open, setOpen] = useState(true);
+function Menu({ editor = null, initialOpen = true }: { editor?: Editor | null; initialOpen?: boolean }) {
+  const [open, setOpen] = useState(initialOpen);
   return <TooltipProvider><EditorMenuScope editor={editor}>
     <ToolbarDropdown trigger={<button>插入</button>} isOpen={open} onOpenChange={setOpen}>
       <ToolbarDropdownItem label="列表" submenu={<input aria-label="起始编号"/>}/>
       <ToolbarDropdownItem label="表格"/>
-      <ToolbarDropdownItem label="代码块"/>
+      <ToolbarDropdownItem label="代码块" helpKey="block.code"/>
       <ToolbarDropdownItem label="分割线"/>
     </ToolbarDropdown>
   </EditorMenuScope></TooltipProvider>;
@@ -58,6 +58,68 @@ it('keeps both portalled menu levels alive while their input owns focus and pres
   const key = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
   await act(async () => input.dispatchEvent(key));
   expect(key.defaultPrevented).toBe(false);
+});
+
+it('dismisses a pointer menu after leaving a focused ordinary action', async () => {
+  await act(async () => root.render(<Menu/>));
+  await act(async () => { move(document.body, item('代码块')); item('代码块').focus(); move(item('代码块'), document.body); vi.advanceTimersByTime(350); });
+  expect(item('代码块')).toBeNull();
+});
+
+it('returns an already open keyboard menu to hover dismissal when its trigger is entered by pointer', async () => {
+  await act(async () => root.render(<Menu initialOpen={false}/>));
+  const trigger = document.querySelector<HTMLElement>('[data-nb-menu-trigger]')!;
+  await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })));
+  expect(item('代码块')).not.toBeNull();
+  await act(async () => { move(document.body, trigger); move(trigger, document.body); vi.advanceTimersByTime(350); });
+  expect(item('代码块')).toBeNull();
+});
+
+it('dismisses focused input branches on outside pointer without consuming document selection input', async () => {
+  await act(async () => root.render(<Menu/>));
+  await act(async () => { move(document.body, item('列表')); vi.advanceTimersByTime(300); });
+  const input = document.querySelector<HTMLInputElement>('[aria-label="起始编号"]')!;
+  await act(async () => input.focus());
+  const press = new MouseEvent('pointerdown', { bubbles: true, cancelable: true });
+  await act(async () => document.body.dispatchEvent(press));
+  expect(item('代码块')).toBeNull();
+  expect(press.defaultPrevented).toBe(false);
+});
+
+it('does not reopen an interrupted hover intention after window focus is lost', async () => {
+  await act(async () => root.render(<Menu initialOpen={false}/>));
+  const trigger = document.querySelector('[data-nb-menu-trigger]')!;
+  await act(async () => move(document.body, trigger));
+  await act(async () => { window.dispatchEvent(new Event('blur')); vi.advanceTimersByTime(500); });
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
+it('lets an IME consume Escape without dismissing an open menu', async () => {
+  await act(async () => root.render(<Menu/>));
+  const key = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, isComposing: true });
+  await act(async () => item('代码块').dispatchEvent(key));
+  expect(item('代码块')).not.toBeNull();
+});
+
+it('returns keyboard focus to an Anchor-based toolbar trigger after Escape', async () => {
+  await act(async () => root.render(<Menu/>));
+  const trigger = document.querySelector<HTMLElement>('[data-nb-menu-trigger]')!;
+  await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })));
+  await act(async () => { item('代码块').focus(); item('代码块').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); vi.advanceTimersByTime(100); });
+  expect(item('代码块')).toBeNull();
+  expect(document.activeElement?.textContent).toBe('插入');
+});
+
+it('closes the owning menu with one Escape while a keyboard explanation is on top', async () => {
+  await act(async () => root.render(<Menu/>));
+  const trigger = document.querySelector<HTMLElement>('[data-nb-menu-trigger]')!;
+  await act(async () => trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })));
+  await act(async () => { item('代码块').focus(); vi.advanceTimersByTime(700); });
+  expect(document.querySelector('.nb-contextual-help-content')).not.toBeNull();
+  await act(async () => { item('代码块').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); vi.advanceTimersByTime(100); });
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.querySelector('.nb-contextual-help-content')).toBeNull();
+  expect(document.activeElement?.textContent).toBe('插入');
 });
 
 it('leases toolbar activity for the owning editor without changing focus or selection', async () => {

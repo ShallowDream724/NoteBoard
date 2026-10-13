@@ -4,6 +4,7 @@ import { Text } from '@codemirror/state';
 import * as ipc from '@/core/ipc/commands';
 import { save } from '@tauri-apps/plugin-dialog';
 import { saveAs } from '@/features/editor-code/orchestration/saveDocument';
+import { useSaveActivityStore } from '@/stores/saveActivityStore';
 import { useWindowStore, disposeTabLifecycleAsync } from '@/stores/windowStore';
 import { useDocumentStore } from '@/stores/documentStore';
 import { __debugSessionState, writeDocumentWithBarrier } from '@/features/session/documentSession';
@@ -11,9 +12,9 @@ import { stagePendingSourceSnapshot, discardPendingSourceSnapshot } from '@/feat
 import { initializeDocumentHistory, getCurrentDocumentHistoryContent } from '@/features/history/documentHistory';
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: 'review' }) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
-vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), getStagedPath: vi.fn(), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn(), releaseStagedDocument: vi.fn() }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
-vi.mock('@/core/ipc/commands', () => ({ unregisterDocument: vi.fn(), registerDocument: vi.fn(), writeDocument: vi.fn(), setDocumentDirty: vi.fn() }));
+vi.mock('@/core/ipc/commands', () => ({ unregisterDocument: vi.fn(), registerDocument: vi.fn(), writeDocument: vi.fn(), setDocumentDirty: vi.fn(), pathExists: vi.fn() }));
 
 function seed(key: string): void {
   useDocumentStore.getState().upsertFromPayload({ key, displayName: 'review.md', dirPath: 'C:/round4', kind: 'markdown', language: 'markdown', content: 'base', encoding: 'utf8', eol: 'lf', size: 4, mtime: 0, readonly: false });
@@ -25,6 +26,58 @@ beforeEach(() => {
   vi.mocked(ipc.unregisterDocument).mockResolvedValue(undefined);
   vi.mocked(ipc.registerDocument).mockResolvedValue({ type:'ok' });
   vi.mocked(ipc.writeDocument).mockResolvedValue({ ok:true, size:4, mtime:1 } as never);
+  vi.mocked(ipc.pathExists).mockResolvedValue({ exists: false, isDir: false });
+});
+
+it('另存为重复请求只打开一个对话框，取消后不伪造保存失败', async () => {
+  const key = 'untitled:coalesced'; seed(key);
+  let cancel!: (path: null) => void;
+  vi.mocked(save).mockImplementation(() => new Promise(resolve => { cancel = resolve; }));
+  const first = saveAs(key, 'base');
+  await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+  useDocumentStore.getState().setContent(key, '对话框期间的新输入');
+  expect(saveAs(key, 'base')).toBe(first);
+  cancel(null);
+  expect(await first).toBe(false);
+  expect(ipc.writeDocument).not.toHaveBeenCalled();
+  expect(useDocumentStore.getState().getDocument(key)?.isDirty).toBe(true);
+  expect(useSaveActivityStore.getState().activities.has(key)).toBe(false);
+});
+
+function deleted(key: string) {
+  seed(key); useDocumentStore.getState().setContent(key, '未保存的新内容');
+  useDocumentStore.getState().setExternalStatus(key, 'deleted');
+  useWindowStore.getState().setTabDetached(key, true);
+  useWindowStore.getState().setTabExternalStatus(key, 'deleted');
+  useWindowStore.getState().setTabDirty(key, true);
+}
+
+it('已删除文件另存为选择原路径只询问一次，并原子仅创建后解除断开', async () => {
+  const key = 'C:/round4/recreate.md'; deleted(key); vi.mocked(save).mockResolvedValue(key);
+  expect(await saveAs(key, '')).toBe(true);
+  expect(save).toHaveBeenCalledOnce();
+  expect(ipc.writeDocument).toHaveBeenCalledWith(key, '未保存的新内容', 'utf8', 'lf', true);
+  expect(useDocumentStore.getState().getDocument(key)).toMatchObject({ content: '未保存的新内容', baselineContent: '未保存的新内容', isDirty: false, externalStatus: 'clean' });
+  expect(useWindowStore.getState().getTab(key)).toMatchObject({ isDetached: false, externalStatus: 'clean', isDirty: false });
+});
+
+it('已删除文件取消另存为不重建路径或改变断开和未保存状态', async () => {
+  const key = 'C:/round4/cancel-recreate.md'; deleted(key); vi.mocked(save).mockResolvedValue(null);
+  expect(await saveAs(key, '')).toBe(false);
+  expect(ipc.writeDocument).not.toHaveBeenCalled(); expect(ipc.registerDocument).not.toHaveBeenCalled();
+  expect(useDocumentStore.getState().getDocument(key)).toMatchObject({ content: '未保存的新内容', isDirty: true, externalStatus: 'deleted' });
+  expect(useWindowStore.getState().getTab(key)?.isDetached).toBe(true);
+});
+
+it('原路径出现其它文件时拒绝覆盖，创建竞争失败也保留未保存内容和断开状态', async () => {
+  const key = 'C:/round4/foreign-recreate.md'; deleted(key); vi.mocked(save).mockResolvedValue(key);
+  vi.mocked(ipc.pathExists).mockResolvedValueOnce({ exists: true, isDir: false });
+  expect(await saveAs(key, '')).toBe(false); expect(ipc.writeDocument).not.toHaveBeenCalled();
+  vi.mocked(ipc.writeDocument).mockResolvedValueOnce({ ok: false, size: 0, mtime: 0, error: { kind: 'io', message: '目标已存在，未覆盖' } });
+  expect(await saveAs(key, '')).toBe(false);
+  expect(ipc.writeDocument).toHaveBeenCalledWith(key, '未保存的新内容', 'utf8', 'lf', true);
+  expect(useDocumentStore.getState().getDocument(key)).toMatchObject({ content: '未保存的新内容', baselineContent: 'base', isDirty: true, externalStatus: 'deleted' });
+  expect(useWindowStore.getState().getTab(key)?.isDetached).toBe(true);
 });
 
 it('D04：真实标签关闭后会话表与 closing 表应回落，而非永久保留每条路径', async () => {

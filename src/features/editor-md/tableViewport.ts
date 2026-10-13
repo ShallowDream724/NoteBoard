@@ -3,6 +3,7 @@ import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Selection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import { CellSelection } from '@tiptap/pm/tables';
+import { AttrStep } from '@tiptap/pm/transform';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { hasSimpleTableRows, isLargeTable } from './tableRowLayout';
 
@@ -10,7 +11,8 @@ const INITIAL_ROWS = 36;
 const ESTIMATED_HEIGHT = 40;
 const ROW_BATCH = 16;
 interface Row { end: number; index: number; visible: boolean; node: Node }
-interface ViewportState { rows: Map<number, Row>; decorations: DecorationSet; selected: Set<number> }
+interface Table { end: number; node: Node; rows: number[] }
+interface ViewportState { rows: Map<number, Row>; tables: Map<number, Table>; decorations: DecorationSet; selected: Set<number> }
 interface Visibility { pos: number; visible: boolean }
 export const tableViewportKey = new PluginKey<ViewportState>('tableViewport');
 const heights = new WeakMap<Node, number>();
@@ -34,24 +36,122 @@ function decoration(pos: number, row: Row, selected: Set<number>) {
     pos + 1 + offset + cell.nodeSize, {}, { tableCellViewport: 'visible' })));
   return result;
 }
-function build(state: EditorState, previous?: ViewportState, transaction?: Transaction): ViewportState {
-  const rows = new Map<number, Row>(), selected = selectedRows(state.selection), decorations: Decoration[] = [];
-  const prior = new Map<number, Row>();
-  if (previous && transaction) for (const [pos, row] of previous.rows) {
-    const mapped = transaction.mapping.mapResult(pos, 1);
-    if (!mapped.deleted) prior.set(mapped.pos, row);
-  }
+function build(state: EditorState): ViewportState {
+  const rows = new Map<number, Row>(), tables = new Map<number, Table>(), selected = selectedRows(state.selection), decorations: Decoration[] = [];
   state.doc.descendants((node, pos) => {
     if (node.type.name === 'annotationStore') return false;
     if (node.type.spec.tableRole !== 'table') return;
-    if (isLargeTable(node) && hasSimpleTableRows(node)) node.forEach((child, offset, index) => {
-      const at = pos + 1 + offset;
-      const row = { end: at + child.nodeSize, index, node: child, visible: prior.get(at)?.visible ?? index < INITIAL_ROWS };
-      rows.set(at, row); decorations.push(...decoration(at, row, selected));
-    });
+    if (isLargeTable(node) && hasSimpleTableRows(node)) {
+      const positions: number[] = [];
+      node.forEach((child, offset, index) => {
+        const at = pos + 1 + offset;
+        const row = { end: at + child.nodeSize, index, node: child, visible: index < INITIAL_ROWS };
+        positions.push(at); rows.set(at, row); decorations.push(...decoration(at, row, selected));
+      });
+      tables.set(pos, { node, end: pos + node.nodeSize, rows: positions });
+    }
     return false;
   });
-  return { rows, selected, decorations: DecorationSet.create(state.doc, decorations) };
+  return { rows, tables, selected, decorations: DecorationSet.create(state.doc, decorations) };
+}
+
+/** Find inserted or newly qualifying tables only in changed document ranges.
+ * Attribute-only steps have empty maps; the existing table index detects those
+ * by immutable node identity instead. Annotation bodies own their own editor. */
+function changedTables(transaction: Transaction, doc: Node) {
+  const tables = new Map<number, Node>();
+  const ancestor = (position: number) => {
+    const resolved = doc.resolve(position);
+    for (let depth = 1; depth <= resolved.depth; depth++) {
+      const node = resolved.node(depth);
+      if (node.type.name === 'annotationStore') return;
+      if (node.type.spec.tableRole === 'table') { tables.set(resolved.before(depth), node); return; }
+    }
+  };
+  const scan = (from: number, to: number, index: number) => {
+    const remaining = transaction.mapping.slice(index + 1);
+    from = Math.max(0, Math.min(doc.content.size, remaining.map(from, -1)));
+    to = Math.max(from, Math.min(doc.content.size, remaining.map(to, 1)));
+    ancestor(from); ancestor(to);
+    doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === 'annotationStore') return false;
+      if (node.type.spec.tableRole === 'table') { tables.set(pos, node); return false; }
+    });
+  };
+  transaction.steps.forEach((step, index) => {
+    let mapped = false;
+    step.getMap().forEach((_oldFrom, _oldTo, from, to) => { mapped = true; scan(from, to, index); });
+    if (!mapped) {
+      // A merged table is not in the viewport index yet. Removing its last
+      // span with AttrStep (or an application attribute step) can qualify it.
+      const positions = step as unknown as { from?: number; to?: number; pos?: number };
+      const from = positions.from ?? positions.pos;
+      if (from !== undefined) scan(from, positions.to ?? from + 1, index);
+    }
+  });
+  return tables;
+}
+
+function documentTableAt(doc: Node, position: number) {
+  const resolved = doc.resolve(position);
+  for (let depth = 1; depth <= resolved.depth; depth++) {
+    const role = resolved.node(depth);
+    if (role.type.name === 'annotationStore' || role.type.spec.tableRole === 'table') return undefined;
+  }
+  const node = doc.nodeAt(position);
+  return node?.type.spec.tableRole === 'table' ? node : undefined;
+}
+
+function updateDocument(transaction: Transaction, value: ViewportState, state: EditorState): ViewportState {
+  const selected = selectedRows(state.selection), candidates = changedTables(transaction, state.doc);
+  const tables = new Map<number, Table>(), prior = new Map<number, Row>();
+  let rows = value.rows, decorations = value.decorations.map(transaction.mapping, state.doc);
+  const mutableRows = () => { if (rows === value.rows) rows = new Map(rows); return rows; };
+  const removeDecorations = (from: number, to: number) => {
+    decorations = decorations.remove(decorations.find(from, to, spec => !!spec.tableViewport || !!spec.tableCellViewport)
+      .filter(item => item.from >= from && item.to <= to));
+  };
+  for (const [pos, table] of value.tables) {
+    const mapped = transaction.mapping.mapResult(pos, 1), node = mapped.deleted ? undefined : documentTableAt(state.doc, mapped.pos);
+    // Position/alignment attributes do not alter row identity or eligibility.
+    const attributesOnly = transaction.steps.every(step => step instanceof AttrStep && step.pos === pos);
+    if (mapped.pos === pos && node?.type === table.node.type && (node.content === table.node.content || attributesOnly)) {
+      tables.set(pos, node === table.node ? table : { ...table, node }); continue;
+    }
+    if (node?.type.spec.tableRole === 'table') candidates.set(mapped.pos, node);
+    removeDecorations(transaction.mapping.map(pos, -1), transaction.mapping.map(table.end, 1));
+    for (const at of table.rows) {
+      const row = value.rows.get(at)!;
+      mutableRows().delete(at);
+      const next = transaction.mapping.mapResult(at, 1);
+      if (!next.deleted) prior.set(next.pos, row);
+    }
+  }
+  for (const [pos, node] of candidates) {
+    // A changed range may include an untouched neighbouring table.
+    if (tables.get(pos)?.node === node) continue;
+    if (!isLargeTable(node) || !hasSimpleTableRows(node)) continue;
+    const positions: number[] = [], added: Decoration[] = [];
+    node.forEach((child, offset, index) => {
+      const at = pos + 1 + offset;
+      const row = { end: at + child.nodeSize, index, node: child, visible: prior.get(at)?.visible ?? index < INITIAL_ROWS };
+      positions.push(at); mutableRows().set(at, row); added.push(...decoration(at, row, selected));
+    });
+    tables.set(pos, { node, end: pos + node.nodeSize, rows: positions });
+    decorations = decorations.add(state.doc, added);
+  }
+  const dirty = new Set<number>();
+  for (const pos of value.selected) {
+    const at = transaction.mapping.map(pos, 1);
+    if (!selected.has(at)) dirty.add(at);
+  }
+  for (const pos of selected) if (!value.selected.has(pos)) dirty.add(pos);
+  for (const pos of dirty) {
+    const row = rows.get(pos); if (!row) continue;
+    removeDecorations(pos, row.end);
+    decorations = decorations.add(state.doc, decoration(pos, row, selected));
+  }
+  return { rows, tables, selected, decorations };
 }
 
 /** Only visibility is stored here. The complete document, history, clipboard and
@@ -61,7 +161,7 @@ export function createTableViewportPlugin() {
     state: {
       init: (_config, state) => build(state),
       apply(transaction, value, _oldState, state) {
-        if (transaction.docChanged) return build(state, value, transaction);
+        if (transaction.docChanged) return updateDocument(transaction, value, state);
         const changes = transaction.getMeta(tableViewportKey) as Visibility[] | undefined;
         if (!changes && !transaction.selectionSet) return value;
         const selected = selectedRows(state.selection), dirty = new Set<number>();
@@ -82,7 +182,7 @@ export function createTableViewportPlugin() {
             .filter(item => item.from >= pos && item.to <= row.end));
           decorations = decorations.add(state.doc, decoration(pos, row, selected));
         }
-        return { rows, selected, decorations };
+        return { rows, tables: value.tables, selected, decorations };
       },
     },
     props: { decorations: state => tableViewportKey.getState(state)?.decorations ?? null },

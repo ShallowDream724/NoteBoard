@@ -22,12 +22,19 @@ const OUTLINE_MIN = 200;
 const OUTLINE_MAX = 480;
 // 默认大纲宽度设置为最小宽度 OUTLINE_MIN
 const OUTLINE_DEFAULT = OUTLINE_MIN;
+export type NavigationTab = 'outline' | 'bookmarks';
+const NAVIGATION_TAB_PREFERENCE = 'noteboard.navigation-tab';
+function preferredNavigationTab(): NavigationTab {
+  try { return localStorage.getItem(NAVIGATION_TAB_PREFERENCE) === 'bookmarks' ? 'bookmarks' : 'outline'; }
+  catch { return 'outline'; }
+}
 
 interface LayoutStore {
   explorerVisible: boolean;
   explorerWidth: number;
   outlineVisible: boolean;
   outlineWidth: number;
+  navigationTab: NavigationTab;
   statusBarVisible: boolean;
   settingsModalVisible: boolean;
   /** 编辑器顶部操作栏是否可见 */
@@ -52,6 +59,7 @@ interface LayoutStore {
   setOutlineVisible: (visible: boolean) => void;
   setExplorerWidth: (width: number) => void;
   setOutlineWidth: (width: number) => void;
+  setNavigationTab: (tab: NavigationTab) => void;
   setStatusBarVisible: (visible: boolean) => void;
   setSettingsModalVisible: (visible: boolean) => void;
   setEditorToolbarVisible: (visible: boolean) => void;
@@ -85,6 +93,7 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   explorerWidth: preferredExplorerWidth(),
   outlineVisible: true,
   outlineWidth: OUTLINE_DEFAULT,
+  navigationTab: preferredNavigationTab(),
   statusBarVisible: true,
   settingsModalVisible: false,
   editorToolbarVisible: true,
@@ -111,6 +120,10 @@ export const useLayoutStore = create<LayoutStore>((set, get) => ({
   },
   setOutlineWidth: (width) =>
     set({ outlineWidth: clamp(width, OUTLINE_MIN, OUTLINE_MAX) }),
+  setNavigationTab: (tab) => {
+    try { localStorage.setItem(NAVIGATION_TAB_PREFERENCE, tab); } catch { /* Session remains usable. */ }
+    set({ navigationTab: tab });
+  },
   setStatusBarVisible: (visible) => set({ statusBarVisible: visible }),
   setSettingsModalVisible: (visible) => set({ settingsModalVisible: visible }),
   setEditorToolbarVisible: (visible) => set({ editorToolbarVisible: visible }),

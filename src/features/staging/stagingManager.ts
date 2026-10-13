@@ -46,6 +46,16 @@ export function migrateStagedDocumentKey(from: string, to: string): void {
   if (automaticKeys.delete(from)) automaticKeys.add(to);
 }
 
+/** Final session disposal releases ownership, not the durable recovery file.
+ * A reopened path must allocate its own copy; otherwise its next edit/discard
+ * could overwrite/delete work explicitly retained by the previous session. */
+export function releaseStagedDocument(key: string): void {
+  stagedPaths.delete(key);
+  retainedKeys.delete(key);
+  pendingStagingKeys.delete(key);
+  automaticKeys.delete(key);
+}
+
 /** 统一复用关闭保护策略：空白未命名文件不暂存，有内容或脏态才暂存。 */
 const shouldStage = hasUnsavedWork;
 
@@ -168,8 +178,11 @@ async function writePendingDocuments(keys?: string[], retain = false, onlyChange
   // 只有整批成功时才标记为用户确认保留，失败时窗口继续停留并允许用户重试或正常保存。
   if (errors.length > 0) throw new Error(errors.join('；'));
   if (retain) {
+    if (documents.some(snapshot => getSessionGeneration(snapshot.document.key) !== snapshot.generation)) {
+      throw new Error('文档会话已改变，暂存已取消');
+    }
     assertStagedDocumentsCurrent(keys ?? documents.map(item => item.document.key));
-    results.forEach((result) => retainedKeys.add(result.key));
+    results.forEach(result => retainedKeys.add(result.key));
   }
   return results;
 }
@@ -193,9 +206,20 @@ export function assertStagedDocumentsCurrent(keys: readonly string[]): void {
  * 立即暂存未保存文档。所有调用串行执行；retain=true 表示用户明确要求保留并关闭。
  */
 export function stashPendingDocuments(options: { keys?: string[]; retain?: boolean; onlyChanged?: boolean } = {}): Promise<StagingResult[]> {
-  const keys = options.keys ? [...options.keys] : undefined;
+  const requested = options.keys ?? useWindowStore.getState().tabs.map(tab => tab.key);
+  const generations = new Map(requested.map(key => [key, getSessionGeneration(key)]));
   const retain = options.retain ?? false;
-  return enqueueStaging(() => writePendingDocuments(keys, retain, options.onlyChanged && !retain));
+  return enqueueStaging(async () => {
+    const keys = [...generations].filter(([key, generation]) => getSessionGeneration(key) === generation).map(([key]) => key);
+    if (retain && keys.length !== generations.size) throw new Error('文档会话已改变，暂存已取消');
+    const results = await writePendingDocuments(keys, retain, options.onlyChanged && !retain);
+    // Capture can skip a disposed session before it produces any snapshot.
+    // That empty pass still cannot authorize closing a later same-path session.
+    if (retain && [...generations].some(([key, generation]) => getSessionGeneration(key) !== generation)) {
+      throw new Error('文档会话已改变，暂存已取消');
+    }
+    return results;
+  });
 }
 
 /** 返回当前编辑会话已分配的暂存路径，供最近关闭窗口快照建立原路径/暂存路径关系。 */

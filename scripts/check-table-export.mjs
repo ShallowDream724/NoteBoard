@@ -1,21 +1,25 @@
+/* global window, document, getComputedStyle */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { build } from 'vite';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('C:/Users/dell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const root=process.cwd(), dir=path.join(root,'.tmp/table-export-check');
 await fs.mkdir(dir,{recursive:true});
 await fs.cp(path.join(root,'src'),path.join(dir,'src'),{recursive:true});
-await fs.writeFile(path.join(dir,'index.html'),'<html><head><meta charset="utf-8"></head><body><main id="document"></main><script type="module" src="./entry.ts"></script></body></html>');
+await fs.writeFile(path.join(dir,'index.html'),'<!doctype html><html><head><meta charset="utf-8"></head><body><main id="document"></main><script type="module" src="./entry.ts"></script></body></html>');
 await fs.writeFile(path.join(dir,'entry.ts'),`
 import {renderDocument} from './src/features/export/renderDocument';
 import {createLayoutSession} from './src/features/export/layout';
+import {markTableEdges} from './src/features/export/tableLayout';
 import {DEFAULT_PDF} from './src/features/export/model';
 import './src/features/export/document.css';
-window.tablePdf={async render(markdown){const root=document.querySelector('#document');const result=await renderDocument(markdown,'表格排版检查','');root.innerHTML=result.html;document.documentElement.style.cssText='--export-font:10.5pt;--export-line:1.4;--export-width:186mm';await document.fonts.ready;window.layout=createLayoutSession(root);return window.layout.update(DEFAULT_PDF);}};
+import './src/features/export/standalonePage.css';
+window.tablePdf={async render(markdown){const root=document.querySelector('#document');root.classList.remove('export-reader');const result=await renderDocument(markdown,'表格排版检查','');root.innerHTML=result.html;document.documentElement.style.cssText='--export-font:10.5pt;--export-line:1.4;--export-width:186mm';await document.fonts.ready;window.layout=createLayoutSession(root);return window.layout.update(DEFAULT_PDF);},async html(html,standalone=false){const root=document.querySelector('#document');root.classList.toggle('export-reader',standalone);root.innerHTML=html;if(standalone)root.querySelectorAll('table').forEach(markTableEdges);document.documentElement.style.cssText='--export-font:10.5pt;--export-line:1.4;--export-width:186mm';await document.fonts.ready;window.layout=createLayoutSession(root);return standalone?null:window.layout.update(DEFAULT_PDF);},update(mode){return window.layout.update({...DEFAULT_PDF,items:{'table-manual':mode}})}};
 `);
 if(!process.argv.includes('--reuse-build')) await build({configFile:false,root:dir,base:'./',worker:{format:'es'},build:{outDir:path.join(dir,'dist'),emptyOutDir:false,minify:true},logLevel:'warn'});
 const mime={'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'};
@@ -36,6 +40,41 @@ try{
  assert.ok(geometry.parts.slice(1).every(p=>p.label.includes('HIGHEST')&&p.label.includes('续')));
  await page.pdf({path:path.join(dir,'table-layout.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'},displayHeaderFooter:true,headerTemplate:'<span></span>',footerTemplate:'<div style="font-size:9px;text-align:center;width:100%"><span class="pageNumber"></span></div>'});
  await page.screenshot({path:path.join(dir,'first-table.png')});
- await fs.writeFile(path.join(dir,'results.json'),JSON.stringify({report,geometry,errors},null,2));
+ const manual='<table data-export-item="table-manual" style="width:1800px"><colgroup><col style="width:1200px"><col style="width:600px"></colgroup><thead><tr><th>ID</th><th>Description</th></tr></thead><tbody><tr style="height:2000px;min-height:2000px"><td>R-01</td><td><p>Readable content retained at the selected body size. '+ 'LONGIDENTIFIER'.repeat(35) +'</p></td></tr><tr><td>R-02</td><td>End-of-manual-content</td></tr></tbody></table>';
+ const automatic=await page.evaluate(html=>window.tablePdf.html(html),manual);
+ const tableGeometry=()=>page.evaluate(()=>{const table=document.querySelector('table'),cell=table.rows[1].cells[1];return {width:table.getBoundingClientRect().width,rowHeight:table.rows[1].getBoundingClientRect().height,columns:[...table.querySelectorAll('col')].map(col=>col.getBoundingClientRect().width),font:getComputedStyle(cell).fontSize,zoom:getComputedStyle(table).zoom,cellWidth:cell.clientWidth,cellScroll:cell.scrollWidth,text:table.textContent.replaceAll('\u00a0','')}});
+ const autoGeometry=await tableGeometry();
+ assert.deepEqual(automatic.issues.filter(i=>i.blocking),[]);assert.ok(autoGeometry.width<=geometry.width+1);assert.ok(autoGeometry.columns[0]<100);assert.equal(autoGeometry.zoom,'1');assert.equal(autoGeometry.font,'14px');assert.ok(autoGeometry.cellScroll<=autoGeometry.cellWidth+1);
+ await page.pdf({path:path.join(dir,'manual-auto.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'}});
+ const original=await page.evaluate(()=>window.tablePdf.update('original'));
+ const originalGeometry=await tableGeometry();assert.equal(originalGeometry.width,1800);assert.equal(originalGeometry.columns[0],1200);assert.ok(originalGeometry.rowHeight>=2000);assert.ok(original.issues.some(i=>i.blocking&&i.message.includes('原列宽')));
+ const again=await page.evaluate(()=>window.tablePdf.update('auto'));assert.deepEqual(again.issues.filter(i=>i.blocking),[]);const againGeometry=await tableGeometry();assert.equal(againGeometry.text,autoGeometry.text);assert.equal(againGeometry.font,autoGeometry.font);assert.ok(againGeometry.columns.every((width,index)=>Math.abs(width-autoGeometry.columns[index])<2));
+ await page.evaluate(html=>window.tablePdf.html(html,true),manual);
+ const reader=await tableGeometry();assert.equal(reader.width,1800);
+ await page.emulateMedia({media:'print'});const readerPrint=await tableGeometry();assert.ok(readerPrint.width<=geometry.width+1);assert.ok(readerPrint.columns[0]>=60&&readerPrint.columns[0]<100);assert.ok(readerPrint.rowHeight<200);assert.equal(readerPrint.font,reader.font);assert.ok(readerPrint.cellScroll<=readerPrint.cellWidth+1);assert.equal(readerPrint.text,reader.text);
+ await page.pdf({path:path.join(dir,'standalone-print.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'}});
+ await page.evaluate(()=>document.querySelector('table').dataset.exportTableMode='original');assert.equal((await tableGeometry()).width,1800);
+ await page.emulateMedia({media:'screen'});const readerAfter=await tableGeometry();assert.equal(readerAfter.width,reader.width);assert.equal(readerAfter.rowHeight,reader.rowHeight);assert.equal(readerAfter.font,reader.font);assert.equal(readerAfter.text,reader.text);
+ const nested='<table data-export-item="table-parent" style="width:500px"><colgroup><col style="width:250px"><col style="width:250px"></colgroup><tbody><tr><td><p>Parent label</p></td><td>'+manual+'</td></tr></tbody></table>';
+ const nestedReport=await page.evaluate(html=>window.tablePdf.html(html),nested);
+ const nestedGeometry=await page.evaluate(()=>{const parent=document.querySelector('table'),table=parent.querySelector('table'),cell=table.parentElement,style=getComputedStyle(cell);return {parentWidth:parent.getBoundingClientRect().width,width:table.getBoundingClientRect().width,available:cell.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),rowHeight:table.rows[1].getBoundingClientRect().height,cellScroll:cell.scrollWidth,cellWidth:cell.clientWidth}});
+ assert.deepEqual(nestedReport.issues.filter(i=>i.blocking),[]);assert.ok(nestedGeometry.width<=nestedGeometry.available+1);assert.ok(nestedGeometry.cellScroll<=nestedGeometry.cellWidth+1);assert.ok(nestedGeometry.rowHeight<900);
+ await page.emulateMedia({media:'print'});
+ await page.pdf({path:path.join(dir,'nested-auto.pdf'),format:'A4',printBackground:true,margin:{top:'12mm',bottom:'12mm',left:'12mm',right:'12mm'}});
+ await page.emulateMedia({media:'screen'});
+ const continued=await page.evaluate(html=>window.tablePdf.html(html),nested.replace('Parent label','Parent continuation content '.repeat(300)));
+ assert.deepEqual(continued.issues.filter(i=>i.blocking),[]);
+ assert.ok(await page.locator('table[data-export-item="table-parent"] > tbody > tr').count()>1);
+ await page.evaluate(()=>window.tablePdf.update('original'));
+ assert.equal(await page.locator('table[data-export-item="table-manual"]').evaluate(table=>table.style.width),'1800px');
+ const continuedAgain=await page.evaluate(()=>window.tablePdf.update('auto'));assert.deepEqual(continuedAgain.issues.filter(i=>i.blocking),[]);
+ assert.equal(await page.locator('table[data-export-item="table-manual"]').count(),1);
+ const printed=[];
+ for(const name of ['manual-auto.pdf','standalone-print.pdf','nested-auto.pdf']){
+  const task=getDocument({data:new Uint8Array(await fs.readFile(path.join(dir,name))),useSystemFonts:true});const pdf=await task.promise;let text='';const fonts=[];
+  for(let index=1;index<=pdf.numPages;index++){const sheet=await pdf.getPage(index);for(const item of (await sheet.getTextContent()).items){text+=item.str||'';if(item.str?.includes('Readable'))fonts.push(Math.abs(item.transform[0]));}}
+  assert.equal((text.match(/LONGIDENTIFIER/g)||[]).length,35);assert.ok(text.includes('End-of-manual-content'));assert.ok(fonts.length&&fonts.every(size=>Math.abs(size-10.5)<.2));printed.push({name,pages:pdf.numPages,fontPt:fonts});await task.destroy();
+ }
+ await fs.writeFile(path.join(dir,'results.json'),JSON.stringify({report,geometry,manual:{automatic,autoGeometry,original,originalGeometry,reader,readerPrint,readerAfter},nested:{report:nestedReport,geometry:nestedGeometry,continued,continuedAgain},printed,errors},null,2));
  console.log(JSON.stringify({report,tables:geometry.tables,links:geometry.links,tallParts:geometry.parts.map(({label,height})=>({label,height})),errors},null,2));
 }finally{await browser.close();server.close();}

@@ -1,3 +1,13 @@
+import { contrastRatio, TEXT_CONTRAST_THRESHOLD } from '../../core/theme/contrast';
+
+/** A rendered default only; never persist this as the user's explicit text color. */
+export function readableBlockText(background: string): string {
+  const dark = '#18202b', light = '#f8fafc';
+  const darkRatio = contrastRatio(dark, background), lightRatio = contrastRatio(light, background);
+  if (Math.max(darkRatio, lightRatio) >= TEXT_CONTRAST_THRESHOLD) return darkRatio >= lightRatio ? dark : light;
+  return contrastRatio('#000000', background) >= contrastRatio('#ffffff', background) ? '#000000' : '#ffffff';
+}
+
 /** Shared document colors. Values are data, never arbitrary CSS declarations. */
 export function documentColor(value: unknown): string | null {
   return typeof value === 'string' && /^#[\da-f]{6}$/i.test(value) ? value.toLowerCase() : null;

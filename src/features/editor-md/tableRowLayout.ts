@@ -2,13 +2,22 @@ import type { Node } from '@tiptap/pm/model';
 
 let nextTable = 0;
 const simpleTables = new WeakMap<Node, boolean>();
+const simpleRows = new WeakMap<Node, number | null>();
+function simpleRowColumns(row: Node): number | null {
+  let columns = simpleRows.get(row);
+  if (columns === undefined) {
+    columns = row.childCount;
+    row.forEach(cell => { if (cell.attrs.rowspan > 1 || cell.attrs.colspan > 1) columns = null; });
+    simpleRows.set(row, columns);
+  }
+  return columns;
+}
 export function hasSimpleTableRows(table: Node) {
   let simple = simpleTables.get(table);
   if (simple === undefined) {
     simple = true;
     const columns = table.firstChild?.childCount;
-    table.forEach(row => { if (row.childCount !== columns) simple = false;
-      row.forEach(cell => { if (cell.attrs.rowspan > 1 || cell.attrs.colspan > 1) simple = false; }); });
+    table.forEach(row => { if (simple && simpleRowColumns(row) !== columns) simple = false; });
     simpleTables.set(table, simple);
   }
   return simple;

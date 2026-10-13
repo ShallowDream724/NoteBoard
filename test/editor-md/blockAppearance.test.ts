@@ -7,10 +7,30 @@ import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { clearBlockFormatting, clearSelectionTextFormatting } from '../../src/features/editor-md/textFormatting';
 import { renderDocument } from '../../src/features/export/renderDocument';
 import { nativeTestEditor } from './nativeTestEditor';
+import { BACKGROUND_COLORS, readableBlockText } from '../../src/features/document-style/colors';
+import { contrastRatio } from '../../src/core/theme/contrast';
 
 const create = (content: string) => nativeTestEditor(new Editor({ extensions: buildDocumentExtensions(), content }));
 const backspace = (editor: Editor) => editor.view.someProp('handleKeyDown', handler => handler(editor.view, new KeyboardEvent('keydown', { key: 'Backspace', keyCode: 8, bubbles: true })));
 describe('block color defaults and independent inline color', () => {
+  it('keeps colored blocks readable across themes without persisting or overriding explicit text colors', async () => {
+    for (const background of [...BACKGROUND_COLORS.map(item => item.color).filter(color => color !== null), '#000000', '#ffffff', '#777777']) {
+      expect(contrastRatio(readableBlockText(background), background)).toBeGreaterThanOrEqual(4.5);
+    }
+    const editor = create('<h2 data-block-background="#bfdbfe">Title <span data-text-color="#dc2626">red</span></h2>');
+    try {
+      const heading = editor.view.dom.querySelector('h2')!;
+      expect(heading.style.color).toBe('rgb(24, 32, 43)');
+      expect(heading.querySelector('span')!.style.color).toBe('rgb(220, 38, 38)');
+      expect(editor.state.doc.firstChild!.attrs.blockTextColor).toBeNull();
+      const restored = create(editor.getHTML());
+      try { expect(restored.state.doc.toJSON()).toEqual(editor.state.doc.toJSON()); } finally { restored.destroy(); }
+      const exported = await renderDocument('', 'test', '', undefined, editor.state.doc);
+      expect(exported.html).toContain('data-block-auto-text');
+      setBlockColors(editor, 0, { color: '#7c3aed' });
+      expect(editor.view.dom.querySelector('h2')!.style.color).toBe('rgb(124, 58, 237)');
+    } finally { editor.destroy(); }
+  });
   it('colors the full list item, preserves explicit text marks, and has one undo without moving the caret', () => {
     const editor = create('<ul><li><p>one <span data-text-color="#dc2626"><mark data-color="#fef08a">word</mark></span></p></li><li><p>two</p></li></ul>');
     try {

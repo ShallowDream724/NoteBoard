@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { ALERT_META, alertKind, type AlertKind } from './alertPresentation';
-import { documentColor } from '../document-style/colors';
+import { documentColor, readableBlockText } from '../document-style/colors';
 
 export type CalloutAttributes = {
   kind: AlertKind;
@@ -60,10 +60,7 @@ export const calloutSvgIcon = (attrs: Record<string, unknown>) => {
 };
 export function calloutStyle(attrs: Record<string, unknown>): CSSProperties {
   const value = calloutAttributes(attrs);
-  const channels = value.backgroundColor?.slice(1).match(/../g)?.map(channel => {
-    const component = parseInt(channel, 16) / 255; return component <= .04045 ? component / 12.92 : ((component + .055) / 1.055) ** 2.4;
-  });
-  const autoText = channels ? .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2] > .179 ? '#18202b' : '#f8fafc' : null;
+  const autoText = value.backgroundColor ? readableBlockText(value.backgroundColor) : null;
   const text = value.textColor ?? autoText;
   return {
     '--callout-accent': `var(--alert-${value.kind}-border, ${ALERT_META[value.kind].color})`,

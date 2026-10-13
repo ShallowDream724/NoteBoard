@@ -1,6 +1,6 @@
 {
   "name": "noteboard",
-  "version": "1.0.3",
+  "version": "1.0.4-preview.1",
   "description": "Windows 桌面笔记 + 画板软件",
   "type": "module",
   "license": "GPL-3.0-only",
@@ -89,6 +89,7 @@
     "@tiptap/react": "^3.30.1",
     "@tiptap/starter-kit": "^3.30.1",
     "@tiptap/suggestion": "^3.30.1",
+    "dompurify": "3.4.13",
     "hast-util-to-html": "^9.0.5",
     "highlight.js": "^11.11.1",
     "jszip": "^3.10.1",

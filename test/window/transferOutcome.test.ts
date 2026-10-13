@@ -33,7 +33,7 @@ vi.mock('@/features/session/closedWindowSession', async () => {
     },
   };
 });
-vi.mock('@/features/staging/stagingManager', () => ({
+vi.mock('@/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(),
   onDocumentSaved: vi.fn().mockResolvedValue(undefined),
   stashPendingDocuments: vi.fn(),
   getStagedPath: vi.fn(),
@@ -45,6 +45,7 @@ import { moveToNewWindow } from '@/features/window/windowManager';
 import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import { resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
+import { registerBookmarkPersistence, resetBookmarkStorage } from '@/features/bookmarks/storage';
 
 const KEY = 'C:\\t\\transfer.md';
 
@@ -72,10 +73,23 @@ describe('🔴 N01 迁移终态判别（waitForTransferOutcome）', () => {
     useWindowStore.setState({ tabs: [], activeKey: null, transferringKeys: [], pendingCloseKeys: [] });
     useDocumentStore.setState({ documents: new Map() });
     resetEditorRegistryForTest();
+    resetBookmarkStorage();
   });
   afterEach(async () => {
     await settleMicrotasks();
     vi.useRealTimers();
+  });
+
+  it('书签尚未持久化时保留源文档并解除迁移保护', async () => {
+    seed('only-copy');
+    const release = registerBookmarkPersistence(KEY, () => false);
+    try {
+      expect(await moveToNewWindow(KEY)).toBe(false);
+      expect(ipc.beginDocumentTransfer).not.toHaveBeenCalled();
+      expect(useDocumentStore.getState().getDocument(KEY)?.content).toBe('only-copy');
+      expect(useWindowStore.getState().getTab(KEY)).not.toBeNull();
+      expect(useWindowStore.getState().isTransferring(KEY)).toBe(false);
+    } finally { release(); }
   });
 
   it('超时 abort 被 committed 抢占拒绝（返回 committed）→ 按提交成功清理源', async () => {

@@ -160,6 +160,7 @@ export function NumberingControl({ editor, disabled, active, actionLabel = '有�
     if (draft.current.update(Number(start))) done();
   };
   const inputKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { finishDraft(); return; }
     event.stopPropagation();
     if (event.key === 'Escape') { event.preventDefault(); finishDraft(true); done(); }
@@ -178,11 +179,11 @@ export function NumberingControl({ editor, disabled, active, actionLabel = '有�
       </Popover.Trigger>}
     </div>
     <Popover.Portal container={portal}><Popover.Content role="menu" aria-label="有序列表选项" className="nb-numbering-menu" side={variant === 'block' || variant === 'overflow' ? 'right' : 'bottom'} align="start" sideOffset={6} collisionPadding={10}
-      {...hover.contentProps} onPointerLeave={() => { if (document.activeElement !== input.current) hover.leave(); }}
+      {...hover.contentProps}
       onPointerDown={event => { event.stopPropagation(); if (!(event.target instanceof HTMLInputElement)) event.preventDefault(); }}
       onMouseDown={event => event.stopPropagation()} onOpenAutoFocus={hover.onOpenAutoFocus} onCloseAutoFocus={event => event.preventDefault()}
-      onEscapeKeyDown={event => { event.preventDefault(); finishDraft(true); done(); }}>
-      <HoverMenuContext.Provider value={hover}>
+      onEscapeKeyDown={event => { event.preventDefault(); if (!event.isComposing && event.keyCode !== 229) { finishDraft(true); done(); } }}>
+      <HoverMenuContext.Provider value={{ ...hover, escape: () => { finishDraft(true); done(); } }}>
         {context && <>
           <ContinueNumberingAction context={context} onApply={() => apply(continueNumbering)}/>
           <div className={`nb-numbering-row nb-numbering-restart${!context.available ? ' is-disabled' : ''}`} role="group" aria-label="重新编号">

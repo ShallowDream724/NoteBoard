@@ -30,6 +30,8 @@ import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
 import { renderMermaidSvg } from './mermaidRenderer';
+import { PlantUmlOnlinePreview } from '../plantuml/PlantUmlOnlinePreview';
+import { useEditorActive } from '../../core/editor/EditorActivityContext';
 
 interface DiagramSplitEditorProps {
   docKey: string;
@@ -38,6 +40,9 @@ interface DiagramSplitEditorProps {
 type LayoutMode = 'split' | 'code' | 'preview';
 
 export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
+  const active = useEditorActive();
+  const [onlinePreviewKey, setOnlinePreviewKey] = useState<string | null>(null);
+  const onlinePreview = onlinePreviewKey === docKey;
   const doc = useDocumentStore((s) => s.documents.get(docKey));
   const setContent = useDocumentStore((s) => s.setContent);
   const setDirty = useDocumentStore((s) => s.setDirty);
@@ -60,6 +65,10 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   const editorViewRef = useRef<EditorView | null>(null);
   const renderTokenRef = useRef(0);
   const renderAbortRef = useRef<AbortController | null>(null);
+  const sourceCodeRef = useRef(''), renderedCodeRef = useRef(''), renderedDocumentRef = useRef('');
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => { setOnlinePreviewKey(null); return () => resizeCleanupRef.current?.(); }, [docKey]);
+  useEffect(() => { if (!active || layoutMode !== 'split') resizeCleanupRef.current?.(); if (!active) setIsDragging(false); }, [active, layoutMode]);
 
   // 🔴 S12：布局/预览状态 ref 镜像（回收捕获读取最新值）+ 能力注册 + 重挂载恢复
   const extraStateRef = useRef({ layoutMode: 'split' as LayoutMode, zoom: 1, pan: { x: 0, y: 0 } });
@@ -104,6 +113,8 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
 
   // 处理分隔条鼠标拖拽调整左右分栏比例
   const handleResizerMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    resizeCleanupRef.current?.();
     e.preventDefault();
     setIsResizing(true);
 
@@ -119,10 +130,14 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
       setIsResizing(false);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      resizeCleanupRef.current = null;
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+    resizeCleanupRef.current = handleMouseUp;
   };
 
   // 渲染图表
@@ -131,7 +146,9 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
       renderAbortRef.current?.abort();
       const controller = new AbortController(); renderAbortRef.current = controller;
       const token = ++renderTokenRef.current;
-      const trimmed = code.trim();
+      const trimmed = code.trim(); sourceCodeRef.current = trimmed;
+      if (renderedCodeRef.current !== trimmed || renderedDocumentRef.current !== docKey) setSvgContent('');
+      if (!active || layoutMode === 'code') { setIsRendering(false); return; }
       if (!trimmed) {
         setSvgContent('');
         setRenderError(null);
@@ -139,31 +156,35 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
         return;
       }
 
-      setIsRendering(true);
+      setIsRendering(diagramType !== 'plantuml' || onlinePreview);
       setRenderError(null);
+      setSvgContent('');
 
       try {
         if (diagramType === 'mermaid') {
           const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
           const svg = await renderMermaidSvg(trimmed, isDark ? 'dark' : 'default', controller.signal);
           if (token === renderTokenRef.current) {
+            renderedCodeRef.current = trimmed; renderedDocumentRef.current = docKey;
             setSvgContent(svg);
           }
         } else {
           // PlantUML
-          const result = await renderPlantUmlToSvg(trimmed, controller.signal);
+          const result = await renderPlantUmlToSvg(trimmed, controller.signal, { allowNetwork: onlinePreview });
           if (token === renderTokenRef.current) {
-            if (result.error && !result.svg) {
+            if (result.permissionRequired || !onlinePreview && !result.svg) { setRenderError(null); setSvgContent(''); }
+            else if (result.error && !result.svg) {
               setRenderError(result.error);
               setSvgContent('');
             } else {
+              if (!result.error) { renderedCodeRef.current = trimmed; renderedDocumentRef.current = docKey; }
               setSvgContent(result.svg);
               if (result.error) setRenderError(result.error);
             }
           }
         }
       } catch (err) {
-        if (token === renderTokenRef.current) {
+        if (token === renderTokenRef.current && !controller.signal.aborted) {
           setRenderError(err instanceof Error ? err.message : String(err));
         }
       } finally {
@@ -172,8 +193,9 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
         }
       }
     },
-    [diagramType],
+    [diagramType, onlinePreview, active, layoutMode, docKey],
   );
+  const renderDiagramRef = useRef(renderDiagram); renderDiagramRef.current = renderDiagram;
 
   // 初始化 CodeMirror 6 编辑器
   useEffect(() => {
@@ -198,7 +220,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
             setContent(docKey, newText);
             setDirty(docKey, true);
             setTabDirty(docKey, true);
-            renderDiagram(newText);
+            void renderDiagramRef.current(newText);
           }
         }),
         EditorView.theme({
@@ -231,7 +253,6 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
     });
 
     editorViewRef.current = view;
-    renderDiagram(initialContent);
 
     return () => {
       renderAbortRef.current?.abort(); renderTokenRef.current++;
@@ -239,6 +260,11 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
       editorViewRef.current = null;
     };
   }, [docKey]);
+
+  useEffect(() => {
+    void renderDiagram(editorViewRef.current?.state.doc.toString() ?? doc?.content ?? '');
+    return () => { renderAbortRef.current?.abort(); renderTokenRef.current++; };
+  }, [docKey, renderDiagram]);
 
   // 当 layoutMode 或 splitRatio 改变时，通知 CodeMirror 立即重新测量布局尺寸
   useEffect(() => {
@@ -248,7 +274,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   }, [layoutMode, splitRatio]);
 
   // 导出来源：只有渲染出 SVG 后复制/导出才可用
-  const exportSource: ChartImageSource | null = svgContent ? { kind: 'svg', svg: svgContent } : null;
+  const exportSource: ChartImageSource | null = svgContent && !renderError && renderedDocumentRef.current === docKey && renderedCodeRef.current === sourceCodeRef.current ? { kind: 'svg', svg: svgContent } : null;
   const exportFileName = buildExportFileName(doc?.displayName, diagramType);
 
   // 画布鼠标拖拽平移
@@ -511,6 +537,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
           onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
         >
+            {diagramType === 'plantuml' && <PlantUmlOnlinePreview enabled={onlinePreview} onChange={enabled => setOnlinePreviewKey(enabled ? docKey : null)}/>}
             {/* 错误提示条 */}
             {renderError && (
               <div
@@ -563,7 +590,8 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
                 />
               ) : (
                 <div style={{ color: 'var(--editor-text-muted, #94a3b8)', fontSize: 13, textAlign: 'center' }}>
-                  {renderError ? '图表语法有误，请修正代码' : '输入图表代码即可在右侧实时预览'}
+                  {renderError ? '预览未完成，可修正源码或重试。' : diagramType === 'plantuml' && !onlinePreview ? '可继续编辑源码，启用在线预览后查看图表。' : '输入图表代码即可在右侧实时预览'}
+                  {renderError && <button type="button" className="nb-editor-toolbar-btn" style={{ display: 'block', margin: '8px auto' }} onClick={() => void renderDiagram(editorViewRef.current?.state.doc.toString() ?? '')}>重试预览</button>}
                 </div>
               )}
             </div>

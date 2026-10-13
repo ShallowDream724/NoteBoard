@@ -1,4 +1,5 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { validateDocumentImageAsset } from '../../core/documentImageSource';
 
 const mimeByExtension: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
@@ -38,8 +39,12 @@ async function dataUrl(bytes: Uint8Array, path: string, signal?: AbortSignal): P
 }
 
 /** Read each original once, sequentially, so only one source byte buffer is live. */
-export async function portableHtmlAssetUrls(paths: string[], signal?: AbortSignal): Promise<string[]> {
+export async function portableHtmlAssetUrls(paths: string[], signal?: AbortSignal,
+  context: { references?: string[]; directory: string } = { directory: '' }): Promise<string[]> {
   signal?.throwIfAborted();
+  if (paths.some((path, index) => !validateDocumentImageAsset(path, context.references?.[index] ?? path, context.directory))) {
+    throw new Error('网络共享图片未获准自动加载');
+  }
   const urls = new Map<string, string>();
   for (const path of paths) {
     signal?.throwIfAborted();

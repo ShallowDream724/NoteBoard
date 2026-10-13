@@ -213,7 +213,6 @@ export function ToolbarDropdown({
             display: 'flex',
             flexDirection: 'column',
             gap: 1,
-            animation: 'nb-fade-in 120ms ease-out',
             ...style,
           }}
         >
@@ -327,6 +326,7 @@ export function ToolbarDropdownItem({
       role="menuitem" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
       aria-haspopup={hasSubmenu ? 'menu' : undefined} aria-expanded={hasSubmenu ? submenuOpen : undefined}
       data-nb-menu-branch={hover.branch}
+      data-nb-menu-trigger={hasSubmenu ? hover.triggerProps['data-nb-menu-trigger'] : undefined}
       onKeyDown={event => {
         if (disabled) return;
         if (hasSubmenu && ['ArrowRight', 'Enter', ' '].includes(event.key)) {
@@ -407,7 +407,6 @@ export function ToolbarDropdownItem({
             display: 'flex',
             flexDirection: 'column',
             gap: 1,
-            animation: 'nb-fade-in 100ms ease-out',
           }}
         >
           {/* 透明悬停连桥：覆盖父子菜单间隙，确保鼠标移动不会产生盲区 */}

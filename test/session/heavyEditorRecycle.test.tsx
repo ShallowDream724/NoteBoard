@@ -226,7 +226,7 @@ describe('🔴 S12 重型编辑器回收等价', () => {
     }
   });
 
-  it('Drawio：引擎未就绪时不可回收；close 场景 flush 以最近镜像为权威', async () => {
+  it('Drawio：未启用在线编辑可按本地内容回收；启用但未就绪时保护实例', async () => {
     const key = 'C:/t/recycle.drawio';
     useDocumentStore.getState().upsertFromPayload({
       key, displayName: 'recycle.drawio', dirPath: 'C:/t', kind: 'drawio', language: 'xml',
@@ -241,8 +241,19 @@ describe('🔴 S12 重型编辑器回收等价', () => {
     try {
       const capabilities = getEditorCapabilities(key);
       expect(capabilities).not.toBeNull();
-      // 🔴 引擎未就绪（iframe 未加载成功）——不可回收（保守）
+      // 未启用在线编辑时没有远程草稿，现有本地 XML 可完整恢复。
+      expect(container.querySelector('iframe')).toBeNull();
+      expect(capabilities!.canSuspend()).toBe(true);
+      expect((await capabilities!.flush('evict'))?.content).toBe('<mxfile><diagram/></mxfile>');
+      expect(await suspendEditorInstance(key)).toBe(true);
+
+      const enable = Array.from(container.querySelectorAll('button')).find(button => button.textContent === '启用在线编辑');
+      expect(enable).toBeDefined();
+      act(() => { enable!.click(); });
+      expect(container.querySelector('iframe')).not.toBeNull();
+      // 已启用但未收到 init 的引擎不能提供当前 XML，继续拒绝回收。
       expect(capabilities!.canSuspend()).toBe(false);
+      expect(await capabilities!.flush('evict')).toBeNull();
       expect(await suspendEditorInstance(key)).toBe(false);
       // close 场景（iframe 即将销毁）：以最近 autosave 镜像为权威（不等回包）
       const captured = await capabilities!.flush('close');

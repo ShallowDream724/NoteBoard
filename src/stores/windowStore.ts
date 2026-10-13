@@ -29,6 +29,13 @@ import {
   releaseSessionAfterClosing,
 } from '../features/session/documentSession';
 import { markClosed } from '../features/session/editorSuspension';
+import { flushDocumentBookmarks, relinquishDocumentBookmarks, setOpenBookmarkDocuments } from '../features/bookmarks/storage';
+import { getEditorCapabilities } from '../core/editor/editorRegistry';
+
+function finishBookmarkPersistence(key: string): void {
+  flushDocumentBookmarks(key);
+  relinquishDocumentBookmarks(key);
+}
 
 export interface Tab {
   /** 唯一 ID（用文件路径规范化 key） */
@@ -230,6 +237,8 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   closeTab: (key, reason = 'closed') => {
     if (get().isTransferring(key) && reason !== 'transferred') return;
+    if (reason === 'transferred') relinquishDocumentBookmarks(key);
+    else finishBookmarkPersistence(key);
     set((state) => {
       const idx = state.tabs.findIndex((t) => t.key === key);
       if (idx < 0) return {};
@@ -254,6 +263,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     if (get().transferringKeys.length) return;
     const { tabs } = get();
     const removedKeys = tabs.filter((t) => t.key !== key).map((t) => t.key);
+    removedKeys.forEach(finishBookmarkPersistence);
     set((state) => ({
       tabs: state.tabs.filter((t) => t.key === key),
       activeKey: key,
@@ -269,6 +279,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx <= 0) return;
     const removedKeys = tabs.slice(0, idx).map((t) => t.key);
+    removedKeys.forEach(finishBookmarkPersistence);
     set((state) => {
       const newTabs = state.tabs.slice(idx);
       let newActive = state.activeKey;
@@ -287,6 +298,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx < 0) return;
     const removedKeys = tabs.slice(idx + 1).map((t) => t.key);
+    removedKeys.forEach(finishBookmarkPersistence);
     set((state) => {
       const newTabs = state.tabs.slice(0, idx + 1);
       let newActive = state.activeKey;
@@ -303,6 +315,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     if (get().transferringKeys.length) return;
     const { tabs } = get();
     const removedKeys = tabs.map((t) => t.key);
+    removedKeys.forEach(finishBookmarkPersistence);
     set({ tabs: [], activeKey: null });
     removedKeys.forEach((k) => disposeTabLifecycle(k));
   },
@@ -315,7 +328,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     if (!target) return;
     // 🔴 迁移保护中的文档不能关闭（迁移未提交前不能销毁源内容）
     if (get().isTransferring(key)) return;
-    if (target.isDirty) {
+    if (target.isDirty || getEditorCapabilities(key)?.hasExplicitDraft?.()) {
       set({ pendingCloseKeys: [key], isWindowClosing: false });
     } else {
       closeTab(key);
@@ -325,7 +338,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
   requestCloseOther: (key) => {
     const { tabs, closeOtherTabs } = get();
     const targetTabs = tabs.filter((t) => t.key !== key);
-    const hasDirty = targetTabs.some((t) => t.isDirty);
+    const hasDirty = targetTabs.some((t) => t.isDirty || getEditorCapabilities(t.key)?.hasExplicitDraft?.());
     if (hasDirty) {
       set({ pendingCloseKeys: targetTabs.map((t) => t.key), isWindowClosing: false });
     } else {
@@ -338,7 +351,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx <= 0) return;
     const targetTabs = tabs.slice(0, idx);
-    const hasDirty = targetTabs.some((t) => t.isDirty);
+    const hasDirty = targetTabs.some((t) => t.isDirty || getEditorCapabilities(t.key)?.hasExplicitDraft?.());
     if (hasDirty) {
       set({ pendingCloseKeys: targetTabs.map((t) => t.key), isWindowClosing: false });
     } else {
@@ -351,7 +364,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     const idx = tabs.findIndex((t) => t.key === key);
     if (idx < 0 || idx >= tabs.length - 1) return;
     const targetTabs = tabs.slice(idx + 1);
-    const hasDirty = targetTabs.some((t) => t.isDirty);
+    const hasDirty = targetTabs.some((t) => t.isDirty || getEditorCapabilities(t.key)?.hasExplicitDraft?.());
     if (hasDirty) {
       set({ pendingCloseKeys: targetTabs.map((t) => t.key), isWindowClosing: false });
     } else {
@@ -361,7 +374,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   requestCloseAll: () => {
     const { tabs, closeAllTabs } = get();
-    const hasDirty = tabs.some((t) => t.isDirty);
+    const hasDirty = tabs.some((t) => t.isDirty || getEditorCapabilities(t.key)?.hasExplicitDraft?.());
     if (hasDirty) {
       set({ pendingCloseKeys: tabs.map((t) => t.key), isWindowClosing: false });
     } else {
@@ -511,6 +524,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   confirmCloseBatch: (keys) => {
     if (keys.some(key => get().isTransferring(key))) return;
+    keys.forEach(finishBookmarkPersistence);
     set((state) => {
       const newTabs = state.tabs.filter((t) => !keys.includes(t.key));
       let newActive = state.activeKey;
@@ -564,3 +578,9 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
 
   isTransferring: (key) => get().transferringKeys.includes(key),
 }));
+
+// Only lightweight tab identities are retained; source-first tabs never need
+// a hidden visual editor merely to protect their local navigation metadata.
+useWindowStore.subscribe((state, previous) => {
+  if (state.tabs !== previous.tabs) setOpenBookmarkDocuments(state.tabs.map(tab => tab.key));
+});

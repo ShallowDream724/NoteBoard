@@ -30,6 +30,6 @@ table.nb-isolated-rows>tbody>tr>:is(td,th)+:is(td,th) { border-left-width:0; }
 .nb-row-resize-guide { position: fixed; left: 0; top: 0; height: 4px; background: var(--accent-500, #3b82f6); pointer-events: none; z-index: 20; }
 .nb-prose :is(td, th) { --math-white-space: normal; }
 .nb-prose .math-node-display { --math-white-space: nowrap; }
-.nb-prose :is(td, th) :is(p, a) { word-break: normal; overflow-wrap: break-word; }
+.nb-prose :is(td, th) :is(p, a) { word-break: normal; overflow-wrap: anywhere; }
 .nb-prose :is(td, th) .math-node > span { max-width: 100%; }
 .nb-prose :is(td, th) .math-preview { width: auto !important; min-width: 0 !important; max-width: 100%; }

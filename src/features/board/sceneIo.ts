@@ -141,6 +141,13 @@ export function parseScene(json: string): ExcalidrawScene {
     data.appState = cleanAppState(data.appState);
   }
   if (!data.files) data.files = {};
+  // Excalidraw assigns dataURL directly to Image.src. A scene's embedded binary
+  // field cannot be an asset URL or a file/network reference, even in a share.
+  for (const file of Object.values(data.files)) {
+    if (!file || typeof file.dataURL !== 'string' || !/^data:image\/[a-z0-9.+-]+(?:;[^,]*)?,/i.test(file.dataURL)) {
+      throw new Error('画板包含非内嵌图片资源，已停止加载以保留原文件。');
+    }
+  }
 
   return data;
 }

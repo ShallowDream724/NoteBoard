@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
+import { Fragment } from '@tiptap/pm/model';
 import { CellSelection } from '@tiptap/pm/tables';
-import { Plugin, TextSelection } from '@tiptap/pm/state';
+import { EditorState, Plugin, TextSelection } from '@tiptap/pm/state';
 import { buildDocumentExtensions, materializeDocument, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { MarkdownTable } from '../../src/features/editor-md/markdownTable';
 import { ResizableTableRow } from '../../src/features/editor-md/tableSizing';
 import { EfficientTableView } from '../../src/features/editor-md/tableView';
-import { TableViewport, tableViewportKey } from '../../src/features/editor-md/tableViewport';
+import { createTableViewportPlugin, TableViewport, tableViewportKey } from '../../src/features/editor-md/tableViewport';
 import { EditableTableCell, EditableTableHeader } from '../../src/features/editor-md/tableCellView';
+import { hasSimpleTableRows } from '../../src/features/editor-md/tableRowLayout';
 
 function create(rows: number, merged = false) {
   return new Editor({ extensions: [
@@ -26,6 +28,97 @@ function positions(editor: Editor) {
 }
 
 describe('large table viewport', () => {
+  it('reuses the table index after an unrelated paragraph edit without scanning document descendants or table cells', () => {
+    const editor = create(1000), plugin = createTableViewportPlugin();
+    try {
+      const before = tableViewportKey.getState(editor.state)!;
+      const tr = editor.state.tr.insertText('tail', editor.state.doc.content.size - 1);
+      const state = EditorState.create({ schema: editor.schema, doc: tr.doc, selection: tr.selection });
+      const descendants = vi.spyOn(tr.doc, 'descendants'), cells = vi.spyOn(tr.doc.firstChild!, 'forEach');
+      const next = plugin.spec.state!.apply(tr, before, editor.state, state);
+      expect(next.rows).toBe(before.rows);
+      expect(next.tables.get(0)).toBe(before.tables.get(0));
+      expect(descendants).not.toHaveBeenCalled(); expect(cells).not.toHaveBeenCalled();
+      descendants.mockRestore(); cells.mockRestore();
+    } finally { editor.destroy(); }
+  });
+  it('checks only changed immutable row cells when a table is edited', () => {
+    const editor = create(1000);
+    try {
+      const before = editor.state.doc.firstChild!, unchanged = before.child(800);
+      expect(hasSimpleTableRows(before)).toBe(true);
+      const tr = editor.state.tr.insertText('edited', positions(editor)[700] + 3);
+      const next = tr.doc.firstChild!, oldCells = vi.spyOn(unchanged, 'forEach');
+      expect(hasSimpleTableRows(next)).toBe(true); expect(oldCells).not.toHaveBeenCalled();
+      oldCells.mockRestore();
+      const merged = next.child(700).child(0).type.create({ colspan: 2 }, next.child(700).child(0).content);
+      const row = next.child(700).copy(Fragment.from(merged));
+      const rows = next.content.content.slice(); rows[700] = row;
+      expect(hasSimpleTableRows(next.copy(Fragment.fromArray(rows)))).toBe(false);
+    } finally { editor.destroy(); }
+  });
+  it('retains the row index when only table alignment changes', () => {
+    const editor = create(1000), plugin = createTableViewportPlugin();
+    try {
+      const before = tableViewportKey.getState(editor.state)!;
+      const tr = editor.state.tr.setNodeAttribute(0, 'tableAlign', 'right');
+      const state = EditorState.create({ schema: editor.schema, doc: tr.doc, selection: tr.selection });
+      const rows = vi.spyOn(tr.doc.firstChild!, 'forEach');
+      const next = plugin.spec.state!.apply(tr, before, editor.state, state);
+      expect(next.rows).toBe(before.rows); expect(rows).not.toHaveBeenCalled();
+      expect(next.tables.get(0)?.node).toBe(tr.doc.firstChild);
+      rows.mockRestore();
+    } finally { editor.destroy(); }
+  });
+  it('discovers a newly qualifying table and removes its viewport index when it becomes small', () => {
+    const editor = create(99);
+    try {
+      expect(tableViewportKey.getState(editor.state)?.rows.size).toBe(0);
+      const table = editor.state.doc.firstChild!, row = table.firstChild!;
+      editor.view.dispatch(editor.state.tr.insert(table.nodeSize - 1, row));
+      expect(tableViewportKey.getState(editor.state)?.rows.size).toBe(100);
+      const last = positions(editor)[99];
+      editor.view.dispatch(editor.state.tr.delete(last, last + row.nodeSize));
+      expect(tableViewportKey.getState(editor.state)?.rows.size).toBe(0);
+      expect(tableViewportKey.getState(editor.state)?.decorations.find()).toHaveLength(0);
+    } finally { editor.destroy(); }
+  });
+  it('discovers an unindexed table when an empty-map attribute step removes its last span', () => {
+    const editor = create(120), plugin = createTableViewportPlugin();
+    try {
+      const original = editor.state.doc.firstChild!, first = original.firstChild!;
+      const cells = first.content.content.slice();
+      cells[0] = cells[0].type.create({ ...cells[0].attrs, colspan: 2 }, cells[0].content);
+      const rows = original.content.content.slice(); rows[0] = first.copy(Fragment.fromArray(cells));
+      const table = original.copy(Fragment.fromArray(rows));
+      const doc = editor.state.doc.copy(Fragment.fromArray([table, editor.schema.nodes.paragraph.create()]));
+      const state = EditorState.create({ schema: editor.schema, doc });
+      const before = plugin.spec.state!.init({}, state); expect(before.rows.size).toBe(0);
+      const tr = state.tr.setNodeAttribute(2, 'colspan', 1);
+      let mappedRanges = 0; tr.mapping.maps[0].forEach(() => { mappedRanges++; });
+      expect(mappedRanges).toBe(0);
+      const next = EditorState.create({ schema: editor.schema, doc: tr.doc, selection: tr.selection });
+      expect(plugin.spec.state!.apply(tr, before, state, next).rows.size).toBe(120);
+    } finally { editor.destroy(); }
+  });
+  it('drops a tracked table when it moves into an annotation store owned by a separate editor', () => {
+    const editor = create(100), plugin = createTableViewportPlugin();
+    try {
+      const before = tableViewportKey.getState(editor.state)!;
+      expect(before.rows.size).toBe(100);
+      const end = editor.state.doc.firstChild!.nodeSize;
+      const range = editor.state.doc.resolve(0).blockRange(editor.state.doc.resolve(end))!;
+      const tr = editor.state.tr.wrap(range, [
+        { type: editor.schema.nodes.annotationStore },
+        { type: editor.schema.nodes.annotationBody, attrs: { id: 'annotation-table' } },
+      ]);
+      const state = EditorState.create({ schema: editor.schema, doc: tr.doc, selection: tr.selection });
+      const next = plugin.spec.state!.apply(tr, before, editor.state, state);
+      expect(next.rows.size).toBe(0); expect(next.tables.size).toBe(0);
+      expect(next.decorations.find()).toHaveLength(0);
+      expect(plugin.spec.state!.init({}, state).rows.size).toBe(next.rows.size);
+    } finally { editor.destroy(); }
+  });
   it('keeps small and merged tables fully editable', () => {
     for (const [count, merged] of [[10, false], [120, true]] as const) {
       const editor = create(count, merged);

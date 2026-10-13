@@ -7,7 +7,7 @@
 //   3. 超链接弹窗、右键菜单、气泡菜单等 visual 专属 UI 全部内聚在本组件。
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useEditorActive } from '../../core/editor/EditorActivityContext';
+import { EditorActivityContext, useEditorActive } from '../../core/editor/EditorActivityContext';
 import { EditorContent, useEditor } from '@tiptap/react';
 import type { Editor } from '@tiptap/core';
 import { undoDepth as prosemirrorUndoDepth } from '@tiptap/pm/history';
@@ -40,6 +40,7 @@ import { registerHistoryMaterializeHook } from '../history/documentHistory';
 import { saveViewState } from '../session/editorSuspension';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { setMathPreviewSessionActive } from './mathPreviewSession';
+import { setBlockBoundaryActive } from './blockBoundary';
 import { transactionStart } from './transactionStart';
 import { selectContextMenuTarget } from './contextMenuSelection';
 
@@ -207,7 +208,8 @@ export function VisualKernel({
     if (!editor) return;
     const owner = editor.view.dom;
     setMathPreviewSessionActive(owner, active && visible);
-    return () => setMathPreviewSessionActive(owner, false);
+    setBlockBoundaryActive(editor.view, active && visible);
+    return () => { setMathPreviewSessionActive(owner, false); setBlockBoundaryActive(editor.view, false); };
   }, [editor, active, visible]);
 
   // 🔴 J2 的合并序列化已按复审要求重做：输入热路径只暂存不可变快照（O(1)），
@@ -438,7 +440,9 @@ export function VisualKernel({
           onRemove={handleRemoveLink}
         />
       )}
-      <EditorContent editor={editor} className="nb-document-content" style={{ minHeight: '100%' }} />
+      <EditorActivityContext.Provider value={active && visible}>
+        <EditorContent editor={editor} className="nb-document-content" style={{ minHeight: '100%' }} />
+      </EditorActivityContext.Provider>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // 详见 docs/09-开发路线图.md
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, FileCode, RefreshCw, WifiOff } from 'lucide-react';
+import { Download, FileCode, RefreshCw, WifiOff, Globe } from 'lucide-react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { showToast } from '../../stores/toastStore';
@@ -16,7 +16,7 @@ import {
   getDocumentRevision,
   bumpDocumentRevision,
 } from '../../core/editor/editorRegistry';
-import { submitCapturedContent } from '../session/documentSession';
+import { getSessionGeneration, submitCapturedContent } from '../session/documentSession';
 import type { EditorCapabilities, FlushReason } from '../../core/editor/editorTypes';
 import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
 
@@ -26,6 +26,7 @@ interface DrawioEditorProps {
 
 /** 🔴 S12：实例代际序号（同 docKey 重挂载递增；注册表删除保护） */
 let nextDrawioInstanceId = 0;
+const DRAWIO_ORIGIN = 'https://embed.diagrams.net';
 
 const DEFAULT_DRAWIO_XML = `<mxfile host="NoteBoard" modified="${new Date().toISOString()}" agent="NoteBoard" version="0.1.3" etag="noteboard">
   <diagram id="diagram_1" name="第 1 页">
@@ -42,12 +43,20 @@ const DEFAULT_DRAWIO_XML = `<mxfile host="NoteBoard" modified="${new Date().toIS
 </mxfile>`;
 
 export function DrawioEditor({ docKey }: DrawioEditorProps) {
-  const doc = useDocumentStore((s) => s.documents.get(docKey));
+  // Consent, iframe identity and asynchronous requests belong to one document
+  // view. A different key mounts a fresh session before any message is handled.
+  return <DrawioSession key={docKey} docKey={docKey} />;
+}
+
+function DrawioSession({ docKey }: DrawioEditorProps) {
   const setContent = useDocumentStore((s) => s.setContent);
-  const setDirty = useDocumentStore((s) => s.setDirty);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [onlineEnabled, setOnlineEnabled] = useState(false);
+  const onlineEnabledRef = useRef(false);
+  const [reloadAttempt, setReloadAttempt] = useState(0);
+  const generation = useRef(getSessionGeneration(docKey));
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   // 🔴 S12：能力对象（canSuspend/flush 回包判断）需要的同步镜像
@@ -64,6 +73,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
     resolve: (xml: string | null) => void;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const pendingImageExportRef = useRef<{ requestId: string; format: 'svg' | 'png'; timer: ReturnType<typeof setTimeout> } | null>(null);
   /** 导出请求序号（单调递增；每个请求持有唯一 ID） */
   const nextExportRequestIdRef = useRef(0);
   const docKeyRef = useRef(docKey);
@@ -105,7 +115,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
         },
       };
       // 官方 XML 导出在 msg.message 回传该对象，在 msg.xml 回传正文；不能假定响应按序到达。
-      win.postMessage(JSON.stringify({ action: 'export', format: 'xml', requestId }), '*');
+      win.postMessage(JSON.stringify({ action: 'export', format: 'xml', requestId }), DRAWIO_ORIGIN);
     });
   };
 
@@ -119,9 +129,10 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
       getRevision: () => getDocumentRevision(docKey),
       flush: async (reason: FlushReason) => {
         const key = docKeyRef.current;
+        if (getSessionGeneration(key) !== generation.current) return null;
         const current = useDocumentStore.getState().getDocument(key)?.content;
         // close：iframe 即将销毁，不再等待回包——直接以最近 autosave 镜像为权威
-        if (reason === 'close') {
+        if (reason === 'close' || !onlineEnabledRef.current) {
           if (current == null) return null;
           return { docKey: key, instanceId, revision: getDocumentRevision(key), content: current };
         }
@@ -129,7 +140,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
         //    恢复能力才允许回收）——超时/未就绪返回 **null**（失败：没有最新内容
         //    证明不回退旧镜像当成功，调用方保守不回收/保留实例）
         const xml = await requestExportXml();
-        if (xml === null) {
+        if (xml === null || getSessionGeneration(key) !== generation.current) {
           return null;
         }
         submitCapturedContent(key, { instanceId, revision: getDocumentRevision(key), content: xml });
@@ -141,37 +152,42 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
       getSelectedText: () => '',
       // 🔴 S12：引擎加载成功且无错误时可回收（内容经 autosave 同步 store +
       //    flush 导出回包双重确认；挂载时从 store XML 重新 load 完整恢复）
-      canSuspend: () => isLoadedRef.current && !loadErrorRef.current,
+      canSuspend: () => !onlineEnabledRef.current || (isLoadedRef.current && !loadErrorRef.current),
     };
     return registerEditorCapabilities(capabilities);
   }, [docKey]);
-
-  // 初始化默认内容（若为空）
-  useEffect(() => {
-    if (!doc?.content?.trim()) {
-      setContent(docKey, DEFAULT_DRAWIO_XML);
-    }
-  }, [docKey, doc?.content, setContent]);
 
   // 获取当前主题
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
   // 构建 Diagrams.net 嵌入 URL（添加 saveAndExit=0&noSaveBtn=1&noExitBtn=1 隐藏内置保存与退出按钮）
-  const embedUrl = `https://embed.diagrams.net/?embed=1&ui=min&spin=1&proto=json&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1${isDark ? '&dark=1' : '&dark=0'}`;
+  const embedUrl = `${DRAWIO_ORIGIN}/?embed=1&ui=min&spin=1&proto=json&libraries=1&saveAndExit=0&noSaveBtn=1&noExitBtn=1${isDark ? '&dark=1' : '&dark=0'}`;
 
   // 监听 Draw.io postMessage 事件
   useEffect(() => {
+    if (!onlineEnabled) return;
+    let active = true;
+    const isCurrent = () => active && getSessionGeneration(docKey) === generation.current;
     let timeoutTimer: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-      if (!isLoaded) {
+      if (isCurrent() && !isLoadedRef.current) {
         setLoadError('加载 Diagrams.net 引擎耗时较长，请检查网络或点击重新加载');
         // 🔴 S12：能力对象同步镜像（canSuspend 立即感知错误态）
         loadErrorRef.current = '加载 Diagrams.net 引擎耗时较长，请检查网络或点击重新加载';
       }
     }, 15000);
+    const frame = iframeRef.current;
+    const handleFrameError = () => {
+      if (!isCurrent()) return;
+      setIsLoaded(false);
+      isLoadedRef.current = false;
+      setLoadError('无法加载 Draw.io 绘图引擎，请检查网络连接');
+      loadErrorRef.current = '无法加载 Draw.io 绘图引擎，请检查网络连接';
+    };
+    frame?.addEventListener('error', handleFrameError);
 
     const handleMessage = async (e: MessageEvent) => {
       // 过滤非目标 iframe 消息
-      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) {
+      if (!isCurrent() || e.origin !== DRAWIO_ORIGIN || !iframeRef.current || e.source !== iframeRef.current.contentWindow) {
         return;
       }
 
@@ -186,7 +202,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
               action: 'configure',
               config: {},
             }),
-            '*',
+            DRAWIO_ORIGIN,
           );
         }
 
@@ -213,22 +229,21 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
               autosave: 1,
               xml,
             }),
-            '*',
+            DRAWIO_ORIGIN,
           );
         }
 
         // 3. 自动保存与手动保存事件
         if (msg.event === 'autosave' || msg.event === 'save') {
-          if (msg.xml) {
+          if (typeof msg.xml === 'string' && useDocumentStore.getState().getDocument(docKey)?.content !== msg.xml) {
             // 🔴 S12：引擎推送的真实内容变化推进 revision（会话屏障校验用）
             bumpDocumentRevision(docKey);
             setContent(docKey, msg.xml);
-            setDirty(docKey, true);
-            setTabDirty(docKey, true);
+            setTabDirty(docKey, useDocumentStore.getState().getDocument(docKey)?.isDirty ?? true);
           }
           if (msg.event === 'save') {
-            await saveDocument(docKey);
-            showToast('Draw.io 图表已保存');
+            const saved = await saveDocument(docKey);
+            if (saved && isCurrent()) showToast('Draw.io 图表已保存');
           }
         }
 
@@ -243,8 +258,15 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
             // 当前官方实现只回 xml；兼容旧服务的 data，但两种字段都必须经过同一请求身份校验。
             const xml = typeof msg.xml === 'string' ? msg.xml : typeof msg.data === 'string' ? msg.data : null;
             pending.resolve(msg.error ? null : xml);
-          } else if (msg.data && msg.format !== 'xml') {
-            const format = msg.format === 'svg' ? 'svg' : 'png';
+          } else {
+            const request = typeof msg.message === 'string' ? JSON.parse(msg.message) : msg.message;
+            const pending = pendingImageExportRef.current;
+            if (!pending || msg.format !== pending.format || request?.action !== 'export'
+              || request?.format !== pending.format || request?.requestId !== pending.requestId) return;
+            clearTimeout(pending.timer);
+            pendingImageExportRef.current = null;
+            if (msg.error || typeof msg.data !== 'string' || !msg.data) return;
+            const format = pending.format;
             let blob: Blob;
             if (typeof msg.data === 'string' && msg.data.startsWith('data:')) {
               const resp = await fetch(msg.data);
@@ -254,8 +276,9 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
             } else {
               blob = new Blob([msg.data], { type: 'image/png' });
             }
+            if (!isCurrent()) return;
 
-            const baseName = buildExportFileName(doc?.displayName, 'drawio');
+            const baseName = buildExportFileName(useDocumentStore.getState().getDocument(docKey)?.displayName, 'drawio');
             const defaultFilename = `${baseName}.${format}`;
             const filters =
               format === 'svg'
@@ -270,7 +293,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
 
             // 唤起系统原生保存文件对话框
             const saved = await exportBlobWithDialog(blob, defaultFilename, filters);
-            if (saved) {
+            if (saved && isCurrent()) {
               showToast(`绘图已成功导出为 ${format.toUpperCase()}`, 'success');
             }
           }
@@ -282,8 +305,11 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
 
     window.addEventListener('message', handleMessage);
     return () => {
+      active = false;
+      isLoadedRef.current = false;
       if (timeoutTimer) clearTimeout(timeoutTimer);
       window.removeEventListener('message', handleMessage);
+      frame?.removeEventListener('error', handleFrameError);
       // 🔴 S12：卸载时终结在途导出请求（不再有回包）
       const pending = pendingExportRef.current;
       if (pending) {
@@ -291,21 +317,27 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
         pendingExportRef.current = null;
         pending.resolve(null);
       }
+      const imageExport = pendingImageExportRef.current;
+      if (imageExport) { clearTimeout(imageExport.timer); pendingImageExportRef.current = null; }
     };
     // 🔴 R3-06：订阅稳定——doc.content/isLoaded 变化不重建消息监听
     //    （此前每次 autosave 都会 cleanup 终结在途导出请求；内容读取改经 getState）
-  }, [docKey, doc?.displayName, setContent, setDirty, setTabDirty]);
+  }, [docKey, onlineEnabled, reloadAttempt, setContent, setTabDirty]);
 
   // 触发导出请求 (SVG 或 PNG)
   const handleRequestExport = (format: 'png' | 'svg') => {
-    if (!iframeRef.current?.contentWindow) return;
+    if (!onlineEnabled || !isLoadedRef.current || !iframeRef.current?.contentWindow || pendingImageExportRef.current) return;
+    const requestId = `${drawioInstanceIdRef.current}:${++nextExportRequestIdRef.current}`;
+    const timer = setTimeout(() => { if (pendingImageExportRef.current?.requestId === requestId) pendingImageExportRef.current = null; }, 30000);
+    pendingImageExportRef.current = { requestId, format, timer };
 
     iframeRef.current.contentWindow.postMessage(
       JSON.stringify({
         action: 'export',
         format,
+        requestId,
       }),
-      '*',
+      DRAWIO_ORIGIN,
     );
   };
 
@@ -339,7 +371,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
           <FileCode size={15} color="var(--editor-accent, #3b82f6)" />
           <span>Draw.io 绘图编辑器</span>
-          {!isLoaded && !loadError && (
+          {onlineEnabled && !isLoaded && !loadError && (
             <span style={{ fontSize: 11, color: 'var(--editor-text-muted)', fontWeight: 400 }}>
               加载引擎中
             </span>
@@ -353,6 +385,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
               type="button"
               onClick={() => handleRequestExport('svg')}
               aria-label="导出为 SVG 矢量图"
+              disabled={!onlineEnabled || !isLoaded}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -362,7 +395,8 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
                 border: '1px solid var(--editor-border, #e2e8f0)',
                 background: 'var(--editor-bg, #ffffff)',
                 color: 'var(--editor-text, #1e293b)',
-                cursor: 'pointer',
+                cursor: isLoaded ? 'pointer' : 'default',
+                opacity: isLoaded ? 1 : 0.5,
                 fontSize: 11,
               }}
             >
@@ -376,6 +410,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
               type="button"
               onClick={() => handleRequestExport('png')}
               aria-label="导出为 PNG 图片"
+              disabled={!onlineEnabled || !isLoaded}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -385,7 +420,8 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
                 border: '1px solid var(--editor-border, #e2e8f0)',
                 background: 'var(--editor-bg, #ffffff)',
                 color: 'var(--editor-text, #1e293b)',
-                cursor: 'pointer',
+                cursor: isLoaded ? 'pointer' : 'default',
+                opacity: isLoaded ? 1 : 0.5,
                 fontSize: 11,
               }}
             >
@@ -398,21 +434,27 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
 
       {/* Draw.io iframe 嵌入容器 */}
       <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-        <iframe
+        {!onlineEnabled && <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, textAlign: 'center', color: 'var(--editor-text)' }}>
+          <Globe size={32} color="var(--editor-text-muted)" />
+          <strong>启用在线绘图编辑器</strong>
+          <p style={{ maxWidth: 430, margin: 0, lineHeight: 1.7, color: 'var(--editor-text-muted)', fontSize: 13 }}>绘图由 diagrams.net 提供。启用后，当前图表内容会传入其在线页面。重新打开时需再次启用。</p>
+          <button type="button" className="nb-btn-primary" onClick={() => { onlineEnabledRef.current = true; setOnlineEnabled(true); }}>启用在线编辑</button>
+        </div>}
+        {onlineEnabled && <iframe
+          key={reloadAttempt}
           ref={iframeRef}
           src={embedUrl}
           title="Draw.io Editor"
+          sandbox="allow-scripts allow-same-origin"
+          allow="clipboard-write"
+          referrerPolicy="no-referrer"
           style={{
             width: '100%',
             height: '100%',
             border: 'none',
             display: 'block',
           }}
-          onError={() => {
-            setLoadError('无法加载 Draw.io 绘图引擎，请检查网络连接');
-            loadErrorRef.current = '无法加载 Draw.io 绘图引擎，请检查网络连接';
-          }}
-        />
+        />}
 
         {/* 离线/异常提示 */}
         {loadError && (
@@ -441,9 +483,7 @@ export function DrawioEditor({ docKey }: DrawioEditorProps) {
                 // 🔴 S12：同步镜像（重连期间不可回收）
                 loadErrorRef.current = null;
                 isLoadedRef.current = false;
-                if (iframeRef.current) {
-                  iframeRef.current.src = embedUrl;
-                }
+                setReloadAttempt(attempt => attempt + 1);
               }}
               style={{
                 padding: '6px 14px',

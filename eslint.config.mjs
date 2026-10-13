@@ -18,8 +18,9 @@ const nodeGlobals = {
 
 export default [
   {
-    // 构建产物、依赖和 Rust 工程不属于前端 JavaScript 静态检查范围。
-    ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'coverage/**', 'test-results/**', 'tools/**'],
+    // Temporary verification checkouts/artifacts are not another copy of the app.
+    // Keep the authored src/test/scripts trees under the same full lint gate.
+    ignores: ['dist/**', 'node_modules/**', 'src-tauri/**', 'coverage/**', 'test-results/**', 'tools/**', '.tmp/**', 'output/**'],
   },
   {
     // JavaScript 配置和脚本使用 ESLint 核心推荐规则，并声明 Node 运行时全局变量。

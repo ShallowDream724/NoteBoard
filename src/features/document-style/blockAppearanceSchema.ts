@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
-import { documentColor } from './colors';
+import { documentColor, readableBlockText } from './colors';
 
 /** Explicit text-container policy. Media, code and table fills have their own controls. */
 export const BLOCK_COLOR_TYPES = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'taskList', 'listItem', 'taskItem'] as const;
@@ -16,9 +16,11 @@ export const BlockAppearance = Extension.create({
       parseHTML: (element: HTMLElement) => documentColor(element.getAttribute(field === 'blockTextColor' ? 'data-block-text-color' : 'data-block-background')),
       renderHTML: (attrs: Record<string, unknown>) => {
         const color = documentColor(attrs[field]); if (!color) return {};
+        const automaticText = field === 'blockBackground' && !documentColor(attrs.blockTextColor) ? readableBlockText(color) : null;
         return field === 'blockTextColor'
           ? { 'data-block-text-color': color, style: `color:${color};print-color-adjust:exact` }
-          : { 'data-block-background': color, style: `background-color:${color};--nb-block-background:${color};print-color-adjust:exact` };
+          : { 'data-block-background': color, ...(automaticText ? { 'data-block-auto-text': automaticText } : {}),
+            style: `background-color:${color};--nb-block-background:${color};${automaticText ? `color:${automaticText};` : ''}print-color-adjust:exact` };
       },
     }])) }];
   },

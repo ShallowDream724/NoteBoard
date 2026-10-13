@@ -7,6 +7,7 @@ import { PlantUmlNode } from '../editor-md/documentNodes';
 import { ReactNodeViewRenderer, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { Maximize2, Edit2, X, AlertCircle } from 'lucide-react';
 import { renderPlantUmlToSvg } from './plantumlEncoder';
+import { PlantUmlOnlinePreview } from './PlantUmlOnlinePreview';
 import { observe } from '../editor-md/viewportActivation';
 import { scheduleTask, cancelTask } from '../editor-md/viewportWorkScheduler';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
@@ -29,6 +30,7 @@ import { AnnotationMarker } from '../editor-md/annotations/AnnotationMarker';
 
 function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, decorations }: NodeViewProps) {
   const active = useEditorActive();
+  const activeRef = useRef(active); activeRef.current = active;
   // 重新激活未变化的图形使用已有结果，不再次请求图表服务。
   const renderedCodeRef = useRef<string | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
@@ -39,29 +41,35 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
   const [inViewport, setInViewport] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [onlinePreview, setOnlinePreview] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const renderTokenRef = useRef<number>(0);
+  const renderAbortRef = useRef<AbortController | null>(null);
 
-  const code = node.attrs.code || '';
+  const code = typeof node.attrs.code === 'string' ? node.attrs.code : '';
 
   const doRender = useCallback(async (currentCode: string) => {
+    if (!activeRef.current || editor.view.dom.closest('[inert]') || editor.isDestroyed) return;
+    renderAbortRef.current?.abort();
+    const controller = new AbortController(); renderAbortRef.current = controller;
+    const token = ++renderTokenRef.current;
     if (!currentCode.trim()) {
       setSvg(null);
       setError(null);
+      setLoading(false); renderedCodeRef.current = null;
       return;
     }
 
-    if (renderedCodeRef.current === currentCode) return;
-    const token = ++renderTokenRef.current;
-    setLoading(true);
+    setLoading(onlinePreview);
     setError(null);
 
     try {
-      const result = await renderPlantUmlToSvg(currentCode);
+      const result = await renderPlantUmlToSvg(currentCode, controller.signal, { allowNetwork: onlinePreview });
       if (token !== renderTokenRef.current) return;
 
-      if (result.error && !result.svg) {
+      if (result.permissionRequired || !onlinePreview && !result.svg) { setSvg(null); setError(null); }
+      else if (result.error && !result.svg) {
         setError(result.error);
         setSvg(null);
       } else {
@@ -72,14 +80,14 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
         }
       }
     } catch (e) {
-      if (token !== renderTokenRef.current) return;
+      if (token !== renderTokenRef.current || controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       if (token === renderTokenRef.current) {
         setLoading(false);
       }
     }
-  }, []);
+  }, [onlinePreview, editor]);
 
   // 视口门控
   useEffect(() => {
@@ -99,15 +107,16 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
 
   // 视口可见且有代码时调度渲染
   useEffect(() => {
-    if (!active || !inViewport || !code) return;
+    if (!active || !inViewport || editing) { setLoading(false); return; }
+    if (renderedCodeRef.current !== code) { setSvg(null); setError(null); }
     const identity = `plantuml:${editorTaskId(editor)}:${getPos()}`;
     scheduleTask(identity, () => doRender(code));
     // 后台只取消非必要的预览任务，继续保留内核与正文。
-    return () => cancelTask(identity);
-  }, [active, inViewport, code, doRender, editor, getPos]);
+    return () => { cancelTask(identity); renderAbortRef.current?.abort(); renderTokenRef.current++; };
+  }, [active, inViewport, code, doRender, editor, getPos, editing]);
 
   // 导出来源：渲染出 SVG 后复制/导出才可用
-  const exportSource: ChartImageSource | null = svg ? { kind: 'svg', svg } : null;
+  const exportSource: ChartImageSource | null = svg && renderedCodeRef.current === code ? { kind: 'svg', svg } : null;
   const exportFileName = buildExportFileName('', 'plantuml');
 
   if (editing) {
@@ -287,6 +296,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
           </div>
         </div>
 
+        <PlantUmlOnlinePreview enabled={onlinePreview} onChange={setOnlinePreview}/>
         {/* 内容展示区 */}
         <div
           onDoubleClick={() => {
@@ -305,7 +315,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
         >
           {!inViewport && code && (
             <div style={{ color: 'var(--editor-text-muted, #64748b)', fontSize: 13 }}>
-              <span>📐 PlantUML 图表（滚动到视口时渲染）</span>
+              <span>PlantUML 图表</span>
             </div>
           )}
 
@@ -334,6 +344,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
               >
                 {code}
               </pre>
+              {onlinePreview && <button type="button" className="nb-editor-toolbar-btn" onClick={() => void doRender(code)}>重试预览</button>}
             </div>
           )}
 
@@ -355,6 +366,7 @@ function PlantUmlComponent({ node, updateAttributes, selected, editor, getPos, d
               空 PlantUML 图表（双击或点击编辑输入内容）
             </span>
           )}
+          {code && inViewport && !svg && !error && !loading && <span style={{ color: 'var(--editor-text-muted, #64748b)', fontSize: 13 }}>可继续编辑源码，启用在线预览后查看图表。</span>}
         </div>
       </div>
 

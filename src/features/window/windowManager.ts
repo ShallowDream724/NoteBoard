@@ -29,6 +29,8 @@ import { saveCurrentWindowSnapshot, ensureWritableContent } from '../session/clo
 import { disposeTabLifecycleAsync } from '../../stores/windowStore';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { clearDocumentRevision, getDocumentRevision } from '../../core/editor/editorRegistry';
+import { flushDocument, getSessionGeneration } from '../session/documentSession';
+import { relinquishDocumentBookmarks } from '../bookmarks/storage';
 // 🔴 R06：迁移携带可序列化统一历史
 import { serializeDocumentHistory, restoreDocumentHistory } from '../history/documentHistory';
 // 🔴 R06：迁移视图状态快照经回收恢复存储传递
@@ -420,7 +422,10 @@ export async function requestCurrentWindowClose(): Promise<void> {
   if (dirtyTabs.length > 0) {
     // 系统关闭请求到达时先立即刷新副本；即使用户尚未在确认框中选择，内容也已受保护。
     try {
-      await stashPendingDocuments({ keys: dirtyTabs.map((tab) => tab.key) });
+      // Explicit child drafts need the user's own Save/Cancel; a parent snapshot
+      // cannot claim to preserve them in staging.
+      const stageKeys = dirtyTabs.filter(tab => !getEditorCapabilities(tab.key)?.hasExplicitDraft?.()).map(tab => tab.key);
+      if (stageKeys.length) await stashPendingDocuments({ keys: stageKeys });
     } catch (error) {
       console.error('关闭前暂存失败:', error);
       showToast(`关闭前暂存失败：${error instanceof Error ? error.message : String(error)}`, 'error', 5000);
@@ -511,7 +516,19 @@ export async function moveToNewWindow(docKey: string): Promise<boolean> {
   }
 
   const capabilities = getEditorCapabilities(docKey);
-  const captured = capabilities ? await capabilities.flush('transfer') : null;
+  const generation = getSessionGeneration(docKey);
+  let captured;
+  try {
+    captured = await flushDocument(docKey, 'transfer', { requireDurableBookmarks: true });
+  } catch (error) {
+    tabStore.exitTransfer(docKey);
+    showToast(error instanceof Error ? error.message : '无法捕获文档，迁移已取消', 'warning');
+    return false;
+  }
+  if (getSessionGeneration(docKey) !== generation) {
+    tabStore.exitTransfer(docKey);
+    return false;
+  }
   const content = captured?.content ?? useDocumentStore.getState().getDocument(docKey)?.content;
   if (content == null) {
     // 🔴 N02：无权威正文（无实例且镜像未知）——中止迁移，源保持原状
@@ -566,6 +583,7 @@ export async function moveToNewWindow(docKey: string): Promise<boolean> {
     const outcome = await waitForTransferOutcome(transferId, label);
     if (outcome === 'committed') {
       // 5. 源清理（transferred 语义）：不移除目标所有权、不删暂存、不清空目标已接管的历史
+      relinquishDocumentBookmarks(docKey);
       tabStore.closeTab(docKey, 'transferred');
       docStore.remove(docKey);
       clearDocumentRevision(docKey);
@@ -700,6 +718,7 @@ function scheduleTransferReconcile(transferId: string, docKey: string): void {
     const tabStore = useWindowStore.getState();
     if (outcome === 'committed') {
       // 权威 committed：源清理（与 moveToNewWindow 成功路径同语义）
+      relinquishDocumentBookmarks(docKey);
       tabStore.closeTab(docKey, 'transferred');
       useDocumentStore.getState().remove(docKey);
       clearDocumentRevision(docKey);

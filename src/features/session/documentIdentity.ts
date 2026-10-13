@@ -8,6 +8,7 @@ import { moveDocumentHistory } from '../history/documentHistory';
 import { drainStagingWrites, migrateStagedDocumentKey } from '../staging/stagingManager';
 import { saveViewState, takeViewState } from './editorSuspension';
 import { kindFromPath } from '../../core/docKind';
+import { migrateBookmarks } from '../bookmarks/storage';
 
 export interface DocumentIdentityLease {
   key: string;
@@ -71,6 +72,7 @@ export function commitDocumentIdentity(from: string, to: string, publish: () => 
   const baseline = getBaseline(from).getBaseline();
   moveDocumentHistory(from, to);
   migrateStagedDocumentKey(from, to);
+  migrateBookmarks(from, to);
   migrateDocumentSession(from, to);
   if (baseline !== null) getBaseline(to).setBaseline(baseline);
   removeBaseline(from);

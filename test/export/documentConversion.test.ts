@@ -127,3 +127,23 @@ it('renders a worker diagram batch in the browser and aborts unfinished renderin
   expect(worker.postMessage.mock.calls.some(call => call[0].type === 'diagram-results')).toBe(false);
   expect(worker.terminate).toHaveBeenCalledOnce();
 });
+
+it.each(['print', 'html'])('rejects unproven remote paths in the %s host handshake without native conversion', async format => {
+  vi.stubGlobal('Worker', ConversionWorker);
+  const result = format === 'html' ? prepareHtmlExport('source', 'title', 'C:/docs') : prepareDocument('source', 'title', 'C:/docs');
+  ConversionWorker.current.emit({ type: 'assets', paths: [String.raw`\\server\share\a.png`] });
+  await expect(result).rejects.toThrow('网络共享图片未获准自动加载');
+  expect(convertFileSrc).not.toHaveBeenCalled(); expect(fetchAsset).not.toHaveBeenCalled();
+  expect(ConversionWorker.current.terminate).toHaveBeenCalledOnce();
+});
+
+it('maps a relative share asset only when the original reference matches the opened document directory', async () => {
+  vi.stubGlobal('Worker', ConversionWorker);
+  const directory = String.raw`\\server\share\notes`, path = directory + '\\a.png';
+  const result = prepareDocument('source', 'title', directory);
+  const worker = ConversionWorker.current;
+  worker.emit({ type: 'assets', paths: [path], references: ['./a.png'] });
+  expect(convertFileSrc).toHaveBeenCalledExactlyOnceWith(path);
+  worker.emit({ type: 'result', result: { html: '<img>', markdown: 'source', items: [] } });
+  await result;
+});

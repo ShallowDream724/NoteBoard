@@ -137,6 +137,8 @@ const ExcalidrawCanvas = React.memo(
 function BoardEditorInner({ docKey }: BoardEditorProps) {
   const [initialData, setInitialData] = useState<ExcalidrawScene | null>(null);
   const [readOnly, setReadOnly] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const loadErrorRef = useRef(false);
   const [elementCount, setElementCount] = useState(0);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [historyAvailability, setHistoryAvailability] = useState({ canUndo: false, canRedo: false });
@@ -273,6 +275,10 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     if (initializedDocKeyRef.current === docKey) return;
     initializedDocKeyRef.current = docKey;
     initialMountHandledRef.current = false;
+    loadErrorRef.current = false;
+    setLoadError(''); setReadOnly(false);
+    sceneRef.current = null; materializerRef.current = null; revisionTrackerRef.current = null;
+    setInitialData(null);
 
     const doc = useDocumentStore.getState().getDocument(docKey);
     const content = doc?.content?.trim() ?? '';
@@ -285,8 +291,12 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
         if (!isVersionSupported(parsed)) {
           setReadOnly(true);
         }
-      } catch {
-        parsed = createEmptyScene(theme === 'dark');
+      } catch (error) {
+        // An invalid/untrusted scene must never become an editable empty scene:
+        // initialization, history, flush and unmount would otherwise overwrite it.
+        loadErrorRef.current = true;
+        setLoadError(error instanceof Error ? error.message : '无法解析画板文件');
+        return;
       }
     }
 
@@ -317,6 +327,7 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
   // onChange 回调（函数引用全局恒定，内部绝不直接触发同步 setState）
   const handleChange = useCallback(
     (elements: ExcalidrawScene['elements'], appState: ExcalidrawScene['appState'], files: ExcalidrawScene['files']) => {
+      if (loadErrorRef.current) return;
       const prev = sceneRef.current;
       const key = docKeyRef.current;
 
@@ -636,6 +647,12 @@ function BoardEditorInner({ docKey }: BoardEditorProps) {
     };
   }, [initialData]);
 
+  if (loadError) {
+    return <div role="alert" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: '100%', padding: 24, color: 'var(--editor-text)' }}>
+      <strong>画板未加载</strong><p style={{ textAlign: 'center', margin: 0 }}>{loadError}</p>
+      <span style={{ color: 'var(--editor-text-muted)', fontSize: 13 }}>原文件保持不变。请修正图片资源或文件内容后重新打开。</span>
+    </div>;
+  }
   if (!stableInitialData) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--editor-text-muted)' }}>

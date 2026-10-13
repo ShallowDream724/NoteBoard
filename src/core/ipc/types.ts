@@ -344,6 +344,8 @@ export interface TypographySettings {
 
 export interface EditorSettings {
   pureMarkdown?: boolean;
+  navigationPanelMode?: 'floating' | 'docked';
+  tableColumnResizeMode?: 'grow' | 'adjacent';
   selectionToolbarPosition?: 'below' | 'above';
   defaultViewMode: ViewMode;
   softWrap: boolean;

@@ -30,6 +30,7 @@ import { ScopedListCommands } from '../editor-md/scopedListCommands';
 import { DiscreteHistoryBoundary } from '../editor-md/discreteHistoryBoundary';
 import { discreteTransaction } from '../editor-md/discreteEdit';
 import { TextStyleKeys } from '../editor-md/textStyleShortcuts';
+import { ProseLink } from '../editor-md/proseLink';
 
 /** Markdown 允许粗体/斜体包裹行内代码；默认 Code 的 excludes: '_' 会导致解析出非法 marks */
 const MarkdownCompatibleCode = Code.extend({ excludes: '' });
@@ -44,13 +45,11 @@ export function buildLongTextExtensions(placeholder = '输入内容，支持 Mar
       // 换用允许与粗体/斜体嵌套的 Code 扩展，避免同名扩展与 schema 冲突
       code: false,
       heading: { levels: [1, 2, 3] },
-      link: {
-        openOnClick: false,
-        HTMLAttributes: { rel: 'noopener noreferrer', target: null },
-      },
+      link: false,
       // 单元格浮层内的撤销不应与文件级历史混淆，保留编辑器自带的短程撤销
       undoRedo: { depth: 100, newGroupDelay: 300 },
     }),
+    ProseLink.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: null } }),
     MarkdownCompatibleCode,
     ScopedListCommands,
     DiscreteHistoryBoundary,

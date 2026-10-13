@@ -68,6 +68,19 @@ it('keeps small HTML and text paste synchronous and isolated in the draft histor
   expect(editor.state.doc).toBe(parent);
 });
 
+it('types plain prose after a link and preserves whole-link replacement in the standalone draft', () => {
+  const view = create([{ type: 'paragraph', content: [{ type: 'text', text: 'link', marks: [{ type: 'link', attrs: { href: 'https://example.com' } }] }] }]);
+  const linked = () => { let text = ''; view.state.doc.descendants(node => { if (node.isText && node.marks.some(mark => mark.type.name === 'link')) text += node.text; }); return text; };
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 5)).insertText('正文'));
+  expect(linked()).toBe('link');
+  view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 5)));
+  view.dispatch(view.state.tr.insertText('新链接'));
+  expect(linked()).toBe('新链接');
+  view.dispatch(view.state.tr.insertText('继续正文'));
+  expect(linked()).toBe('新链接');
+  expect(editor.state.doc.textContent).toBe('Parent document');
+});
+
 it('uses the shared worker and chunked import for large Office HTML and keeps table DOM bounded', async () => {
   const view = create(), parent = editor.state.doc, before = view.state.doc;
   const html = `<table>${Array.from({ length: 600 }, (_, index) => `<tr><td style="mso-number-format:'@'">${index}</td><td><b>解释 ${index}</b></td></tr>`).join('')}</table>`;

@@ -42,6 +42,7 @@ import { getSessionGeneration } from '../../features/session/documentSession';
 // 🔴 J2：visual 模式先物化暂存快照（输入热路径只暂存不可变引用，flush 时序列化）
 import { submitCapturedContent } from '../session/documentSession';
 import { flushPendingVisualSnapshot, flushPendingSourceSnapshot, hasPendingSnapshot } from './visualSnapshot';
+import { hasAnnotationDraft } from './annotations/panelSession';
 
 /** 读取文档当前视图模式（无 tab 信息时默认 visual） */
 function currentMode(docKey: string): 'visual' | 'source' {
@@ -109,7 +110,10 @@ export function createMarkdownEditorCapabilities(
     docKey,
     instanceId,
     getRevision: () => getDocumentRevision(docKey),
-    flush: async (_reason: FlushReason): Promise<CapturedContent | null> => {
+    flush: async (reason: FlushReason): Promise<CapturedContent | null> => {
+      if (hasAnnotationDraft(getMdTipTapEditor(docKey)) && ['transfer', 'close', 'evict', 'switch-mode'].includes(reason)) {
+        throw new Error('请先保存或取消说明草稿，再关闭、迁移或切换编辑模式。');
+      }
       // 🔴 R02：visual 每键已即时记录历史（合并序列化按复审回退）；
       //    源码模式：CM6 doc 为不可变结构，toString 即权威快照
       if (currentMode(docKey) === 'source') {
@@ -145,6 +149,7 @@ export function createMarkdownEditorCapabilities(
     },
     focus: () => focusActiveEditor(currentTarget(docKey)),
     getSelectedText: () => getSelectedText(currentTarget(docKey)),
+    hasExplicitDraft: () => hasAnnotationDraft(getMdTipTapEditor(docKey)),
     // 🔴 N01：可迁移类型的真实视图捕获——`?? null` 的缺省不再让迁移载荷
     //    假装带上了 Markdown 视图（选区/滚动随迁移传递，目标侧经 saveViewState 恢复）
     captureViewState: () => {
@@ -176,6 +181,7 @@ export function createMarkdownEditorCapabilities(
     //    统一历史在 documentHistory（按 docKey，重挂载不清）；选区/滚动经
     //    captureViewState 捕获、挂载时恢复。IME 组合中不回收（视图状态不可靠恢复）。
     canSuspend: () => {
+      if (hasAnnotationDraft(getMdTipTapEditor(docKey))) return false;
       if (currentMode(docKey) === 'source') {
         const view = getMdSourceView(docKey);
         return view ? !view.composing : true;
@@ -188,6 +194,7 @@ export function createMarkdownEditorCapabilities(
     //    J2 暂存（source/visual pending）或镜像与文档记录不一致（未确认脏内容）。
     //    无未确认输入的保留实例不执行全文 flush（往返切换零序列化成本）。
     hasUnconfirmedInput: () => {
+      if (hasAnnotationDraft(getMdTipTapEditor(docKey))) return true;
       if (hasPendingSnapshot(docKey)) return true;
       const doc = useDocumentStore.getState().getDocument(docKey);
       if (!doc) return false;

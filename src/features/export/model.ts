@@ -1,6 +1,6 @@
 import type { PdfPagePreferences } from '../../core/ipc/types';
 
-export type ItemMode = 'auto' | 'fit' | 'wrap' | 'columns';
+export type ItemMode = 'auto' | 'fit' | 'wrap' | 'columns' | 'original';
 export interface PdfOptions extends PdfPagePreferences {
   items: Record<string, ItemMode>;
 }

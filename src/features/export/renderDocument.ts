@@ -1,5 +1,5 @@
 import { DOMSerializer, type Node } from '@tiptap/pm/model';
-import { resolveRelativeDocPath } from '../../core/documentPath';
+import { resolveDocumentImageSource } from '../../core/documentImageSource';
 import { parseMarkdownDocument } from '../editor-md/documentExtensions';
 import { renderMath } from '../editor-md/mathRendering';
 import type { MathRendering } from '../editor-md/mathRendering';
@@ -16,7 +16,7 @@ import { collectionPresentation } from '../editor-md/rich-content/collectionPres
 import { enhanceStandaloneReadView } from './standaloneReadView';
 
 export async function renderDocument(markdown: string, title: string, baseDirectory: string, signal?: AbortSignal, snapshot?: Node | null,
-  math = renderMath, assetUrls: (paths: string[]) => string[] | Promise<string[]> = paths => paths,
+  math = renderMath, assetUrls: (paths: string[], references?: string[]) => string[] | Promise<string[]> = paths => paths,
   mode: 'print' | 'html' = 'print', diagrams?: DiagramRenderer): Promise<ExportDocument> {
   signal?.throwIfAborted();
   const original = snapshot ?? parseMarkdownDocument(markdown);
@@ -145,17 +145,22 @@ export async function renderDocument(markdown: string, title: string, baseDirect
       items.push({ id, kind: 'diagram', label: `${DIAGRAM_LABELS[request.kind]} ${index + 1}` });
     });
   }
-  const localImages: Array<{ image: HTMLImageElement; path: string }> = [];
+  const localImages: Array<{ image: HTMLImageElement; path: string; reference: string }> = [];
   for (const image of container.querySelectorAll('img')) {
-    const source = image.getAttribute('src') ?? '';
-    if (!/^(?:https?:|data:|asset:|blob:)/i.test(source) && (baseDirectory || /^(?:[A-Za-z]:|file:|\\\\)/i.test(source))) {
-      localImages.push({ image, path: resolveRelativeDocPath(baseDirectory, source) });
-    }
+    const reference = image.getAttribute('src') ?? '';
+    image.removeAttribute('srcset');
+    const source = resolveDocumentImageSource(reference, baseDirectory);
+    if (source.kind === 'blocked') {
+      const message = document.createElement('span'); message.className = 'export-image-blocked';
+      message.textContent = source.message; image.replaceWith(message);
+    } else if (source.kind === 'file') localImages.push({ image, path: source.path, reference });
+    else if (source.url) image.setAttribute('src', source.url);
+    else image.removeAttribute('src');
   }
   if (localImages.length) {
     // Keep the original element references while the host maps paths to its
     // asset scheme. Only these attributes change, before the sole serialization.
-    const urls = await assetUrls(localImages.map(({ path }) => path)); signal?.throwIfAborted();
+    const urls = await assetUrls(localImages.map(({ path }) => path), localImages.map(({ reference }) => reference)); signal?.throwIfAborted();
     if (urls.length !== localImages.length || urls.some(url => typeof url !== 'string')) throw new Error('图片资源地址映射不完整');
     localImages.forEach(({ image }, index) => image.setAttribute('src', urls[index]));
   }

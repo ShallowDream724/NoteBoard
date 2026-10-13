@@ -26,6 +26,7 @@ import { pairedFormattingTokenizer } from './inlineFormattingMask';
 import { ScopedListCommands } from './scopedListCommands';
 import { ParagraphCommands } from './paragraphCommands';
 import { ListNumbering } from './numbering/extension';
+import { ProseLink } from './proseLink';
 
 const ConsistentStarterKit = StarterKit.extend({
   addExtensions() { return (this.parent?.() ?? []).map(extension => withoutFormattingRules(extension.name === 'underline'
@@ -57,11 +58,12 @@ const PresentedMarkdown = Markdown.extend({ onBeforeCreate(event) {
 export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}): Extensions {
   return [
     ConsistentStarterKit.configure({
-      code: false, codeBlock: false, blockquote: false, orderedList: false,
+      code: false, codeBlock: false, blockquote: false, orderedList: false, trailingNode: false,
       undoRedo: { depth: 200, newGroupDelay: 300 },
-      link: { openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: null, title: 'Ctrl + 单击以访问链接' } },
+      link: false,
       dropcursor: { width: 2, color: 'var(--editor-accent)', class: 'nb-dropcursor' },
     }),
+    ProseLink.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: null, title: 'Ctrl + 单击以访问链接' } }),
     // Highlight must wrap inline code; serializing its markup inside backticks
     // would turn the mark into literal code and discard the highlight on reload.
     withoutFormattingRules(MarkdownHighlight.configure({ multicolor: true })), InlineFormattingInput, TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,

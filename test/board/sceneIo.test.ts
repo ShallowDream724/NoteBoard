@@ -14,6 +14,18 @@ import {
 } from '../../src/features/board/sceneIo';
 
 describe('sceneIo - 画板场景数据处理', () => {
+  it('rejects external binary image URLs before an engine can assign Image.src, while retaining inline images', () => {
+    for (const dataURL of [String.raw`\\server\share\a.png`, 'file://server/share/a.png',
+      'asset://localhost/%5c%5cserver%5cshare%5ca.png', 'http://asset.localhost/%255c%255cserver%255cshare%255ca.png',
+      'https://example.com/a.png']) {
+      const json = JSON.stringify({ ...createEmptyScene(false), files: { a: { id: 'a', mimeType: 'image/png', dataURL, created: 1 } } });
+      expect(() => parseScene(json)).toThrow('非内嵌图片资源');
+      expect(JSON.parse(json).files.a.dataURL).toBe(dataURL);
+    }
+    for (const dataURL of ['data:image/png;base64,AQID', 'data:image/svg+xml;charset=utf-8,%3Csvg%20/%3E']) {
+      expect(parseScene(JSON.stringify({ ...createEmptyScene(false), files: { a: { id: 'a', mimeType: 'image/png', dataURL, created: 1 } } })).files?.a?.dataURL).toBe(dataURL);
+    }
+  });
   describe('cleanAppState', () => {
     it('应剔除协作、选区和全屏演示等运行时临时字段，并保留 objectsSnapModeEnabled', () => {
       const dirtyAppState = {

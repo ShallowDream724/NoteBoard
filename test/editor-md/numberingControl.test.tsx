@@ -99,6 +99,13 @@ it('cancels the draft on Escape and commits before an application save shortcut 
   expect(save).toHaveBeenCalledOnce(); expect(startInput()).not.toBeNull();
 });
 
+it('preserves a numeric preview while an IME consumes Escape or Enter', async () => {
+  await open(); await type('4');
+  for (const key of ['Escape', 'Enter']) await act(async () => startInput().dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, isComposing: true })));
+  expect(startInput().value).toBe('4');
+  expect(draft.cancel).not.toHaveBeenCalled(); expect(draft.commit).not.toHaveBeenCalled();
+});
+
 it('offers all nine numbering styles in their fixed order and applies the chosen style', async () => {
   await open(); await act(async () => button('编号样式').click());
   const choices = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]')];

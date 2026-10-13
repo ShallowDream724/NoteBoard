@@ -22,6 +22,8 @@ import { MarkdownTypingKeys } from '../typingAssist';
 import { AlertCompletion } from '../alertCompletion';
 import { ContainerSelectAll } from '../containerSelection';
 import { MediaEditing } from '../mediaEditing';
+import { BlockBoundary } from '../blockBoundary';
+import { DocumentBookmarks } from '../../bookmarks/extension';
 
 import { handleLinkClick } from '../linkHandler';
 import { TableClipboard } from '../tableClipboard';
@@ -180,9 +182,10 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
       tableCell: EditableTableCell, tableHeader: EditableTableHeader, nativeError: NativeErrorView,
       imageCollection: withRichPresentation(InteractiveImageCollection), imageSlot: InteractiveImageSlot.configure({ docKey }), disclosure: withRichPresentation(InteractiveDisclosure),
       table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }).map(withApplicationHistory),
-    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, MediaEditing, EditorDragActivity, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
+    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, BlockBoundary, MediaEditing, EditorDragActivity, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
+    DocumentBookmarks.configure({ docKey }),
     Placeholder.configure({ placeholder: '开始输入，或键入 / 插入内容', emptyEditorClass: 'is-empty' }),
     CharacterCount, TableClipboard, TableViewport, DocumentReadingView, TableSizing, TableSelectionHandles, TableMarginSelection, HeadingFolding, AnnotationBehavior, CodeHighlight, searchReplaceExtension(),
     Extension.create({

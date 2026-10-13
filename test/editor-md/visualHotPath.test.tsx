@@ -25,7 +25,7 @@ const kernel = vi.hoisted(() => ({
   options: null as unknown as { onUpdate: (payload: unknown) => void },
   editor: {
     text: 'base',
-    state: { depth: 0, selection: { anchor: 1, head: 1 } },
+    state: { depth: 0, selection: { anchor: 1, head: 1 }, doc: null as unknown as import('@tiptap/pm/model').Node },
     storage: { markdown: { manager: {} } },
     schema: {},
     view: { dom: document.createElement('div') },
@@ -65,6 +65,8 @@ function typeInKernel(depth: number, text: string) {
   const transaction = EditorState.create({ schema, doc }).tr.insertText(text, 1, 1 + previous.length);
   Object.assign(transaction.doc, { __text: text });
   kernel.editor.text = text;
+  // onUpdate observes the applied editor state, including appended transactions.
+  kernel.editor.state.doc = transaction.doc;
   kernel.editor.state.depth = depth;
   kernel.options.onUpdate({ editor: kernel.editor, transaction });
 }

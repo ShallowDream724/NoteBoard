@@ -23,10 +23,13 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import * as ipc from '../../core/ipc/commands';
 import { getBaseline, normalizeEol } from '../editor-md/serialize';
-import { onDocumentSaved } from '../staging/stagingManager';
+import { onDocumentSaved, releaseStagedDocument } from '../staging/stagingManager';
 // 🔴 S14：写盘后登记自身写入（目录 watcher 忽略自身原子替换事件，防自触发循环）
 import { noteSelfWrite } from '../explorer/directoryWatcher';
 import { emit } from '../../core/emitter';
+import { clearSaveError, recordSaveError, trackDocumentSave } from '../../stores/saveActivityStore';
+import { getWriteErrorMessage } from '../../core/writeError';
+import { flushDocumentBookmarks, hasBookmarkPersistence, hasBookmarkWriteFailure, loadBookmarks } from '../bookmarks/storage';
 
 // ── 🔴 N04：会话代际（独立于路径的生命周期身份） ──
 //
@@ -91,6 +94,10 @@ useDocumentStore.subscribe((state, prev) => {
       releaseSessionGeneration(key);
     }
   }
+  for (const key of prev.documents.keys()) if (!state.documents.has(key)) {
+    discardPendingAutoSaves(key);
+    savedWriteGenerations.delete(key);
+  }
 });
 
 // ── revision 记录（会话字段；内容版本在 editorRegistry，此处记录同步进度） ──
@@ -99,6 +106,7 @@ useDocumentStore.subscribe((state, prev) => {
 const mirroredRevisions = new Map<string, number>();
 /** savedRevision：最近一次成功写盘时捕获的 revision */
 const savedRevisions = new Map<string, number>();
+const savedWriteGenerations = new Map<string, number>();
 
 function setMirroredRevision(docKey: string, revision: number): void {
   // 🔴 迟到快照不得倒退镜像版本
@@ -114,6 +122,7 @@ export function getSavedRevision(docKey: string): number {
 /** 文档身份迁移（另存为）/最终关闭时清理会话记录 */
 export function migrateDocumentSession(fromKey: string, toKey: string): void {
   emit('document-session-ended', { key: fromKey });
+  discardPendingAutoSaves(fromKey);
   const mirrored = mirroredRevisions.get(fromKey);
   const saved = savedRevisions.get(fromKey);
   if (mirrored !== undefined) mirroredRevisions.set(toKey, mirrored);
@@ -122,6 +131,8 @@ export function migrateDocumentSession(fromKey: string, toKey: string): void {
   moveDocumentRevision(fromKey, toKey);
   mirroredRevisions.delete(fromKey);
   savedRevisions.delete(fromKey);
+  savedWriteGenerations.delete(fromKey);
+  savedWriteGenerations.delete(toKey);
   // 🔴 N04：旧 key 会话作废（迟到旧任务不得再写旧 key）；新 key 换代
   //    （若新路径存在旧任务/旧会话残留，一并作废）
   advanceSessionGeneration(fromKey);
@@ -136,9 +147,12 @@ export function migrateDocumentSession(fromKey: string, toKey: string): void {
  */
 export function disposeDocumentSession(docKey: string): void {
   emit('document-session-ended', { key: docKey });
+  discardPendingAutoSaves(docKey);
+  releaseStagedDocument(docKey);
   clearDocumentRevision(docKey);
   mirroredRevisions.delete(docKey);
   savedRevisions.delete(docKey);
+  savedWriteGenerations.delete(docKey);
   advanceSessionGeneration(docKey);
   // 🔴 R3-03：孤立会话表清理——关闭后既无 documents 记录也无在途写/closing 时
   //    从活动表移除（get 回 0）；documents 订阅的兜底清理同样覆盖此路径
@@ -204,15 +218,32 @@ export function submitCapturedContent(
 export async function flushDocument(
   docKey: string,
   reason: FlushReason,
+  options: { requireDurableBookmarks?: boolean } = {},
 ): Promise<CapturedContent | null> {
   const generation = getSessionGeneration(docKey);
   const capabilities = getEditorCapabilities(docKey);
-  if (!capabilities) return null;
-  const captured = await capabilities.flush(reason);
+  const captured = capabilities ? await capabilities.flush(reason) : null;
+  if (!isSessionCurrent(docKey, generation)) return null;
   if (captured) {
     // 🔴 N04：flush 是异步屏障——等待期间同路径会话已换代时，迟到快照作废
     if (!isSessionCurrent(docKey, generation)) return null;
     setMirroredRevision(docKey, captured.revision);
+  }
+  // Bookmarks follow the same authority boundary as their document. Source-only
+  // tabs load the grammar only when they actually have saved bookmark anchors.
+  if (reason !== 'stage' && reason !== 'export') {
+    let bookmarksReady = flushDocumentBookmarks(docKey);
+    if (useWindowStore.getState().getTab(docKey)?.viewMode === 'source'
+      && !hasBookmarkPersistence(docKey) && loadBookmarks(docKey).length) {
+      const { captureSourceBookmarks } = await import('../bookmarks/sourcePersistence');
+      bookmarksReady = await captureSourceBookmarks(docKey, captured?.content ?? undefined);
+    }
+    if (!isSessionCurrent(docKey, generation)) return null;
+    // Only cross-window handoff requires a durable copy. Saving the document or
+    // changing its identity in this window must still work if localStorage is full.
+    if (options.requireDurableBookmarks && (!bookmarksReady || hasBookmarkWriteFailure(docKey))) {
+      throw new Error('书签尚未保存到本机，文档已保留在当前窗口。请稍后重试。');
+    }
   }
   return captured;
 }
@@ -289,6 +320,19 @@ export function releaseSessionAfterClosing(docKey: string): void {
 
 /** docKey → 上一次写任务（settled），新任务串接其后 */
 const writeQueues = new Map<string, Promise<unknown>>();
+interface AutoSaveSnapshot {
+  generation: number; revision: number; content: string;
+  encoding: Parameters<typeof ipc.writeDocument>[2]; eol: Parameters<typeof ipc.writeDocument>[3];
+}
+interface AutoSaveBatch { latest: AutoSaveSnapshot | null; promise: Promise<void> }
+/** One replaceable pending auto slot between explicit write barriers. */
+const pendingAutoSaves = new Map<string, AutoSaveBatch>();
+const autoSaveBatches = new Map<string, Set<AutoSaveBatch>>();
+
+function discardPendingAutoSaves(key: string): void {
+  pendingAutoSaves.delete(key);
+  for (const batch of autoSaveBatches.get(key) ?? []) batch.latest = null;
+}
 
 /**
  * 把一次写盘任务排入该文档的串行队列。
@@ -300,12 +344,16 @@ const writeQueues = new Map<string, Promise<unknown>>();
 export function enqueueDocumentWrite<T>(
   docKey: string,
   writer: () => Promise<T>,
+  kind: 'explicit' | 'auto' = 'explicit',
 ): Promise<T> {
   // 🔴 R3-05：closing 状态停止接纳——窗口整体关闭/标签关闭期间的新写任务被拒绝
   //    （旧任务正常排空；任务内部代际校验保证旧会话任务不越权）
   if (isClosing(docKey) || useWindowStore.getState().isTransferring(docKey)) {
     return Promise.reject(new Error(`文档正在关闭，拒绝新的写任务: ${docKey}`));
   }
+  // An auto snapshot arriving after a manual save must never replace a slot
+  // ahead of that save and then be overwritten by its older explicit snapshot.
+  if (kind === 'explicit') pendingAutoSaves.delete(docKey);
   const previous = writeQueues.get(docKey) ?? Promise.resolve();
   const current = previous.then(writer);
   // 队列链只接 settled 状态：单个失败不断链，也不吞掉调用方错误
@@ -373,37 +421,62 @@ async function refreshDirtyAfterWrite(docKey: string): Promise<boolean> {
  * 成功后基线更新为实际写入内容 + 脏态精确重算 + 带证明的暂存清理。
  * CodeEditor / Markdown visual / Markdown source / BoardEditor 的 autosave 统一走这里。
  */
-export async function queuedAutoSave(docKey: string, content: string): Promise<void> {
-  if (useWindowStore.getState().isTransferring(docKey)) return;
+export function queuedAutoSave(docKey: string, content: string): Promise<void> {
+  if (useWindowStore.getState().isTransferring(docKey) || isClosing(docKey)) return Promise.resolve();
   const store = useDocumentStore.getState();
   const targetDoc = store.getDocument(docKey);
-  if (!targetDoc) return;
+  if (!targetDoc) return Promise.resolve();
 
   // 🔴 N04：排队时捕获会话代际——关闭/重开后换代的旧任务在执行时作废
   const generation = getSessionGeneration(docKey);
 
   // 只有 auto 策略才自动保存
-  if (targetDoc.savePolicy !== 'auto') return;
+  if (targetDoc.savePolicy !== 'auto') return Promise.resolve();
   // 外部变更/断开状态不自动保存
-  if (targetDoc.externalStatus === 'modified' || targetDoc.externalStatus === 'deleted') return;
+  if (targetDoc.externalStatus === 'modified' || targetDoc.externalStatus === 'deleted') return Promise.resolve();
   // 与基线一致无需保存
   const baseline = getBaseline(docKey);
-  if (baseline.isClean(content)) {
+  if (baseline.isClean(content) && !writeQueues.has(docKey)) {
     store.setDirty(docKey, false);
     useWindowStore.getState().setTabDirty(docKey, false);
-    return;
+    return Promise.resolve();
   }
 
   const encoding = targetDoc.encoding;
   const eol = targetDoc.eol;
   // 捕获本次写入对应的 revision（写盘期间的新编辑由后续任务/脏态重算处理）
   const revision = getDocumentRevision(docKey);
+  const snapshot = { generation, revision, content, encoding, eol };
+  const pending = pendingAutoSaves.get(docKey);
+  if (pending?.latest?.generation === generation) {
+    if (pending.latest.revision <= revision) pending.latest = snapshot;
+    return pending.promise;
+  }
+  const batch: AutoSaveBatch = { latest: snapshot, promise: null as unknown as Promise<void> };
+  pendingAutoSaves.set(docKey, batch);
+  const batches = autoSaveBatches.get(docKey) ?? new Set<AutoSaveBatch>();
+  batches.add(batch); autoSaveBatches.set(docKey, batches);
+  batch.promise = trackDocumentSave(docKey, () => enqueueDocumentWrite(docKey, () => runAutoSaveBatch(docKey, batch), 'auto'))
+    .catch(error => { console.error('自动保存失败:', error); })
+    .finally(() => {
+      if (pendingAutoSaves.get(docKey) === batch) pendingAutoSaves.delete(docKey);
+      batch.latest = null; batches.delete(batch);
+      if (!batches.size && autoSaveBatches.get(docKey) === batches) autoSaveBatches.delete(docKey);
+    });
+  return batch.promise;
+}
 
-  await enqueueDocumentWrite(docKey, async () => {
+async function runAutoSaveBatch(docKey: string, batch: AutoSaveBatch): Promise<void> {
+    if (pendingAutoSaves.get(docKey) === batch) pendingAutoSaves.delete(docKey);
+    const snapshot = batch.latest;
+    batch.latest = null;
+    if (!snapshot) return;
+    const { generation, revision, content, encoding, eol } = snapshot;
     // 🔴 R03：排队到执行之间重新验证生命周期——文档仍存在、策略仍 auto、
     //    外部状态未变（用户切手动策略/文件被外部修改后，旧排队任务不得落盘）
     // 🔴 N04：会话代际校验——同路径关闭重开后，旧会话排队任务不得覆盖新会话写盘
     if (!isSessionCurrent(docKey, generation)) return;
+    if (savedWriteGenerations.get(docKey) === generation && revision < getSavedRevision(docKey)) return;
     const doc = useDocumentStore.getState().getDocument(docKey);
     if (!doc) return;
     if (doc.savePolicy !== 'auto') return;
@@ -424,17 +497,18 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
       const savedContent = written.content;
       // 🔴 基线只更新为实际写成功的文本
       useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
-      baseline.updateBaseline(savedContent);
+      getBaseline(docKey).updateBaseline(savedContent);
       savedRevisions.set(docKey, revision);
+      savedWriteGenerations.set(docKey, generation);
       // 精确重算脏态（写盘期间的新输入仍为脏；改回基线则清脏）
       await refreshDirtyAfterWrite(docKey);
       // 携带内容证明的暂存清理：只删被覆盖的副本
       await onDocumentSaved(docKey, savedContent);
+      if (isSessionCurrent(docKey, generation)) clearSaveError(docKey);
       if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
+    } else {
+      if (isSessionCurrent(docKey, generation)) recordSaveError(docKey, result.error ? getWriteErrorMessage(result.error) : '文件未能写入，请重试保存');
     }
-  }).catch((e) => {
-    console.error('自动保存失败:', e);
-  });
 }
 
 // ── 手动保存的共享写盘路径 ──
@@ -446,7 +520,7 @@ export async function queuedAutoSave(docKey: string, content: string): Promise<v
 export async function writeDocumentWithBarrier(
   docKey: string,
   content: string,
-  options?: { expectedNativeHash?: string },
+  options?: { expectedNativeHash?: string; createOnly?: boolean },
 ): Promise<boolean> {
   // 🔴 R3-05/C09：closing 状态的旧会话拒绝写盘（返回 false——调用方得到明确失败，
   //    不以异常炸保存链；排空中的在途任务仍正常完成）
@@ -460,7 +534,7 @@ export async function writeDocumentWithBarrier(
   // 🔴 N04：排队时捕获会话代际（同路径重开后旧任务作废）
   const generation = getSessionGeneration(docKey);
 
-  return enqueueDocumentWrite(docKey, async () => {
+  return trackDocumentSave(docKey, () => enqueueDocumentWrite(docKey, async () => {
     // 🔴 N04：会话代际校验（排队到执行之间可能已换代）
     if (!isSessionCurrent(docKey, generation)) return false;
     const current = useDocumentStore.getState().getDocument(docKey);
@@ -470,17 +544,18 @@ export async function writeDocumentWithBarrier(
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return false;
     }
-    const written = await writeSnapshot(docKey, content, encoding, eol, options?.expectedNativeHash);
+    const written = await writeSnapshot(docKey, content, encoding, eol, options?.expectedNativeHash, options?.createOnly);
     const result = written.result;
     // 🔴 N04：写盘 I/O 返回后再校验（等待磁盘期间换代则不推进基线）
     if (!isSessionCurrent(docKey, generation)) return false;
     noteSelfWrite(docKey);
     if (!result.ok) {
+      recordSaveError(docKey, result.error ? getWriteErrorMessage(result.error) : '文件未能写入，请重试保存');
       if (result.error) {
         const { showWriteError } = await import(
           '../editor-code/orchestration/saveDocument'
         );
-        showWriteError(result.error);
+        if (isSessionCurrent(docKey, generation)) showWriteError(result.error);
       }
       return false;
     }
@@ -490,23 +565,26 @@ export async function writeDocumentWithBarrier(
     useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
     getBaseline(docKey).updateBaseline(savedContent);
     savedRevisions.set(docKey, revision);
+    savedWriteGenerations.set(docKey, generation);
     await refreshDirtyAfterWrite(docKey);
     await onDocumentSaved(docKey, savedContent);
+    if (isSessionCurrent(docKey, generation)) clearSaveError(docKey);
     if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     return true;
-  });
+  }));
 }
 
 /** Storage routing is shared by every auto/manual save. A native save commits
  * its linked Markdown before either baseline is advanced. */
-async function writeSnapshot(key: string, content: string, encoding: Parameters<typeof ipc.writeDocument>[2], eol: Parameters<typeof ipc.writeDocument>[3], expectedNativeHash?: string) {
+async function writeSnapshot(key: string, content: string, encoding: Parameters<typeof ipc.writeDocument>[2], eol: Parameters<typeof ipc.writeDocument>[3], expectedNativeHash?: string, createOnly?: boolean) {
   const doc = useDocumentStore.getState().getDocument(key);
+  const writeText = (text: string) => createOnly ? ipc.writeDocument(key, text, encoding, eol, true) : ipc.writeDocument(key, text, encoding, eol);
   if (doc?.kind !== 'noteboard') {
-    if (doc?.kind !== 'markdown') return { content, result: await ipc.writeDocument(key, content, encoding, eol), commit: async () => {} };
+    if (doc?.kind !== 'markdown') return { content, result: await writeText(content), commit: async () => {} };
     const { prepareDocumentImageAssets } = await import('../editor-md/prepareImageAssets');
     const prepared = await prepareDocumentImageAssets(content, 'markdown', key);
     const generation = getSessionGeneration(key);
-    return { content: prepared.content, result: await ipc.writeDocument(key, prepared.content, encoding, eol), commit: async () => {
+    return { content: prepared.content, result: await writeText(prepared.content), commit: async () => {
       if (!prepared.references.length) return;
       const { commitImageAssetSources } = await import('../editor-md/imageAssetCommit');
       await flushDocument(key, 'save');
@@ -515,7 +593,7 @@ async function writeSnapshot(key: string, content: string, encoding: Parameters<
   }
   const { persistNativeDocument } = await import('../document-format/nativePersistence');
   const generation = getSessionGeneration(key);
-  const prepared = await persistNativeDocument(doc, content, expectedNativeHash);
+  const prepared = await persistNativeDocument(createOnly ? { ...doc, persistedContent: null } : doc, content, expectedNativeHash);
   const result = { ok: prepared.result.ok, mtime: prepared.result.native?.mtime ?? 0, size: prepared.result.native?.size ?? 0,
     ...(prepared.result.error ? { error: { kind: 'io' as const, message: prepared.result.error.message } } : {}) };
   return { content: prepared.content, result, commit: async () => {

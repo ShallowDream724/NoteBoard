@@ -1,7 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { Editor } from '@tiptap/core';
-import type { Transaction } from '@tiptap/pm/state';
 import { Check, GripHorizontal, Pencil, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { Tooltip } from '../../../components/Tooltip';
 import { useHoverMenu } from '../../../components/useHoverMenu';
@@ -11,15 +10,19 @@ import { annotationIndexKey } from './extension';
 import { annotationAnchors, collectAnnotations, type AnnotationRecord } from './model';
 import { AnnotationBodyEditor, type AnnotationDraftHandle } from './bodyEditor';
 import { constrainAnnotationGeometry, type AnnotationBoundary, type AnnotationGeometry } from './geometry';
-import { captureAnnotationTarget, mapAnnotationTarget, resolveAnnotationTarget, type AnnotationDraftTarget } from './draftTarget';
+import { captureAnnotationTarget, resolveAnnotationTarget } from './draftTarget';
+import { annotationPanelSession, type AnnotationPanelState as PanelState } from './panelSession';
 import { editorDocumentKey } from '../editorDocumentCodec';
 import './annotations.css';
 
-interface PanelState { id: string; pinned: boolean; editing: boolean; geometry: AnnotationGeometry; trigger: HTMLElement | null; creation?: AnnotationDraftTarget }
 type OpenRequest = { id: string; edit: boolean };
+const emptyPanels: PanelState[] = [];
+const noSubscribe = () => () => {};
 
 export function AnnotationLayer({ editor, container }: { editor: Editor | null; container?: HTMLElement | null }) {
-  const [panels, setPanels] = useState<PanelState[]>([]), [, refresh] = useState(0);
+  const session = editor ? annotationPanelSession(editor) : null;
+  const panels = useSyncExternalStore(session?.subscribe ?? noSubscribe, session?.snapshot ?? (() => emptyPanels));
+  const setPanels = (update: (panels: PanelState[]) => PanelState[]) => session?.set(update);
   const pending = useRef<{ id: string; element: HTMLElement } | null>(null);
   const restoringFocus = useRef(false);
   const boundaryElement = useRef<HTMLElement | null>(null);
@@ -38,7 +41,7 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
       const existing = current.find(panel => panel.id === id);
       const retained = current.filter(panel => panel.pinned || panel.editing || panel.id === id);
       return existing ? retained.map(panel => panel.id === id ? { ...panel, editing: panel.editing || editing } : panel)
-        : [...retained, { id, pinned: false, editing, trigger: element,
+        : [...retained, { id, pinned: false, editing, trigger: element, body: records.get(id)?.node, position: records.get(id)?.pos,
           geometry: constrainAnnotationGeometry({ x: rect?.left ?? bounds.left + 24, y: (rect?.bottom ?? bounds.top + 24) + 6, width: 340 }, bounds) }];
     });
   };
@@ -55,11 +58,12 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
       geometry: constrainAnnotationGeometry({ x: rect?.left ?? bounds.left + 24, y: (rect?.bottom ?? bounds.top + 24) + 6, width: 340 }, bounds) }]);
   };
   const closeTransient = () => setPanels(current => current.filter(panel => panel.pinned || panel.editing));
-  const hover = useHoverMenu(panels.some(panel => !panel.pinned), value => {
+  const hover = useHoverMenu(panels.some(panel => !panel.pinned && !panel.editing), value => {
     if (value && pending.current) open(pending.current.id, pending.current.element);
     else if (!value) closeTransient();
-  }, false, false);
-  const latest = useRef({ open, begin, hover, hasTransient: false, hasPanels: false }); latest.current = { open, begin, hover, hasTransient: panels.some(panel => !panel.pinned), hasPanels: panels.length > 0 };
+  }, false, false, target => target instanceof Element && Boolean(editor?.view.dom.contains(target)
+    && target.closest('.nb-annotation-anchor, .nb-annotation-indicator')));
+  const latest = useRef({ open, begin, hover, hasTransient: false, hasPanels: false }); latest.current = { open, begin, hover, hasTransient: panels.some(panel => !panel.pinned && !panel.editing), hasPanels: panels.length > 0 };
   useEffect(() => {
     if (!editor) return;
     const dom = editor.view.dom;
@@ -96,28 +100,15 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
     };
     const beginRequest = (event: Event) => { latest.current.hover.cancel(); latest.current.begin((event as CustomEvent<AnnotationBeginRequest>).detail); };
     const dismissTransient = () => { latest.current.hover.cancel(); closeTransient(); };
-    const update = ({ transaction }: { transaction: Transaction }) => {
-      if (!transaction.docChanged || !latest.current.hasPanels) return;
-      const available = annotationIndexKey.getState(editor.state)?.records ?? collectAnnotations(editor.state.doc);
-      setPanels(current => current.flatMap(panel => panel.creation ? [{ ...panel, creation: mapAnnotationTarget(panel.creation, transaction) }] : available.has(panel.id) ? [panel] : []));
-      refresh(value => value + 1);
-    };
-    const outside = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element) || target.closest('.nb-annotation-panel') || (dom.contains(target) && anchor(target))) return;
-      latest.current.hover.cancel(); closeTransient();
-    };
     dom.addEventListener('pointerover', enter); dom.addEventListener('pointerout', leave);
     dom.addEventListener('click', click); dom.addEventListener('focusin', focus); dom.addEventListener('keydown', keyboard, true);
-    dom.addEventListener(ANNOTATION_OPEN_EVENT, request); dom.addEventListener(ANNOTATION_BEGIN_EVENT, beginRequest); document.addEventListener('pointerdown', outside, true);
+    dom.addEventListener(ANNOTATION_OPEN_EVENT, request); dom.addEventListener(ANNOTATION_BEGIN_EVENT, beginRequest);
     dom.addEventListener(ANNOTATION_DISMISS_TRANSIENT_EVENT, dismissTransient);
-    editor.on('transaction', update);
     return () => {
       dom.removeEventListener('pointerover', enter); dom.removeEventListener('pointerout', leave);
       dom.removeEventListener('click', click); dom.removeEventListener('focusin', focus); dom.removeEventListener('keydown', keyboard, true);
-      dom.removeEventListener(ANNOTATION_OPEN_EVENT, request); dom.removeEventListener(ANNOTATION_BEGIN_EVENT, beginRequest); document.removeEventListener('pointerdown', outside, true);
+      dom.removeEventListener(ANNOTATION_OPEN_EVENT, request); dom.removeEventListener(ANNOTATION_BEGIN_EVENT, beginRequest);
       dom.removeEventListener(ANNOTATION_DISMISS_TRANSIENT_EVENT, dismissTransient);
-      editor.off('transaction', update); setPanels([]);
     };
   }, [editor, container]);
   if (!editor || !panels.length) return null;
@@ -126,10 +117,12 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
     counts.set(anchor.id, (counts.get(anchor.id) ?? 0) + 1);
   }
   return createPortal(<>{panels.map(panel => {
-    const record = records.get(panel.id) ?? (panel.creation ? { id: panel.id, pos: -1, node: editor.schema.nodes.annotationBody.create({ id: panel.id }, editor.schema.nodes.paragraph.create()) } : null);
-    if (!record) return null;
-    return <AnnotationPanel key={panel.id} editor={editor} record={record} panel={panel} anchorCount={counts.get(panel.id) ?? 0} boundary={boundary}
-      onEnter={() => hover.cancel()} onLeave={() => { if (!panel.pinned && !panel.editing) hover.leave(); }}
+    const record = !panel.removed ? records.get(panel.id) : null;
+    const bodyRecord = record ?? (panel.body ? { id: panel.id, pos: -1, node: panel.body } : panel.creation ? { id: panel.id, pos: -1, node: editor.schema.nodes.annotationBody.create({ id: panel.id }, editor.schema.nodes.paragraph.create()) } : null);
+    if (!bodyRecord) return null;
+    return <AnnotationPanel key={panel.id} editor={editor} record={bodyRecord} panel={panel} anchorCount={counts.get(panel.id) ?? 0} boundary={boundary}
+      branch={hover.branch} onEnter={hover.contentProps.onPointerEnter} onFocus={hover.contentProps.onFocusCapture}
+      onLeave={event => { if (!panel.pinned && !panel.editing) hover.leave(event); }}
       onChange={change => setPanels(current => current.map(item => item.id === panel.id ? { ...item, ...change } : item))}
       onClose={restore => { hover.cancel(); setPanels(current => current.filter(item => item.id !== panel.id));
         if (restore) { restoringFocus.current = true; if (panel.trigger?.isConnected) panel.trigger.focus(); else editor.view.focus(); restoringFocus.current = false; }
@@ -137,9 +130,9 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
   })}</>, document.body);
 }
 
-function AnnotationPanel({ editor, record, panel, anchorCount, boundary, onChange, onClose, onEnter, onLeave }: {
+function AnnotationPanel({ editor, record, panel, anchorCount, boundary, branch, onChange, onClose, onEnter, onFocus, onLeave }: {
   editor: Editor; record: AnnotationRecord; panel: PanelState; anchorCount: number; boundary(): AnnotationBoundary;
-  onChange(change: Partial<PanelState>): void; onClose(restore: boolean): void; onEnter(): void; onLeave(): void;
+  branch: string; onChange(change: Partial<PanelState>): void; onClose(restore: boolean): void; onEnter(): void; onFocus(): void; onLeave(event: ReactPointerEvent<HTMLElement>): void;
 }) {
   const element = useRef<HTMLDivElement>(null), draft = useRef<AnnotationDraftHandle | null>(null);
   const gesture = useRef<{ id: number; x: number; y: number; geometry: AnnotationGeometry; resize: boolean } | null>(null);
@@ -185,20 +178,22 @@ function AnnotationPanel({ editor, record, panel, anchorCount, boundary, onChang
   const pointerHandlers = { onPointerMove: move, onPointerUp: (event: ReactPointerEvent<HTMLElement>) => end(event, false), onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => end(event, true), onLostPointerCapture: () => { gesture.current = null; } };
   const save = () => {
     if (!draft.current) return;
+    if (panel.removed) { setError('说明已被移除，无法保存。草稿已保留。'); return; }
     if (panel.creation) {
       const selection = resolveAnnotationTarget(panel.creation, editor.state.doc);
       if (!selection) { setError('原选区已删除，请重新选择正文。说明草稿已保留。'); return; }
       if (!addAnnotation(editor, draft.current.content(), { id: record.id, selection, open: false })) { setError('当前选区无法添加说明，请重新选择正文。说明草稿已保留。'); return; }
     } else if (!updateAnnotation(editor, record.id, draft.current.content())) { setError('说明已被移除，无法保存。'); return; }
-    setError(''); onChange({ editing: false, creation: undefined });
+    const saved = (annotationIndexKey.getState(editor.state)?.records ?? collectAnnotations(editor.state.doc)).get(record.id);
+    setError(''); onChange({ editing: false, creation: undefined, body: saved?.node, position: saved?.pos });
     requestAnimationFrame(() => element.current?.querySelector<HTMLElement>('[data-annotation-edit]')?.focus());
   };
-  const visibleError = error || (panel.creation?.invalid ? '原选区已删除，请重新选择正文。说明草稿已保留。' : '');
+  const visibleError = error || (panel.removed ? '说明已被移除，无法保存。草稿已保留。' : panel.creation?.invalid ? '原选区已删除，请重新选择正文。说明草稿已保留。' : '');
   const deleteLabel = anchorCount > 1 ? `删除说明及全部 ${anchorCount} 处关联` : '移除说明';
-  return <div ref={element} role="dialog" aria-label="补充说明" aria-modal="false" className="nb-annotation-panel" data-annotation-panel={record.id} data-shortcuts-suspended={panel.editing || undefined}
+  return <div ref={element} role="dialog" aria-label="补充说明" aria-modal="false" className="nb-annotation-panel" data-annotation-panel={record.id} data-shortcuts-suspended={panel.editing || undefined} data-nb-menu-branch={branch}
     data-annotation-editor-key={editorDocumentKey(editor)} data-annotation-target-from={panel.creation?.from} data-annotation-target-to={panel.creation?.to} data-annotation-target-invalid={panel.creation?.invalid || undefined}
     data-pinned={panel.pinned || undefined} style={{ left: panel.geometry.x, top: panel.geometry.y, width: panel.geometry.width, height: panel.geometry.height }}
-    onPointerEnter={onEnter} onPointerLeave={() => { if (!element.current?.contains(document.activeElement)) onLeave(); }} onFocus={onEnter}
+    onPointerEnter={onEnter} onPointerLeave={onLeave} onFocus={onFocus}
     onKeyDownCapture={event => {
       if (panel.editing && event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing && event.keyCode !== 229
         && event.target instanceof Element && event.target.closest('.nb-annotation-richtext')) {
@@ -206,11 +201,11 @@ function AnnotationPanel({ editor, record, panel, anchorCount, boundary, onChang
       }
     }}
     onKeyDown={event => {
-      if (event.defaultPrevented) return;
+      if (event.defaultPrevented || event.nativeEvent.isComposing || event.keyCode === 229) return;
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(true); }
     }}>
     <div className="nb-annotation-header" onPointerDown={event => start(event, false)} {...pointerHandlers}>
-      <span className="nb-annotation-title">补充说明{anchorCount > 1 ? ` · ${anchorCount} 处共用` : ''}</span>
+      <span className="nb-annotation-title">补充说明{anchorCount > 1 ? ` · ${anchorCount} 处共用` : ''}{panel.editing ? ' · 未保存草稿' : ''}</span>
       {panel.pinned && <span className="nb-annotation-move" role="button" tabIndex={0} aria-label="移动说明，使用方向键" onKeyDown={event => {
         if (!event.key.startsWith('Arrow')) return; event.preventDefault();
         const step = event.shiftKey ? 30 : 10;
@@ -219,17 +214,18 @@ function AnnotationPanel({ editor, record, panel, anchorCount, boundary, onChang
           y: panel.geometry.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) }, boundary()) });
       }}><GripHorizontal size={14}/></span>}
       <div className="nb-annotation-actions">
-        {!panel.creation && <Tooltip content={deleteLabel}><button type="button" aria-label={deleteLabel} onClick={() => { removeAnnotation(editor, record.id); onClose(true); }}><Trash2 size={14}/></button></Tooltip>}
+        {!panel.creation && !panel.removed && <Tooltip content={deleteLabel}><button type="button" aria-label={deleteLabel} onClick={() => { removeAnnotation(editor, record.id); onClose(true); }}><Trash2 size={14}/></button></Tooltip>}
         {!panel.editing && <Tooltip content="编辑说明"><button type="button" aria-label="编辑说明" data-annotation-edit onClick={() => onChange({ editing: true })}><Pencil size={14}/></button></Tooltip>}
         <Tooltip content={panel.pinned ? '取消固定' : '固定说明'}><button type="button" aria-label={panel.pinned ? '取消固定' : '固定说明'} aria-pressed={panel.pinned}
           onClick={() => onChange({ pinned: !panel.pinned })}>{panel.pinned ? <PinOff size={14}/> : <Pin size={14}/>}</button></Tooltip>
         <Tooltip content={panel.editing ? '取消编辑' : '关闭说明'}><button type="button" aria-label={panel.editing ? '取消编辑' : '关闭说明'} onClick={() => onClose(true)}><X size={14}/></button></Tooltip>
       </div>
     </div>
-    <div className="nb-annotation-scroll" data-editor-scroll><AnnotationBodyEditor editor={editor} body={record.node} editable={panel.editing} draft={draft}/></div>
+    <div className="nb-annotation-scroll" data-editor-scroll><AnnotationBodyEditor editor={editor} body={record.node} editable={panel.editing} draft={draft}
+      restoredDraft={annotationPanelSession(editor).draft(panel.id)} onDraftState={state => annotationPanelSession(editor).retainDraft(panel.id, state)}/></div>
     {panel.editing && <div className="nb-annotation-footer">
       <span className="nb-annotation-save-hint">Enter 保存 · Shift + Enter 换行</span>
-      <button type="button" onClick={() => { setError(''); if (panel.creation) onClose(true); else onChange({ editing: false }); }}>取消</button>
+      <button type="button" onClick={() => { setError(''); if (panel.creation || panel.removed) onClose(true); else onChange({ editing: false }); }}>取消</button>
       <button type="button" className="nb-annotation-save" onClick={save}><Check size={14}/>保存</button>
     </div>}
     {visibleError && <div role="alert" className="nb-annotation-error">{visibleError}{panel.creation && <button type="button" onClick={() => {

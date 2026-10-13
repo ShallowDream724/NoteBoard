@@ -17,6 +17,7 @@ import { dispatchEditorShortcut } from './dispatchEditorShortcut';
 import { getEditingScope, isEditingScopeInteraction, registerEditingScope, type EditingScope } from './editingScope';
 import { LinkModal } from './LinkModal';
 import { TextStyleKeys } from './textStyleShortcuts';
+import { ProseLink } from './proseLink';
 
 const active = new WeakMap<EditorView, () => void>();
 let nextHistoryGroup = -1;
@@ -39,7 +40,8 @@ export function mountFigureCaptionEditor(host: HTMLElement, options: {
   const editor: Editor = new Editor({ element, extensions: [
     StarterKit.configure({ document: false, heading: false, blockquote: false, codeBlock: false, horizontalRule: false,
       bulletList: false, orderedList: false, listItem: false, listKeymap: false, undoRedo: false,
-      dropcursor: false, gapcursor: false, trailingNode: false, link: { openOnClick: false }, code: false }),
+      dropcursor: false, gapcursor: false, trailingNode: false, link: false, code: false }),
+    ProseLink.configure({ openOnClick: false }),
     CaptionDocument, Code.extend({ excludes: '' }), MarkdownHighlight.configure({ multicolor: true }), TextColor, TextStyleKeys,
   ], content: captionDocument(figureCaptionContent(original?.attrs.caption, original?.attrs.captionContent)),
   editorProps: {

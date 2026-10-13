@@ -206,8 +206,9 @@ export function writeDocument(
   content: string,
   encoding: Encoding,
   eol: Eol,
+  createOnly?: boolean,
 ): Promise<WriteResult> {
-  return invoke<WriteResult>('write_document', { path, content, encoding, eol });
+  return invoke<WriteResult>('write_document', { path, content, encoding, eol, ...(createOnly ? { createOnly: true } : {}) });
 }
 
 /** Publish only a content-addressed recovery image; native code verifies bytes and never replaces another file. */

@@ -2,13 +2,14 @@
 // 基于 @radix-ui/react-tooltip 封装，自适应晨光/琥珀/墨夜主题，支持自定义延迟与微动效
 // 详见 docs/contextual-help.md
 
-import React, { createContext, useContext, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as RadixTooltip from '@radix-ui/react-tooltip';
 import { placeCursorTooltip, type TooltipSide } from './tooltipPosition';
 import { useResolvedShortcutLabel } from '../core/useShortcutBindings';
 import type { ContextualHelpKey } from './contextualHelp';
 import { HoverMenuContext } from './useHoverMenu';
+import { retainHoverMenu } from './hoverMenuLifecycle';
 
 // Load the shared document presentation only when a rich explanation opens.
 const ContextualHelpContent = React.lazy(() => import('./contextualHelp').then(module => ({ default: module.ContextualHelpContent })));
@@ -139,6 +140,8 @@ function FollowCursorTooltip({
   sideOffset: number;
 }) {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const [pending, setPending] = useState(false);
+  const id = useId();
   const timerRef = useRef<number | null>(null);
   const frameRef = useRef(0);
   const latestPoint = useRef({ x: 0, y: 0 });
@@ -153,10 +156,19 @@ function FollowCursorTooltip({
 
   // 卸载时清理未触发的延迟计时，避免对已卸载组件 setState
   useEffect(() => clearTimer, [clearTimer]);
+  const hide = () => { clearTimer(); setPending(false); setPoint(null); };
+  const latestHide = useRef(hide); latestHide.current = hide;
+  const visible = point !== null;
+  useEffect(() => {
+    if (!pending && !visible) return;
+    return retainHoverMenu({ id, branch: id, exclusive: false, isOpen: () => visible, owns: () => false,
+      pointer: () => latestHide.current(), dismiss: () => latestHide.current() });
+  }, [id, pending, visible]);
 
   useEffect(() => {
     if (disabled) {
       clearTimer();
+      setPending(false);
       setPoint(null);
     }
   }, [disabled, clearTimer]);
@@ -174,10 +186,12 @@ function FollowCursorTooltip({
     originalProps.onMouseEnter?.(e);
     if (disabled) return;
     clearTimer();
+    setPending(true);
     const { clientX, clientY } = e;
     latestPoint.current = { x: clientX, y: clientY };
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
+      setPending(false);
       setPoint(latestPoint.current);
     }, delayDuration);
   };
@@ -193,8 +207,7 @@ function FollowCursorTooltip({
 
   const handleMouseLeave = (e: React.MouseEvent) => {
     originalProps.onMouseLeave?.(e);
-    clearTimer();
-    setPoint(null);
+    hide();
   };
 
   if (!child) return <>{children}</>;
@@ -209,7 +222,7 @@ function FollowCursorTooltip({
         onMouseLeave: handleMouseLeave,
         onPointerDown: (event: React.PointerEvent) => {
           originalProps.onPointerDown?.(event);
-          clearTimer(); setPoint(null);
+          hide();
         },
       })}
       {point &&
@@ -247,9 +260,21 @@ export function Tooltip({
   const input = useContext(TooltipInput);
   const menu = useContext(HoverMenuContext);
   const [open, setOpen] = useState(false);
+  const [engaged, setEngaged] = useState(false);
+  const id = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const interrupted = useRef(false);
   const delay = delayDuration ?? (helpKey ? 650 : 100);
   const blocked = disabled || (!content && !shortcut);
-  useEffect(() => { if (blocked) setOpen(false); }, [blocked]);
+  useEffect(() => { if (blocked) { setOpen(false); setEngaged(false); } }, [blocked]);
+  useEffect(() => {
+    if (blocked || (!open && !engaged)) return;
+    const hide = () => { interrupted.current = true; setOpen(false); setEngaged(false); };
+    return retainHoverMenu({ id, branch: [menu?.branch, id].filter(Boolean).join(' '), exclusive: false, isOpen: () => open,
+      owns: target => target instanceof Node && Boolean(triggerRef.current?.contains(target) || contentRef.current?.contains(target)),
+      pointer: hide, dismiss: hide });
+  }, [blocked, engaged, open, id, menu?.branch]);
   // 跟随指针模式必须始终使用同一组件形态，否则 disabled 切换会重建子元素 DOM
   // A rich explanation keeps a stable anchor so the pointer can enter the card.
   if (followCursor && !helpKey) {
@@ -258,7 +283,7 @@ export function Tooltip({
         content={content}
         shortcut={shortcut}
         delayDuration={delay}
-        disabled={disabled}
+        disabled={blocked}
         side={side}
         align={align}
         sideOffset={sideOffset}
@@ -269,18 +294,27 @@ export function Tooltip({
   }
 
   const tooltip = (
-    <RadixTooltip.Root delayDuration={delay} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked)}>
-      <RadixTooltip.Trigger asChild={asChild} onPointerMove={event => {
+    <RadixTooltip.Root delayDuration={delay} open={open && !blocked} onOpenChange={value => setOpen(value && !blocked && !interrupted.current)}>
+      <RadixTooltip.Trigger ref={triggerRef} asChild={asChild}
+        onPointerEnter={event => { if (!blocked && event.pointerType !== 'touch') { interrupted.current = false; setEngaged(true); } }}
+        onPointerLeave={() => setEngaged(false)} onBlur={() => setEngaged(false)} onPointerMove={event => {
         // A blocked Radix root still announces an attempted open globally.
         // Suppress that attempt so an empty parent cannot dismiss child help.
         if (blocked) event.preventDefault();
       }} onFocus={event => {
         if (blocked || (input ? input.current !== 'keyboard' : !event.currentTarget.matches(':focus-visible'))) event.preventDefault();
+        else { interrupted.current = false; setEngaged(true); }
       }}>
         {children}
       </RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content
+          ref={contentRef}
+          onEscapeKeyDown={event => {
+            if (event.isComposing || event.keyCode === 229) { event.preventDefault(); return; }
+            // Help is incidental chrome of its owner, not another menu level.
+            if (menu?.escape) { event.preventDefault(); setOpen(false); setEngaged(false); menu.escape(); }
+          }}
           data-nb-editor-menu={helpKey ? true : undefined}
           data-nb-menu-branch={helpKey ? menu?.branch : undefined}
           onPointerEnter={helpKey ? () => menu?.cancel() : undefined}

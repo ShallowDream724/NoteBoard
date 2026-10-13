@@ -8,6 +8,7 @@ import { tableFill } from '../editor-md/tableCellPresentation';
 import { documentTableStyle } from '../editor-md/documentPresentation';
 import { documentColor } from '../document-style/colors';
 import { figureCaptionContent, normalizeFigureCaption } from '../editor-md/figureCaption';
+import { resolveDocumentImageSource } from '../../core/documentImageSource';
 
 type Ast = { t: string; c?: unknown };
 type Attributes = Record<string, string>;
@@ -21,7 +22,7 @@ const dimension = (value: unknown) => typeof value === 'number' && Number.isFini
 
 /** One direct read of the authoritative tree. Target writers consume semantic
  * Pandoc nodes plus a small presentation vocabulary; no portable/PM round trip. */
-export function pandocSource(source: string | DocumentNode): string {
+export function pandocSource(source: string | DocumentNode, baseDirectory = ''): string {
   const document = typeof source === 'string' ? parseMarkdownDocument(source) : source;
   const cellFills = documentTableStyle(document) !== 'three-line';
   const bodies = new Map<string, DocumentNode>(), usedNotes = new Set<string>(), activeNotes = new Set<string>();
@@ -62,7 +63,9 @@ export function pandocSource(source: string | DocumentNode): string {
     else if (value.type.name === 'image') {
       const size: Attributes = {};
       for (const key of ['width', 'height']) { const valid = dimension(value.attrs[key]); if (valid) size[key] = valid; }
-      result = [node('Image', [attr([], size), words(value.attrs.alt ?? ''), [value.attrs.src, value.attrs.title ?? '']])];
+      const source = resolveDocumentImageSource(String(value.attrs.src ?? ''), baseDirectory);
+      result = source.kind === 'blocked' ? words(source.message)
+        : [node('Image', [attr([], size), words(value.attrs.alt ?? ''), [source.kind === 'file' ? source.path : source.url, value.attrs.title ?? '']])];
     } else return [node('Code', [attr(), String(value.attrs.raw ?? JSON.stringify(value.toJSON()))])];
     const presentation: Attributes = {};
     for (const mark of [...value.marks].reverse()) {

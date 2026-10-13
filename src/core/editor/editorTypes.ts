@@ -115,6 +115,8 @@ export interface EditorCapabilities {
    * 未提供时保守视为 true（调用方走完整 flush 屏障）。
    */
   hasUnconfirmedInput?(): boolean;
+  /** A child editor still needs an explicit Save/Cancel; parent Save cannot confirm it. */
+  hasExplicitDraft?(): boolean;
   /**
    * 捕获视图状态（S11 回收流程；同步读取内核状态，不含正文）。
    * 返回类型见 editorTypes 底部的判别联合；不可恢复的类型返回 undefined。

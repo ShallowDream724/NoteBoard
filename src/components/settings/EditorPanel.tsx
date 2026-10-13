@@ -9,9 +9,13 @@ export function EditorPanel() {
       <SettingRow label="默认视图" description="新打开 Markdown 文档时使用的模式。"><select value={editor.defaultViewMode} onChange={event => setEditor({ defaultViewMode: event.target.value as 'visual' | 'source' })} style={{ ...inputStyle, width: '10em' }}><option value="visual">可视化模式</option><option value="source">源码模式</option></select></SettingRow>
       <SettingRow label="纯 Markdown 偏好" description="默认新建 Markdown，并隐藏 NoteBoard 专属功能入口。"><input type="checkbox" checked={editor.pureMarkdown ?? false} onChange={event => setEditor({ pureMarkdown: event.target.checked })}/></SettingRow>
       <SettingRow label="选区工具栏位置"><select value={editor.selectionToolbarPosition ?? 'below'} onChange={event => setEditor({ selectionToolbarPosition: event.target.value as 'below' | 'above' })} style={{ ...inputStyle, width: '10em' }}><option value="below">选区下方</option><option value="above">选区上方</option></select></SettingRow>
+      <SettingRow label="大纲与书签" description="浮动面板覆盖正文，右侧栏为导航保留独立空间。"><select value={editor.navigationPanelMode ?? 'floating'} onChange={event => setEditor({ navigationPanelMode: event.target.value as 'floating' | 'docked' })} style={{ ...inputStyle, width: '10em' }}><option value="floating">浮动面板</option><option value="docked">右侧栏</option></select></SettingRow>
       <SettingRow label="数学公式渲染"><input type="checkbox" checked={editor.enableMath} onChange={event => setEditor({ enableMath: event.target.checked })}/></SettingRow>
       <SettingRow label="Mermaid 图表渲染"><input type="checkbox" checked={editor.enableMermaid} onChange={event => setEditor({ enableMermaid: event.target.checked })}/></SettingRow>
       <SettingRow label="显示块把手" description="拖动段落或打开块菜单。"><input type="checkbox" checked={editor.enableBlockHandle} onChange={event => setEditor({ enableBlockHandle: event.target.checked })}/></SettingRow>
+    </SettingsSection>
+    <SettingsSection title="表格">
+      <SettingRow label="列宽拖动" description="表格最外侧边缘始终调整整表宽度。"><select value={editor.tableColumnResizeMode ?? 'grow'} onChange={event => setEditor({ tableColumnResizeMode: event.target.value as 'grow' | 'adjacent' })} style={{ ...inputStyle, width: '13em' }}><option value="grow">随列宽调整整表</option><option value="adjacent">调整相邻列</option></select></SettingRow>
     </SettingsSection>
     <SettingsSection title="代码与纯文本显示">
       <SettingRow label="显示行号" description="显示代码行号与当前行高亮。"><input type="checkbox" checked={editor.showLineNumbers} onChange={event => setEditor({ showLineNumbers: event.target.checked })}/></SettingRow>

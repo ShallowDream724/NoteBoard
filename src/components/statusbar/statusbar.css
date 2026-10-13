@@ -1,0 +1,16 @@
+.nb-status-metadata {
+  display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; overflow: hidden;
+}
+.nb-status-metadata > * { flex-shrink: 0; }
+.nb-status-save {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  height: calc(var(--ui-font-size, 13px) + 8px); margin-right: 8px; padding: 0 7px; border: 1px solid var(--editor-border);
+  border-radius: 4px; background: transparent; color: var(--statusbar-text);
+  font: inherit; cursor: pointer;
+}
+.nb-status-save:hover:not(:disabled) { background: var(--toolbar-hover); color: var(--editor-text); }
+.nb-status-save:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+.nb-status-save:disabled { opacity: .55; cursor: default; }
+.nb-status-save-spinner { animation: nb-save-spin 1s linear infinite; }
+@keyframes nb-save-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .nb-status-save-spinner { animation: none; } }

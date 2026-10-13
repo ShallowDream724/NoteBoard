@@ -16,6 +16,7 @@ import {
   queuedAutoSave,
   migrateDocumentSession,
   disposeDocumentSession,
+  drainDocumentWrites,
 } from '@/features/session/documentSession';
 import { stashPendingDocuments } from '@/features/staging/stagingManager';
 import { saveDocument } from '@/features/editor-code/orchestration/saveDocument';
@@ -24,6 +25,9 @@ import { useDocumentStore } from '@/stores/documentStore';
 import { useWindowStore } from '@/stores/windowStore';
 import * as ipc from '@/core/ipc/commands';
 import { on, off } from '@/core/emitter';
+import { useSaveActivityStore } from '@/stores/saveActivityStore';
+import { recordSaveError } from '@/stores/saveActivityStore';
+import * as staging from '@/features/staging/stagingManager';
 
 const images = vi.hoisted(() => ({ restore: vi.fn() }));
 vi.mock('@/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: images.restore }));
@@ -192,6 +196,164 @@ describe('S09 保存竞态与版本屏障（H 节时序）', () => {
     } finally {
       fake.dispose();
     }
+  });
+
+  it('同版本重复保存复用请求，新输入后的保存仍排队写入新版本', async () => {
+    seedDocument('基线');
+    const fake = installFakeCaps(KEY, '首次编辑');
+    let resolveWrite!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { resolveWrite = resolve; }))
+      .mockResolvedValue({ ok: true, mtime: 2, size: 4, error: null });
+    try {
+      const first = saveDocument(KEY);
+      expect(saveDocument(KEY)).toBe(first);
+      await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+      // The first flush changed the mirror; that must not defeat coalescing.
+      expect(saveDocument(KEY)).toBe(first);
+      expect(useSaveActivityStore.getState().activities.get(KEY)?.pending).toBeGreaterThan(0);
+      fake.edit('第二版');
+      const second = saveDocument(KEY);
+      expect(second).not.toBe(first);
+      resolveWrite({ ok: true, mtime: 1, size: 4, error: null });
+      await Promise.all([first, second]);
+      expect(ipc.writeDocument).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(ipc.writeDocument).mock.calls.map(call => call[1])).toEqual(['首次编辑', '第二版']);
+      expect(useDocumentStore.getState().getDocument(KEY)?.isDirty).toBe(false);
+      expect(useSaveActivityStore.getState().activities.has(KEY)).toBe(false);
+    } finally { fake.dispose(); }
+  });
+
+  it.each(['manual', 'auto'] as const)('%s写盘返回失败保持脏态并提供可重试错误，成功重试清除错误', async mode => {
+    seedDocument('基线', mode);
+    const fake = installFakeCaps(KEY, '新输入');
+    useDocumentStore.getState().setContent(KEY, '新输入');
+    vi.mocked(ipc.writeDocument).mockResolvedValueOnce({ ok: false, mtime: 0, size: 0, error: { kind: 'disk-full' } })
+      .mockResolvedValueOnce({ ok: true, mtime: 1, size: 3, error: null });
+    try {
+      const save = () => mode === 'manual' ? saveDocument(KEY) : queuedAutoSave(KEY, '新输入');
+      await save();
+      expect(useDocumentStore.getState().getDocument(KEY)?.isDirty).toBe(true);
+      expect(useDocumentStore.getState().getDocument(KEY)?.baselineContent).toBe('基线');
+      expect(useSaveActivityStore.getState().activities.get(KEY)).toEqual({ pending: 0, error: '磁盘空间不足，无法保存' });
+      await save();
+      expect(useSaveActivityStore.getState().activities.has(KEY)).toBe(false);
+      expect(useDocumentStore.getState().getDocument(KEY)?.isDirty).toBe(false);
+    } finally { fake.dispose(); }
+  });
+
+  it.each(['manual', 'auto'] as const)('%s保存的迟到暂存清理不会清除同路径新会话的错误', async mode => {
+    seedDocument('旧会话基线', mode);
+    const fake = installFakeCaps(KEY, '旧会话输入');
+    let finish!: () => void;
+    const cleanup = vi.spyOn(staging, 'onDocumentSaved').mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    vi.mocked(ipc.writeDocument).mockResolvedValue({ ok: true, mtime: 1, size: 4, error: null });
+    try {
+      const saving = mode === 'manual' ? saveDocument(KEY) : queuedAutoSave(KEY, '旧会话输入');
+      await vi.waitFor(() => expect(cleanup).toHaveBeenCalled());
+      useDocumentStore.getState().remove(KEY);
+      seedDocument('新会话', mode);
+      recordSaveError(KEY, '新会话保存失败');
+      finish(); await saving;
+      expect(useSaveActivityStore.getState().activities.get(KEY)?.error).toBe('新会话保存失败');
+    } finally { cleanup.mockRestore(); fake.dispose(); }
+  });
+
+  it('慢速写盘期间100版自动保存仅保留在途与最新待写版本，关闭屏障等待两者', async () => {
+    seedDocument('base', 'auto'); const fake = installFakeCaps(KEY, 'base');
+    let finish!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, mtime: 2, size: 4, error: null });
+    try {
+      fake.edit('r1'); const first = queuedAutoSave(KEY, 'r1');
+      await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+      const pending: Promise<void>[] = [];
+      for (let index = 2; index <= 100; index++) { fake.edit(`r${index}`); pending.push(queuedAutoSave(KEY, `r${index}`)); }
+      expect(new Set(pending).size).toBe(1);
+      expect(useSaveActivityStore.getState().activities.get(KEY)?.pending).toBe(2);
+      const drained = drainDocumentWrites(KEY);
+      finish({ ok: true, mtime: 1, size: 2, error: null });
+      await Promise.all([first, ...pending, drained]);
+      expect(vi.mocked(ipc.writeDocument).mock.calls.map(call => call[1])).toEqual(['r1', 'r100']);
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'r100', isDirty: false });
+      expect((await flushDocument(KEY, 'save'))?.content).toBe('r100');
+      expect(useSaveActivityStore.getState().activities.has(KEY)).toBe(false);
+    } finally { fake.dispose(); }
+  });
+
+  it('手动写入封存此前待写自动版本，之后的自动合并严格排在手动写入后', async () => {
+    seedDocument('base', 'auto'); const fake = installFakeCaps(KEY, 'base');
+    let finish!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, mtime: 2, size: 4, error: null });
+    try {
+      fake.edit('A'); const first = queuedAutoSave(KEY, 'A');
+      await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+      fake.edit('B'); const before = queuedAutoSave(KEY, 'B');
+      fake.edit('manual'); const manual = writeDocumentWithBarrier(KEY, 'manual');
+      fake.edit('C'); const after = queuedAutoSave(KEY, 'C');
+      fake.edit('D'); expect(queuedAutoSave(KEY, 'D')).toBe(after);
+      expect(after).not.toBe(before);
+      finish({ ok: true, mtime: 1, size: 1, error: null });
+      await Promise.all([first, before, manual, after]);
+      expect(vi.mocked(ipc.writeDocument).mock.calls.map(call => call[1])).toEqual(['A', 'B', 'manual', 'D']);
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'D', isDirty: false });
+      expect((await flushDocument(KEY, 'save'))?.content).toBe('D');
+    } finally { fake.dispose(); }
+  });
+
+  it('最终待写自动版本失败保持错误和脏态，后续重试不被旧队列阻断', async () => {
+    seedDocument('base', 'auto'); const fake = installFakeCaps(KEY, 'base');
+    let finish!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce({ ok: false, mtime: 0, size: 0, error: { kind: 'disk-full' } })
+      .mockResolvedValue({ ok: true, mtime: 3, size: 4, error: null });
+    try {
+      fake.edit('first'); const first = queuedAutoSave(KEY, 'first');
+      await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+      fake.edit('latest'); const latest = queuedAutoSave(KEY, 'latest');
+      finish({ ok: true, mtime: 1, size: 5, error: null }); await Promise.all([first, latest]);
+      expect(useSaveActivityStore.getState().activities.get(KEY)?.error).toContain('磁盘空间不足');
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'first', isDirty: true });
+      expect((await flushDocument(KEY, 'save'))?.content).toBe('latest');
+      await queuedAutoSave(KEY, 'latest');
+      expect(useSaveActivityStore.getState().activities.has(KEY)).toBe(false);
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'latest', isDirty: false });
+    } finally { fake.dispose(); }
+  });
+
+  it('写盘期间撤回到当前基线仍排入最新自动版本，旧写入完成后恢复磁盘原文', async () => {
+    seedDocument('base', 'auto'); const fake = installFakeCaps(KEY, 'base');
+    let finish!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, mtime: 2, size: 4, error: null });
+    try {
+      fake.edit('changed'); const first = queuedAutoSave(KEY, 'changed');
+      await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+      fake.edit('base'); const reverted = queuedAutoSave(KEY, 'base');
+      finish({ ok: true, mtime: 1, size: 7, error: null }); await Promise.all([first, reverted]);
+      expect(vi.mocked(ipc.writeDocument).mock.calls.map(call => call[1])).toEqual(['changed', 'base']);
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'base', content: 'base', isDirty: false });
+    } finally { fake.dispose(); }
+  });
+
+  it('关闭同路径重开丢弃旧待写自动快照，新会话低版本仍可保存', async () => {
+    seedDocument('old base', 'auto'); const oldEditor = installFakeCaps(KEY, 'old base');
+    let finish!: (result: Awaited<ReturnType<typeof ipc.writeDocument>>) => void;
+    vi.mocked(ipc.writeDocument).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, mtime: 2, size: 4, error: null });
+    oldEditor.edit('old active'); const active = queuedAutoSave(KEY, 'old active');
+    await vi.waitFor(() => expect(ipc.writeDocument).toHaveBeenCalledOnce());
+    oldEditor.edit('old pending'); const pending = queuedAutoSave(KEY, 'old pending');
+    oldEditor.dispose(); useDocumentStore.getState().remove(KEY); disposeDocumentSession(KEY);
+    seedDocument('new base', 'auto'); const newEditor = installFakeCaps(KEY, 'new base');
+    try {
+      newEditor.edit('new content'); const current = queuedAutoSave(KEY, 'new content');
+      finish({ ok: true, mtime: 1, size: 10, error: null });
+      await Promise.all([active, pending, current]);
+      expect(vi.mocked(ipc.writeDocument).mock.calls.map(call => call[1])).toEqual(['old active', 'new content']);
+      expect(useDocumentStore.getState().getDocument(KEY)).toMatchObject({ baselineContent: 'new content', isDirty: false });
+      expect(useSaveActivityStore.getState().activities.has(KEY)).toBe(false);
+    } finally { newEditor.dispose(); }
   });
 
   it('时序 3：保存 r10 成功后，r11 的暂存副本不被删除（带内容证明）', async () => {

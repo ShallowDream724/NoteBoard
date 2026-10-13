@@ -130,18 +130,21 @@ describe('提示块内容与保存', () => {
     } finally { await act(async () => root.unmount()); host.remove(); editor.destroy(); vi.unstubAllGlobals(); }
   });
   it('表格、分隔线和媒体不能转换为提示块，也不触发格式切换', () => {
-    const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>正文</p>' });
-    try {
-      const s = editor.schema.nodes;
-      for (const block of [s.horizontalRule.create(), s.image.create({ src: 'image.png' }), s.codeBlock.create(),
-        s.table.create(null, s.tableRow.create(null, s.tableCell.create(null, s.paragraph.create())))]) {
-        editor.commands.setContent({ type: 'doc', content: [block.toJSON()] });
+    const schema = documentParser().schema.nodes;
+    const blocks = [schema.horizontalRule.create(), schema.image.create({ src: 'image.png' }), schema.codeBlock.create(),
+      schema.table.create(null, schema.tableRow.create(null, schema.tableCell.create(null, schema.paragraph.create())))];
+    for (const block of blocks) {
+      // Mount each target directly; this tests the callout command rather than
+      // the upstream delete-all normalization of an atom-to-empty replacement.
+      const editor = new Editor({ extensions: buildDocumentExtensions(), content: { type: 'doc', content: [block.toJSON()] } });
+      try {
         const doc = editor.state.doc;
+        expect(doc.toJSON()).toEqual({ type: 'doc', content: [block.toJSON()] });
         expect(canWrapBlockInCallout(editor, 0)).toBe(false);
         expect(wrapBlockInCallout(editor, 0)).toBe(false);
         expect(editor.state.doc).toBe(doc);
-      }
-    } finally { editor.destroy(); }
+      } finally { editor.destroy(); }
+    }
   });
   it('GFM预设不触发能力门控，自定义属性有明确的提示块能力', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p></p>' });

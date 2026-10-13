@@ -9,7 +9,7 @@ import { splitListItem } from '@tiptap/pm/schema-list';
 import { tableEditing } from '@tiptap/pm/tables';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useDocumentStore } from '../../../stores/documentStore';
-import { resolveRelativeDocPath } from '../linkHandler';
+import { resolveDocumentImageSource } from '../../../core/documentImageSource';
 import { createClipboardImportPlugin } from '../clipboard/clipboardImport';
 import { createTableViewportPlugin } from '../tableViewport';
 import { EfficientTableView } from '../tableView';
@@ -20,6 +20,7 @@ import { normalizeImageSlots } from '../imageCaptions';
 import { normalizeFigureCaption, renderFigureCaption } from '../figureCaption';
 import { handleTextStyleShortcut } from '../textStyleShortcuts';
 import { clearDraftTextFormatting, runDraftCommand } from './bodyFormatting';
+import { createProseLinkReplacementPlugin } from '../proseLink';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
@@ -44,6 +45,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
     ...(editable ? [
       createClipboardImportPlugin({ docKey, ownerCurrent: () => !editor.isDestroyed, stripAnnotations: true }),
       createMediaEditingPlugin(), history(), keymap(bindings), keymap(baseKeymap),
+      ...(schema.marks.link ? [createProseLinkReplacementPlugin(schema.marks.link)] : []),
       ...(tables ? [tableEditing()] : []),
     ] : []),
     ...(tables ? [createTableViewportPlugin()] : []),
@@ -73,12 +75,16 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
         const dom = document.createElement('img'); dom.alt = String(node.attrs.alt ?? '');
         const raw = String(node.attrs.src ?? '');
         const base = docKey ? useDocumentStore.getState().getDocument(docKey)?.dirPath : null;
-        if (raw && !/^(https?:|data:|blob:|asset:)/i.test(raw) && (base || /^[a-zA-Z]:[\\/]/.test(raw))) {
-          try { dom.src = convertFileSrc(base ? resolveRelativeDocPath(base, raw) : raw); } catch { dom.src = raw; }
-        } else dom.src = raw;
+        const source = resolveDocumentImageSource(raw, base ?? '');
+        if (source.kind === 'blocked') {
+          const message = document.createElement('p'); message.textContent = source.message;
+          message.className = 'nb-image-source-blocked'; figure.append(message);
+        } else if (source.kind === 'file') {
+          try { dom.src = convertFileSrc(source.path); } catch { dom.alt = '图片加载失败'; }
+        } else if (source.url) dom.src = source.url;
         dom.loading = 'lazy'; dom.referrerPolicy = 'no-referrer';
         dom.style.maxWidth = '100%'; dom.style.height = 'auto'; dom.style.display = 'block';
-        figure.append(dom);
+        if (source.kind !== 'blocked') figure.append(dom);
         if (normalizeFigureCaption(node.attrs.caption)) {
           const caption = document.createElement('figcaption'); renderFigureCaption(caption, node.attrs.caption, node.attrs.captionContent); figure.append(caption);
         }

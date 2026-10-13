@@ -4,14 +4,28 @@ import { Editor } from '@tiptap/core';
 import { Step } from '@tiptap/pm/transform';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { parseMarkdown, serializeMarkdown } from '../../src/features/editor-md/serialize';
-import { columnWidthsStep, resizedColumnPair } from '../../src/features/editor-md/tableColumnWidths';
+import { columnWidthsStep, resizedColumnWidth, resizedColumnPair } from '../../src/features/editor-md/tableColumnWidths';
 
 describe('table column gestures', () => {
-  it('redistributes adjacent columns and clamps only at the minimum', () => {
+  it('resizes one column without borrowing width from a neighbour', () => {
+    expect(resizedColumnWidth(500, -120)).toBe(380);
+    expect(resizedColumnWidth(500, 300)).toBe(800);
+    expect(resizedColumnWidth(100, 120)).toBe(220);
+    expect(resizedColumnWidth(80, -100)).toBe(40);
+    expect(resizedColumnWidth(80, 20000)).toBe(10000);
+  });
+  it('keeps imported narrow widths stable until the user grows them', () => {
+    expect(resizedColumnWidth(10, 1)).toBe(11);
+    expect(resizedColumnWidth(10, -20)).toBe(10);
+    expect(resizedColumnWidth(10, 50)).toBe(60);
+  });
+  it('optionally exchanges adjacent widths while keeping the outer boundary free', () => {
     expect(resizedColumnPair([80, 500, 100], 1, -120)).toEqual([380, 220]);
     expect(resizedColumnPair([80, 500, 100], 1, 300)).toEqual([560, 40]);
     expect(resizedColumnPair([80, 500, 100], 2, 120)).toEqual([220, undefined]);
     expect(resizedColumnPair([10, 10], 0, 1)).toEqual([10, 10]);
+    expect(resizedColumnPair([10, 500], 0, 4)).toEqual([14, 496]);
+    expect(resizedColumnPair([10000, 10000], 0, -500)).toEqual([10000, 10000]);
   });
   it('commits one attribute step, preserves text/selection/DOM and supports undo/redo', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions() });

@@ -7,12 +7,15 @@ import { TooltipProvider } from '@/components/Tooltip';
 import { annotationSchemaExtensions } from '@/features/editor-md/annotations/schema';
 import { AnnotationBehavior } from '@/features/editor-md/annotations/extension';
 import { AnnotationLayer } from '@/features/editor-md/annotations/AnnotationLayer';
-import { beginAnnotation, addAnnotation, dismissTransientAnnotations } from '@/features/editor-md/annotations/commands';
+import { beginAnnotation, addAnnotation, dismissTransientAnnotations, removeAnnotation } from '@/features/editor-md/annotations/commands';
 import { annotationAnchors, collectAnnotations } from '@/features/editor-md/annotations/model';
 import { undoDepth } from '@tiptap/pm/history';
 import { EditorView } from '@tiptap/pm/view';
 import { nativeTestEditor } from './nativeTestEditor';
 import { getEditingScope } from '@/features/editor-md/editingScope';
+import { hasAnnotationDraft } from '@/features/editor-md/annotations/panelSession';
+import { createMarkdownEditorCapabilities } from '@/features/editor-md/editorCapabilities';
+import { registerMdTipTapEditor } from '@/features/editor-md/editorInstances';
 
 let editor: Editor, root: Root;
 beforeEach(async () => {
@@ -60,6 +63,112 @@ it('keeps the hover panel open across the anchor-to-panel gap, then closes outsi
   expect(panel()).not.toBeNull();
   await act(async () => pointer(document.body, 'pointerdown'));
   expect(panel()).toBeNull();
+});
+
+it('dismisses reading panels after leaving a focused header action', async () => {
+  await act(async () => { pointer(anchor(), 'pointerover'); vi.advanceTimersByTime(280); });
+  await act(async () => {
+    pointer(panel()!, 'pointerover'); panel()!.querySelector<HTMLButtonElement>('button')!.focus();
+    pointer(panel()!, 'pointerout'); vi.advanceTimersByTime(350);
+  });
+  expect(panel()).toBeNull();
+});
+
+it('dismisses reading panels on interruption while preserving unsaved editors', async () => {
+  await act(async () => anchor().click());
+  await act(async () => window.dispatchEvent(new Event('blur')));
+  expect(panel()).toBeNull();
+  await act(async () => { editor.commands.setTextSelection(targetRange()); beginAnnotation(editor); });
+  const field = await enterBody('draft survives backgrounding');
+  await act(async () => window.dispatchEvent(new Event('blur')));
+  expect(field.isConnected).toBe(true); expect(field.textContent).toBe('draft survives backgrounding');
+});
+
+it('restores a hidden draft and its undo history without retaining a view or changing the parent document', async () => {
+  const original = editor.state.doc;
+  await act(async () => { editor.commands.setTextSelection(targetRange()); beginAnnotation(editor); });
+  const previousField = await enterBody('Draft across tab switches');
+  expect(hasAnnotationDraft(editor)).toBe(true);
+  await act(async () => root.render(null));
+  expect(previousField.isConnected).toBe(false); expect(getEditingScope(editor.view)).toBeNull(); expect(panel()).toBeNull();
+  expect(editor.state.doc).toBe(original); expect(hasAnnotationDraft(editor)).toBe(true);
+  await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+  const restoredField = panel()!.querySelector<HTMLElement>('.nb-annotation-richtext')!;
+  expect(restoredField.textContent).toBe('Draft across tab switches');
+  await act(async () => restoredField.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })));
+  expect(restoredField.textContent).toBe(''); expect(editor.state.doc).toBe(original);
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('button[aria-label="取消编辑"]')!.click());
+  expect(hasAnnotationDraft(editor)).toBe(false);
+});
+
+it('protects explicit drafts from eviction and identity loss while ordinary Save captures only the parent document', async () => {
+  const key = 'C:\\test\\draft-capabilities.nb';
+  const unregister = registerMdTipTapEditor(key, editor);
+  const capabilities = createMarkdownEditorCapabilities(key, 'draft-capabilities-test');
+  try {
+    expect(capabilities.canSuspend()).toBe(true);
+    await act(async () => { editor.commands.setTextSelection(targetRange()); beginAnnotation(editor); });
+    await enterBody('Explicit draft must not be silently saved');
+    await act(async () => root.render(null));
+    expect(capabilities.canSuspend()).toBe(false); expect(capabilities.hasUnconfirmedInput?.()).toBe(true); expect(capabilities.hasExplicitDraft?.()).toBe(true);
+    for (const reason of ['close', 'evict', 'transfer', 'switch-mode'] as const) await expect(capabilities.flush(reason)).rejects.toThrow('请先保存或取消说明草稿');
+    const saved = await capabilities.flush('save');
+    expect(saved?.content).toContain('Read this note'); expect(saved?.content).not.toContain('Explicit draft must not be silently saved');
+    await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+    await act(async () => panel()!.querySelector<HTMLButtonElement>('button[aria-label="取消编辑"]')!.click());
+    expect(capabilities.canSuspend()).toBe(true); expect(capabilities.hasExplicitDraft?.()).toBe(false);
+  } finally { unregister(); }
+});
+
+it('maps a creation target while its draft is hidden and refuses to save a deleted target', async () => {
+  const range = targetRange();
+  await act(async () => { editor.commands.setTextSelection(range); beginAnnotation(editor); });
+  await enterBody('Keep the deleted-target draft');
+  await act(async () => root.render(null));
+  await act(async () => editor.view.dispatch(editor.state.tr.delete(range.from, range.to)));
+  await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+  expect(panel()?.dataset.annotationTargetInvalid).toBe('true');
+  expect(panel()?.querySelector('.nb-annotation-richtext')?.textContent).toBe('Keep the deleted-target draft');
+  const parentBeforeSave = editor.state.doc;
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('.nb-annotation-save')!.click());
+  expect(editor.state.doc).toBe(parentBeforeSave); expect(panel()?.querySelector('[role="alert"]')?.textContent).toContain('原选区已删除');
+});
+
+it('restores pins but dismisses passive reading panels when their layer is hidden', async () => {
+  await act(async () => anchor().click());
+  await act(async () => root.render(null));
+  await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+  expect(panel()).toBeNull();
+  await act(async () => anchor().click());
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('button[aria-label="固定说明"]')!.click());
+  await act(async () => root.render(null));
+  await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+  expect(panel()?.dataset.pinned).toBe('true'); expect(hasAnnotationDraft(editor)).toBe(false);
+});
+
+it.each(['delete/reuse', 'replace'])('keeps an existing draft detached from a reused id after hidden %s', async replacement => {
+  await act(async () => anchor().click());
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('[data-annotation-edit]')!.click());
+  await enterBody('Original detached draft');
+  await act(async () => root.render(null));
+  await act(async () => {
+    if (replacement === 'replace') {
+      const record = collectAnnotations(editor.state.doc).get('example')!;
+      editor.view.dispatch(editor.state.tr.replaceWith(record.pos, record.pos + record.node.nodeSize, editor.schema.nodes.annotationBody.create({ id: 'example' }, editor.schema.nodes.paragraph.create(null, editor.schema.text('Replacement body')))));
+    } else {
+      removeAnnotation(editor, 'example'); editor.commands.setTextSelection(targetRange());
+      addAnnotation(editor, [{ type: 'paragraph', content: [{ type: 'text', text: 'Replacement body' }] }], { id: 'example', open: false });
+    }
+  });
+  await act(async () => root.render(<TooltipProvider><AnnotationLayer editor={editor}/></TooltipProvider>));
+  expect(panel()?.querySelector('.nb-annotation-richtext')?.textContent).toBe('Original detached draft');
+  await act(async () => panel()!.querySelector<HTMLButtonElement>('.nb-annotation-save')!.click());
+  expect(collectAnnotations(editor.state.doc).get('example')?.node.textContent).toBe('Replacement body');
+  expect(panel()?.querySelector('[role="alert"]')?.textContent).toContain('说明已被移除');
+  expect(panel()?.querySelector('button[aria-label="移除说明"]')).toBeNull();
+  await act(async () => Array.from(panel()!.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent === '取消')!.click());
+  expect(panel()).toBeNull(); expect(hasAnnotationDraft(editor)).toBe(false);
+  expect(collectAnnotations(editor.state.doc).get('example')?.node.textContent).toBe('Replacement body');
 });
 
 it('pins a window without changing document content, and supports keyboard closing with focus restoration', async () => {

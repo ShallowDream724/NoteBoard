@@ -34,7 +34,7 @@ vi.mock('../../src/features/export/documentConversion', () => ({ prepareTextExpo
 vi.mock('../../src/features/document-format/linkedMarkdownUpdates', () => ({ getAcceptedLinkedMarkdownHash: vi.fn(), checkLinkedMarkdownUpdates: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: vi.fn().mockResolvedValue(undefined), prepareImageAssetsForIdentity: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
-vi.mock('../../src/features/staging/stagingManager', () => ({ onDocumentSaved: vi.fn().mockResolvedValue(undefined), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn(), getStagedPath: vi.fn() }));
+vi.mock('../../src/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn().mockResolvedValue(undefined), drainStagingWrites: vi.fn().mockResolvedValue(undefined), migrateStagedDocumentKey: vi.fn(), getStagedPath: vi.fn() }));
 
 const MD = 'C:\\notes\\memo.md', NB = 'C:\\notes\\memo.nb';
 const native = (text: string, metadata: NativeMetadata = {}, image = false) => encodeNativeDocument({ type: 'doc', content: [

@@ -11,9 +11,10 @@ import { getEditingScope, registerExternalEditingScope } from '../editingScope';
 export interface AnnotationDraftHandle { content(): JSONContent[]; focus(): void }
 
 /** Only an active panel owns a view. Draft history stays local until one parent transaction saves it. */
-export function AnnotationBodyEditor({ editor, body, editable, draft }: {
+export function AnnotationBodyEditor({ editor, body, editable, draft, restoredDraft, onDraftState }: {
   editor: Editor; body: ProseMirrorNode; editable: boolean;
   draft: MutableRefObject<AnnotationDraftHandle | null>;
+  restoredDraft?: EditorState; onDraftState?(state: EditorState): void;
 }) {
   const host = useRef<HTMLDivElement>(null), view = useRef<EditorView | null>(null);
   const scope = useRef<(() => void) | null>(null);
@@ -21,6 +22,8 @@ export function AnnotationBodyEditor({ editor, body, editable, draft }: {
   const [composing, setComposing] = useState(false);
   const [imageInput, setImageInput] = useState(false), [imageSource, setImageSource] = useState(''), [imageAlt, setImageAlt] = useState('');
   const currentBody = useRef(body); currentBody.current = body;
+  const restored = useRef(restoredDraft); restored.current = restoredDraft;
+  const retain = useRef(onDraftState); retain.current = onDraftState;
   const focusDraft = useCallback(() => view.current?.focus(), []);
   const activateScope = () => {
     if (!editable || !view.current) return;
@@ -30,9 +33,11 @@ export function AnnotationBodyEditor({ editor, body, editable, draft }: {
     scope.current = registerExternalEditingScope(editor.view, { focus: focusDraft });
   };
   useLayoutEffect(() => {
-    const bodyView = createAnnotationBodyView(host.current!, editor, currentBody.current, editable, setState);
+    const bodyView = createAnnotationBodyView(host.current!, editor, currentBody.current, editable, next => { setState(next); if (editable) retain.current?.(next); });
+    if (editable && restored.current?.schema === editor.schema) bodyView.updateState(restored.current);
     view.current = bodyView;
     setState(bodyView.state);
+    if (editable) retain.current?.(bodyView.state);
     setImageInput(false); setComposing(false);
     if (editable) scope.current = registerExternalEditingScope(editor.view, { focus: focusDraft });
     draft.current = { content: () => bodyView.state.doc.toJSON().content ?? [{ type: 'paragraph' }], focus: () => bodyView.focus() };

@@ -36,6 +36,7 @@ import { documentFormulaReadingMode, setDocumentFormulaReadingMode, documentTabl
 import { preserveReadingAnchor } from '../../core/dom/readingAnchor';
 import { HEADING_HELP_KEYS } from '../../components/contextualHelpKeys';
 import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
+import { BookmarkMenuItem } from '../bookmarks/BookmarkMenuItem';
 
 export function BlockTypeIcon({ type, level }: { type: string | null; level?: number }) {
   if (type === 'heading') return <span className="nb-block-heading-icon">H{level}</span>;
@@ -132,6 +133,7 @@ export function BlockContextMenu({ editor, pos, close }: { editor: Editor; pos: 
     </>}
     {native && (type === 'table' || type === 'image') && <Tooltip content={`${range.node.attrs.caption ? '编辑' : '添加'}${type === 'table' ? '表注' : '图注'}`} helpKey={type === 'table' ? 'table.caption' : 'figure.caption'} side="right"><button role="menuitem" type="button" onClick={() => action(() => editFigureCaption(editor, pos))}><MessageSquareText size={16}/>{range.node.attrs.caption ? '编辑' : '添加'}{type === 'table' ? '表注' : '图注'}</button></Tooltip>}
     {native && showAnnotation && <Tooltip content={annotationId ? '编辑说明' : '添加说明'} helpKey="block.annotation" side="right"><button role="menuitem" type="button" onClick={() => action(() => { if (annotationId) openAnnotation(editor, annotationId, { edit: true }); else beginBlockAnnotation(editor, pos); })}>{annotationId ? <MessageSquareText size={16}/> : <CircleHelp size={16}/>} {annotationId ? '编辑说明' : '添加说明'}</button></Tooltip>}
+    <BookmarkMenuItem editor={editor} position={pos} run={action}/>
     {native && Object.hasOwn(range.node.attrs, 'concealed') && <button role="menuitem" type="button" onClick={() => action(() => { selectNode(); toggleConceal(editor); })}><EyeOff size={16}/>{range.node.attrs.concealed ? '取消模糊' : '模糊内容'}</button>}
     {native && (showAnnotation || Object.hasOwn(range.node.attrs, 'concealed')) && <hr/>}
     <button role="menuitem" type="button" onClick={() => action(() => copy(true))}><Scissors size={16}/>剪切内容块</button>
