@@ -21,6 +21,7 @@ pub mod perf;
 pub mod export;
 mod shortcut_probe;
 mod clipboard_image;
+mod shell_open;
 
 use state::AppState;
 use std::sync::Mutex;

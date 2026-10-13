@@ -84,33 +84,61 @@ pub fn probe_document(path: String) -> Result<ProbeResult, String> {
 
 /// 写入文档（原子写）
 #[tauri::command]
-pub fn write_document(
+pub async fn write_document(
     path: String,
     content: String,
     encoding: crate::dto::Encoding,
     eol: crate::dto::Eol,
+    create_only: Option<bool>,
 ) -> Result<WriteResult, String> {
+    // Encoding, fsync and replacement may take seconds on slow/network disks.
+    // Move owned buffers to the blocking pool without stalling the webview loop.
+    tauri::async_runtime::spawn_blocking(move || {
+        write_document_on_worker(path, content, encoding, eol, create_only.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+fn write_document_on_worker(
+    path: String,
+    content: String,
+    encoding: crate::dto::Encoding,
+    eol: crate::dto::Eol,
+    create_only: bool,
+) -> WriteResult {
     let p = Path::new(&path);
 
-    match write::write_with_encoding(p, &content, encoding, eol) {
-        Ok((size, mtime)) => Ok(WriteResult {
+    let result = if create_only {
+        write::write_with_encoding_create_only(p, &content, encoding, eol)
+    } else {
+        write::write_with_encoding(p, &content, encoding, eol)
+    };
+    match result {
+        Ok((size, mtime)) => WriteResult {
             ok: true,
             mtime,
             size,
             error: None,
-        }),
-        Err(e) => Ok(WriteResult {
+        },
+        Err(e) => WriteResult {
             ok: false,
             mtime: 0,
             size: 0,
             error: Some(e),
-        }),
+        },
     }
 }
 
 /// 保存二进制文件（如粘贴或插入的图片，自动创建父级目录）
 #[tauri::command]
-pub fn save_binary_file(path: String, data: Vec<u8>) -> Result<WriteResult, String> {
+pub async fn save_binary_file(path: String, data: Vec<u8>) -> Result<WriteResult, String> {
+    tauri::async_runtime::spawn_blocking(move || save_binary_file_on_worker(path, data))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn save_binary_file_on_worker(path: String, data: Vec<u8>) -> Result<WriteResult, String> {
     let p = Path::new(&path);
 
     // 确保目标父级目录存在
@@ -122,7 +150,7 @@ pub fn save_binary_file(path: String, data: Vec<u8>) -> Result<WriteResult, Stri
     }
 
     // 写入二进制字节数据
-    std::fs::write(p, &data).map_err(|e| format!("写入二进制文件失败: {}", e))?;
+    write::atomic_write(p, &data).map_err(|e| format!("写入二进制文件失败: {}", e))?;
 
     let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
     let mtime = metadata
@@ -323,23 +351,10 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
 
 /// 用系统默认程序打开
 #[tauri::command]
-pub fn open_with_default_app(path: String) -> Result<(), String> {
-    // 用 Windows 的 start 命令
-    #[cfg(windows)]
-    {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path])
-            .spawn()
-            .map_err(|e| format!("无法打开文件: {}", e))?;
-    }
-    #[cfg(not(windows))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("无法打开文件: {}", e))?;
-    }
-    Ok(())
+pub async fn open_with_default_app(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::shell_open::open(crate::shell_open::validate_file_path(&path)?)
+    }).await.map_err(|error| error.to_string())?
 }
 
 
@@ -419,7 +434,9 @@ mod image_asset_tests {
         for folder in ["recovery/.noteboard-assets", "documents/img"] {
             let target = directory.path().join(folder).join("image.png");
             assert!(!target.parent().unwrap().exists());
-            let result = save_binary_file(target.to_string_lossy().to_string(), bytes.clone()).unwrap();
+            let result = tauri::async_runtime::block_on(save_binary_file(
+                target.to_string_lossy().to_string(), bytes.clone(),
+            )).unwrap();
             assert!(result.ok);
             assert_eq!(std::fs::read(&target).unwrap(), bytes);
         }

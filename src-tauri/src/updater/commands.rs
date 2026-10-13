@@ -543,56 +543,10 @@ pub async fn download_and_install_update(
 
 /// 在系统默认浏览器中打开外部链接
 #[tauri::command]
-pub fn open_external_url(url: String) -> Result<bool, String> {
-    let normalized = url.trim();
-    if !(normalized.starts_with("https://") || normalized.starts_with("http://")) {
-        return Err("仅支持打开 http/https 协议的外部链接".to_string());
-    }
-    if normalized.chars().any(|character| character.is_control()) {
-        return Err("链接包含非法控制字符".to_string());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::HSTRING;
-        use windows::Win32::UI::Shell::ShellExecuteW;
-        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-
-        // 使用 Windows 原生 ShellExecuteW 唤起默认浏览器，避免 explorer.exe 导致的双重打开问题
-        let url_wide = HSTRING::from(normalized);
-        let operation = HSTRING::from("open");
-        unsafe {
-            let result = ShellExecuteW(
-                None,
-                &operation,
-                &url_wide,
-                None,
-                None,
-                SW_SHOWNORMAL,
-            );
-            // ShellExecute 返回值大于 32 表示成功
-            if result.0 as usize <= 32 {
-                return Err(format!("打开外部链接失败，错误代码: {}", result.0 as usize));
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg(normalized)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        Command::new("xdg-open")
-            .arg(normalized)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-
+pub async fn open_external_url(url: String) -> Result<bool, String> {
+    let normalized = crate::shell_open::normalize_external_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || crate::shell_open::open(&normalized))
+        .await.map_err(|error| error.to_string())??;
     Ok(true)
 }
 
