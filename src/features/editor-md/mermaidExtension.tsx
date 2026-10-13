@@ -108,13 +108,8 @@ function editorTaskId(editor: object): number {
 import { Tooltip } from '../../components/Tooltip';
 
 import { renderMermaidSvg, resetMermaidRenderer } from '../diagram-preview/mermaidRenderer';
-
-// ── 获取当前主题 ──
-
-function getCurrentMermaidTheme(): 'default' | 'dark' | 'forest' {
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  return isDark ? 'dark' : 'default';
-}
+import { useDiagramTheme } from '../diagram-preview/mermaidTheme';
+import { useMermaidExportSource } from '../diagram-preview/mermaidExportSource';
 
 import { Maximize2, Edit2, X, AlertCircle } from 'lucide-react';
 import { ChartExportMenu } from '../export/ChartExportMenu';
@@ -156,6 +151,7 @@ function MermaidSourceField({ value, onChange, onKeyDown, autoFocus = true, read
 
 function MermaidComponent({ node, updateAttributes, selected, editor, getPos, decorations }: NodeViewProps) {
   const active = useEditorActive();
+  const theme = useDiagramTheme();
   const enabled = useSettingsStore(state => state.settings.editor.enableMermaid);
   // 保留已渲染图形；重新激活且正文/主题未变时不重复运行 Mermaid。
   const renderedSignatureRef = useRef<string | null>(null);
@@ -173,6 +169,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
   const renderTokenRef = useRef<number>(0);
 
   const code = node.attrs.code || '';
+  const prepareExportSource = useMermaidExportSource(code);
 
   const beginEditing = useCallback(() => {
     initialCodeRef.current = code;
@@ -205,7 +202,6 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
       return;
     }
 
-    const theme = getCurrentMermaidTheme();
     const signature = `${theme}:${currentCode}`;
     if (renderedSignatureRef.current === signature) return;
     const token = ++renderTokenRef.current;
@@ -226,7 +222,7 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
         setLoading(false);
       }
     }
-  }, []);
+  }, [theme]);
 
   // 视口门控
   useEffect(() => {
@@ -250,18 +246,6 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
     scheduleTask(identity, () => doRender(code, controller.signal));
     // 切走时取消尚未执行的展示任务；正文/保存链不受影响。
     return () => { cancelTask(identity); controller.abort(); renderTokenRef.current++; };
-  }, [enabled, active, inViewport, editing, code, doRender, editor, getPos]);
-
-  // 主题切换时重渲染
-  useEffect(() => {
-    if (!enabled || !active || !inViewport || editing || !code) return;
-    const controller = new AbortController();
-    const identity = `mermaid:${editorTaskId(editor)}:${getPos()}`;
-    const observer = new MutationObserver(() => {
-      scheduleTask(identity, () => doRender(code, controller.signal));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => { observer.disconnect(); cancelTask(identity); controller.abort(); renderTokenRef.current++; };
   }, [enabled, active, inViewport, editing, code, doRender, editor, getPos]);
 
   // 导出来源：渲染出 SVG 后复制/导出才可用
@@ -423,13 +407,13 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
             <ChartExportMenu
               action="copy"
               variant="ghost"
-              source={exportSource}
+              source={exportSource} prepareSource={prepareExportSource}
               fileName={exportFileName}
             />
             <ChartExportMenu
               action="download"
               variant="ghost"
-              source={exportSource}
+              source={exportSource} prepareSource={prepareExportSource}
               fileName={exportFileName}
             />
             {svg && (
@@ -564,13 +548,13 @@ function MermaidComponent({ node, updateAttributes, selected, editor, getPos, de
               <ChartExportMenu
                 action="copy"
                 variant="outline"
-                source={exportSource}
+                source={exportSource} prepareSource={prepareExportSource}
                 fileName={exportFileName}
               />
               <ChartExportMenu
                 action="download"
                 variant="primary"
-                source={exportSource}
+                source={exportSource} prepareSource={prepareExportSource}
                 fileName={exportFileName}
               />
               <button

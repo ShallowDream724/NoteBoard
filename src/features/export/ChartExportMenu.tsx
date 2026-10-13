@@ -26,6 +26,8 @@ interface ChartExportMenuProps {
   action: 'copy' | 'download';
   /** 图表来源，为 null 时按钮禁用（图表尚未渲染完成） */
   source: ChartImageSource | null;
+  /** Resolve an export-specific rendering only after an explicit format choice. */
+  prepareSource?: (signal: AbortSignal) => Promise<ChartImageSource | null>;
   /** 导出默认文件名（不含扩展名） */
   fileName: string;
   /** 按钮文案，默认按 action 取「复制」/「导出」 */
@@ -147,6 +149,7 @@ function ensureStyles(): void {
 export function ChartExportMenu({
   action,
   source,
+  prepareSource,
   fileName,
   label,
   compact = false,
@@ -162,6 +165,13 @@ export function ChartExportMenu({
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const anchorRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const pending = useRef<AbortController | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    setBusy(false); setCopied(false);
+    return () => { pending.current?.abort(); pending.current = null; clearTimeout(copiedTimer.current); };
+  }, [prepareSource]);
 
   useEffect(ensureStyles, []);
 
@@ -217,16 +227,21 @@ export function ChartExportMenu({
 
   const run = useCallback(
     async (format: ChartImageFormat) => {
-      if (!source) return;
+      if (!source || pending.current) return;
+      const controller = new AbortController(); pending.current = controller;
       setBusy(true);
       try {
+        const prepared = prepareSource ? await prepareSource(controller.signal) : source;
+        if (!prepared || controller.signal.aborted) return;
         if (action === 'copy') {
-          await copyChartImage(source, format, rasterOptions);
+          await copyChartImage(prepared, format, rasterOptions);
+          if (controller.signal.aborted) return;
           setCopied(true);
           showToast(format === 'png' ? 'PNG 图片已复制到剪贴板' : 'SVG 源码已复制到剪贴板', 'success');
-          setTimeout(() => setCopied(false), 2000);
+          clearTimeout(copiedTimer.current); copiedTimer.current = setTimeout(() => setCopied(false), 2000);
         } else {
-          const saved = await exportChartImage(source, format, fileName, rasterOptions);
+          const saved = await exportChartImage(prepared, format, fileName, rasterOptions);
+          if (controller.signal.aborted) return;
           // 用户主动取消另存为对话框不算失败，不提示
           if (saved) {
             showToast(`已导出 ${format.toUpperCase()} 图片`, 'success');
@@ -234,13 +249,15 @@ export function ChartExportMenu({
         }
         setOpen(false);
       } catch (err) {
+        if (controller.signal.aborted) return;
         const message = err instanceof Error ? err.message : String(err);
         showToast(`${action === 'copy' ? '复制' : '导出'}失败：${message}`, 'error');
       } finally {
-        setBusy(false);
+        if (pending.current === controller) pending.current = null;
+        if (!controller.signal.aborted) setBusy(false);
       }
     },
-    [action, fileName, source, rasterOptions],
+    [action, fileName, source, rasterOptions, prepareSource],
   );
 
   const isDisabled = disabled || !source || busy;

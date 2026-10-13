@@ -24,6 +24,7 @@ function AlertComponent({ node, editor, getPos, selected, decorations }: NodeVie
   };
   return <NodeViewWrapper as="div" className={'github-alert github-alert-' + attrs.kind + (selected ? ' is-selected' : '')}
     data-alert={attrs.kind} data-callout-colored-text={!!(attrs.textColor || attrs.backgroundColor) || undefined}
+    data-callout-background-color={attrs.backgroundColor ?? undefined}
     data-callout-menu-open={!!menu || undefined} data-annotation-toolbar={!!annotationMarkerId(decorations) || undefined} style={calloutStyle(attrs)}>
     <Popover.Root open={menu !== null} onOpenChange={open => { if (!open) setMenu(null); }}>
       <Popover.Anchor asChild><button type="button" contentEditable={false} className="callout-icon callout-icon-button"

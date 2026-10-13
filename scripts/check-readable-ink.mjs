@@ -35,7 +35,7 @@ try {
   await page.goto(base + '/.tmp/readable-ink/index.html');
   await page.waitForFunction(() => window.fixture);
   const results = [];
-  for (const theme of ['chen-guang', 'mo-ye', 'chi-tao']) {
+  for (const theme of ['chen-guang', 'mo-ye', 'hu-po']) {
     await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
     const result = await page.evaluate(() => {
       const { contrastRatio }=window.fixture;

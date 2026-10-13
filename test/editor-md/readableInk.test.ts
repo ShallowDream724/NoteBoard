@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { EditorState } from '@tiptap/pm/state';
-import { Node } from '@tiptap/pm/model';
+import { DOMParser, Node } from '@tiptap/pm/model';
 import { contrastRatio } from '../../src/core/theme/contrast';
-import { readableInk, readableInkVariables } from '../../src/features/document-style/readableInk';
+import { darkBackground, readableInk, readableInkVariables } from '../../src/features/document-style/readableInk';
 import { BACKGROUND_COLORS, TEXT_COLORS } from '../../src/features/document-style/colors';
 import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
 import { NodeAttributesStep } from '../../src/features/editor-md/nodeAttributesStep';
@@ -30,6 +30,7 @@ describe('theme-safe authored text colors', () => {
     for (const background of BACKGROUND_COLORS.filter(item => item.color)) {
       for (const color of ['#ffffff', ...TEXT_COLORS.map(item => item.color).filter(Boolean)] as string[]) {
         expect(contrastRatio(readableInk(color, background.color!), background.color!), `${color}/${background.color}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(readableInkVariables(color, background.color)['--nb-ink-dark'], darkBackground(background.color!))).toBeGreaterThanOrEqual(4.5);
       }
     }
     for (const color of TEXT_COLORS.map(item => item.color).filter(Boolean) as string[]) {
@@ -41,11 +42,24 @@ describe('theme-safe authored text colors', () => {
       p('code', [mark(), { type: 'code' }]), { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p('cell', [mark(), ink('#ffffff')])] }] }] }]);
     const original = editor.getJSON(), marks = editor.view.dom.querySelectorAll<HTMLElement>('.nb-readable-ink');
     expect(marks).toHaveLength(4);
-    for (const element of marks) expect(element.style.getPropertyValue('--nb-ink-dark')).not.toBe('#ffffff');
+    for (const element of marks) expect(element.style.getPropertyValue('--nb-ink-dark')).toBeTruthy();
     expect(editor.view.dom.querySelector('code .nb-readable-ink')?.textContent).toBe('code');
     expect(editor.getJSON()).toEqual(original);
     expect(editor.getHTML()).not.toContain('nb-readable-ink');
+    expect(editor.getHTML()).not.toContain('nb-screen-fill');
     expect(editor.commands.undo()).toBe(false);
+  });
+  it('keeps an uncolored highlight null when typed DOM is reparsed', () => {
+    const editor = create([p('default highlight', [{type:'highlight'}]), p('legacy empty highlight', [{type:'highlight',attrs:{color:''}}])]);
+    const dom = editor.view.dom.querySelector('mark')!;
+    expect(dom.getAttribute('data-color')).toBeNull(); expect(dom.style.backgroundColor).toBe('');
+    const parsed = DOMParser.fromSchema(editor.schema).parse(editor.view.dom);
+    expect(parsed.firstChild!.firstChild!.marks.find(mark => mark.type.name === 'highlight')!.attrs.color).toBeNull();
+    expect(parsed.lastChild!.firstChild!.marks.find(mark => mark.type.name === 'highlight')!.attrs.color).toBeNull();
+    expect(editor.view.dom.querySelectorAll('.nb-readable-ink')).toHaveLength(2);
+    for (const ink of editor.view.dom.querySelectorAll<HTMLElement>('.nb-readable-ink')) {
+      expect(contrastRatio(ink.style.getPropertyValue('--nb-ink-dark'), darkBackground('#fef08a'))).toBeGreaterThanOrEqual(4.5);
+    }
   });
   it('recomputes a changed block and preserves untouched blocks through typing and undo', () => {
     const editor = create([p('first', [mark()]), p('last', [mark('#fb923c')])]);
@@ -66,7 +80,7 @@ describe('theme-safe authored text colors', () => {
       const root = document.createElement('div'), content = [text('caption', marks)];
       const before = JSON.stringify(content); renderFigureCaption(root, 'caption', content);
       const element = root.querySelector<HTMLElement>('.nb-readable-ink')!;
-      expect(contrastRatio(element.style.getPropertyValue('--nb-ink-dark'), '#fef08a')).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(element.style.getPropertyValue('--nb-ink-dark'), darkBackground('#fef08a'))).toBeGreaterThanOrEqual(4.5);
       expect(JSON.stringify(content)).toBe(before);
     }
   });
@@ -76,7 +90,7 @@ describe('theme-safe authored text colors', () => {
       { type: 'table', attrs: { caption: 'caption', captionContent }, content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [p('cell')] }] }] }]);
     const html = editor.getHTML(), clipboard = editor.view.serializeForClipboard(editor.state.doc.slice(0)).dom.innerHTML;
     for (const serialized of [html, clipboard]) {
-      expect(serialized).not.toContain('nb-readable-ink'); expect(serialized).not.toContain('--nb-ink-');
+      expect(serialized).not.toContain('nb-readable-ink'); expect(serialized).not.toContain('--nb-ink-'); expect(serialized).not.toContain('nb-screen-fill');
       const root = document.createElement('div'); root.innerHTML = serialized;
       for (const caption of root.querySelectorAll('caption,figcaption')) {
         expect(caption.querySelector<HTMLElement>('[data-text-color]')!.style.color).toBe('rgb(255, 255, 255)');

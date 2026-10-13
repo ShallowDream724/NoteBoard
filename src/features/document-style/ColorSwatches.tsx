@@ -1,6 +1,6 @@
 import { BACKGROUND_COLORS, TEXT_COLORS } from './colors';
 import './colorSwatches.css';
-import { readableInkVariables } from './readableInk';
+import { readableInkVariables, screenFillVariables } from './readableInk';
 
 /** A shared compact palette for text and cells; scope and commands belong to the caller. */
 export function ColorSwatches({ kind, value, onChange, label }: {
@@ -17,10 +17,10 @@ export function ColorSwatches({ kind, value, onChange, label }: {
       const current = items.indexOf(event.target as HTMLButtonElement);
       items[(current + step + items.length) % items.length]?.focus();
     }}>
-    {colors.map(item => <button type="button" key={item.color ?? 'default'} className="nb-color-swatch"
+    {colors.map(item => <button type="button" key={item.color ?? 'default'} className={`nb-color-swatch${kind === 'background' && item.color ? ' nb-screen-fill' : ''}`}
       aria-label={kind === 'border' && item.color === null ? '默认边框颜色' : item.name} title={kind === 'border' && item.color === null ? '默认边框颜色' : item.name} aria-pressed={(value ?? null) === item.color}
       data-kind={kind} data-clear={kind === 'background' && item.color === null || undefined}
-      style={kind === 'text' ? { color: item.color ?? 'var(--editor-text)' } : { backgroundColor: item.color ?? (kind === 'border' ? 'var(--editor-border)' : 'var(--editor-bg)') }}
+      style={kind === 'text' ? { color: item.color ?? 'var(--editor-text)' } : { backgroundColor: item.color ?? (kind === 'border' ? 'var(--editor-border)' : 'var(--editor-bg)'), ...(kind === 'background' ? screenFillVariables(item.color) : {}) }}
       onPointerDown={event => event.preventDefault()} onClick={() => onChange(item.color)}>
       {kind === 'text' ? <span aria-hidden="true" className={item.color ? 'nb-readable-ink' : undefined} style={readableInkVariables(item.color)}>A</span> : null}
     </button>)}

@@ -1,6 +1,6 @@
 /** One lazy module and serial queue for editor views and document export.
  * Mermaid needs a real browser SVG layout engine; it must not run in a DOM shim. */
-type Theme = 'default' | 'dark' | 'forest';
+import { mermaidThemeConfig, type MermaidTheme as Theme } from './mermaidTheme';
 type RenderTask = { id: number; code: string; theme: Theme; signal: AbortSignal; resolve(svg: string): void; reject(error: Error): void };
 const queue: RenderTask[] = [];
 let processing = false, nextId = 0;
@@ -16,10 +16,11 @@ async function processQueue(): Promise<void> {
     loading ??= import('mermaid').catch(error => { loading = undefined; throw error; });
     const mermaid = await loading;
     if (task.signal.aborted) { task.resolve(''); return; }
-    mermaid.default.initialize({ startOnLoad: false, securityLevel: 'strict', theme: task.theme });
+    mermaid.default.initialize({ startOnLoad: false, securityLevel: 'strict', ...mermaidThemeConfig(task.theme) });
     // A measurable, hidden host prevents Mermaid's temporary/error SVGs from
     // flashing in the editor. Every success, failure and cancellation releases it.
     host = document.createElement('div');
+    host.dataset.mermaidRenderHost = '';
     host.style.cssText = 'position:fixed;left:0;top:0;width:1000px;visibility:hidden;pointer-events:none';
     document.body.append(host);
     const { svg } = await mermaid.default.render(`nb-mermaid-${task.id}`, task.code, host);

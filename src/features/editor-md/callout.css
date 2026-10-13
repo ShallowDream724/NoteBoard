@@ -45,3 +45,7 @@
 .callout-emoji-input button:disabled { opacity: .4; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .github-alert .callout-palette, .callout-color-tabs button { transition: none; } }
 @media print { .github-alert .callout-palette, .callout-menu { display: none; } }
+@media screen {
+  [data-theme="mo-ye"] .github-alert:not([data-callout-background-color]) { background:color-mix(in srgb,var(--callout-accent) 12%,var(--editor-bg)); }
+  [data-theme="mo-ye"] .github-alert { border-color:var(--callout-border,color-mix(in srgb,var(--callout-accent) 48%,var(--editor-bg))); }
+}

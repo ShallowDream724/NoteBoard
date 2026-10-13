@@ -30,6 +30,8 @@ import { ChartExportMenu } from '../export/ChartExportMenu';
 import { buildExportFileName, type ChartImageSource } from '../export/chartExport';
 import { Tooltip } from '../../components/Tooltip';
 import { renderMermaidSvg } from './mermaidRenderer';
+import { useDiagramTheme } from './mermaidTheme';
+import { useMermaidExportSource } from './mermaidExportSource';
 import { PlantUmlOnlinePreview } from '../plantuml/PlantUmlOnlinePreview';
 import { useEditorActive } from '../../core/editor/EditorActivityContext';
 
@@ -41,6 +43,7 @@ type LayoutMode = 'split' | 'code' | 'preview';
 
 export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
   const active = useEditorActive();
+  const theme = useDiagramTheme();
   const [onlinePreviewKey, setOnlinePreviewKey] = useState<string | null>(null);
   const onlinePreview = onlinePreviewKey === docKey;
   const doc = useDocumentStore((s) => s.documents.get(docKey));
@@ -110,6 +113,8 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
     if (ext === 'mmd' || ext === 'mermaid') return 'mermaid';
     return 'plantuml';
   }, [doc?.language, doc?.displayName, doc?.key, docKey]);
+  const renderTheme = diagramType === 'mermaid' ? theme : 'default';
+  const prepareMermaidExport = useMermaidExportSource(doc?.content ?? '', docKey);
 
   // 处理分隔条鼠标拖拽调整左右分栏比例
   const handleResizerMouseDown = (e: React.MouseEvent) => {
@@ -162,8 +167,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
 
       try {
         if (diagramType === 'mermaid') {
-          const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-          const svg = await renderMermaidSvg(trimmed, isDark ? 'dark' : 'default', controller.signal);
+          const svg = await renderMermaidSvg(trimmed, renderTheme, controller.signal);
           if (token === renderTokenRef.current) {
             renderedCodeRef.current = trimmed; renderedDocumentRef.current = docKey;
             setSvgContent(svg);
@@ -193,7 +197,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
         }
       }
     },
-    [diagramType, onlinePreview, active, layoutMode, docKey],
+    [diagramType, onlinePreview, active, layoutMode, docKey, renderTheme],
   );
   const renderDiagramRef = useRef(renderDiagram); renderDiagramRef.current = renderDiagram;
 
@@ -442,7 +446,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
           <ChartExportMenu
             action="copy"
             variant="outline"
-            source={exportSource}
+            source={exportSource} prepareSource={diagramType === 'mermaid' ? prepareMermaidExport : undefined}
             fileName={exportFileName}
             label="复制"
           />
@@ -450,7 +454,7 @@ export function DiagramSplitEditor({ docKey }: DiagramSplitEditorProps) {
           <ChartExportMenu
             action="download"
             variant="primary"
-            source={exportSource}
+            source={exportSource} prepareSource={diagramType === 'mermaid' ? prepareMermaidExport : undefined}
             fileName={exportFileName}
             label="导出"
           />

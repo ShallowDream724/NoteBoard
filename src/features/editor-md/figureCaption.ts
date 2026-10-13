@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DOMSerializer, type DOMOutputSpec } from '@tiptap/pm/model';
 import { documentColor } from '../document-style/colors';
 import { TEXT_STYLE_MARKS } from './textStylePolicy';
-import { readableInkStyle } from '../document-style/readableInk';
+import { darkBackground, readableInkStyle } from '../document-style/readableInk';
 
 export const FIGURE_CAPTION_MAX_LENGTH = 10_000;
 export function normalizeFigureCaption(value: unknown): string | null {
@@ -75,7 +75,7 @@ export function figureCaptionDOM(value: unknown, rich?: unknown, screen = false)
       if (tag) output = [tag, {}, output];
       else if (mark.type === 'link') output = ['a', { href: mark.attrs!.href, ...(mark.attrs?.title ? { title: mark.attrs.title } : {}) }, output];
       else if (mark.type === 'textColor') output = ['span', { 'data-text-color': mark.attrs?.color, style: `color:${mark.attrs?.color};print-color-adjust:exact` }, output];
-      else if (mark.type === 'highlight') output = ['mark', { 'data-color': mark.attrs?.color, style: `background-color:${mark.attrs?.color ?? '#ffff00'};color:inherit;print-color-adjust:exact` }, output];
+      else if (mark.type === 'highlight') output = ['mark', { 'data-color': mark.attrs?.color, ...(screen ? { class: 'nb-screen-fill' } : {}), style: `background-color:${mark.attrs?.color ?? (screen ? '#fef08a' : '#ffff00')};color:inherit;print-color-adjust:exact${screen ? `;--nb-fill-dark:${darkBackground(mark.attrs?.color ?? '#fef08a')}` : ''}` }, output];
     }
     return output;
   });

@@ -3,6 +3,10 @@
 @media screen {
   .nb-readable-ink { color:var(--nb-ink-light) !important; }
   [data-theme="mo-ye"] .nb-readable-ink { color:var(--nb-ink-dark) !important; }
+  [data-theme="mo-ye"] .nb-screen-container:not(.react-renderer) { color:var(--nb-ink-dark) !important; }
+  [data-theme="mo-ye"] .nb-screen-fill:not(.react-renderer) { background-color:var(--nb-fill-dark) !important; --nb-block-background:var(--nb-fill-dark) !important; --nb-cell-background:var(--nb-fill-dark) !important; }
+  [data-theme="mo-ye"] :is(.github-alert.nb-screen-container,.nb-screen-container > .github-alert) { --callout-text:var(--nb-ink-dark) !important; --callout-border:var(--nb-border-dark,var(--callout-accent)) !important; }
+  [data-theme="mo-ye"] :is(.github-alert.nb-screen-fill,.nb-screen-fill > .github-alert) { --callout-background:var(--nb-fill-dark) !important; }
   .nb-readable-ink :is([data-text-color],code,a) { color:inherit !important; }
   /* Inline code retains its typeface but must not paint a second surface over
      an explicit highlight/fill whose ink was matched to that surface. */

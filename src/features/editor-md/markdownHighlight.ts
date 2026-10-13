@@ -1,6 +1,7 @@
 import Highlight from '@tiptap/extension-highlight';
 import { pairedFormattingTokenizer } from './inlineFormattingMask';
 import { createReadableInkPlugin } from '../document-style/readableInkPlugin';
+import { createHighlightMarkView } from '../document-style/highlightMarkView';
 
 // Fixed markup and a restricted CSS color value keep Markdown roundtrips independent
 // of browser HTML parsing without accepting arbitrary attributes, styles or URLs.
@@ -28,6 +29,16 @@ function closingMark(source: string, start: number): number {
 }
 
 export const MarkdownHighlight = Highlight.extend({
+  addAttributes() {
+    const attributes = this.parent?.() ?? {};
+    if (!attributes.color) return attributes;
+    const parseColor = attributes.color.parseHTML;
+    return { ...attributes, color: { ...attributes.color,
+      // An implicit highlight stays implicit after typing reparses its live DOM.
+      parseHTML: element => parseColor?.(element) || null,
+    } };
+  },
+  addMarkView() { return ({ mark, view }) => createHighlightMarkView(mark, view.dom.ownerDocument); },
   addProseMirrorPlugins() { return [createReadableInkPlugin()]; },
   markdownTokenizer: {
     ...tokenizer,

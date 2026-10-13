@@ -22,6 +22,7 @@ import { handleTextStyleShortcut } from '../textStyleShortcuts';
 import { clearDraftTextFormatting, runDraftCommand } from './bodyFormatting';
 import { createProseLinkReplacementPlugin } from '../proseLink';
 import { createReadableInkPlugin } from '../../document-style/readableInkPlugin';
+import { createHighlightMarkView } from '../../document-style/highlightMarkView';
 
 /** The embedded view shares import and table rendering with the main editor,
  * while its history and pending asynchronous work belong only to this draft. */
@@ -57,6 +58,7 @@ export function createAnnotationBodyView(host: HTMLElement, editor: Editor, body
     return { dom };
   };
   const bodyView = new EditorView(host, {
+    markViews: { highlight: mark => createHighlightMarkView(mark, host.ownerDocument) },
     state: EditorState.create({ schema, doc: normalizeImageSlots(schema.nodes.doc.create(null, body.content)), plugins }),
     editable: () => editable,
     handleDOMEvents: { keydown: (view, event) => editable && handleTextStyleShortcut(view, event, () => runDraftCommand(view, clearDraftTextFormatting)) },

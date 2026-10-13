@@ -11,3 +11,9 @@
 生产回归：先 `pnpm exec vite build --outDir .tmp/board-loading-dist`，再运行 `node scripts/check-board-loading.mjs --dist .tmp/board-loading-dist` 和 `node scripts/check-budget.mjs --check --dist .tmp/board-loading-dist`。浏览器脚本使用已安装的 Playwright（可由 `PLAYWRIGHT_MODULE` 指定）与 Edge（可由 `BROWSER_CHANNEL` 指定），关闭外网请求，验证新建画板、绘制、撤销/重做、引擎请求失败的可见错误与显式重试，以及思维导图/多维表格入口。预热后再完成 5 轮画板绘制与关闭，以 CDP 全 GC 后 JavaScript 堆、DOM 节点和 JS 事件监听数检查关闭后的保留情况，并核验引擎不重复抓取。结果保存在 `test-results/board/loading-production.json`；该堆数据不代表原生窗口或整个渲染进程的内存。启动预算从构建模块来源清单核验，不能依赖 chunk 名称。此测试模拟 Tauri IPC，不覆盖原生窗口或真实文件写入。
 
 构建图对比：Mermaid 引擎的增量静态依赖从 7,252,700 字节降至 623,051 字节；实际图种仍会按需加载自己的渲染模块。此数字是 JavaScript 文件大小，不是运行内存。内存需在相同文档、窗口、DPI、操作和采样时点另行测量，不能换算为已经减少 100 MB。
+
+Mermaid 编辑器和独立图表预览共享 `mermaidTheme`，使用真实主题 ID `chen-guang` / `hu-po` / `mo-ye`，不将墨夜误判为不存在的 `dark`。墨夜与赤陶分别指定节点、描边、连线、箭头、边标签和时序信号颜色。渲染缓存签名包含主题；所有图表共用一个根主题 MutationObserver，最后一个订阅者卸载时断开。切换主题取消过期排队任务，非活动或源码编辑状态继续保持视口门控；PlantUML 不因 Mermaid 配色变化重新发起网络预览。串行 Mermaid 渲染 host 在成功、失败和取消后都释放，默认文档导出显式使用 `default` 配色，独立于界面主题。
+
+`scripts/check-dark-containers.mjs` 在真实 Edge 中验证三主题与返回墨夜、流程和时序箭头/线/标记、醒目块预设与自定义底色、文字对比度、原始 HTML/剪贴板及渲染 host 清理，并保存截图；`check-readable-ink.mjs` 覆盖文字高亮、行内代码、表格、图注与配色预览。
+
+单图复制/导出同样固定为浅色：块内、全屏和独立 Mermaid 预览仅在用户选择 SVG/PNG 后通过 `prepareSource` 惰性请求 `default` 渲染，不改变屏幕 SVG。每份当前源码最多缓存一个不超过 2,000,000 字符的成功结果；源码/文档变化或菜单宿主卸载取消未完成准备并释放缓存闭包，失败不缓存。PlantUML/Infographic 保持原出口。

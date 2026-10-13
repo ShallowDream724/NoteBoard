@@ -2,11 +2,11 @@ import type { Node } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { documentColor } from './colors';
-import { readableInkStyle } from './readableInk';
+import { darkBackground, readableInk, readableInkStyle } from './readableInk';
 
 const key = new PluginKey<DecorationSet>('readable-document-ink');
 interface Range { from: number; to: number }
-const COLOR_ATTRIBUTES = ['blockTextColor', 'textColor', 'blockBackground', 'background', 'backgroundColor'] as const;
+const COLOR_ATTRIBUTES = ['blockTextColor', 'textColor', 'blockBackground', 'background', 'backgroundColor', 'borderColor'] as const;
 
 function decorations(doc: Node, from: number, to: number): Decoration[] {
   const result: Decoration[] = [];
@@ -18,12 +18,19 @@ function decorations(doc: Node, from: number, to: number): Decoration[] {
     let color = documentColor(attrs.blockTextColor ?? attrs.textColor) ?? parent.color;
     let background = documentColor(attrs.blockBackground ?? attrs.background ?? attrs.backgroundColor) ?? parent.background;
     if (!node.isInline) {
+      const ownColor = documentColor(attrs.blockTextColor ?? attrs.textColor);
+      const ownBackground = documentColor(attrs.blockBackground ?? attrs.background ?? attrs.backgroundColor);
+      const ownBorder = documentColor(attrs.borderColor);
+      if (ownColor || ownBackground || ownBorder) result.push(Decoration.node(pos, pos + node.nodeSize, {
+        class: `nb-screen-container${ownBackground ? ' nb-screen-fill' : ''}`,
+        style: `${readableInkStyle(color, background)}${ownBackground ? `;--nb-fill-dark:${darkBackground(ownBackground)}` : ''}${ownBorder ? `;--nb-border-dark:${readableInk(ownBorder, background ? darkBackground(background) : '#1e293b')}` : ''}`,
+      }));
       inherited.push({ end: pos + node.nodeSize, color, background });
       return;
     }
     for (const mark of node.marks) {
       if (mark.type.name === 'textColor') color = documentColor(mark.attrs.color) ?? color;
-      if (mark.type.name === 'highlight') background = typeof mark.attrs.color === 'string' ? mark.attrs.color : '#fef08a';
+      if (mark.type.name === 'highlight') background = typeof mark.attrs.color === 'string' && mark.attrs.color ? mark.attrs.color : '#fef08a';
     }
     const style = readableInkStyle(color, background);
     if (style) result.push(Decoration.inline(pos, pos + node.nodeSize, { class: 'nb-readable-ink', style }));

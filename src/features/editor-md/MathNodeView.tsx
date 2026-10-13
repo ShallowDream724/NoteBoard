@@ -12,7 +12,7 @@ import { positionInlineMathPreview } from './positionInlineMathPreview';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { readSourceSelection, readSourceText } from './nativeSourceDom';
 import '../../core/math/alignment.css';
-import { readableInkVariables } from '../document-style/readableInk';
+import { readableInkVariables, screenFillVariables } from '../document-style/readableInk';
 
 /** The document owns committed source; the native input owns only an IME preedit. */
 export function MathNodeView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
@@ -125,7 +125,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
   return (
     <NodeViewWrapper
       as={block ? 'div' : 'span'}
-      className={'math-node' + (display ? ' math-node-display' : '') + (editing ? ' math-node-editing' : '') + (node.attrs.textColor || node.attrs.background ? ' nb-readable-ink' : '')}
+      className={'math-node' + (display ? ' math-node-display' : '') + (editing ? ' math-node-editing' : '') + (node.attrs.textColor || node.attrs.background ? ' nb-readable-ink' : '') + (node.attrs.background ? ' nb-screen-fill' : '')}
       data-math-delimiter={delimiter}
       data-math-align={block ? alignment : undefined}
       contentEditable={false}
@@ -135,6 +135,7 @@ export function MathNodeView({ node, editor, getPos, updateAttributes, selected 
         color: node.attrs.textColor || undefined,
         background: node.attrs.background || undefined,
         ...readableInkVariables(node.attrs.textColor, node.attrs.background),
+        ...screenFillVariables(node.attrs.background),
         boxShadow: selected && !editing ? '0 0 0 2px var(--editor-selection-background)' : undefined,
       }}
       onClick={() => { if (!editing) setInitialSelection(undefined); setEditing(true); }}

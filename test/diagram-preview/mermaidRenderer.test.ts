@@ -18,6 +18,7 @@ it('serializes editor/export renders, drops canceled queued work, and releases a
   fail(new Error('Broken syntax')); await failure;
   expect(await third).toBe('<svg>Final result</svg>');
   expect(engine.render.mock.calls.map(call => call[1])).toEqual(['broken', 'final']);
-  expect(engine.initialize.mock.calls.map(call => call[0].theme)).toEqual(['dark', 'default']);
+  expect(engine.initialize.mock.calls.map(call => call[0].theme)).toEqual(['base', 'default']);
+  expect(engine.initialize.mock.calls[0][0].themeVariables.lineColor).toBe('#a4b3c9');
   expect(document.body.children).toHaveLength(0);
 });

@@ -5,6 +5,7 @@ import { contrastRatio, parseColor } from '../../core/theme/contrast';
 const DARK_SURFACE = '#1e293b';
 const DEFAULT_INK = '#18202b';
 const cache = new Map<string, string>();
+const backgrounds = new Map<string, string>();
 const hex = (channels: number[]) => `#${channels.map(value => Math.round(value).toString(16).padStart(2, '0')).join('')}`;
 
 /** Rendering only. Preserve a readable authored color, otherwise make the
@@ -40,8 +41,31 @@ export function readableInk(color: string, background: string): string {
 export function readableInkVariables(color: string | null | undefined, background?: string | null): Record<string, string> {
   if (!color && !background) return {};
   const light = background ? readableInk(color || DEFAULT_INK, background) : color!;
-  return { '--nb-ink-light': light, '--nb-ink-dark': background ? light : readableInk(color!, DARK_SURFACE) };
+  return { '--nb-ink-light': light, '--nb-ink-dark': background ? readableInk(color || '#c6cfdd', darkBackground(background)) : readableInk(color!, DARK_SURFACE) };
 }
 export function readableInkStyle(color: string | null | undefined, background?: string | null): string {
   return Object.entries(readableInkVariables(color, background)).map(([name, value]) => `${name}:${value}`).join(';');
+}
+
+/** Keep the authored hue, but give pale paper fills a quiet dark counterpart.
+ * Already dark fills stay intact. This is a screen token, never document data. */
+export function darkBackground(color: string): string {
+  const found = backgrounds.get(color); if (found) return found;
+  let result = color;
+  try {
+    const [r, g, b] = parseColor(color).map(channel => channel / 255), max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const lightness = (max + min) / 2, delta = max - min;
+    if (Number.isFinite(lightness) && lightness > .23) {
+      const saturation = delta ? delta / (1 - Math.abs(2 * lightness - 1)) : 0;
+      const hue = !delta ? 0 : (max === r ? ((g - b) / delta + 6) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4);
+      const chroma = .4 * Math.min(.52, saturation * .75), x = chroma * (1 - Math.abs(hue % 2 - 1)), m = .2 - chroma / 2;
+      const channels = hue < 1 ? [chroma,x,0] : hue < 2 ? [x,chroma,0] : hue < 3 ? [0,chroma,x] : hue < 4 ? [0,x,chroma] : hue < 5 ? [x,0,chroma] : [chroma,0,x];
+      result = hex(channels.map(channel => (channel + m) * 255));
+    }
+  } catch { /* Keep unknown legacy CSS colors unchanged. */ }
+  if (backgrounds.size >= 256) backgrounds.delete(backgrounds.keys().next().value!);
+  backgrounds.set(color, result); return result;
+}
+export function screenFillVariables(background?: string | null): Record<string, string> {
+  return background ? { '--nb-fill-dark': darkBackground(background) } : {};
 }
