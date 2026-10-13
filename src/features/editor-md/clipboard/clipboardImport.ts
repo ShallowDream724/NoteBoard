@@ -324,10 +324,19 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           },
           dragleave: () => { clearDrop(); return false; },
           drop(view, event) {
-            const files = event.dataTransfer && clipboardFiles(event.dataTransfer); clearDrop(); if (!view.editable || !files?.length) return false;
-            if (isNativeFileDropDuplicate(files)) { event.preventDefault(); return true; }
-            const target = imageDropTargetAtPoint(view, { x: event.clientX, y: event.clientY }); if (!target) return false;
-            event.preventDefault(); void imageFiles(view, files, target.position); return true;
+            const files = Array.from(event.dataTransfer?.files ?? []);
+            const images = event.dataTransfer ? clipboardFiles(event.dataTransfer) : [];
+            clearDrop(); if (!files.length && !images.length) return false;
+            event.preventDefault();
+            // Compare the complete payload before filtering images, so a native
+            // rejection of a mixed drop cannot become a second, partial insertion.
+            if (isNativeFileDropDuplicate(files.length ? files : images)) return true;
+            if (!images.length || (files.length && images.length !== files.length)) {
+              showToast('正文支持拖入图片；其他文件请拖到顶部标签栏打开', 'info'); return true;
+            }
+            const target = imageDropTargetAtPoint(view, { x: event.clientX, y: event.clientY });
+            if (!target) { showToast('请把图片放到可编辑的正文或图片空位中', 'info'); return true; }
+            void imageFiles(view, images, target.position); return true;
           },
         },
       },
@@ -361,6 +370,7 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
         };
         if (editor) view.dom.ownerDocument.addEventListener('paste', pasteIntoHoveredSlot, true);
         const unregisterDrop = editor ? registerNativeFileDropTarget({
+          zone: 'insert',
           clear: clearDrop,
           hover(_paths, point) {
             if (!mainEditorCurrent(view)) return false;

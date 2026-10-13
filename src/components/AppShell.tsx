@@ -592,7 +592,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                       display: !activeTab ? 'none' : 'flex',
                     }}
                   >
-                    <div className="nb-document-editors">{tabs.map((tab) => {
+                    <div className="nb-document-editors" data-file-drop-zone="insert">{tabs.map((tab) => {
                       const isTabActive = tab.key === activeKey;
                       const isTransferring = transferringKeys.includes(tab.key);
 

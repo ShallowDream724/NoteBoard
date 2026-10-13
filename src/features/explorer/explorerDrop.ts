@@ -27,6 +27,7 @@ async function refreshDropDirectories(...directories: string[]): Promise<boolean
 /** One delegated pointer session for the tree; no per-row drag subscriptions. */
 export function bindExplorerDrop(root: HTMLElement, workspace: string) {
   const doc = root.ownerDocument, win = doc.defaultView!;
+  const previousZone = root.dataset.fileDropZone; root.dataset.fileDropZone = 'workspace';
   const feedback = doc.createElement('div'); feedback.className = 'nb-explorer-drop-feedback'; feedback.hidden = true;
   feedback.setAttribute('role','status'); feedback.setAttribute('aria-live','polite'); doc.body.append(feedback);
   let marked: HTMLElement | null = null;
@@ -139,6 +140,7 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
   const click = (event:MouseEvent) => {if(suppressClick){suppressClick=false;event.preventDefault();event.stopPropagation();}};
   root.addEventListener('pointerdown',start);root.addEventListener('click',click,true);root.addEventListener('lostpointercapture',cancel);
   const unregister=registerNativeFileDropTarget({
+    zone: 'workspace',
     accepts:paths=>paths.length>0,
     hover(paths,at){
       const hit=doc.elementFromPoint(at.x,at.y);if(busy||!validWorkspace()||!hit||!root.contains(hit))return false;
@@ -156,5 +158,5 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
       return true;
     }, clear,
   });
-  return ()=>{spring.destroy();disposed=true;finish();unregister();feedback.remove();root.removeEventListener('pointerdown',start);root.removeEventListener('click',click,true);root.removeEventListener('lostpointercapture',cancel);};
+  return ()=>{spring.destroy();disposed=true;finish();unregister();feedback.remove();if(previousZone === undefined)delete root.dataset.fileDropZone;else root.dataset.fileDropZone=previousZone;root.removeEventListener('pointerdown',start);root.removeEventListener('click',click,true);root.removeEventListener('lostpointercapture',cancel);};
 }

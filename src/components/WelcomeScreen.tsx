@@ -267,6 +267,7 @@ export function WelcomeScreen({
 
   return (
     <div
+      data-file-drop-zone="open"
       style={{
         width: '100%',
         height: '100%',

@@ -36,7 +36,8 @@ import { serializeDocumentHistory, restoreDocumentHistory } from '../history/doc
 // 🔴 R06：迁移视图状态快照经回收恢复存储传递
 import { saveViewState } from '../session/editorSuspension';
 import { reportWebSpans } from '../../core/perf/reportWebSpans';
-import { clearNativeFileDropTargets, routeNativeFileDrop } from '../../core/editor/fileDropTargets';
+import { clearNativeFileDropTargets } from '../../core/editor/fileDropTargets';
+import { handleWindowFileDrop } from './nativeFileDrop';
 import {
   acquireBootCoordinator,
   releaseBootCoordinator,
@@ -286,26 +287,13 @@ export async function startEventListeners(): Promise<void> {
     unlistenFocusTab = unlisten;
   }
 
-  // 拖拽：drop 事件入队本窗口打开队列并唤醒消费（不再在监听里直接打开）
+  // 只有显式打开区域入队；工作区复制和正文插入/拒绝都在本区域完成。
   if (!unlistenDragDrop) {
-    const unlisten = await onDragDrop(async (payload) => {
-      const editorClaimed = routeNativeFileDrop(payload);
-      if (payload.type === 'enter' || payload.type === 'over') {
-        useLayoutStore.getState().setIsDraggingFile(!editorClaimed);
-      } else if (payload.type === 'leave') {
-        useLayoutStore.getState().setIsDraggingFile(false);
-      } else if (payload.type === 'drop') {
-        useLayoutStore.getState().setIsDraggingFile(false);
-        if (!editorClaimed && payload.paths.length > 0) {
-          try {
-            await ipc.enqueueOpenRequests(label, payload.paths, 'drop');
-          } catch (e) {
-            console.error('拖拽入队失败:', e);
-          }
-          requestDrain();
-        }
-      }
-    });
+    const unlisten = await onDragDrop(payload => handleWindowFileDrop(payload, async paths => {
+      try { await ipc.enqueueOpenRequests(label, paths, 'drop'); }
+      catch (e) { console.error('拖拽入队失败:', e); }
+      requestDrain();
+    }));
     if (!accept(epoch)) {
       try { unlisten(); } catch { /* 已注销 */ }
       return;

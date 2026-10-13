@@ -185,7 +185,7 @@ describe('native image drop and current-pointer paste routing', () => {
     paste(editor);
     expect(mock.paste).not.toHaveBeenCalled();
   });
-  it('claims native image hover/drop by physical-to-CSS hit coordinates, clears indicators, and preserves file-open fallback', () => {
+  it('claims native image drops by physical-to-CSS coordinates and owns unsupported/read-only rejection', () => {
     const editor = create(); hit = editor.view.dom.querySelectorAll('[data-image-slot]')[4];
     vi.spyOn(window, 'devicePixelRatio', 'get').mockReturnValue(2);
     expect(nativeDropToCssPoint({ x: 90, y: 120 }, 2)).toEqual({ x: 45, y: 60 });
@@ -197,11 +197,21 @@ describe('native image drop and current-pointer paste routing', () => {
     expect(mock.lease).toHaveBeenCalledWith(editor, 'test.nb', 22); expect(mock.paths).toHaveBeenCalledOnce();
     expect(isNativeFileDropDuplicate([new File([], 'photo.png')])).toBe(true);
     expect(document.body.textContent).not.toContain('释放图片以填入此处');
-    expect(routeNativeFileDrop({ type: 'enter', paths: ['C:\\photo.png', 'C:\\note.md'], position: { x: 90, y: 120 } })).toBe(false);
+    expect(routeNativeFileDrop({ type: 'enter', paths: ['C:\\photo.png', 'C:\\note.md'], position: { x: 90, y: 120 } })).toBe(true);
     hit = document.body;
     expect(routeNativeFileDrop({ type: 'drop', paths: ['C:\\photo.png'], position: { x: 90, y: 120 } })).toBe(false);
     hit = editor.view.dom.querySelector('[data-image-slot]'); editor.setEditable(false);
-    expect(routeNativeFileDrop({ type: 'enter', paths: ['C:\\photo.png'], position: { x: 90, y: 120 } })).toBe(false);
+    expect(routeNativeFileDrop({ type: 'enter', paths: ['C:\\photo.png'], position: { x: 90, y: 120 } })).toBe(true);
     routeNativeFileDrop({ type: 'leave' }); expect(document.body.textContent).not.toContain('释放图片以填入此处');
+  });
+  it.each([false, true])('rejects a mixed DOM file drop without partially inserting its image (native first: %s)', nativeFirst => {
+    const editor = create(); hit = editor.view.dom.querySelector('[data-image-slot]');
+    const files = [new File(['png'], 'mixed.png', { type: 'image/png' }), new File(['text'], 'mixed.md', { type: 'text/markdown' })];
+    if (nativeFirst) routeNativeFileDrop({ type: 'drop', paths: ['C:\\mixed.png', 'C:\\mixed.md'], position: { x: 45, y: 60 } });
+    const before = editor.state.doc;
+    const event = { dataTransfer: { files, items: [] }, preventDefault: vi.fn(), clientX: 45, clientY: 60 } as unknown as DragEvent;
+    expect(editor.view.someProp('handleDOMEvents', handlers => handlers.drop?.(editor.view, event))).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalled(); expect(mock.paste).not.toHaveBeenCalled(); expect(mock.paths).not.toHaveBeenCalled();
+    expect(editor.state.doc.eq(before)).toBe(true);
   });
 });
