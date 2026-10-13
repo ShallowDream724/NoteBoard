@@ -10,9 +10,9 @@ vi.mock('@/features/explorer/renameOpenPath',()=>({renameOpenPath:vi.fn(async()=
 vi.mock('@/features/explorer/explorerActions',()=>({readExplorerDirectory:vi.fn(async()=>[]),refreshExplorerDirectory:vi.fn(async()=>{})}));
 vi.mock('@/core/ipc/commands',()=>({copyPathIntoDirectory:vi.fn(async()=> 'C:\\work\\folder\\a.md')}));
 const stops:(()=>void)[]=[];
-afterEach(()=>{stops.splice(0).forEach(stop=>stop());document.body.replaceChildren();vi.restoreAllMocks();vi.clearAllMocks();});
+afterEach(()=>{stops.splice(0).forEach(stop=>stop());document.body.replaceChildren();vi.useRealTimers();vi.restoreAllMocks();vi.clearAllMocks();});
 function create(){
-  useExplorerStore.setState({root:'C:\\work'});
+  useExplorerStore.getState().clear(); useExplorerStore.getState().setRoot('C:\\work', []);
   const root=document.createElement('div');root.innerHTML='<div data-explorer-row="C:\\work\\a.md">A</div><div data-explorer-row="C:\\work\\folder" data-explorer-directory="true">Folder</div>';
   document.body.append(root);const [file,folder]=[...root.children] as HTMLElement[];let hit:Element=root;
   Object.defineProperty(document,'elementFromPoint',{configurable:true,value:vi.fn(()=>hit)});
@@ -64,5 +64,35 @@ describe('workspace drop targeting',()=>{
     await new Promise(resolve=>setTimeout(resolve,0));
     expect(copyPathIntoDirectory).toHaveBeenCalledExactlyOnceWith('C:\\outside\\b.md','C:\\work');
     expect(useExplorerStore.getState().root).toBe('C:\\work');
+  });
+  it('keeps the destination spring-open across native router cleanup, then restores it on failure',async()=>{
+    vi.useFakeTimers();
+    const {folder,setHit}=create();setHit(folder);
+    let reject!: (reason: Error) => void;
+    vi.mocked(copyPathIntoDirectory).mockImplementationOnce(()=>new Promise((_,fail)=>{reject=fail;}));
+    routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}});
+    await vi.advanceTimersByTimeAsync(650);
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
+    routeNativeFileDrop({type:'drop',paths:['D:\\a.md'],position:{x:40,y:40}});
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
+    reject(new Error('copy denied')); await vi.advanceTimersByTimeAsync(0);
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(false);
+    expect(useExplorerStore.getState().root).toBe('C:\\work');
+  });
+  it('retains the successful destination but closes spring folders when a pointer drag is cancelled',async()=>{
+    vi.useFakeTimers();
+    const {folder,file,pointer,setHit}=create();setHit(folder);
+    routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}});
+    await vi.advanceTimersByTimeAsync(650);
+    routeNativeFileDrop({type:'drop',paths:['D:\\a.md'],position:{x:40,y:40}});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
+    useExplorerStore.getState().collapse('C:\\work\\folder');
+    pointer(file,'pointerdown',1);pointer(window,'pointermove',50);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',cancelable:true}));
+    expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(false);
+    expect(renameOpenPath).not.toHaveBeenCalled();
   });
 });

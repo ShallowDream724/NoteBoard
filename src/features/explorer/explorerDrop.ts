@@ -3,7 +3,8 @@ import { registerNativeFileDropTarget, type FileDropPoint } from '../../core/edi
 import { createDragEdgeScroller, type DragEdgeScroller } from '../../core/dom/dragEdgeScroll';
 import { useExplorerStore } from './explorerStore';
 import { isSubPath, normalizePath, parentDirectory, sameKey } from './pathUtils';
-import { readExplorerDirectory, refreshExplorerDirectory } from './explorerActions';
+import { refreshExplorerDirectory } from './explorerActions';
+import { createSpringFolders } from './springFolders';
 import { renameOpenPath } from './renameOpenPath';
 import { showToast } from '../../stores/toastStore';
 
@@ -28,13 +29,14 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
   const doc = root.ownerDocument, win = doc.defaultView!;
   const feedback = doc.createElement('div'); feedback.className = 'nb-explorer-drop-feedback'; feedback.hidden = true;
   feedback.setAttribute('role','status'); feedback.setAttribute('aria-live','polite'); doc.body.append(feedback);
-  let marked: HTMLElement | null = null, hoverDirectory = '', hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  let marked: HTMLElement | null = null;
   let session: { id:number; x:number; y:number; source:ExplorerDragSource; started:boolean; cursor:string; select:string } | null = null;
   let point: FileDropPoint = {x:0,y:0}, frame = 0, scroller: DragEdgeScroller | null = null, suppressClick = false, busy = false, disposed = false;
   const validWorkspace = () => !disposed && sameKey(useExplorerStore.getState().root, workspace) && root.isConnected;
+  const spring = createSpringFolders(workspace, validWorkspace);
   const clear = () => {
     marked?.removeAttribute('data-drop-target'); marked = null;
-    clearTimeout(hoverTimer); hoverTimer = undefined; hoverDirectory = ''; feedback.hidden = true;
+    spring.clear(); feedback.hidden = true;
     if (!session?.started) { scroller?.stop(); scroller = null; }
   };
   const destination = (at: FileDropPoint) => {
@@ -60,15 +62,7 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     feedback.dataset.allowed = String(allowed); feedback.hidden = false;
     feedback.style.left = `${Math.max(8,Math.min(at.x+16,win.innerWidth-328))}px`;
     feedback.style.top = `${Math.max(8,Math.min(at.y+16,win.innerHeight-70))}px`;
-    if (hoverDirectory !== (allowed ? target!.directory : '')) {
-      clearTimeout(hoverTimer); hoverDirectory = allowed ? target!.directory : '';
-      const directory = hoverDirectory;
-      if (directory && !sameKey(directory,workspace) && !useExplorerStore.getState().isExpanded(directory)) hoverTimer = setTimeout(() => {
-        void readExplorerDirectory(directory).then(children => {
-          if (validWorkspace() && hoverDirectory === directory) useExplorerStore.getState().expand(directory,children);
-        }).catch(()=>{});
-      },650);
-    }
+    spring.hover(allowed ? target!.directory : undefined);
     return allowed ? { directory:target!.directory, path:plan?.path } : null;
   };
   const autoScroll = (at: FileDropPoint, repaint:()=>void) => {
@@ -78,14 +72,14 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     const box=root.getBoundingClientRect();
     if(at.x>=box.left&&at.x<=box.right) scroller.update(at.x,at.y); else scroller.stop();
   };
-  const perform = async (directory:string, source:ExplorerDragSource | readonly string[]) => {
-    if (busy) { showToast('正在处理上一次拖放，请稍候','warning'); return; }
-    busy = true;
+  const perform = async (directory:string, source:ExplorerDragSource | readonly string[], settleExpansion: (success: boolean) => void) => {
+    if (busy) { settleExpansion(false); showToast('正在处理上一次拖放，请稍候','warning'); return; }
+    busy = true; let completed = false;
     try {
       if (Array.isArray(source)) {
         let copied = 0, firstCopy: string | undefined; const failures:string[]=[];
         for (const path of source) {
-          try { const copy = await copyPathIntoDirectory(path,directory); firstCopy ??= copy; copied++; }
+          try { const copy = await copyPathIntoDirectory(path,directory); firstCopy ??= copy; copied++; completed = true; }
           catch(error) { failures.push(`${path.split(/[\\/]/).pop()}：${String(error)}`); }
         }
         const refreshed = await refreshDropDirectories(directory);
@@ -96,12 +90,13 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
         const item=source as ExplorerDragSource, plan=explorerMoveDestination(item,directory);
         if (!plan.path) throw new Error(plan.reason);
         await renameOpenPath(item.path,plan.path,item.directory);
+        completed = true;
         const refreshed = await refreshDropDirectories(parentDirectory(item.path), directory);
         if (refreshed) revealDrop(directory, plan.path);
         showToast(`已移动到 ${directory}${refreshed ? '' : '；目录列表暂未刷新，请手动刷新'}`,refreshed?'success':'warning');
       }
     } catch(error) { showToast(error instanceof Error?error.message:String(error),'error'); }
-    finally { busy=false; }
+    finally { settleExpansion(completed); busy=false; }
   };
   const revealDrop = (directory: string, path: string) => {
     if (!validWorkspace()) return;
@@ -130,8 +125,9 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     if(!session || session.id!==event.pointerId)return;
     const source=session.source,started=session.started;
     const target=started?show({x:event.clientX,y:event.clientY},'move',source):null;
+    const settleExpansion = target ? spring.take(target.directory) : null;
     if(started){event.preventDefault();suppressClick=true;} finish();
-    if(target)void perform(target.directory,source);
+    if(target && settleExpansion)void perform(target.directory,source,settleExpansion);
   };
   const start = (event:PointerEvent) => {
     if(event.button||session||busy||!validWorkspace()||!(event.target instanceof Element)||event.target.closest('input,button'))return;
@@ -145,17 +141,20 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
   const unregister=registerNativeFileDropTarget({
     accepts:paths=>paths.length>0,
     hover(paths,at){
-      const hit=doc.elementFromPoint(at.x,at.y);if(!validWorkspace()||!hit||!root.contains(hit))return false;
+      const hit=doc.elementFromPoint(at.x,at.y);if(busy||!validWorkspace()||!hit||!root.contains(hit))return false;
       point=at;show(at,'copy');autoScroll(at,()=>show(point,'copy'));return true;
     },
     drop(paths,at){
       const hit=doc.elementFromPoint(at.x,at.y);if(!validWorkspace()||!hit||!root.contains(hit))return false;
-      const target=show(at,'copy');clear();
+      if (busy) { clear(); showToast('正在处理上一次拖放，请稍候','warning'); return true; }
+      const target=show(at,'copy');
+      const settleExpansion = target && paths.length <= 256 ? spring.take(target.directory) : null;
+      clear();
       if(paths.length>256)showToast('一次最多复制 256 项，请分批拖入','warning');
-      else if(target)void perform(target.directory,paths);
+      else if(target && settleExpansion)void perform(target.directory,paths,settleExpansion);
       else showToast('请把文件放到工作区内的文件或文件夹上','warning');
       return true;
     }, clear,
   });
-  return ()=>{disposed=true;finish();unregister();feedback.remove();root.removeEventListener('pointerdown',start);root.removeEventListener('click',click,true);root.removeEventListener('lostpointercapture',cancel);};
+  return ()=>{spring.destroy();disposed=true;finish();unregister();feedback.remove();root.removeEventListener('pointerdown',start);root.removeEventListener('click',click,true);root.removeEventListener('lostpointercapture',cancel);};
 }
