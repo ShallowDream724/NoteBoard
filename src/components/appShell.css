@@ -61,7 +61,7 @@
   top: auto;
   right: auto;
   flex: 0 0 auto;
-  width: clamp(144px, 22cqi, 232px);
+  width: var(--edge-panel-width, clamp(144px, 22cqi, 232px));
   max-width: 45%;
   max-height: none;
   height: 100%;

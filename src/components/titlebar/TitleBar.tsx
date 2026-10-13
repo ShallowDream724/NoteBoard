@@ -8,6 +8,7 @@ import { Settings as SettingsIcon, FileOutput, Home } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
 import { NewDocumentMenu } from './NewDocumentMenu';
+import { SaveDocumentButton } from './SaveDocumentButton';
 import { Tooltip } from '../Tooltip';
 import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -54,6 +55,7 @@ export function TitleBar() {
             useWindowStore.setState({ activeKey: null });
           }}><Home size={15} /></button>
         </Tooltip>
+        <SaveDocumentButton />
       </div>
 
       {/* Tab 栏 */}

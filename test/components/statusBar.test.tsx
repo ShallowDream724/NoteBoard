@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StatusBar } from '../../src/components/statusbar/StatusBar';
+import { SaveDocumentButton } from '../../src/components/titlebar/SaveDocumentButton';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore, type Tab } from '../../src/stores/windowStore';
@@ -76,14 +77,16 @@ describe('document status information', () => {
     expect(container.textContent).toContain('CRLF');
     expect(container.textContent).not.toContain('行 1, 列 1');
     if (kind === 'markdown') expect(container.querySelector('button')?.textContent).toBe('Markdown (源码)');
-    expect(container.querySelector('button[aria-label="保存当前文档"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="保存当前文档"]')).toBeNull();
   });
 
-  it('offers a keyboard-accessible save button even for a clean untitled document', () => {
+  it('offers one keyboard-accessible titlebar save button for a clean untitled document', () => {
     openText('code', 'Hello');
-    act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
+    act(() => root.render(<TooltipProvider><header><SaveDocumentButton /></header><StatusBar /></TooltipProvider>));
     expect(container.textContent).toContain('未保存');
     const save = container.querySelector<HTMLButtonElement>('button[aria-label="保存当前文档"]')!;
+    expect(save.closest('header')).not.toBeNull();
+    expect(container.querySelectorAll('button[aria-label="保存当前文档"]')).toHaveLength(1);
     expect(save.disabled).toBe(false);
     act(() => save.click());
     expect(saveDocument).toHaveBeenCalledWith('untitled:status-test');
@@ -93,7 +96,7 @@ describe('document status information', () => {
     openText('code', 'Hello');
     const key = 'untitled:status-test', doc = useDocumentStore.getState().getDocument(key)!;
     useDocumentStore.setState({ documents: new Map([[key, { ...doc, isDirty: true, savePolicy: 'auto' }]]) });
-    act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
+    act(() => root.render(<TooltipProvider><SaveDocumentButton /><StatusBar /></TooltipProvider>));
     expect(container.textContent).toContain('未保存');
     expect(container.textContent).not.toContain('正在保存');
     let finish!: () => void, saving!: Promise<void>;

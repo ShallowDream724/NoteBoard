@@ -16,6 +16,7 @@ import { useLayoutStore } from '../../stores/layoutStore';
 import { revealEditorBlock } from '../editor-md/editorViewport';
 import { BookmarkPanel } from '../bookmarks/BookmarkPanel';
 import { headingFoldingKey } from '../editor-md/headingFolding';
+import { bindEdgePanelResize } from '../../core/dom/edgePanelResize';
 import './outlinePanel.css';
 
 interface OutlinePanelProps {
@@ -30,7 +31,7 @@ function getFontSize(level: number): number {
 
 /** 缩进 */
 function getIndent(level: number): number {
-  return Math.min(level - 1, 5) * 12 + 8;
+  return Math.min(level - 1, 5) * 10 + 6;
 }
 
 export function OutlinePanel({ editor }: OutlinePanelProps) {
@@ -38,6 +39,26 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   const toggleOutline = useLayoutStore(state => state.toggleOutline);
   const tab = useLayoutStore(state => state.navigationTab);
   const setTab = useLayoutStore(state => state.setNavigationTab);
+  const preferredWidth = useLayoutStore(state => state.outlineWidth);
+  const panelRef = useRef<HTMLElement>(null), resizeRef = useRef<HTMLDivElement>(null);
+  const resizeController = useRef<ReturnType<typeof bindEdgePanelResize> | null>(null);
+  useLayoutEffect(() => {
+    const panel = panelRef.current, handle = resizeRef.current;
+    if (!panel || !handle) return;
+    const control = bindEdgePanelResize(panel, handle, {
+      preferredWidth: () => useLayoutStore.getState().outlineWidth,
+      limits: () => {
+        const parent = panel.parentElement!, width = parent.clientWidth;
+        const docked = parent.dataset.navigationMode === 'docked';
+        const inset = parseFloat(getComputedStyle(panel).right) || 28;
+        return { min: 200, max: Math.max(100, Math.min(480, docked ? width * .45 : width - inset * 2)) };
+      },
+      commit: width => useLayoutStore.getState().setOutlineWidth(width),
+    });
+    resizeController.current = control;
+    return () => { control.destroy(); resizeController.current = null; };
+  }, []);
+  useLayoutEffect(() => resizeController.current?.refresh(), [preferredWidth]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -231,7 +252,8 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   }, []);
 
   return (
-    <nav className="nb-document-outline" aria-label="文档导航">
+    <nav ref={panelRef} className="nb-document-outline" aria-label="文档导航">
+      <div ref={resizeRef} className="nb-navigation-resize" role="separator" aria-orientation="vertical" aria-label="调整导航栏宽度" tabIndex={0}/>
       <div className="nb-outline-header">
         <Tooltip content="收起导航面板" shortcut="Ctrl+Alt+B" side="left">
           <button className="nb-outline-toggle" type="button" aria-label="收起导航面板" aria-expanded="true" onClick={toggleOutline}><ChevronsRight size={18}/></button>

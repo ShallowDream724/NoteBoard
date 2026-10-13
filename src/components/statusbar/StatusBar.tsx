@@ -5,13 +5,12 @@
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useMemo } from 'react';
-import { saveDocument } from '../../features/editor-code/orchestration/saveDocument';
 import { emit } from '../../core/emitter';
-import { Eye, Code, Save, LoaderCircle } from 'lucide-react';
+import { Eye, Code } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { getCodeLanguage } from '../../core/codeLanguages';
-import { isEditable } from '../../core/docKind';
 import { useSaveActivityStore } from '../../stores/saveActivityStore';
+import { documentSaveStatus } from '../documentSaveStatus';
 import './statusbar.css';
 
 export function StatusBar() {
@@ -68,27 +67,7 @@ export function StatusBar() {
     background: 'var(--editor-border)',
   };
 
-  // 保存状态判定
-  let saveStatus = '已保存';
-  let saveStatusColor = 'var(--statusbar-text)';
-  let saveStatusTitle = doc.savePolicy === 'auto' ? '自动保存已启用 · 文件已保存' : '文件已保存';
-
-  const saving = Boolean(activity?.pending);
-  const needsPath = doc.key.startsWith('untitled:') || activeTab?.isDetached || doc.externalStatus === 'deleted';
-  const canSave = isEditable(doc.kind) && !doc.readonly;
-  if (saving) {
-    saveStatus = '正在保存';
-    saveStatusColor = 'var(--accent-strong)';
-    saveStatusTitle = '正在写入文件';
-  } else if (activity?.error) {
-    saveStatus = '保存失败';
-    saveStatusColor = 'var(--error-500)';
-    saveStatusTitle = activity.error;
-  } else if (doc.isDirty || needsPath) {
-    saveStatus = '未保存';
-    saveStatusColor = 'var(--warning-600)';
-    saveStatusTitle = needsPath ? '选择文件位置以保存文档' : doc.savePolicy === 'auto' ? '修改尚未写入，自动保存已启用' : '有未保存的修改，按 Ctrl+S 保存';
-  }
+  const saveStatus = documentSaveStatus(doc, Boolean(activeTab?.isDetached), activity);
 
   // 类型显示
   const typeLabel =
@@ -216,18 +195,11 @@ export function StatusBar() {
 
       </div>
       {/* 保存状态 */}
-      <Tooltip content={saveStatusTitle} side="top" sideOffset={6}>
-        <div style={{ ...sectionStyle, flexShrink: 0, cursor: 'default', color: saveStatusColor }}>
-          <span>{saveStatus}</span>
+      <Tooltip content={saveStatus.description} side="top" sideOffset={6}>
+        <div style={{ ...sectionStyle, flexShrink: 0, cursor: 'default', color: saveStatus.color }}>
+          <span>{saveStatus.label}</span>
         </div>
       </Tooltip>
-      {isEditable(doc.kind) && <Tooltip content={doc.readonly ? '只读文件，请使用另存为保存副本' : '保存当前文档'} shortcut="Ctrl+S" side="top" sideOffset={6}>
-        <button type="button" className="nb-status-save" aria-label="保存当前文档" disabled={!canSave || saving}
-          onClick={() => { if (activeKey) void saveDocument(activeKey); }}>
-          {saving ? <LoaderCircle size={13} className="nb-status-save-spinner" /> : <Save size={13} />}
-          <span>保存</span>
-        </button>
-      </Tooltip>}
 
       {/* 只读标记 */}
       {doc.readonly && (
