@@ -1,25 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { invoke } from '@tauri-apps/api/core';
-import { getDocument, GlobalWorkerOptions, PDFDataRangeTransport, type PDFDocumentProxy, type PDFDocumentLoadingTask } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFDocumentLoadingTask } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { ItemLocation, PdfReceipt } from './model';
+import { NativePdfRange } from './nativePdfRange';
 GlobalWorkerOptions.workerSrc = workerUrl;
-
-class NativePdfRange extends PDFDataRangeTransport {
-  private stopped = false;
-  constructor(private receipt: PdfReceipt, private fail: (error: unknown) => void) { super(receipt.size, null, true); }
-  requestDataRange(begin: number, end: number) {
-    // PDF.js may request adjacent chunks together. Keep every IPC transfer bounded.
-    void (async () => {
-      for (let from = begin; from < end && !this.stopped; from += 1024 * 1024) {
-        const data = await invoke<ArrayBuffer>('read_pdf', { id: this.receipt.id, revision: this.receipt.revision, offset: from, length: Math.min(1024 * 1024, end - from) });
-        if (!this.stopped) this.onDataRange(from, new Uint8Array(data));
-      }
-    })().catch(error => { if (!this.stopped) this.fail(error); });
-  }
-  abort() { this.stopped = true; }
-}
 
 function Page({ pdf, index, width, locations, selected, onSelect, issues }: {
   pdf: PDFDocumentProxy; index: number; width: number; locations: ItemLocation[]; selected?: string; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
