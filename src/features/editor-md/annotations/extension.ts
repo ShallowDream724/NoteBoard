@@ -4,8 +4,9 @@ import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { annotationId, type AnnotationAnchor, type AnnotationRecord } from './model';
 import { createAnnotationMarker } from './marker';
+import { annotationGroups, shortAnnotationRange } from './presentation';
 
-interface AnnotationIndex { records: Map<string, AnnotationRecord>; anchors: AnnotationAnchor[]; decorations: DecorationSet; orphanIds: string[] }
+interface AnnotationIndex { records: Map<string, AnnotationRecord>; anchors: AnnotationAnchor[]; decorations: DecorationSet; groupCounts: Map<string, number>; orphanIds: string[] }
 export const annotationIndexKey = new PluginKey<AnnotationIndex>('annotations');
 
 interface Range { from: number; to: number }
@@ -69,20 +70,28 @@ function mergeAnchors(anchors: AnnotationAnchor[]): AnnotationAnchor[] {
   return merged;
 }
 
-function decorationsFor(doc: ProseMirrorNode, records: Map<string, AnnotationRecord>, anchors: AnnotationAnchor[], markerOwners: ReadonlySet<string>): DecorationSet {
-      const decorations: Decoration[] = [];
-      for (const anchor of anchors) {
-        if (!records.has(anchor.id)) continue;
-        const block = anchor.block ? doc.nodeAt(anchor.from) : null;
-        const inline = !anchor.block || (block?.isTextblock && block.type.name !== 'codeBlock');
-        const position = inline ? anchor.to - (anchor.block ? 1 : 0) : anchor.from;
-        if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, { class: `nb-annotation-block-anchor${inline ? ' nb-annotation-text-block' : ''}`, 'data-annotation-id': anchor.id }, { annotationId: anchor.id }));
-        // A custom view owns its toolbar/frame geometry; document positions do not.
-        if (block && (block.type.name === 'table' || markerOwners.has(block.type.name))) continue;
-        decorations.push(Decoration.widget(position, () => createAnnotationMarker(anchor.id, inline ? 'inline' : 'block'),
-          { key: `annotation-${anchor.id}-${position}-${inline}`, side: -1, stopEvent: () => true }));
-      }
-      return DecorationSet.create(doc, decorations);
+function presentationFor(doc: ProseMirrorNode, records: Map<string, AnnotationRecord>, anchors: AnnotationAnchor[], markerOwners: ReadonlySet<string>) {
+  const decorations: Decoration[] = [], groupCounts = new Map<string, number>();
+  for (const group of annotationGroups(doc, anchors)) {
+    if (!records.has(group.id)) continue;
+    groupCounts.set(group.id, (groupCounts.get(group.id) ?? 0) + 1);
+    if (shortAnnotationRange(doc, group)) decorations.push(Decoration.inline(group.last.from, group.last.to, { class: 'nb-annotation-short-anchor' }));
+    for (const anchor of group.anchors) {
+      const block = anchor.block ? doc.nodeAt(anchor.from) : null;
+      const inline = !anchor.block || (block?.isTextblock && block.type.name !== 'codeBlock');
+      const position = inline ? anchor.to - (anchor.block ? 1 : 0) : anchor.from;
+      if (anchor.block) decorations.push(Decoration.node(anchor.from, anchor.to, {
+        class: `nb-annotation-block-anchor${inline ? ' nb-annotation-text-block' : ''}`,
+        'data-annotation-id': anchor.id, 'data-annotation-marker': anchor === group.last ? 'visible' : 'hidden',
+      }, { annotationId: anchor === group.last ? anchor.id : null }));
+      if (anchor !== group.last) continue;
+      // A custom view owns its toolbar/frame geometry; document positions do not.
+      if (block && (block.type.name === 'table' || markerOwners.has(block.type.name))) continue;
+      decorations.push(Decoration.widget(position, () => createAnnotationMarker(anchor.id, inline ? 'inline' : 'block'),
+        { key: `annotation-${anchor.id}-${position}-${inline}`, side: -1, stopEvent: () => true }));
+    }
+  }
+  return { decorations: DecorationSet.create(doc, decorations), groupCounts };
 }
 
 function orphanIds(records: Map<string, AnnotationRecord>, anchors: AnnotationAnchor[]) {
@@ -94,7 +103,7 @@ export function createAnnotationIndex(doc: ProseMirrorNode, markerOwners: Readon
   const records = new Map<string, AnnotationRecord>(), found: AnnotationAnchor[] = [];
   scan(doc, { from: 0, to: doc.content.size }, records, found);
   const anchors = mergeAnchors(found);
-  return { records, anchors, decorations: decorationsFor(doc, records, anchors, markerOwners), orphanIds: orphanIds(records, anchors) };
+  return { records, anchors, ...presentationFor(doc, records, anchors, markerOwners), orphanIds: orphanIds(records, anchors) };
 }
 
 export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex, markerOwners: ReadonlySet<string> = new Set()): AnnotationIndex {
@@ -112,7 +121,14 @@ export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex
   const found = mapped.filter(anchor => !ranges.some(range => intersects(range, anchor)));
   for (const range of ranges) scan(tr.doc, range, records, found);
   const anchors = mergeAnchors(found);
-  const unchanged = anchors.length === mapped.length && anchors.every((anchor, index) => {
+  // Text inserted inside an anchor can cross the short-underline threshold;
+  // edits between same-note anchors can join/split their visible groups.
+  const presentationTouched = anchors.some((anchor, index) => ranges.some(range => {
+    const next = anchors[index + 1];
+    const end = next?.id === anchor.id ? next.from : anchor.to;
+    return range.from <= Math.max(anchor.to, end) && range.to >= anchor.from;
+  }));
+  const unchanged = !presentationTouched && anchors.length === mapped.length && anchors.every((anchor, index) => {
     const other = mapped[index];
     // setNodeMarkup preserves an anchor's range while replacing its opening token.
     // Mapping drops that node decoration (and can change its view layout), so rebuild it.
@@ -120,7 +136,7 @@ export function updateAnnotationIndex(tr: Transaction, previous: AnnotationIndex
     return !boundaryChanged && anchor.id === other.id && anchor.from === other.from && anchor.to === other.to && anchor.block === other.block;
   }) && records.size === previous.records.size && [...records.keys()].every(id => previous.records.has(id));
   return { records, anchors, orphanIds: orphanIds(records, anchors),
-    decorations: unchanged ? previous.decorations.map(tr.mapping, tr.doc) : decorationsFor(tr.doc, records, anchors, markerOwners) };
+    ...(unchanged ? { decorations: previous.decorations.map(tr.mapping, tr.doc), groupCounts: previous.groupCounts } : presentationFor(tr.doc, records, anchors, markerOwners)) };
 }
 
 export const AnnotationBehavior = Extension.create({

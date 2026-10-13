@@ -8,6 +8,7 @@ import { findScrollContainer } from '../../../core/dom/scrollContainer';
 import { ANNOTATION_BEGIN_EVENT, ANNOTATION_OPEN_EVENT, ANNOTATION_DISMISS_TRANSIENT_EVENT, addAnnotation, canAddAnnotation, removeAnnotation, updateAnnotation, type AnnotationBeginRequest } from './commands';
 import { annotationIndexKey } from './extension';
 import { annotationAnchors, collectAnnotations, type AnnotationRecord } from './model';
+import { annotationGroups } from './presentation';
 import { AnnotationBodyEditor, type AnnotationDraftHandle } from './bodyEditor';
 import { constrainAnnotationGeometry, type AnnotationBoundary, type AnnotationGeometry } from './geometry';
 import { captureAnnotationTarget, resolveAnnotationTarget } from './draftTarget';
@@ -112,9 +113,10 @@ export function AnnotationLayer({ editor, container }: { editor: Editor | null; 
     };
   }, [editor, container]);
   if (!editor || !panels.length) return null;
-  const counts = new Map<string, number>();
-  for (const anchor of annotationIndexKey.getState(editor.state)?.anchors ?? annotationAnchors(editor.state.doc)) {
-    counts.set(anchor.id, (counts.get(anchor.id) ?? 0) + 1);
+  const index = annotationIndexKey.getState(editor.state);
+  const counts = index?.groupCounts ?? new Map<string, number>();
+  if (!index) for (const group of annotationGroups(editor.state.doc, annotationAnchors(editor.state.doc))) {
+    counts.set(group.id, (counts.get(group.id) ?? 0) + 1);
   }
   return createPortal(<>{panels.map(panel => {
     const record = !panel.removed ? records.get(panel.id) : null;

@@ -1,4 +1,4 @@
-.nb-annotation-anchor,.nb-annotation-text-block { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; }
+.nb-annotation-short-anchor { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-color: var(--editor-text-muted); text-underline-offset: .22em; }
 .nb-annotation-anchor { cursor: help; }
 .nb-annotation-anchor:focus-visible, .nb-annotation-block-anchor:focus-visible { outline: 2px solid var(--editor-accent); outline-offset: 3px; }
 .nb-annotation-inline-marker { display:inline; font-size:inherit; line-height:inherit; user-select:none; }
@@ -21,6 +21,9 @@
 /* A carousel clips its image frames; keep their own notes inside the free lower corner. */
 .nb-image-slot [data-image-frame] > .nb-annotation-edge-marker { top:auto; right:auto; left:6px; bottom:6px; }
 .nb-annotation-toolbar-marker[hidden],.nb-annotation-edge-marker[hidden] { display:none; }
+/* TableView owns caption geometry, while the annotation projection owns which
+ * occurrence ends a group. Decorations update even when the table node is reused. */
+[data-annotation-marker="hidden"] > table > .nb-table-accessories > .nb-table-annotation-indicator { display:none; }
 .nb-annotation-toolbar-actions { display:flex; align-items:center; gap:6px; flex:none; }
 .github-alert > .nb-callout-actions { position:absolute; top:5px; right:5px; }
 .github-alert > .nb-callout-actions > .callout-palette { position:static; }
