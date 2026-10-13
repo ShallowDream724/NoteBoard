@@ -45,7 +45,7 @@ export function createDragEdgeScroller(axes: DragScrollAxis[], onFrame: () => vo
       const property = axis.direction === 'x' ? 'scrollLeft' : 'scrollTop';
       const before = axis.element[property];
       const delta = axis.limitDelta?.(speeds[i] * elapsed / 1000) ?? speeds[i] * elapsed / 1000;
-      axis.element[property] = before + delta;
+      if (delta) axis.element[property] = before + delta;
       if (axis.element[property] !== before) moved = true;
     }
     // Also refresh on a pointer update that did not scroll. While scrolling,
