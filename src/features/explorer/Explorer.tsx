@@ -3,7 +3,8 @@
 // 详见 docs/07-UI布局与交互规范.md §5
 // 详见 docs/09-开发路线图.md 阶段5
 
-import { useState, useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useState, useCallback, useMemo, useSyncExternalStore, useRef, useEffect } from 'react';
+import { bindExplorerDrop } from './explorerDrop';
 import { FilePlus, FolderPlus, LocateFixed, RotateCw, FolderOpen } from 'lucide-react';
 import { useExplorerStore, normalizePath } from './explorerStore';
 import { refreshExplorer, revealExplorerFile } from './explorerActions';
@@ -28,6 +29,8 @@ export function Explorer() {
   const { root, children, loading } = useExplorerStore();
   const [creatingType, setCreatingType] = useState<'file' | 'folder' | null>(null);
   const [creatingName, setCreatingName] = useState('');
+  const treeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if(root && treeRef.current) return bindExplorerDrop(treeRef.current,root); },[root]);
 
   // 根据工作区与标签来源跟随，不被动离开工作区
   useReveal();
@@ -159,7 +162,7 @@ export function Explorer() {
   }
 
   return (
-    <div style={containerStyle} role="tree" className="nb-explorer-tree">
+    <div ref={treeRef} style={containerStyle} role="tree" className="nb-explorer-tree">
       {/* 标题行 */}
       <ExplorerHeader>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>

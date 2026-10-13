@@ -1,6 +1,7 @@
 /** Window-level native drops stay independent of lazily loaded editor runtimes. */
 export interface FileDropPoint { x: number; y: number }
 export interface NativeFileDropTarget {
+  accepts?(paths: readonly string[]): boolean;
   hover(paths: readonly string[], point: FileDropPoint): boolean;
   drop(paths: readonly string[], point: FileDropPoint): boolean;
   clear(): void;
@@ -23,20 +24,25 @@ export function clearNativeFileDropTargets(): void {
   hoveringPaths = [];
   for (const target of targets) target.clear();
 }
-/** True means the live editor claimed the entire image-only drop. */
+/** True means a visible editor or workspace claimed the entire drop. */
 export function routeNativeFileDrop(event: NativeFileDrop): boolean {
-  for (const target of targets) target.clear();
-  if (event.type === 'leave') { hoveringPaths = []; return false; }
+  const clear = () => { for (const target of targets) target.clear(); };
+  if (event.type === 'leave') { hoveringPaths = []; clear(); return false; }
   if (event.type === 'enter') hoveringPaths = event.paths;
   const paths = event.type === 'drop' ? event.paths : hoveringPaths;
   if (event.type === 'drop') hoveringPaths = [];
-  if (!paths.length || !paths.every(isImageFilePath)) return false;
+  if (!paths.length) { clear(); return false; }
   const point = nativeDropToCssPoint(event.position);
   for (const target of targets) {
+    if (!(target.accepts ? target.accepts(paths) : paths.every(isImageFilePath))) continue;
     if (!(event.type === 'drop' ? target.drop(paths, point) : target.hover(paths, point))) continue;
+    // Keep the active hover alive for folder dwell expansion, but remove every
+    // indicator once the drop is claimed (including the editor's own indicator).
+    for (const other of targets) if (other !== target || event.type === 'drop') other.clear();
     if (event.type === 'drop') recentDrop = { names: paths.map(path => path.split(/[\\/]/).pop()!.toLowerCase()), at: Date.now() };
     return true;
   }
+  clear();
   return false;
 }
 /** WebView native drag handling normally suppresses DOM drop; guard duplicate delivery too. */

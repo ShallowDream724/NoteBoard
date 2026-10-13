@@ -332,6 +332,7 @@ export const TreeNode = memo(function TreeNode({
           style={rowStyle}
           tabIndex={0}
           data-explorer-row={node.path}
+          data-explorer-directory={node.isDir || undefined}
           onMouseEnter={handleHover}
           onMouseLeave={handleLeave}
           onClick={handleClick}

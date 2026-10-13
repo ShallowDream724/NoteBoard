@@ -35,3 +35,9 @@
     transition: none;
   }
 }
+.nb-explorer-tree [data-drop-target] { background:var(--editor-selection-background)!important; box-shadow:inset 0 0 0 1px var(--editor-accent); border-radius:4px; }
+.nb-explorer-tree[data-drop-target] { box-shadow:inset 0 0 0 2px var(--editor-accent); }
+.nb-explorer-drop-feedback { position:fixed; z-index:1400; pointer-events:none; max-width:300px; padding:8px 12px; border:1px solid var(--editor-border); border-radius:8px; background:var(--editor-surface); color:var(--editor-text); box-shadow:var(--shadow-md); font:12px/1.5 var(--ui-font-family); overflow-wrap:anywhere; }
+.nb-explorer-drop-feedback[hidden] { display:none; }
+.nb-explorer-drop-feedback[data-allowed="false"] { color:var(--editor-text-muted); }
+.nb-explorer-tree[data-dragging] { cursor:grabbing; }

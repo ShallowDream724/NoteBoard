@@ -103,6 +103,7 @@ pub fn run() {
             fsio::commands::create_file,
             fsio::commands::create_dir,
             fsio::commands::rename_path,
+            fsio::copy_entry::copy_path_into_directory,
             fsio::commands::move_to_trash,
             fsio::image_assets::recycle_document_image,
             fsio::image_assets::recycle_document_images,

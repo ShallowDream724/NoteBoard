@@ -3,6 +3,11 @@
 // 详见 docs/08-数据契约与持久化.md §2
 
 import { invoke } from '@tauri-apps/api/core';
+
+/** Copy an external drop without changing the source or replacing collisions. */
+export function copyPathIntoDirectory(source: string, directory: string): Promise<string> {
+  return invoke('copy_path_into_directory', { source, directory });
+}
 import type {
   DocumentPayload,
   FileTreeNode,
