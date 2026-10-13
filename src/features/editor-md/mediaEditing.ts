@@ -5,6 +5,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import { normalizeImageSlot } from './imageCaptions';
 import { requestImageRemoval } from './imageRemoval';
 import { stepImageCollection } from './rich-content/collectionNavigation';
+import { handleImageGridNavigation } from './rich-content/gridNavigation';
 import { handleBlockNavigationKey, selectedNavigableBlock } from './blockNavigation';
 import './mediaEditing.css';
 
@@ -40,11 +41,12 @@ function normalizeSlots(state: EditorState, transactions?: readonly Transaction[
 }
 
 export function handleMediaKey(view: EditorView, event: KeyboardEvent): boolean {
-  if (!view.editable || view.composing || event.defaultPrevented || event.isComposing || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
+  if (!view.editable || view.composing || event.defaultPrevented || event.isComposing || event.keyCode === 229 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return false;
   const { state } = view, { selection } = state;
   if (['Backspace', 'Delete'].includes(event.key) && selection instanceof NodeSelection && selection.node.type.name === 'image') {
     void requestImageRemoval(view, selection.from); return true;
   }
+  if (handleImageGridNavigation(view, event)) return true;
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     const selected = selectedNavigableBlock(state);
     if (selected?.node.type.name !== 'imageCollection' || !stepImageCollection(view, selected.pos, event.key === 'ArrowLeft' ? -1 : 1)) return false;

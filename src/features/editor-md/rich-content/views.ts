@@ -11,6 +11,7 @@ import { annotationMarkerId, createAnnotationMarker, updateAnnotationMarker } fr
 import { continueContainerWriting, handleContainerTailKey, needsContainerTail } from '../containerEditing';
 import { observeImageViewport } from './imageVisibility';
 import { COLLECTION_STEP_EVENT } from './collectionNavigation';
+import { handleImageGridNavigation } from './gridNavigation';
 import { DisclosureEditing, deleteEmptyDisclosure } from './disclosureEditing';
 import { resizeImageGrid } from './gridEditing';
 import { imageGridColumns, IMAGE_GRID_MAX_CELLS, IMAGE_GRID_MAX_COLUMNS } from '../../../core/document/imageGrid';
@@ -160,6 +161,14 @@ class SlotView implements NodeView {
       const at = pos + this.node.nodeSize - 1, tr = editor.state.tr.insert(at, editor.schema.nodes.paragraph.create());
       tr.setSelection(TextSelection.create(tr.doc, at + 1)); dispatchDiscreteEdit(editor.view, tr); editor.view.focus();
     });
+    const navigate = (part: 'image' | 'caption', event: KeyboardEvent) => {
+      const slotPos = getPos();
+      if (slotPos !== undefined && handleImageGridNavigation(editor.view, event, { slotPos, part })) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    this.add.onkeydown = event => navigate('image', event);
+    this.caption.onkeydown = event => navigate('caption', event);
     this.dom.append(this.add, this.contentDOM, this.caption); this.update(node);
   }
   update(node: Node) {
