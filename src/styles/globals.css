@@ -204,7 +204,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --code-block-bg: #f8fafc;
   --code-block-container-bg: transparent;
   --code-block-text: #1e293b;
-  --code-language-text: #486581;
+  --code-language-text: #465060;
   --save-pending-text: #925200;
   --save-error-text: #c53535;
 
@@ -345,28 +345,28 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --code-block-bg: #EFEEE9;
   --code-block-container-bg: transparent;
   --code-block-text: #141413;
-  --code-language-text: #52655b;
+  --code-language-text: #4B4742;
   --save-pending-text: #925128;
   --save-error-text: #ae3737;
 
-  /* Warm neutral canvas; restrained plum, ink-blue and sage separate syntax roles. */
-  --hljs-comment: #6F6961;
-  --hljs-keyword: #7A4D76;
-  --hljs-string: #4A6B57;
-  --hljs-number: #8C5E36;
-  --hljs-title: #365F80;
-  --hljs-function: #365F80;
-  --hljs-params: #514D47;
-  --hljs-variable: #5D5147;
-  --hljs-class: #456B6A;
-  --hljs-meta: #6B6860;
-  --hljs-addition: #3B704F;
-  --hljs-deletion: #A94747;
-  --hljs-regexp: #577045;
-  --hljs-selector-class: #6D5683;
-  --hljs-selector-id: #365F80;
-  --hljs-link: #365F80;
-  --hljs-attr: #6F5F8C;
+  /* Claude Code Docs' GitHub Light roles, tuned for our warm gray surface. */
+  --hljs-comment: #626A73;
+  --hljs-keyword: #CF222E;
+  --hljs-string: #0A3069;
+  --hljs-number: #0550AE;
+  --hljs-title: #7B46D1;
+  --hljs-function: #7B46D1;
+  --hljs-params: #24292F;
+  --hljs-variable: #953800;
+  --hljs-class: #116329;
+  --hljs-meta: #0550AE;
+  --hljs-addition: #116329;
+  --hljs-deletion: #CF222E;
+  --hljs-regexp: #116329;
+  --hljs-selector-class: #7B46D1;
+  --hljs-selector-id: #0550AE;
+  --hljs-link: #0A3069;
+  --hljs-attr: #116329;
 
   /* 组件层 */
   --titlebar-bg: #FAF9F5;
@@ -486,28 +486,28 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --code-block-bg: #1e293b;
   --code-block-container-bg: #0f172a;
   --code-block-text: #c6cfdd;
-  --code-language-text: #a3b3c8;
+  --code-language-text: #bfc7d2;
   --save-pending-text: #e2b872;
   --save-error-text: #efa2a2;
 
-  /* Similar luminance across roles avoids isolated fluorescent tokens in long code. */
-  --hljs-comment: #8b9bb0;
-  --hljs-keyword: #c6a5cf;
-  --hljs-string: #a2bea0;
-  --hljs-number: #d4b389;
-  --hljs-title: #8eb7dc;
-  --hljs-function: #8eb7dc;
-  --hljs-params: #bac5d3;
-  --hljs-variable: #b9c9dc;
-  --hljs-class: #a3c4bb;
-  --hljs-meta: #aebdce;
-  --hljs-addition: #94b99b;
-  --hljs-deletion: #d99a9a;
-  --hljs-regexp: #91bfbd;
-  --hljs-selector-class: #b8adc9;
-  --hljs-selector-id: #d4b389;
-  --hljs-link: #8eb7dc;
-  --hljs-attr: #b9b1d1;
+  /* Dark+ hue roles keep syntax distinct without changing the reading canvas. */
+  --hljs-comment: #719E5E;
+  --hljs-keyword: #C586C0;
+  --hljs-string: #CE9178;
+  --hljs-number: #B5CEA8;
+  --hljs-title: #D7CA8B;
+  --hljs-function: #D7CA8B;
+  --hljs-params: #C6CFDD;
+  --hljs-variable: #9CDCFE;
+  --hljs-class: #4EC9B0;
+  --hljs-meta: #569CD6;
+  --hljs-addition: #91C58B;
+  --hljs-deletion: #E99A9A;
+  --hljs-regexp: #D7BA7D;
+  --hljs-selector-class: #D7CA8B;
+  --hljs-selector-id: #9CDCFE;
+  --hljs-link: #9CDCFE;
+  --hljs-attr: #9CDCFE;
 
   /* 组件层 */
   --titlebar-bg: #1e293b;
