@@ -7,7 +7,7 @@ import { BOOKMARK_COLORS, type BookmarkColor, type DocumentBookmark } from './ty
 export interface BookmarkMenuAnchor { id: string; x: number; y: number; colors?: boolean; trigger: HTMLElement }
 interface Props {
   anchor: BookmarkMenuAnchor; record: DocumentBookmark; onClose: () => void;
-  onNavigate: () => void; onRemove: () => void; onBatch: () => void; onColor: (color: BookmarkColor) => void;
+  onNavigate: () => void; onRemove: () => void; onBatch?: () => void; onColor?: (color: BookmarkColor) => void;
 }
 export function BookmarkContextMenu({ anchor, record, onClose, onNavigate, onRemove, onBatch, onColor }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -34,11 +34,11 @@ export function BookmarkContextMenu({ anchor, record, onClose, onNavigate, onRem
     data-menu-min-width="156px" style={{ left: anchor.x, top: anchor.y }} onKeyDown={keydown}
     onContextMenu={event => event.preventDefault()}>
     {anchor.colors ? BOOKMARK_COLORS.map(color => <button key={color.value} type="button" role="menuitemradio" aria-checked={(record.color ?? 'amber') === color.value}
-      onClick={() => run(() => onColor(color.value))}><Bookmark size={15} style={{ color: color.css }}/><span>{color.label}</span></button>) : <>
+      onClick={() => run(() => onColor?.(color.value))}><Bookmark size={15} style={{ color: color.css }}/><span>{color.label}</span></button>) : <>
       <button type="button" role="menuitem" disabled={record.missing} onClick={() => run(onNavigate)}><LocateFixed size={15}/><span>跳转到书签</span></button>
       <button type="button" role="menuitem" onClick={() => run(onRemove)}><Trash2 size={15}/><span>删除书签</span></button>
-      <div role="separator"/>
-      <button type="button" role="menuitem" onClick={() => run(onBatch)}><ListX size={15}/><span>批量删除</span></button>
+      {onBatch && <><div role="separator"/>
+      <button type="button" role="menuitem" onClick={() => run(onBatch)}><ListX size={15}/><span>批量删除</span></button></>}
     </>}
   </div>, document.body);
 }

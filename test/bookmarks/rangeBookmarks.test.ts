@@ -2,7 +2,7 @@ import { Editor, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DocumentBookmarks, bookmarkKey } from '@/features/bookmarks/extension';
-import { addBookmark, setBookmarkColor } from '@/features/bookmarks/commands';
+import { addBookmark, removeBookmark, setBookmarkColor } from '@/features/bookmarks/commands';
 import { captureBookmarkContexts, recoverBookmarks } from '@/features/bookmarks/model';
 import { resetBookmarkStorage } from '@/features/bookmarks/storage';
 import { navigateBookmark } from '@/features/bookmarks/navigation';
@@ -40,6 +40,16 @@ it('maps ranges through prefix typing, deletion, undo and source root synchroniz
   const next = editor.schema.nodeFromJSON({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'xnew before TARGET after' }] }] });
   editor.view.dispatch(editor.state.tr.replaceWith(0, editor.state.doc.content.size, next.content).setMeta('noteboard-document-replacement', 'sync'));
   expect(records(editor)[0]).toMatchObject({ pos: 13, size: 6, missing: false });
+});
+
+it('keeps add, recolor and removal out of undo while undoing and redoing prose normally', () => {
+  const editor = create('<p>original</p>');
+  editor.view.dispatch(closeHistory(editor.state.tr.insertText(' edited', 9)));
+  const record = addBookmark(editor)!; setBookmarkColor(editor, record.id, 'blue'); removeBookmark(editor, record.id);
+  expect(editor.commands.undo()).toBe(true); expect(editor.state.doc.textContent).toBe('original');
+  expect(records(editor)).toHaveLength(0);
+  expect(editor.commands.redo()).toBe(true); expect(editor.state.doc.textContent).toBe('original edited');
+  expect(records(editor)).toHaveLength(0);
 });
 
 it('restores a range when undo recreates its whole paragraph and recovers it across marked text on reopen', () => {

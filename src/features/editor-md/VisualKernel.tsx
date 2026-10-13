@@ -24,6 +24,7 @@ import {
 } from './visualSnapshot';
 import { ClipboardImport } from './clipboard/clipboardImport';
 import { AnnotationLayer } from './annotations/AnnotationLayer';
+import { BookmarkMarkerLayer } from '../bookmarks/BookmarkMarkerLayer';
 import { EditorBubbleMenu, TableToolbar } from './bubbleMenu';
 import { BlockDragHandle } from './blockDragHandle';
 import { BLOCK_MOVE_META } from './headingFolding';
@@ -420,6 +421,7 @@ export function VisualKernel({
       {editor && <EditorBubbleMenu editor={editor} enabled={active && visible && !contextMenu} onOpenLinkModal={handleOpenLinkModal} />}
       {active && visible && editor && <TableToolbar editor={editor} />}
       {active && visible && editor && <AnnotationLayer editor={editor} />}
+      {active && visible && editor && <BookmarkMarkerLayer editor={editor} />}
       {active && visible && blockHandleEnabled && editor && <BlockDragHandle editor={editor} />}
       {active && visible && contextMenu && editor && (
         <EditorContextMenu

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Bookmark, BookmarkPlus, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import { BOOKMARK_COLORS, MAX_DOCUMENT_BOOKMARKS, type DocumentBookmark } from '
 import { getBookmarkStorageError, subscribeBookmarkStorage } from './storage';
 import { BookmarkContextMenu, type BookmarkMenuAnchor } from './BookmarkContextMenu';
 import { BookmarkPreview } from './BookmarkPreview';
+import { BOOKMARK_PANEL_REVEAL, pendingBookmarkReveal, consumeBookmarkReveal } from './panelNavigation';
 
 interface Snapshot { records: readonly DocumentBookmark[]; doc: PMNode | null }
 const EMPTY: Snapshot = { records: [], doc: null };
@@ -22,6 +23,23 @@ export function BookmarkPanel({ editor }: { editor: Editor | null }) {
   const panel = useRef<HTMLDivElement>(null);
   const storageError = useSyncExternalStore(subscribeBookmarkStorage, getBookmarkStorageError);
   const closeMenu = useCallback(() => setMenu(null), []);
+  useLayoutEffect(() => {
+    if (!editor) return;
+    let highlighted: HTMLElement | undefined, timer: ReturnType<typeof setTimeout> | undefined;
+    const reveal = () => {
+      const id = pendingBookmarkReveal(editor); if (!id) return;
+      const item = [...panel.current?.querySelectorAll<HTMLElement>('.nb-bookmark-item') ?? []].find(element => element.dataset.bookmarkId === id);
+      const list = panel.current?.querySelector<HTMLElement>('.nb-bookmark-list');
+      if (!item || !list) return;
+      consumeBookmarkReveal(editor); clearTimeout(timer); highlighted?.removeAttribute('data-revealed'); highlighted = item;
+      const row = item.getBoundingClientRect(), bounds = list.getBoundingClientRect();
+      if (row.top < bounds.top || row.bottom > bounds.bottom) list.scrollTop += row.top - bounds.top - (bounds.height - row.height) / 2;
+      item.dataset.revealed = ''; item.querySelector<HTMLButtonElement>('.nb-bookmark-target')?.focus({ preventScroll: true });
+      timer = setTimeout(() => item.removeAttribute('data-revealed'), 1100);
+    };
+    reveal(); editor.view.dom.addEventListener(BOOKMARK_PANEL_REVEAL, reveal);
+    return () => { editor.view.dom.removeEventListener(BOOKMARK_PANEL_REVEAL, reveal); clearTimeout(timer); highlighted?.removeAttribute('data-revealed'); };
+  }, [editor, records]);
   useEffect(() => {
     setMessage(null); setBatch(false); setMenu(null);
     if (!editor) { setSnapshot(EMPTY); return; }

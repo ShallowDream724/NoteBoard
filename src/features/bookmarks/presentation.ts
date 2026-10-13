@@ -2,6 +2,7 @@ import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BOOKMARK_COLORS, type DocumentBookmark } from './types';
 import { validRange } from './rangeAnchors';
+import { bindBlockBookmarkLayout } from './blockMarkerLayout';
 import './bookmarks.css';
 
 export const BOOKMARK_FLASH_META = 'noteboard-bookmark-flash';
@@ -28,17 +29,23 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
         const node = record.kind === 'range' ? null : state.doc.nodeAt(record.pos);
         if (record.kind !== 'range' && !node?.isBlock) continue;
         const color = BOOKMARK_COLORS.find(option => option.value === record.color)?.css ?? BOOKMARK_COLORS[0].css;
-        if (record.kind === 'range' || node?.isTextblock) {
-          const end = record.pos + record.size - (record.kind === 'range' ? 0 : 1);
+        const inline = record.kind === 'range' || node?.isTextblock;
+        {
+          const end = inline ? record.pos + record.size - (record.kind === 'range' ? 0 : 1) : record.pos;
           decorations.push(Decoration.widget(end, view => {
             const marker = view.dom.ownerDocument.createElement('span');
-            marker.className = 'nb-bookmark-marker'; marker.contentEditable = 'false';
+            marker.className = inline ? 'nb-bookmark-marker' : 'nb-bookmark-block-marker'; marker.contentEditable = 'false';
             marker.dataset.bookmarkId = record.id; marker.style.color = color;
-            marker.setAttribute('role', 'img'); marker.setAttribute('aria-label', `书签：${record.label}`);
-            marker.title = `书签：${record.label}`; marker.innerHTML = icon;
+            const anchor = view.dom.ownerDocument.createElement('span'); anchor.className = 'nb-bookmark-anchor';
+            const button = view.dom.ownerDocument.createElement('button');
+            button.type = 'button'; button.className = 'nb-bookmark-button'; button.dataset.bookmarkId = record.id;
+            button.setAttribute('aria-label', `查看书签：${record.label}`); button.setAttribute('aria-controls', 'nb-navigation-bookmarks');
+            button.title = `查看书签：${record.label}`; button.innerHTML = icon;
+            anchor.append(button); marker.append(anchor);
             return marker;
-          }, { key: `bookmark-${record.id}-${color}`, side: -1, stopEvent: () => true }));
-        } else {
+          }, { key: `bookmark-${record.id}-${color}-${inline}-${record.label}`, side: -1, stopEvent: () => true }));
+        }
+        if (!inline) {
           decorations.push(Decoration.node(record.pos, record.pos + record.size, {
             class: 'nb-bookmarked-block', 'data-bookmark-id': record.id, style: `--bookmark-color:${color}`,
           }));
@@ -56,8 +63,10 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
     } },
     view(view) {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const layout = bindBlockBookmarkLayout(view, recordsFor);
       return {
         update(current, previous) {
+          if (current.state.doc !== previous.doc || recordsFor(current.state) !== recordsFor(previous)) layout.refresh();
           const flash = presentationKey.getState(current.state);
           if (flash === presentationKey.getState(previous)) return;
           clearTimeout(timer);
@@ -67,7 +76,7 @@ export function createBookmarkPresentation(recordsFor: (state: EditorState) => r
             }
           }, 1100);
         },
-        destroy() { clearTimeout(timer); cached = DecorationSet.empty; lastDoc = undefined; lastRecords = undefined; },
+        destroy() { layout.destroy(); clearTimeout(timer); cached = DecorationSet.empty; lastDoc = undefined; lastRecords = undefined; },
       };
     },
   });
