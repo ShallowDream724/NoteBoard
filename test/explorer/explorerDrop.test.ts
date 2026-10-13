@@ -56,4 +56,13 @@ describe('workspace drop targeting',()=>{
     await new Promise(resolve=>setTimeout(resolve,0));expect(copyPathIntoDirectory).toHaveBeenCalledExactlyOnceWith('D:\\a.md','C:\\work\\folder');expect(renameOpenPath).not.toHaveBeenCalled();
     setHit(document.body);expect(routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}})).toBe(false);
   });
+  it('drops onto an existing file into its parent without changing the workspace root',async()=>{
+    const {root,file,setHit}=create();setHit(file);
+    expect(routeNativeFileDrop({type:'enter',paths:['C:\\outside\\b.md'],position:{x:40,y:40}})).toBe(true);
+    expect(root.dataset.dropTarget).toBe('copy');
+    routeNativeFileDrop({type:'drop',paths:['C:\\outside\\b.md'],position:{x:40,y:40}});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(copyPathIntoDirectory).toHaveBeenCalledExactlyOnceWith('C:\\outside\\b.md','C:\\work');
+    expect(useExplorerStore.getState().root).toBe('C:\\work');
+  });
 });

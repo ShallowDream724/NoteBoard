@@ -39,17 +39,23 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
   };
   const destination = (at: FileDropPoint) => {
     const hit = doc.elementFromPoint(at.x,at.y);
-    if (!validWorkspace() || !hit || !root.contains(hit) || hit.closest('button,input,[role="scrollbar"]')) return null;
+    if (!validWorkspace() || !hit || !root.contains(hit) || hit.closest('input,textarea,[role="scrollbar"]')) return null;
     const row = hit.closest<HTMLElement>('[data-explorer-row]');
-    if (row && row.dataset.explorerDirectory !== 'true') return null;
-    return { directory:row?.dataset.explorerRow ?? workspace, element:row ?? root };
+    if (!row && hit.closest('button')) return null;
+    // A file row is a drop into its containing folder, not an invalid target.
+    const directory = row?.dataset.explorerDirectory === 'true' ? row.dataset.explorerRow!
+      : row?.dataset.explorerRow ? parentDirectory(row.dataset.explorerRow) : workspace;
+    const parentRow = row?.closest('[role="treeitem"]')?.parentElement?.closest('[role="treeitem"]')?.querySelector<HTMLElement>('[data-explorer-row]');
+    const element = row?.dataset.explorerDirectory === 'true' ? row : sameKey(directory, workspace) ? root
+      : parentRow && sameKey(parentRow.dataset.explorerRow ?? '', directory) ? parentRow : row ?? root;
+    return { directory, element };
   };
   const show = (at: FileDropPoint, mode:'copy'|'move', source?: ExplorerDragSource) => {
     const target = destination(at), plan = target && source ? explorerMoveDestination(source,target.directory) : undefined;
     const allowed = Boolean(target && !plan?.reason);
     const next = allowed ? target!.element : null;
     if (marked !== next) { marked?.removeAttribute('data-drop-target'); marked=next; marked?.setAttribute('data-drop-target',mode); }
-    const text = allowed ? `${mode==='move'?'移动到':'复制到'}：${target!.directory}` : plan?.reason ?? '请放到目标文件夹或工作区空白处';
+    const text = allowed ? `${mode==='move'?'移动到':'复制到'}：${target!.directory}` : plan?.reason ?? '请放到工作区内的文件或文件夹上';
     if (feedback.textContent !== text) feedback.textContent = text;
     feedback.dataset.allowed = String(allowed); feedback.hidden = false;
     feedback.style.left = `${Math.max(8,Math.min(at.x+16,win.innerWidth-328))}px`;
@@ -77,24 +83,31 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     busy = true;
     try {
       if (Array.isArray(source)) {
-        let copied = 0; const failures:string[]=[];
+        let copied = 0, firstCopy: string | undefined; const failures:string[]=[];
         for (const path of source) {
-          try { await copyPathIntoDirectory(path,directory); copied++; }
+          try { const copy = await copyPathIntoDirectory(path,directory); firstCopy ??= copy; copied++; }
           catch(error) { failures.push(`${path.split(/[\\/]/).pop()}：${String(error)}`); }
         }
         const refreshed = await refreshDropDirectories(directory);
         if (!refreshed) failures.push('目录列表暂未刷新，请手动刷新');
+        if (refreshed && firstCopy) revealDrop(directory, firstCopy);
         showToast(failures.length ? `已复制 ${copied} 项；${failures.slice(0,2).join('；')}` : `已复制 ${copied} 项到 ${directory}`,failures.length?'warning':'success');
       } else {
         const item=source as ExplorerDragSource, plan=explorerMoveDestination(item,directory);
         if (!plan.path) throw new Error(plan.reason);
         await renameOpenPath(item.path,plan.path,item.directory);
         const refreshed = await refreshDropDirectories(parentDirectory(item.path), directory);
-        if (validWorkspace()) useExplorerStore.getState().setRevealed(plan.path,false);
+        if (refreshed) revealDrop(directory, plan.path);
         showToast(`已移动到 ${directory}${refreshed ? '' : '；目录列表暂未刷新，请手动刷新'}`,refreshed?'success':'warning');
       }
     } catch(error) { showToast(error instanceof Error?error.message:String(error),'error'); }
     finally { busy=false; }
+  };
+  const revealDrop = (directory: string, path: string) => {
+    if (!validWorkspace()) return;
+    const store = useExplorerStore.getState(), children = store.getChildren(directory);
+    if (!sameKey(directory, workspace) && children) store.expand(directory, children);
+    store.setRevealed(path, false);
   };
   const paint = () => {frame=0;if(session?.started) show(point,'move',session.source);};
   const move = (event:PointerEvent) => {
@@ -140,7 +153,7 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
       const target=show(at,'copy');clear();
       if(paths.length>256)showToast('一次最多复制 256 项，请分批拖入','warning');
       else if(target)void perform(target.directory,paths);
-      else showToast('请把文件放到目标文件夹或工作区空白处','warning');
+      else showToast('请把文件放到工作区内的文件或文件夹上','warning');
       return true;
     }, clear,
   });
