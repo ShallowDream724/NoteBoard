@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # Verified local installers are uploaded directly. Cloud builds are an
+  # explicit fallback; dispatch this workflow against the matching version tag.
   workflow_dispatch:
 
 permissions:
