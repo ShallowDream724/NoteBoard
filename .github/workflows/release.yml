@@ -46,6 +46,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify frontend
+        run: pnpm test:unit
+
       - name: Generate release notes
         id: release_notes
         shell: pwsh
@@ -122,7 +125,22 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: NoteBoard ${{ github.ref_name }}
           releaseBody: ${{ steps.release_notes.outputs.body }}
-          releaseDraft: false
+          releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
-          # 规范产物文件命名
-          assetNamePattern: NoteBoard_[version]_[platform]_[arch][setup][ext]
+          # Keep Tauri's filename consistent with in-app updates and download links.
+
+      - name: Publish installer checksum
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $installer = Get-Item -LiteralPath "src-tauri/target/release/bundle/nsis/NoteBoard_${version}_x64-setup.exe"
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksumPath = Join-Path $env:RUNNER_TEMP 'SHA256SUMS.txt'
+          [System.IO.File]::WriteAllText($checksumPath, "$hash  $($installer.Name)`n", [System.Text.UTF8Encoding]::new($false))
+          gh release upload "v$version" $checksumPath --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the installer checksum.' }
+          # Make the release public only after both installer and checksum exist.
+          gh release edit "v$version" --draft=false
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish the completed release.' }

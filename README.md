@@ -6,11 +6,11 @@
 
 **Windows 本地笔记与图表编辑器**
 
-[![正式版](https://img.shields.io/badge/1.0.3-正式版-blue)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
+[![正式版](https://img.shields.io/badge/1.0.4-正式版-blue)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
 [![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/ShallowDream724/NoteBoard/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/latest) · [更新说明](docs/releases/1.0.3.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
+[下载安装](https://github.com/ShallowDream724/NoteBoard/releases/latest) · [更新说明](docs/releases/1.0.4.md) · [反馈问题](https://github.com/ShallowDream724/NoteBoard/issues)
 
 </div>
 
@@ -20,7 +20,7 @@ NoteBoard 可以写笔记、整理表格、画流程图，也能打开代码和�
 
 ## 安装与试用
 
-1. 在 [正式版发布页面](https://github.com/ShallowDream724/NoteBoard/releases/latest) 的 **Assets** 中下载 `NoteBoard_1.0.3_x64-setup.exe`。
+1. 在 [正式版发布页面](https://github.com/ShallowDream724/NoteBoard/releases/latest) 的 **Assets** 中下载 `NoteBoard_1.0.4_x64-setup.exe`。
 2. 运行安装程序。需要 Windows 10 / 11 x64 和 WebView2；缺少 WebView2 时，安装程序会联网下载。
 3. 打开应用，在主页点击 **浏览功能示例**。里面的文字、表格、图片和公式都可以直接编辑。
 
@@ -30,6 +30,7 @@ NoteBoard 可以写笔记、整理表格、画流程图，也能打开代码和�
 
 - **可视化与源码切换**：直接编辑正文，也能查看和修改源文件。
 - **标题与大纲**：折叠章节、从大纲跳转，拖动标题时带上整节内容。
+- **书签与导航**：为选中文字或内容块添加本机书签，用颜色分类；右侧可切换大纲与书签，选择浮动或侧栏模式并拖动调整宽度。
 - **选区工具栏**：选中文字就能加粗、加下划线、改颜色或高亮；段落左侧菜单负责整块操作。
 - **列表与缩进**：有序列表、无序列表、任务清单，以及正文和标题缩进。
 - **提示块**：选择图标、标题、文字色、边框和背景。输入 `[!` 或 `【！` 可调出类型补全，原有 Note、Tip、Important 等写法也能继续用。
@@ -62,11 +63,11 @@ NB 是可读的文本格式。本地图片使用外部文件引用，复制文�
 
 表格自身的左、中、右位置与单元格文字对齐分开设置。表注放在表格下方，整表说明跟随表格移动。
 
-阅读时，长表连续向下展开，宽表保留可读列宽，超宽部分通过页面横向滚动查看。点击任一表格左侧把手旁的块菜单，可在“阅读视图 · 全文表格”中改为“滚动块”，让当前文档的所有表格分别在自己的区域内横向、纵向滚动；选择“自然展开”即可恢复。新建表格沿用当前选择。右侧大纲覆盖在内容上方，展开或收起都不会挤压表格与公式。
+阅读时，长表连续向下展开，宽表保留可读列宽，超宽部分通过页面横向滚动查看。点击任一表格左侧把手旁的块菜单，可在“阅读视图 · 全文表格”中改为“滚动块”，让当前文档的所有表格分别在自己的区域内横向、纵向滚动；选择“自然展开”即可恢复。新建表格沿用当前选择。浮动导航覆盖在正文上方；侧栏导航分配独立宽度，两种模式都保留各自的表格与公式阅读方式。
 
 ### 图片与图集
 
-单张图片、四宫格、六宫格、九宫格和轮播都能放进文档。支持图注、组合尺寸和图片查看；轮播固定居中，宫格可调整在正文中的位置。
+单张图片、左右或上下两宫格、四宫格、六宫格、九宫格和轮播都能放进文档。宫格可继续添加行列、删减图片；左右键浏览图片，上下键进入图注。支持组合尺寸和图片查看；轮播固定居中，宫格可调整在正文中的位置。
 
 导出 PDF 时，轮播会展开全部图片，折叠块也会展开。分享出去的人不需要点开文档里的每个控件才能读完整内容。
 
