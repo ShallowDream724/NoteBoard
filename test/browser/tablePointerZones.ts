@@ -15,8 +15,16 @@ const editor = new Editor({ element: document.getElementById('editor')!, extensi
   { type: 'paragraph', content: [{ type: 'text', text: '表格之后的正文' }] },
 ] } });
 initializeEditorDocument(editor, serializeNativeNode(editor.state.doc), 'noteboard');
+let changes = 0;
+editor.on('transaction', ({ transaction }) => { if (transaction.docChanged) changes++; });
 const qa = {
   selection: () => ({ cell: editor.state.selection instanceof CellSelection, rows: editor.state.selection instanceof CellSelection && editor.state.selection.isRowSelection(), columns: editor.state.selection instanceof CellSelection && editor.state.selection.isColSelection(), count: editor.state.selection.ranges.length }),
+  source: () => serializeNativeNode(editor.state.doc),
+  changes: () => changes,
+  resetChanges: () => { changes = 0; },
+  values: () => { const values: string[][] = []; editor.state.doc.descendants(node => {
+    if (node.type.name === 'table') { node.forEach(row => { const cells: string[] = []; row.forEach(cell => cells.push(cell.textContent)); values.push(cells); }); return false; }
+  }); return values; },
 };
 declare global { interface Window { tablePointerQA: typeof qa } }
 window.tablePointerQA = qa;

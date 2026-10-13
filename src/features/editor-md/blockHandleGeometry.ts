@@ -2,6 +2,7 @@ import type { EditorView } from '@tiptap/pm/view';
 import type { TopLevelBlockInfo } from './blockReorder';
 import { isEmptyParagraph } from './blockInteractionScope';
 import { listItemHorizontalBounds } from './listMarkerGeometry';
+import { blockControlAnchor } from './blockVisualBounds';
 
 /** Shared viewport-space edge for document-gutter placement and hit testing. */
 export function editorContentLeft(view: EditorView) {
@@ -15,17 +16,16 @@ export function editorContentLeft(view: EditorView) {
 export function blockHandlePosition(view: EditorView, block: TopLevelBlockInfo, host: HTMLElement, width = 50, height = 30) {
   const rect = block.element.getBoundingClientRect(), bounds = host.getBoundingClientRect();
   const scale = bounds.width / host.offsetWidth || 1;
-  let edge = rect.left;
-  if (block.element.closest('.nb-disclosure-body') || block.node.type.name === 'imageCollection') edge = editorContentLeft(view);
-  else if (block.node.type.name === 'heading') {
+  const anchor = blockControlAnchor(block.element, block.node.type.name, scale);
+  let edge = anchor.left;
+  if (block.node.type.name === 'heading' && edge <= rect.left + 8 * scale) {
     edge = block.element.querySelector('.nb-heading-fold-toggle')?.getBoundingClientRect().left ?? edge - 22 * scale;
-  } else if (block.node.type.name === 'table') edge -= 22 * scale;
-  else if (block.element.tagName === 'LI') {
+  } else if (block.element.tagName === 'LI') {
     edge = listItemHorizontalBounds(view, block.pos, block.element, rect, scale).left;
   }
   // A tall block can start above the viewport. Keep its control reachable without
   // a browser focus/hover scroll moving the anchor out from under the pointer.
-  const blockTop = (rect.top - bounds.top) / scale;
+  const blockTop = (anchor.top - bounds.top) / scale;
   const text = block.element.tagName === 'LI' ? block.element.firstElementChild : block.element;
   const textRow = text instanceof HTMLElement && text.matches('p,h1,h2,h3,h4,h5,h6');
   const lineHeight = textRow ? parseFloat(getComputedStyle(text).lineHeight) || (parseFloat(getComputedStyle(text).fontSize) || 16) * 1.5 : 0;

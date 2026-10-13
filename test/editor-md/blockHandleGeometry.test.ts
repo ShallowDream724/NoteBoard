@@ -18,6 +18,33 @@ function geometry(scale: number, paragraphTop: number, paragraphHeight: number, 
 }
 
 describe('block handle geometry', () => {
+  it.each([
+    ['table', '<table></table>', 'table', 22],
+    ['image', '<div data-image-frame></div>', '[data-image-frame]', 0],
+    ['mathBlock', '<span class="math-node-preview"><span class="katex-html"><span class="base">x</span></span></span>', '.base', 0],
+    ['imageCollection', '', null, 0],
+  ] as const)('places %s controls next to visible content without changing its full-row shell', (type, html, selector, rail) => {
+    const host = document.createElement('div'), element = document.createElement('div'); host.append(element);
+    host.getBoundingClientRect = () => bounds(0, 0, 1000, 800);
+    Object.defineProperties(host, { offsetWidth: { value: 1000 }, clientWidth: { value: 1000 }, clientHeight: { value: 800 } });
+    element.innerHTML = html; element.getBoundingClientRect = () => bounds(selector ? 100 : 420, 100, selector ? 800 : 200, 200);
+    if (selector) element.querySelector(selector)!.getBoundingClientRect = () => bounds(420, 110, 200, 180);
+    const nodes = new Schema({ nodes: { doc: { content: 'block+' }, [type]: { group: 'block', atom: true }, text: {} } });
+    const position = blockHandlePosition({} as EditorView, { element, pos: 0, node: nodes.nodes[type].create() }, host);
+    expect(position.left + position.width + 8 + rail).toBe(420);
+    expect(element.getBoundingClientRect().left).toBe(selector ? 100 : 420);
+  });
+
+  it('anchors a horizontally scrolled table at its visible border', () => {
+    const host = document.createElement('div'), element = host.appendChild(document.createElement('div'));
+    const table = element.appendChild(document.createElement('table'));
+    host.getBoundingClientRect = () => bounds(0, 0, 800, 600);
+    Object.defineProperties(host, { offsetWidth: { value: 800 }, clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+    element.style.overflowX = 'auto'; element.getBoundingClientRect = () => bounds(100, 100, 600, 200);
+    table.getBoundingClientRect = () => bounds(-300, 100, 1600, 200);
+    const nodes = new Schema({ nodes: { doc: { content: 'block+' }, table: { group: 'block', atom: true }, text: {} } });
+    expect(blockHandlePosition({} as EditorView, { element, pos: 0, node: nodes.nodes.table.create() }, host).left).toBe(20);
+  });
   it.each([1, 2])('centers the empty paragraph control in its range at %sx scale', scale => {
     for (const height of [27, 42]) {
       const position = geometry(scale, 84, height);

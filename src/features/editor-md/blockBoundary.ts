@@ -6,6 +6,8 @@ import type { Mappable } from '@tiptap/pm/transform';
 import type { EditorView } from '@tiptap/pm/view';
 import { dispatchDiscreteEdit } from './discreteEdit';
 import { EDITOR_DRAG_ACTIVITY, isEditorDragging } from './editorDragActivity';
+import { blockControlAnchor } from './blockVisualBounds';
+import { contentViewport } from '../../core/dom/contentViewport';
 import './blockBoundary.css';
 
 const hidden = new Set(['annotationStore', 'documentPresentation']);
@@ -124,7 +126,7 @@ export function handleBlockBoundaryKey(view: EditorView, event: KeyboardEvent): 
   view.dispatch(state.tr.setSelection(new BlockBoundarySelection(state.doc.resolve(pos))).scrollIntoView()); return true;
 }
 
-interface BoundaryTarget { pos: number; left: number; right: number; top: number }
+interface BoundaryTarget { pos: number; left: number; right: number; top: number; controlLeft: number }
 function element(view: EditorView, pos: number): HTMLElement | null {
   const dom = view.nodeDOM(pos); return dom instanceof HTMLElement ? dom : null;
 }
@@ -149,7 +151,10 @@ export function blockBoundaryAtPoint(view: EditorView, x: number, y: number, tar
     const left = Math.max(parentBox.left, nextBox?.left ?? previousBox?.left ?? parentBox.left);
     const right = Math.min(parentBox.right, nextBox?.right ?? previousBox?.right ?? parentBox.right);
     if (bottom <= top || y < top || y > bottom || x < left || x > right) continue;
-    return { pos, left, right, top: (top + bottom) / 2 };
+    const anchor = next ?? previous, node = next ? after : before;
+    const anchorWidth = anchor?.getBoundingClientRect().width ?? 0;
+    const controlLeft = anchor && node ? blockControlAnchor(anchor, node.type.name, anchorWidth / (anchor.offsetWidth || anchorWidth || 1)).left : left;
+    return { pos, left, right, top: (top + bottom) / 2, controlLeft };
   }
   return null;
 }
@@ -194,20 +199,22 @@ export function createBlockBoundaryPlugin(): Plugin {
     },
     view(view) {
       const button = view.dom.ownerDocument.createElement('button');
-      button.className = 'nb-block-boundary-insert'; button.type = 'button'; button.textContent = '+';
+      button.className = 'nb-block-boundary-insert'; button.type = 'button';
+      button.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
       button.title = '插入段落'; button.setAttribute('aria-label', '在块之间插入段落'); button.hidden = true;
       view.dom.ownerDocument.body.append(button);
       show = target => {
         if (!available(view)) target = null;
         hover = target; button.hidden = !target;
-        if (target) { button.style.left = `${target.left}px`; button.style.top = `${target.top}px`; }
+        if (target) { button.style.left = `${Math.max(contentViewport(view.dom).outer.left + 19, target.controlLeft - 23)}px`; button.style.top = `${target.top}px`; }
       };
-      const insert = (event: PointerEvent) => {
+      const insert = (event: MouseEvent) => {
         if (event.button || !hover) return;
         event.preventDefault(); const pos = hover.pos; show(null); insertBoundaryParagraph(view, pos);
       };
       const clear = () => { press = null; show(null); };
       button.addEventListener('pointerdown', insert);
+      button.addEventListener('click', event => { if (!event.detail) insert(event); });
       view.dom.addEventListener(EDITOR_DRAG_ACTIVITY, clear);
       view.dom.addEventListener(activityEvent, clear);
       view.dom.ownerDocument.addEventListener('scroll', clear, true);

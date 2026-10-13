@@ -8,6 +8,14 @@
 .nb-table-accessories.nb-caption-empty { padding-top:6px; }
 .nb-table-caption[role=text] { cursor:default; }
 .nb-table-caption:focus-visible { outline:1px solid var(--editor-accent); border-radius:4px; }
+/* Editor-only rail clearance: 6px resize gap + 8px bottom pointer target.
+ * A stable gutter avoids moving captions underneath the pointer on hover. */
+.ProseMirror[contenteditable="true"] .nb-table-caption:not(.nb-caption-add) { margin-top:14px; }
+.ProseMirror[contenteditable="true"] .nb-table-accessories.nb-caption-empty { padding-top:14px; }
+@media print {
+  .ProseMirror[contenteditable="true"] .nb-table-caption:not(.nb-caption-add) { margin-top:6px; }
+  .ProseMirror[contenteditable="true"] .nb-table-accessories.nb-caption-empty { padding-top:0; }
+}
 table.nb-isolated-rows > .nb-table-accessories { display:block; }
 .nb-table-selection-overlay { position:fixed; z-index:1; pointer-events:none; background:var(--editor-selection, #3b82f626); }
 .nb-large-table.nb-fixed-columns > table:not(.nb-isolated-rows) > tbody > tr { content-visibility: auto; contain-intrinsic-size: auto 40px; }

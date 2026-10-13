@@ -21,6 +21,7 @@ import {
   resolveTopLevelDropTarget,
   releaseBlockDropIndex,
   type TopLevelDropTarget,
+  type TopLevelBlockInfo,
 } from './blockReorder';
 import * as Popover from '@radix-ui/react-popover';
 import { useHoverMenu, HoverMenuContext } from '../../components/useHoverMenu';
@@ -30,6 +31,7 @@ import { BlockSelectionMenu } from './BlockSelectionMenu';
 import { prepareBlockSelectionMove, isBlockSelectionMoveAllowed, moveBlockSelection, type BlockSelectionMovePlan } from './blockSelectionMove';
 import { foldedSectionEnd } from './headingFolding';
 import { blockHandlePosition, editorContentLeft } from './blockHandleGeometry';
+import { blockControlAnchor } from './blockVisualBounds';
 import { markHeadingHandleTarget } from './headingHandleMarker';
 import { BlockRangeFeedback } from './BlockRangeFeedback';
 import { Plus, Rows3 } from 'lucide-react';
@@ -237,10 +239,10 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
     let hoverFrame = 0;
     let selectionChanged = false;
     let pointer = { x: 0, y: 0 };
-    let hoveredCollection: HTMLElement | null = null;
+    let hoveredBlock: TopLevelBlockInfo | null = null;
     const updateHover = () => {
       hoverFrame = 0;
-      if (hoveredCollection && !hoveredCollection.isConnected) hoveredCollection = null;
+      if (hoveredBlock && !hoveredBlock.element.isConnected) hoveredBlock = null;
       if (dragSessionRef.current || menuOpenRef.current) return;
       if (isEditorDragging(editor.view)) {
         setState(current => current.visible ? { ...current, visible: false } : current);
@@ -267,11 +269,14 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
         // at the same y without walking every block (including large tables).
         const left = editorContentLeft(editor.view);
         if (pointer.x < left) targetElement = document.elementFromPoint(left + 2, pointer.y);
-        // Resized collections can leave a wide blank corridor before their
-        // fixed gutter control. Keep the current block while crossing it.
-        if (targetElement === editorDom && hoveredCollection?.isConnected) {
-          const rect = hoveredCollection.getBoundingClientRect();
-          if (pointer.x < rect.left && pointer.y >= rect.top && pointer.y <= rect.bottom) targetElement = hoveredCollection;
+        // Keep only the short corridor between the visible block and its
+        // control. Aligned/narrow content shares this policy across node types.
+        if (targetElement === editorDom && hoveredBlock) {
+          const rect = hoveredBlock.element.getBoundingClientRect();
+          const hostRect = scrollParent.getBoundingClientRect(), scale = hostRect.width / (scrollParent.offsetWidth || hostRect.width || 1);
+          const edge = blockControlAnchor(hoveredBlock.element, hoveredBlock.node.type.name, scale).left;
+          const reach = (handleRef.current?.offsetWidth || 50) + 12;
+          if (pointer.x <= edge && pointer.x >= edge - reach * scale && pointer.y >= rect.top && pointer.y <= rect.bottom) targetElement = hoveredBlock.element;
         }
       }
       if (!targetElement || !editorDom.contains(targetElement)) {
@@ -288,7 +293,7 @@ export function BlockDragHandle({ editor }: { editor: Editor | null }) {
 
       const blockInfo = getTopLevelBlockInfo(editor.view, blockElement);
       if (!blockInfo) { scheduleHide(); return; }
-      hoveredCollection = blockInfo.node.type.name === 'imageCollection' ? blockElement : null;
+      hoveredBlock = blockInfo;
 
       const empty = isEmptyParagraph(blockInfo.node);
       // Read the same container policy as CSS, including transitions between

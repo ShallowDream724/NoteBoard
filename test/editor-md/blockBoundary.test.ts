@@ -141,6 +141,20 @@ describe('rich block writing boundaries', () => {
     view.dom.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 60, bubbles: true }));
     expect(button.hidden).toBe(true);
   });
+  it('places the insertion control beside a centered table while keeping the entire gap clickable', () => {
+    const view = create([table(), table()]), second = view.state.doc.firstChild!.nodeSize;
+    geometry(view, [0, second]);
+    const shell = view.nodeDOM(second) as HTMLElement;
+    const content = shell.querySelector('table') ?? shell;
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue(box(136, 236, 300, 450));
+    const target = blockBoundaryAtPoint(view, 200, 130, view.dom)!;
+    expect(target.pos).toBe(second); expect(target.controlLeft).toBe(278);
+    view.dom.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 130, bubbles: true }));
+    const button = document.querySelector<HTMLButtonElement>('.nb-block-boundary-insert')!;
+    expect(button.style.left).toBe('255px'); expect(button.querySelector('svg')).not.toBeNull();
+    button.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+    expect(view.state.doc.child(1).type.name).toBe('paragraph');
+  });
   it('provides one IME context at a boundary and preserves the typed character', () => {
     const view = create([table(), table()]), pos = view.state.doc.firstChild!.nodeSize;
     view.dispatch(view.state.tr.setSelection(new BlockBoundarySelection(view.state.doc.resolve(pos))));

@@ -12,6 +12,10 @@ import { beginEditorDrag, isEditorDragging } from './editorDragActivity';
 
 type Axis = 'row' | 'column';
 interface Handle { button: HTMLButtonElement; axis: Axis; index: number }
+// Keep the 5px cell-resize band free. The bottom gutter matches tableView.css;
+// its slim visible rail has an independent, larger pointer target.
+const RAIL_OUTSET = 22, BORDER_GAP = 6, BOTTOM_HIT = 8;
+const BOTTOM_GUTTER = BORDER_GAP + BOTTOM_HIT;
 /** Two stable, generous hit areas follow the current row/column. Leaving the
  * table allows time to cross into its rails; no corner control is rendered. */
 export const TableSelectionHandles = Extension.create({
@@ -172,14 +176,20 @@ export const TableSelectionHandles = Extension.create({
       paintedRowSide = pointerX <= (left + right) / 2 ? 'left' : 'right';
       paintedColumnSide = pointerY <= (top + bottom) / 2 ? 'top' : 'bottom';
       const outer = clientBounds(scroll);
-      const rowOutside = paintedRowSide === 'left' ? left - 22 >= outer.left : right + 22 <= outer.right;
-      const rowWidth = rowOutside ? 22 : 6;
-      const railLeft = paintedRowSide === 'left' ? (rowOutside ? left - 22 : left) : (rowOutside ? right : right - rowWidth);
-      // The bottom entry belongs to the grid's inner edge, never the caption
-      // below it. A slim hit strip also leaves the last row's text editable.
-      const topOutside = top - 22 >= outer.top;
-      const columnHeight = paintedColumnSide === 'top' ? (topOutside ? 22 : 6) : Math.min(10, bottom - top);
-      const railTop = paintedColumnSide === 'top' ? (topOutside ? top - 22 : top) : Math.max(top, Math.min(bottom, viewport.bottom, window.innerHeight - 2) - columnHeight);
+      const rowOutside = paintedRowSide === 'left' ? left - RAIL_OUTSET >= outer.left : right + RAIL_OUTSET <= outer.right;
+      const rowWidth = rowOutside ? RAIL_OUTSET - BORDER_GAP : 6;
+      // A clipped viewport edge is not a cell edge. If the actual last edge is
+      // still visible, keep its resize band free even in the compact fallback.
+      const rightInset = !rowOutside && right >= t.right - .5 ? BORDER_GAP : 0;
+      const railLeft = paintedRowSide === 'left' ? (rowOutside ? left - RAIL_OUTSET : left)
+        : (rowOutside ? right + BORDER_GAP : Math.max(left, right - rowWidth - rightInset));
+      const topOutside = top - RAIL_OUTSET >= outer.top;
+      const bottomOutside = bottom + BOTTOM_GUTTER <= Math.min(outer.bottom, window.innerHeight - 2);
+      const columnHeight = paintedColumnSide === 'top' ? (topOutside ? RAIL_OUTSET - BORDER_GAP : 6)
+        : Math.min(bottomOutside ? BOTTOM_HIT : 6, bottom - top);
+      const bottomInset = !bottomOutside && bottom >= gridBottom - .5 ? BORDER_GAP : 0;
+      const railTop = paintedColumnSide === 'top' ? (topOutside ? top - RAIL_OUTSET : top)
+        : bottomOutside ? bottom + BORDER_GAP : Math.max(top, bottom - columnHeight - bottomInset);
       let count = 0;
       const rowIndex = Math.min(rows.length - 1, firstVisible(rows, 'bottom', pointerY));
       const row = rows[rowIndex], r = row.getBoundingClientRect();
@@ -202,7 +212,9 @@ export const TableSelectionHandles = Extension.create({
     const schedule = () => { if (!frame && visible) frame = requestAnimationFrame(paint); };
     const move = (event: PointerEvent) => {
       if (gesture || event.buttons || isEditorDragging(view) || !(event.target instanceof Element)) return;
-      if (event.target.closest('.nb-table-accessories')) { hide(); return; }
+      if (event.target.closest('.nb-table-accessories') && (!paintedBounds
+        || event.clientY >= paintedBounds.bottom + BOTTOM_GUTTER
+        || event.target.closest('.nb-table-caption'))) { hide(); return; }
       if (overlay.contains(event.target)) { cancelHide(); return; }
       const nextCell = event.target.closest<HTMLTableCellElement>('td,th'), next = nextCell?.closest('table');
       if (nextCell && next && view.dom.contains(next)) {
@@ -219,7 +231,7 @@ export const TableSelectionHandles = Extension.create({
         // is entered; a distant pointer still starts the ordinary hide delay.
         const bounds = paintedBounds;
         if (visible && bounds && event.clientX >= bounds.left - 24 && event.clientX <= bounds.right + 24
-          && event.clientY >= bounds.top - 24 && event.clientY <= bounds.bottom + 12) {
+          && event.clientY >= bounds.top - 24 && event.clientY <= bounds.bottom + BOTTOM_GUTTER) {
           cancelHide();
           pointerX = event.clientX; pointerY = event.clientY;
           schedule();

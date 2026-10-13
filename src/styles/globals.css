@@ -1117,6 +1117,8 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   overflow: visible;
   margin: 16px 0;
 }
+.ProseMirror[contenteditable="true"] .tableWrapper { margin-block-start:24px; }
+@media print { .ProseMirror[contenteditable="true"] .tableWrapper { margin-block-start:16px; } }
 
 /* 文本高亮标记 */
 .ProseMirror mark {

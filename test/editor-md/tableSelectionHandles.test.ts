@@ -61,7 +61,7 @@ describe('table selection handles', () => {
     column.click(); expect((editor.state.selection as CellSelection).isColSelection()).toBe(true);
 
     [row, column] = await hover(cells[3], 380, 180);
-    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
+    expect([row.style.left, column.style.top]).toEqual(['406px', '206px']);
     expect(row.classList.contains('nb-table-select-row-right')).toBe(true);
     expect(column.classList.contains('nb-table-select-column-bottom')).toBe(true);
     row.click(); expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true);
@@ -80,7 +80,7 @@ describe('table selection handles', () => {
     const [row, column] = await hover(cells[0], 220, 120);
     expect([row.style.left, column.style.top]).toEqual(['178px', '78px']);
     await hover(cells[0], 380, 180);
-    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
+    expect([row.style.left, column.style.top]).toEqual(['406px', '206px']);
   });
 
   it('tracks the pointer immediately across the gap between a cell and its rail', async () => {
@@ -89,7 +89,7 @@ describe('table selection handles', () => {
     expect([row.style.left, column.style.top]).toEqual(['178px', '78px']);
     table.parentElement!.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 380, clientY: 180 }));
     await new Promise(requestAnimationFrame);
-    expect([row.style.left, column.style.top]).toEqual(['400px', '190px']);
+    expect([row.style.left, column.style.top]).toEqual(['406px', '206px']);
     expect(row.parentElement?.hidden).toBe(false);
   });
 
@@ -97,7 +97,7 @@ describe('table selection handles', () => {
     const { cells, scroll, hover } = create();
     vi.mocked(scroll.getBoundingClientRect).mockReturnValue(rect(200, 100, 130, 90));
     const [row, column] = await hover(cells[3], 320, 185);
-    expect([row.style.left, row.style.width, column.style.top]).toEqual(['324px', '6px', '180px']);
+    expect([row.style.left, row.style.width, column.style.top]).toEqual(['324px', '6px', '184px']);
     expect([row.dataset.index, column.dataset.index]).toEqual(['1', '1']);
     expect(row.classList.contains('nb-table-select-row-compact')).toBe(true);
   });
@@ -108,8 +108,8 @@ describe('table selection handles', () => {
     vi.mocked(local.getBoundingClientRect).mockReturnValue(rect(200, 150, 130, 40));
     const text = rect(208, 158, 84, 10); geometry(cells[2].querySelector('p')!, text);
     const [row, column] = await hover(cells[2], 220, 160);
-    expect(handleBox(row)).toMatchObject({ left: 178, right: 200, top: 150, bottom: 190 });
-    expect(handleBox(column)).toMatchObject({ left: 200, right: 300, top: 128, bottom: 150 });
+    expect(handleBox(row)).toMatchObject({ left: 178, right: 194, top: 150, bottom: 190 });
+    expect(handleBox(column)).toMatchObject({ left: 200, right: 300, top: 128, bottom: 144 });
     expect([row.dataset.index, column.dataset.index]).toEqual(['1', '0']);
     expectOutsideText(row, text); expectOutsideText(column, text);
   });
@@ -130,13 +130,33 @@ describe('table selection handles', () => {
     row.click(); expect((editor.state.selection as CellSelection).isRowSelection()).toBe(true);
     column.click(); expect((editor.state.selection as CellSelection).isColSelection()).toBe(true);
   });
-  it('keeps the entire bottom hit strip inside the grid, before empty or multi-line captions', async () => {
+  it('leaves every cell-border resize band clear while offering outside row and column selection', async () => {
+    const { cells, hover } = create();
+    const [left, top] = await hover(cells[0], 220, 120);
+    expect(handleBox(left).right).toBeLessThanOrEqual(195);
+    expect(handleBox(top).bottom).toBeLessThanOrEqual(95);
+    const [right, bottom] = await hover(cells[3], 380, 180);
+    expect(handleBox(right).left).toBeGreaterThanOrEqual(405);
+    expect(handleBox(bottom).top).toBeGreaterThanOrEqual(205);
+    expect(handleBox(bottom).height).toBe(8);
+  });
+  it('preserves actual right and bottom resize bands when the viewport has no outer gutter', async () => {
+    const { cells, scroll, hover } = create();
+    vi.mocked(scroll.getBoundingClientRect).mockReturnValue(rect(200, 100, 200, 100));
+    const [row, column] = await hover(cells[3], 380, 180);
+    expect(handleBox(row)).toMatchObject({ left: 388, right: 394 });
+    expect(handleBox(column)).toMatchObject({ top: 188, bottom: 194 });
+  });
+  it('keeps the bottom rail in a stable caption gutter and hides it only over caption content', async () => {
     for (const captionHeight of [30, 120]) {
       const { table, cells, hover } = create();
       vi.mocked(table.getBoundingClientRect).mockReturnValue(rect(200, 100, 200, 100 + captionHeight));
       const [, column] = await hover(cells[3], 380, 180);
-      expect(Number.parseFloat(column.style.top) + Number.parseFloat(column.style.height)).toBe(200);
+      expect(handleBox(column)).toMatchObject({ top: 206, bottom: 214 });
       const caption = document.createElement('caption'); caption.className = 'nb-table-accessories'; table.append(caption);
+      caption.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 300, clientY: 203 }));
+      await new Promise(requestAnimationFrame);
+      expect(column.parentElement?.hidden).toBe(false);
       caption.dispatchEvent(new MouseEvent('pointermove', { bubbles: true, clientX: 300, clientY: 215 }));
       expect(column.parentElement?.hidden).toBe(true);
       editors.pop()!.destroy();

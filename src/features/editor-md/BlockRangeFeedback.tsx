@@ -46,6 +46,14 @@ export function BlockRangeFeedback({ editor, pos, to, className = '' }: { editor
       const row = listItemHorizontalBounds(editor.view, currentPos!, target, rect, scale);
       const lastRect = last?.getBoundingClientRect() ?? rect;
       const lastRow = last && lastPos !== null ? listItemHorizontalBounds(editor.view, lastPos, last, lastRect, scale) : row;
+      // Narrow/aligned blocks still move as document rows. Only their controls
+      // follow the visible content; feedback keeps the complete writing lane.
+      const lane = target.parentElement;
+      if (target.tagName !== 'LI' && lane?.matches('.ProseMirror,.nb-disclosure-body')) {
+        const laneRect = lane.getBoundingClientRect(), style = getComputedStyle(lane);
+        row.left = Math.min(row.left, laneRect.left + (parseFloat(style.paddingLeft) || 0) * scale);
+        row.right = Math.max(row.right, laneRect.right - (parseFloat(style.paddingRight) || 0) * scale);
+      }
       // Clip to the scroll viewport so a huge table never creates a huge layer.
       const left = Math.max(Math.min(row.left, lastRow.left) - 2 * scale, bounds.left);
       const right = Math.min(Math.max(row.right, lastRow.right) + 2 * scale, bounds.right - (host.offsetWidth - host.clientWidth) * scale);
