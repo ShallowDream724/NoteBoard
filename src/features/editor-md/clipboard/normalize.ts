@@ -251,6 +251,10 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       emit(); pending = [];
     };
     let wordLists: { level: number; id: string; node: JSONContent }[] = [];
+    // Transparent wrappers share the current inline run. Descendant blocks
+    // still own their boundaries, including nested HTML/BODY from CF_HTML.
+    // Visit each node once rather than scanning every wrapper's descendants.
+    const visit = (parent: globalThis.Node, inherited: Mark[], depth: number, preserve: boolean) => {
     for (const node of Array.from(parent.childNodes)) {
       count(depth);
       if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
@@ -262,7 +266,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         else { math.marks = marksFor(element, inherited, style); pending.push(math); }
         continue;
       }
-      if (skipped.has(tag) || style.display === 'none') continue;
+      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
       if (decorativeImage(element, style)) continue;
       if (tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
         flush();
@@ -276,12 +280,7 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       }
       if (tag === 'BR') { pending.push({ type: 'hardBreak' }); continue; }
       if (!blocks.has(tag) && tag !== 'IMG' && tag !== 'V:IMAGEDATA') {
-        if (Array.from(element.children).some(child => blocks.has(child.tagName.toUpperCase()))) {
-          flush(); result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))); continue;
-        }
-        for (const child of inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style))) {
-          if (child.type === 'image' || child.type === 'paragraph' || child.type === 'mathBlock') { flush(); result.push(child); } else pending.push(child);
-        }
+        visit(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style));
         continue;
       }
       flush();
@@ -311,6 +310,8 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       else if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) result.push(...textBlock(element, inherited, depth));
       else result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
     }
+    };
+    visit(parent, inherited, depth, preserve);
     flush(); return result;
   }
   const content = flow(document.body ?? document.documentElement, [], 0);

@@ -20,6 +20,8 @@ NB 与 MD 可视编辑共用 `clipboard/external.ts`，在主线程与 Worker �
 
 HTML 正文中的成对公式标记由 `clipboard/htmlMath.ts` 复用 `mathSyntax` 转换，不重新解析整份 HTML 为 Markdown。相邻样式 span 中的公式可以合并识别，公式外的样式、列表、表格保持原样；代码与链接是识别边界。独立公式拆成块节点，列表仍保留合法的首段。KaTeX/MathML 的 TeX annotation、MathJax 的 math/tex 数据脚本和本应用公式元素只导入一个公式节点，不重复导入视觉字形。其他脚本继续忽略。畸形定界符共享线性扫描预算，超过预算的内容按字面保留；小片段与 Worker 使用同一实现。
 
+未知包装元素按透明容器递归处理，与外层共用尚未结束的行内内容；只有实际块元素建立分段。因此多层 span、自定义元素，以及 Windows CF_HTML 中重复嵌套的 html/body 都不会压平深处的段落、列表、表格或公式，也不会把相邻行内文字拆成额外段落。遍历不为每层执行后代查询，沿用节点/深度预算、隐藏元素过滤和 Office 编号标记过滤。浏览器 DOMParser 与 Worker DOM 的结构差异由这一共享归一化路径处理，不按来源网站设特例。
+
 ## 调度、取消与历史
 
 解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。文档级表格样式的修改命令位于 `documentPresentationCommands.ts`，不由语法模块反向导出。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。两种 Worker 共用 `workerDocumentDom` 的片段 DOM 适配，先安装再加载语法，保证大段 Markdown 中的 HTML 与主线程解析一致。
@@ -47,3 +49,5 @@ MD 源码模式使用 CodeMirror 的文字粘贴，保留 Markdown 原文；切�
 ## 验证
 
 `clipboardExternal.test.ts` 对 NB/MD 两种格式覆盖外部 Markdown 实际节点与序列化、源码 HTML、普通 HTML、Word 条件列表与 CF_HTML、Excel 合并和显示值、单行/单列 TSV、代码字面内容、内部 MIME 优先级及 VML/位图后备，并比较浏览器与 Worker DOM 解析结果。`clipboardImport.test.ts` 覆盖 HTML+PNG 优先级、Word 中英文列表/class 样式、Excel 合并/空格/换行/底色、脚本/URL过滤、原生说明重映射、表格行语义、空槽批量填充、撤销重做、10,000 行和深度边界。`clipboardImportAsync.test.ts` 覆盖占位、编辑期间位置映射、Esc、跨文档取消、大段 Markdown 与代码目标。`imageDropRouting.test.ts` 覆盖物理/CSS 坐标、原生拖拽认领/打开后备、九宫格/轮播实时悬停粘贴、离开恢复光标及遮挡；`imageInsertionLease.test.ts` 覆盖异步读取时槽移动、删除、多图跳过已有图片和并发填槽。
+
+`check-web-paste-controls.mjs` 使用生产构建和真实 ClipboardEvent/Worker，在 MD 与 NB 中检查小片段及超过同步阈值的嵌套文档外壳，断言标题、列表、表格、公式的数量和顺序、单步撤销重做及 Worker 释放；同时保留大段粘贴/清空的内存回归。用户的实际剪贴板仅用于本机复现，不作为公开测试数据提交。

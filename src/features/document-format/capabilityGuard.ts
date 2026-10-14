@@ -44,7 +44,7 @@ function nodeFeatures(node: Node): Feature[] {
   if (attrs.textColor && type !== 'githubAlert') add('textColor', 'textColor', attrs.textColor);
   if (attrs.background) add(type === 'tableCell' || type === 'tableHeader' ? 'tableFill' : 'highlight', 'background', attrs.background);
   if (attrs.fontSize) add('fontSize', 'fontSize', attrs.fontSize);
-  if (attrs.textAlign) add('alignment', 'textAlign', attrs.textAlign);
+  if (attrs.textAlign && attrs.textAlign !== node.type.spec.attrs?.textAlign?.default) add('alignment', 'textAlign', attrs.textAlign);
   if (attrs.indent) add('alignment', 'indent', attrs.indent);
   if (attrs.verticalAlign) add('alignment', 'verticalAlign', attrs.verticalAlign);
   if (type === 'table' && attrs.tableAlign) add('tableAlignment', 'tableAlign', attrs.tableAlign);

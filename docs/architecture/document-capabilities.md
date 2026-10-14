@@ -17,6 +17,8 @@
 
 工具栏、选区菜单、内容块菜单和图片节点菜单使用相同命令入口。图片拖拽只预览尺寸，松开后提交一次可撤销修改。NB 源码不显示 Markdown 格式化工具栏；Markdown 源码不显示私有样式入口。
 
+对齐属性按节点 schema 的默认值判断：独立公式默认居中属于普通公式展示，插入或粘贴到 Markdown 不要求转换；非默认公式对齐及段落显式对齐仍属于增强排版。`documentCapabilities.test.ts` 与嵌套 HTML 的实际粘贴回归共同验证此边界。
+
 ## 偏好与关联提示
 
 `settings.editor.pureMarkdown` 默认为 `false`，Rust 缺失字段也按 `false` 读取。打开该偏好会隐藏 NB 专属编辑及新建入口，默认新建 Markdown；关闭时默认新建 NB。该偏好不改变现有 NB 的格式或阅读能力。

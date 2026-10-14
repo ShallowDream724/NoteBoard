@@ -28,6 +28,14 @@ function normalizedHtml(html: string, plain?: string) {
 }
 
 describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipboard', format => {
+  it('pastes nested document structures without requiring conversion for portable content', async () => {
+    const editor = create(format);
+    const html = 'Version:0.9\r\nStartHTML:0000000100\r\nStartFragment:0000000200\r\n<html><body><!--StartFragment--><html><head></head><body><custom-wrapper><span><section><h2>章节</h2><p>前文 <span><strong>重点</strong><em>术语</em></span> 后文</p><ul><li>第一项</li><li>第二项</li></ul><ol start="7"><li>第七项</li></ol><div><div><table><tr><th>名称</th><th>说明</th></tr><tr><td>结构</td><td>内容</td></tr></table></div></div><p>公式 \\(a+b\\)</p><span>\\[x=y\\]</span><blockquote><p>引用文字</p></blockquote><p>结束</p></section></span></custom-wrapper></body></html><!--EndFragment--></body></html>';
+    paste(editor, { 'text/html': html });
+    await Promise.resolve();
+    expect(conversion.confirm).not.toHaveBeenCalled();
+    expect(editor.getJSON().content?.slice(0, 9).map(node => node.type)).toEqual(['heading', 'paragraph', 'bulletList', 'orderedList', 'table', 'paragraph', 'mathBlock', 'blockquote', 'paragraph']);
+  });
   it('parses external Markdown headings, math, lists, fences and tables with one undo', () => {
     const editor = create(format);
     const source = '# 222\n\n### 333\n\n$a$ is \\(b\\)\n\n- first\n- second\n\n```js\nconst n = 1;\n```\n\n| A | B |\n|---|---|\n| 1 | 2 |';
@@ -208,5 +216,27 @@ describe('external normalization boundaries', () => {
   it('preserves actual non-Markdown language code HTML and unknown wrappers containing semantic blocks', () => {
     expect(normalizedHtml('<pre><code class="language-python"># comment</code></pre>', '# comment').content[0].type).toBe('codeBlock');
     expect(normalizedHtml('<custom-wrapper><h2>Heading</h2><p>Paragraph</p></custom-wrapper>').content.map(node => node.type)).toEqual(['heading', 'paragraph']);
+  });
+  it('preserves block structure inside a complete HTML document nested in a native clipboard envelope', () => {
+    const body = '<p>Introduction</p><hr><h2>Section</h2><ul><li><strong>First</strong></li><li>Second</li></ul><ol start="7"><li>Seventh</li></ol><div><div><table><tr><th>Key</th><th>Value</th></tr><tr><td>A</td><td>B</td></tr></table></div></div><p>\\(a+b\\)</p><span>\\[x=y\\]</span><blockquote><p>Quote</p></blockquote><p>End</p>';
+    const html = 'Version:0.9\r\nStartHTML:0000000100\r\nStartFragment:0000000200\r\n<html><body><!--StartFragment--><html><head></head><body>' + body + '</body></html><!--EndFragment--></body></html>';
+    const worker = new WorkerDOMParser().parseFromString(clipboardHtmlSource(html), 'text/html') as unknown as Document;
+    const actual = normalizeExternalHtml(worker, html, undefined, { inferMarkdown: true });
+    expect(actual.content).toEqual(normalizedHtml(html).content);
+    expect(actual.content.map(node => node.type)).toEqual(['paragraph', 'horizontalRule', 'heading', 'bulletList', 'orderedList', 'table', 'paragraph', 'mathBlock', 'blockquote', 'paragraph']);
+    expect(actual.content[3].content?.[0].content?.[0].content?.[0].marks).toEqual([{ type: 'bold' }]);
+    expect(actual.content[4].attrs?.start).toBe(7);
+    expect(actual.content[5].content).toHaveLength(2);
+    expect(actual.content[6].content?.[0].type).toBe('mathInline');
+  });
+  it('walks transparent wrappers without flattening blocks or splitting adjacent styled text', () => {
+    const html = '<span>before <custom-wrapper><span><strong>bold </strong><span style="mso-list:Ignore">decorative marker</span><span>tail</span><h2>Heading</h2><table><tr><td>Cell</td></tr></table><span>after <em>end</em></span></span></custom-wrapper> final</span>';
+    const expected = normalizedHtml(html).content;
+    const worker = new WorkerDOMParser().parseFromString(`<html><body>${html}</body></html>`, 'text/html') as unknown as Document;
+    expect(normalizeExternalHtml(worker, html, undefined).content).toEqual(expected);
+    expect(expected.map(node => node.type)).toEqual(['paragraph', 'heading', 'table', 'paragraph']);
+    expect(expected[0].content?.map(node => node.text).join('')).toBe('before bold tail');
+    expect(expected[0].content?.find(node => node.text === 'bold ')?.marks).toEqual([{ type: 'bold' }]);
+    expect(expected[3].content?.map(node => node.text).join('')).toBe('after end final');
   });
 });

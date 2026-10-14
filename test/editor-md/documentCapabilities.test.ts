@@ -93,6 +93,17 @@ describe('document format capabilities', () => {
     editor.view.dispatch(editor.state.tr.addMark(1, 3, editor.schema.marks.highlight.create({ color: '#fef08a' })).setMeta('noteboard-document-replacement', 'history'));
     expect(editor.state.doc.firstChild?.firstChild?.marks.some(mark => mark.type.name === 'highlight')).toBe(true);
   });
+  it('allows default display math in Markdown while guarding custom alignment', () => {
+    const editor = make();
+    const math = editor.schema.nodes.mathBlock.create({ latex: 'a+b' });
+    const insert = editor.state.tr.insert(0, math);
+    expect(transactionAddedCapability(insert)).toBeNull();
+    editor.view.dispatch(insert);
+    expect(editor.state.doc.firstChild?.type.name).toBe('mathBlock');
+    expect(transactionAddedCapability(editor.state.tr.setNodeAttribute(0, 'textAlign', 'right'))).toBe('alignment');
+    const custom = editor.schema.nodes.mathBlock.create({ latex: 'a+b', textAlign: 'left' });
+    expect(transactionAddedCapability(editor.state.tr.insert(0, custom))).toBe('alignment');
+  });
   it('cancels conversion without changing the document or selection', async () => {
     const editor = make('markdown', 'C:/note.md'); editor.commands.setTextSelection({ from: 2, to: 6 });
     const before = editor.state.doc, selection = editor.state.selection;
