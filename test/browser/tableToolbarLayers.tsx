@@ -27,10 +27,13 @@ const cellPositions = () => {
   return positions;
 };
 const qa = {
-  select: (type: 'cell' | 'text') => {
-    const pos = cellPositions()[6];
+  select: (type: 'cell' | 'text' | 'row' | 'column' | 'all', column = 0) => {
+    const positions = cellPositions(), pos = positions[6 + column];
     editor.view.focus();
     if (type === 'cell') editor.view.dispatch(editor.state.tr.setSelection(CellSelection.create(editor.state.doc, pos)));
+    else if (type === 'row') editor.view.dispatch(editor.state.tr.setSelection(CellSelection.rowSelection(editor.state.doc.resolve(pos))));
+    else if (type === 'column') editor.view.dispatch(editor.state.tr.setSelection(CellSelection.colSelection(editor.state.doc.resolve(pos))));
+    else if (type === 'all') editor.view.dispatch(editor.state.tr.setSelection(CellSelection.create(editor.state.doc, positions[0], positions.at(-1))));
     else editor.commands.setTextSelection({ from: pos + 2, to: pos + 9 });
   },
   selection: () => ({ cell: editor.state.selection instanceof CellSelection, row: editor.state.selection instanceof CellSelection && editor.state.selection.isRowSelection(), column: editor.state.selection instanceof CellSelection && editor.state.selection.isColSelection() }),

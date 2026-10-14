@@ -2,3 +2,17 @@
  * pointer hit testing over the table's adjacent selection/reordering rails. */
 .nb-table-select-overlay { z-index:900; }
 .nb-editor-selection-toolbar { z-index:1000; }
+
+/* Only whole functional groups wrap. Tiny panes can scroll a group without
+ * reducing button hit areas or separating deletion from table operations. */
+.nb-table-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.nb-table-toolbar-group > * { flex-shrink: 0; }

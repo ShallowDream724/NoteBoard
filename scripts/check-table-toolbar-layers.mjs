@@ -1,5 +1,6 @@
 /* global window, document, requestAnimationFrame */
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { build, preview } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -59,6 +60,47 @@ try {
   await page.mouse.move(rows[4].x + 30, rows[4].y + rows[4].height - 3); await frames();
   await page.locator('.nb-table-select-column:not([hidden])').click();
   assert.equal((await page.evaluate(() => window.tableToolbarQA.selection())).column, true, 'Exposed column rail must keep selecting');
+  const layouts = [];
+  for (const width of [1400, 1000, 760, 520]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const type of ['cell', 'row', 'column', 'all']) {
+      const heights = [];
+      for (const column of [0, 1]) {
+        await page.evaluate(({ type, column }) => window.tableToolbarQA.select(type, column), { type, column });
+        const toolbar = page.getByRole('toolbar', { name: '表格工具栏', exact: true });
+        await toolbar.waitFor(); await frames(); await frames();
+        const layout = await toolbar.evaluate(element => {
+          const box = element.getBoundingClientRect();
+          const rowCenter = button => { const rect = button.getBoundingClientRect(); return Math.round(rect.top + rect.height / 2); };
+          const buttons = [...element.querySelectorAll('button')].map(button => ({ label: button.getAttribute('aria-label'), row: rowCenter(button) }));
+          const group = element.querySelector('[aria-label="表格操作"]');
+          const groupRows = new Set([...group.querySelectorAll('button')].map(rowCenter));
+          const deletion = [...group.querySelectorAll('button')].find(button => /^(删除|清空)/.test(button.getAttribute('aria-label') || ''));
+          const d = deletion.getBoundingClientRect();
+          return { width: box.width, left: box.left, right: box.right, height: box.height, rows: new Set(buttons.map(button => button.row)).size,
+            actionRows: groupRows.size, deleteReachable: deletion.contains(document.elementFromPoint(d.left + d.width / 2, d.top + d.height / 2)) };
+        });
+        assert(layout.left >= 7 && layout.right <= width - 7, JSON.stringify({ width, type, column, layout }));
+        if (width >= 1000) assert.equal(layout.rows, 1, `Wide pane must stay on one row: ${JSON.stringify({ width, type, column, layout })}`);
+        assert.equal(layout.actionRows, 1, 'Delete stays with the table action group');
+        assert(layout.deleteReachable, 'Delete remains directly reachable');
+        heights.push(layout.height); layouts.push({ viewport: width, type, column, ...layout });
+      }
+      assert.equal(heights[0], heights[1], 'Changing only the anchor must not wrap the toolbar');
+    }
+  }
+  // A sidebar resize changes the editor pane without resizing the window.
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.evaluate(() => { document.getElementById('editor-shell').style.width = '390px'; window.tableToolbarQA.select('row'); });
+  await frames(); await frames();
+  const paneLayout = await page.getByRole('toolbar', { name: '表格工具栏', exact: true }).boundingBox();
+  assert(paneLayout.x >= 7 && paneLayout.x + paneLayout.width <= 383, 'Toolbar follows the resized pane');
+  await fs.mkdir('.tmp/table-toolbar-layout', { recursive: true });
+  await page.screenshot({ path: '.tmp/table-toolbar-layout/narrow-pane.png' });
+  await page.evaluate(() => { document.getElementById('editor-shell').style.width = ''; window.tableToolbarQA.select('row'); });
+  await frames(); await frames();
+  await page.screenshot({ path: '.tmp/table-toolbar-layout/wide-pane.png' });
+  await fs.writeFile('.tmp/table-toolbar-layout/results.json', JSON.stringify(layouts, null, 2));
   assert.deepEqual(errors, []);
-  console.log('Passed: real text/table toolbar buttons win overlapping rails inside an isolated editor; exposed row and column rails remain selectable.');
+  console.log('Passed: toolbar hit testing, exposed rails, 32 selection/anchor/viewport layouts and sidebar resize.');
 } finally { await browser.close(); await new Promise(resolve => server.httpServer.close(resolve)); }

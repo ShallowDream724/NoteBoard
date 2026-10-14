@@ -436,7 +436,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
   const [show, setShow] = useState(false);
   const dismissed = useRef(false);
   useEditorOverlayDismiss(editor, toolbar, () => { dismissed.current = true; setShow(false); });
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, maxWidth: 0 });
   useFormattingUpdates(editor, show);
   useLayoutEffect(() => {
     if (!toolbar.current) return;
@@ -518,7 +518,10 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         // 2. 若表格向上滚动且顶部已接近或滚出容器顶部，工具条吸顶在容器顶部下方安全区（containerRect.top + 8px）
         const toolbarBounds = toolbar.current?.getBoundingClientRect();
         const height = toolbarBounds?.height ?? 40;
-        const halfWidth = Math.min(toolbarBounds?.width ?? 490, containerRect.width - 16) / 2;
+        const leftEdge = Math.max(8, containerRect.left + 8);
+        const rightEdge = Math.min(window.innerWidth - 8, containerRect.right - 8);
+        const maxWidth = Math.max(1, rightEdge - leftEdge);
+        const halfWidth = Math.min(toolbarBounds?.width ?? 490, maxWidth) / 2;
         // Near the first rows, use the table's outer edge so the toolbar cannot
         // cover the header or the boundary the user is about to resize.
         const tableTop = tableDom.getBoundingClientRect().top;
@@ -529,14 +532,15 @@ export function TableToolbar({ editor }: { editor: Editor }) {
           ? anchorTop - height - gap
           : Math.min(rect.bottom + 6, containerRect.bottom - height - 6);
 
-        // 计算水平居中位置，并施加容器边界安全约束（工具条宽约 420px，半宽约 210px，留安全边距）
+        // Width is intrinsic and capped by the editor pane, independently of
+        // the anchor's left coordinate and the centering transform.
         const targetLeft = rect.left + rect.width / 2;
         const clampedLeft = Math.max(
-          Math.max(8, containerRect.left) + halfWidth + 8,
-          Math.min(targetLeft, Math.min(window.innerWidth, containerRect.right) - halfWidth - 8)
+          leftEdge + halfWidth,
+          Math.min(targetLeft, rightEdge - halfWidth)
         );
 
-        setPosition(previous => previous.top === topPos && previous.left === clampedLeft ? previous : { top: topPos, left: clampedLeft });
+        setPosition(previous => previous.top === topPos && previous.left === clampedLeft && previous.maxWidth === maxWidth ? previous : { top: topPos, left: clampedLeft, maxWidth });
       } else {
         setShow(false);
       }
@@ -564,6 +568,8 @@ export function TableToolbar({ editor }: { editor: Editor }) {
     editorDom.addEventListener('pointerup', pointerAnchor);
     editorDom.addEventListener(EDITOR_DRAG_ACTIVITY, drag);
     scrollParent.addEventListener('scroll', schedule, { passive: true });
+    const paneObserver = new ResizeObserver(schedule);
+    paneObserver.observe(scrollParent);
     window.addEventListener('resize', schedule, { passive: true });
     window.addEventListener('scroll', schedule, { passive: true });
     schedule();
@@ -576,6 +582,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       editorDom.removeEventListener('pointerup', pointerAnchor);
       editorDom.removeEventListener(EDITOR_DRAG_ACTIVITY, drag);
       scrollParent.removeEventListener('scroll', schedule);
+      paneObserver.disconnect();
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule);
       refresh.current = () => {};
@@ -601,7 +608,9 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         transform: 'translateX(-50%)',
         display: 'flex',
         flexWrap: 'wrap',
-        maxWidth: 'calc(100vw - 24px)',
+        width: 'max-content',
+        maxWidth: position.maxWidth || 'calc(100vw - 16px)',
+        boxSizing: 'border-box',
         alignItems: 'center',
         padding: '4px 6px',
         background: 'var(--editor-surface, #ffffff)',
@@ -614,10 +623,12 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         transition: 'opacity 120ms ease',
       }}
     >
-      {isCellSelection(editor.state.selection) && <TableTextControls editor={editor}/>}
+      {isCellSelection(editor.state.selection) && <div className="nb-table-toolbar-group" role="group" aria-label="文字格式"><TableTextControls editor={editor}/></div>}
+      <div className="nb-table-toolbar-group" role="group" aria-label="单元格样式">
       <AlignmentMenu editor={editor}/>
       <TableFillMenu editor={editor} disabled={documentTableStyle(editor.state.doc) === 'three-line'}/>
-      {(distribution?.columns || distribution?.rows || canMerge || canSplit) && <MenuDivider />}
+      </div>
+      {(distribution?.columns || distribution?.rows || canMerge || canSplit) && <div className="nb-table-toolbar-group" role="group" aria-label="单元格布局"><MenuDivider />
       {distribution?.columns && <BubbleButton title="平均分布列宽" icon={<Columns3 size={16}/>} onClick={() => distributeTableColumns(editor)}/>}
       {distribution?.rows && <BubbleButton title="平均分布行高" icon={<Rows3 size={16}/>} onClick={() => distributeTableRows(editor)}/>}
       {canMerge && <BubbleButton
@@ -626,6 +637,8 @@ export function TableToolbar({ editor }: { editor: Editor }) {
       {canSplit && <BubbleButton
         title="拆分合并单元格" icon={<Split size={16}/>}
         onClick={() => runDiscreteEdit(editor, chain => chain.splitCell())}/>}
+      </div>}
+      <div className="nb-table-toolbar-group" role="group" aria-label="表格操作">
       <MenuDivider />
       {headers?.canRow && <BubbleButton
         title={headers.rowHeader ? '取消表头行' : '首行设为表头'}
@@ -651,6 +664,7 @@ export function TableToolbar({ editor }: { editor: Editor }) {
         onClick={() => deleteTableSelection(editor)}
         danger
       />
+      </div>
     </div></TooltipDetailProvider>, editor.view.dom.ownerDocument.body
   );
 }
