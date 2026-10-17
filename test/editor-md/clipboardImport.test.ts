@@ -115,7 +115,7 @@ describe('bounded rich clipboard import', () => {
     target.commands.undo(); expect(target.state.doc.textContent).toBe('XY');
   });
   it('bounds pathological depth and allows a normal 10,000-row spreadsheet', () => {
-    expect(() => normalize('<div>'.repeat(CLIPBOARD_LIMITS.depth + 2) + 'deep' + '</div>'.repeat(CLIPBOARD_LIMITS.depth + 2))).toThrow(/嵌套/);
+    expect(() => normalize('<blockquote>'.repeat(CLIPBOARD_LIMITS.depth + 2) + '<p>deep</p>' + '</blockquote>'.repeat(CLIPBOARD_LIMITS.depth + 2))).toThrow(/正文嵌套/);
     const html = '<table>' + '<tr><td>row</td><td>value</td></tr>'.repeat(10_000) + '</table>';
     expect(normalize(html).content[0].content).toHaveLength(10_000);
     expect(() => normalize('<table>' + '<tr><td colspan="100">wide</td></tr>'.repeat(1001) + '</table>')).toThrow(/网格过大/);

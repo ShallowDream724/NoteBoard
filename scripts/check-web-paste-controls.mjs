@@ -50,6 +50,33 @@ async function structuredRound(format, repeats) {
   await prose.evaluate(element => element.editor.commands.redo()); await frame(); assert.deepEqual((await snapshot()).json, result.json);
   report.cases.push({ name: 'nested-document-structure', format, characters: html.length, repeats, counts, undoRedo: true });
 }
+async function wholePageRound(format) {
+  const turns = 150;
+  const turn = index => [
+    `<article><h2>历史回合 ${index}</h2>`,
+    ...Array.from({ length: 12 }, (_, line) => `<p>第 ${index}-${line} 段 <strong>研究结果</strong>与<a href="https://example.com/${index}/${line}">来源</a>。</p>`),
+    '<table>', '<tr><th>条件</th><th>结果</th></tr>', '<tr><td>对照</td><td>0.0857</td></tr>', '</table>',
+    '<ul><li>结论一</li><li>结论二</li></ul>',
+    `<pre><code>result = ${index}</code></pre>`,
+    `<p>回合结束 ${index}${index % 10 === 0 ? ' \\(r^4\\)' : ''}</p></article>`,
+  ].join('\n');
+  const source = Array.from({ length: turns }, (_, index) => turn(index)).join('\n');
+  assert.equal(source.split('\n').length, 3000);
+  const hidden = '<section hidden><p>不能带入的隐藏正文</p></section>';
+  const html = `Version:0.9\r\nStartHTML:0000000100\r\nStartFragment:0000000200\r\n<html><body>${'<div>'.repeat(80)}<p>选区外</p><!--StartFragment-->${hidden}${source}<!--EndFragment--><p>选区外</p>${'</div>'.repeat(80)}</body></html>`;
+  await load(); const started = Date.now(), responseMs = await paste({ 'text/html': html });
+  await page.waitForFunction(last => Array.from(document.querySelectorAll('.nb-prose.ProseMirror[contenteditable="true"]')).at(-1)?.editor.state.doc.textContent.includes(last), `回合结束 ${turns - 1}`, { timeout: 30000 });
+  const completionMs = Date.now() - started, result = await snapshot();
+  const counts = {}, pending = [...result.json.content];
+  while (pending.length) { const node = pending.pop(); counts[node.type] = (counts[node.type] || 0) + 1; pending.push(...node.content || []); }
+  for (const type of ['heading', 'table', 'bulletList', 'codeBlock']) assert.equal(counts[type], turns, `${format}: full page ${type}`);
+  assert.equal(counts.mathInline, 15); assert.equal(result.marks.filter(mark => mark.type === 'bold').length, turns * 12);
+  assert(!result.text.includes('选区外')); assert(!result.text.includes('不能带入'));
+  assert.equal(await conversion().count(), 0); assert.equal(await page.evaluate(() => window.__qaClipboardWorkers.active), 0);
+  await prose.evaluate(element => { element.editor.state.doc.check(); element.editor.commands.undo(); }); await frame(); assert.equal((await snapshot()).text, '');
+  await prose.evaluate(element => element.editor.commands.redo()); await frame(); assert.deepEqual((await snapshot()).json, result.json);
+  report.cases.push({ name: 'whole-web-page-3000-lines', format, characters: html.length, counts, responseMs, completionMs, undoRedo: true, workersReleased: true });
+}
 try {
   if (!cdp) {
     await installBrowserNativeShell(page);
@@ -114,6 +141,7 @@ try {
   assert(after.jsEventListeners - before.jsEventListeners < 500, 'Paste does not retain per-row event listeners');
   report.cases.push({ name: 'large-html-worker', characters: large.length, rows: 600, rounds: 4, responses, before, after, workers: await page.evaluate(() => window.__qaClipboardWorkers) });
   await structuredRound('markdown', 1); await structuredRound('markdown', 80);
+  await wholePageRound('markdown');
   await load('保留的正文');
   const rich = { version: 1, openStart: 0, openEnd: 0, content: [{ type: 'paragraph', content: [{ type: 'text', text: '新增的蓝色链接', marks: [{ type: 'textColor', attrs: { color: '#1234ab' } }, { type: 'link', attrs: { href: 'https://example.com/replay' } }] }] }] };
   const data = { 'application/x-noteboard-document-slice': JSON.stringify(rich), 'text/plain': '新增的蓝色链接' };
@@ -130,6 +158,7 @@ try {
   assert(result.marks.some(mark => mark.type === 'textColor')); assert.equal(result.text, plainText);
   report.cases.push({ name: 'explicit-NB-paste', cancelPreservesContent: true, confirmedPasteRetained: true, undoRedo: true, nativeAppearanceRetained: true });
   await structuredRound('noteboard', 1); await structuredRound('noteboard', 80);
+  await wholePageRound('noteboard');
   assert.equal(report.errors.length, 0); report.passed = true;
 } finally {
   if (!report.passed) await page.screenshot({ path: `${out}/failure.png` }).catch(() => {});

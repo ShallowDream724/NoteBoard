@@ -2,6 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { documentParser } from '../documentExtensions';
 import { annotationBodyContent, remapAnnotationIds } from '../annotations/model';
 import { CLIPBOARD_LIMITS, ClipboardImportError, clipboardTextLineCount, normalizeClipboardDocument, normalizeClipboardText, safeClipboardUrl, type ClipboardImportResult, type ExternalHtmlOptions } from './normalize';
+import { checkClipboardHtmlNodes, checkClipboardStructure } from './limits';
 
 export const MARKDOWN_MIMES = ['text/markdown', 'text/x-markdown'] as const;
 const isClipboardHtmlEnvelope = (raw: string) => /^(?:Version:|StartHTML:)/i.test(raw) && /\r?\nStartFragment:\s*-?\d+/i.test(raw);
@@ -14,21 +15,27 @@ export function clipboardHtmlSource(raw: string): string {
 function selectClipboardHtmlFragment(document: Document, raw: string): void {
   if (!isClipboardHtmlEnvelope(raw) || !raw.includes('<!--StartFragment-->') || !raw.includes('<!--EndFragment-->')) return;
   let inside = false, count = 0;
-  const prune = (parent: globalThis.Node, depth: number): boolean => {
-    if (depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构过大或嵌套过深，请分段粘贴');
-    let kept = false;
-    for (const child of Array.from(parent.childNodes)) {
-      if (++count > CLIPBOARD_LIMITS.nodes) throw new ClipboardImportError('剪贴板结构超过导入限制');
-      if (child.nodeType === 8 && child.textContent?.trim() === 'StartFragment') { inside = true; parent.removeChild(child); continue; }
-      if (child.nodeType === 8 && child.textContent?.trim() === 'EndFragment') { inside = false; parent.removeChild(child); continue; }
-      const selected = inside;
-      const keep = child.nodeType === 1 && child.childNodes.length ? prune(child, depth + 1) : selected;
-      if (keep) kept = true; else parent.removeChild(child);
-    }
-    return kept;
-  };
   // Retain ancestor table/list/paragraph structure and all head style rules.
-  prune(document.body, 0);
+  // Transport ancestors have no semantic depth; pruning must not recurse on them.
+  const stack = [{ parent: document.body as globalThis.Node, next: document.body.firstChild, kept: false }];
+  while (stack.length) {
+    const frame = stack[stack.length - 1], child = frame.next;
+    if (!child) {
+      stack.pop();
+      if (stack.length) {
+        if (frame.kept) stack[stack.length - 1].kept = true;
+        else frame.parent.parentNode?.removeChild(frame.parent);
+      }
+      continue;
+    }
+    frame.next = child.nextSibling;
+    checkClipboardHtmlNodes(++count);
+    if (child.nodeType === 8 && child.textContent?.trim() === 'StartFragment') { inside = true; frame.parent.removeChild(child); continue; }
+    if (child.nodeType === 8 && child.textContent?.trim() === 'EndFragment') { inside = false; frame.parent.removeChild(child); continue; }
+    if (child.nodeType === 1 && child.firstChild) stack.push({ parent: child, next: child.firstChild, kept: false });
+    else if (inside) frame.kept = true;
+    else frame.parent.removeChild(child);
+  }
 }
 /** Only an unreadable image by itself may use the clipboard bitmap alternative.
  * Never replace a Word/Excel document or a text selection with its screenshot. */
@@ -75,7 +82,7 @@ function markdownResult(raw: string, options: ExternalTextOptions, explicit: boo
   const diagnostics = new Set<string>(); let nodes = 0, semantic = false, cells = 0;
   while (stack.length) {
     const { node, depth } = stack.pop()!;
-    if (++nodes > CLIPBOARD_LIMITS.nodes || depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构过大或嵌套过深，请分段粘贴');
+    checkClipboardStructure(++nodes, depth);
     semantic ||= !['paragraph', 'text', 'hardBreak'].includes(node.type ?? '') || Boolean(node.marks?.length);
     if (node.type === 'tableCell' || node.type === 'tableHeader') {
       cells += Math.max(1, Number(node.attrs?.colspan) || 1) * Math.max(1, Number(node.attrs?.rowspan) || 1);
@@ -120,28 +127,29 @@ export function normalizeExternalText(raw: string, options: ExternalTextOptions 
 function wrappedMarkdownSource(document: Document, plainText?: string): string | null {
   const body = document.body ?? document.documentElement;
   const allowed = new Set(['DIV', 'SPAN', 'BR', 'PRE', 'CODE', 'META']);
-  for (const element of Array.from(body.querySelectorAll('*'))) {
-    if (!allowed.has(element.tagName.toUpperCase()) || /\bmso-|\bMso(?:Normal|List)/i.test(`${element.getAttribute('style') ?? ''} ${element.getAttribute('class') ?? ''}`)) return null;
-    const language = /(?:^|\s)language-([\w+-]+)/i.exec(element.getAttribute('class') ?? '')?.[1] ?? element.getAttribute('data-language');
-    if (language && !/^(?:md|markdown|text|plaintext)$/i.test(language)) return null;
-  }
   const fragments: string[] = [];
-  const collect = (parent: globalThis.Node, depth: number) => {
-    if (depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构过大或嵌套过深，请分段粘贴');
-    for (const child of Array.from(parent.childNodes)) {
+  let count = 0;
+  const stack = [{ next: body.firstChild, block: false, before: 0 }];
+  while (stack.length) {
+      const frame = stack[stack.length - 1], child = frame.next;
+      if (!child) {
+        if (frame.block && (fragments.length === frame.before || !fragments.at(-1)?.endsWith('\n'))) fragments.push('\n');
+        stack.pop(); continue;
+      }
+      frame.next = child.nextSibling;
+      checkClipboardHtmlNodes(++count);
       if (child.nodeType === 3) { fragments.push(child.textContent ?? ''); continue; }
       if (child.nodeType !== 1) continue;
-      const tag = (child as Element).tagName.toUpperCase();
+      const element = child as Element, tag = element.tagName.toUpperCase(), style = element.getAttribute('style') ?? '';
+      if (!allowed.has(tag) || element.hasAttribute('hidden') || /(?:display|content-visibility|visibility)\s*:\s*(?:none|hidden|collapse)|\bmso-|\bMso(?:Normal|List)/i.test(`${style} ${element.getAttribute('class') ?? ''}`)) return null;
+      const language = /(?:^|\s)language-([\w+-]+)/i.exec(element.getAttribute('class') ?? '')?.[1] ?? element.getAttribute('data-language');
+      if (language && !/^(?:md|markdown|text|plaintext)$/i.test(language)) return null;
       if (tag === 'META') continue;
       if (tag === 'BR') { fragments.push('\n'); continue; }
       const block = tag === 'DIV' || tag === 'PRE';
       if (block && fragments.length && !fragments.at(-1)?.endsWith('\n')) fragments.push('\n');
-      const before = fragments.length;
-      collect(child, depth + 1);
-      if (block && (fragments.length === before || !fragments.at(-1)?.endsWith('\n'))) fragments.push('\n');
-    }
-  };
-  collect(body, 0);
+      stack.push({ next: child.firstChild, block, before: fragments.length });
+  }
   const source = fragments.join('').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
   if (plainText !== undefined) {
     const plain = plainText.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');

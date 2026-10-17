@@ -122,6 +122,22 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
     expect(marks.some(mark => mark.type === 'textColor')).toBe(format === 'noteboard');
     await Promise.resolve(); expect(conversion.confirm).not.toHaveBeenCalled();
   });
+  it('keeps a linked scientific report with display math and tables in its original format', async () => {
+    const source = '## 研究交付\n\n**已完成推导** [原文](https://example.com/paper)\n\n\\[\n\\Delta p=\\frac{p_0}{1+RG}\n\\]\n\n| 条件 | 结果 |\n|---|---|\n| A | \\(r^4\\) |\n\n结束';
+    const html = '<h2>研究交付</h2><p style="background:#000;color:#fff"><strong>已完成推导</strong> <a href="https://example.com/paper" style="color:#36a4dc">原文</a></p><div class="katex-display"><span class="katex"><math><annotation encoding="application/x-tex">\\Delta p=\\frac{p_0}{1+RG}</annotation></math><span aria-hidden="true">duplicate glyphs</span></span></div><table><tr><th>条件</th><th>结果</th></tr><tr><td>A</td><td>\\(r^4\\)</td></tr></table><p>结束</p>';
+    for (const formats of [{ 'text/plain': source }, { 'text/html': html, 'text/plain': source }]) {
+      const editor = create(format);
+      paste(editor, formats); await Promise.resolve();
+      expect(conversion.confirm).not.toHaveBeenCalled();
+      expect(editor.getJSON().content?.slice(0, 5).map(node => node.type)).toEqual(['heading', 'paragraph', 'mathBlock', 'table', 'paragraph']);
+      expect(editor.state.doc.child(2).attrs.latex).toBe('\\Delta p=\\frac{p_0}{1+RG}');
+      const saved = serializeEditorDocument(editor);
+      expect(saved).toContain('https://example.com/paper');
+      if (format === 'markdown') { expect(saved).toMatch(/\\\[|\$\$/); expect(saved).not.toContain('#000000'); expect(saved).not.toContain('duplicate glyphs'); }
+      const json = editor.getJSON(); editor.commands.undo(); expect(editor.state.doc.textContent).toBe('target');
+      editor.commands.redo(); expect(editor.getJSON()).toEqual(json);
+    }
+  });
   it('Ctrl+Shift+V skips rich HTML and conversion while inserting only plain text', async () => {
     const editor = create(format);
     editor.view.someProp('handleKeyDown', handler => handler(editor.view, new KeyboardEvent('keydown', { key: 'V', ctrlKey: true, shiftKey: true })));

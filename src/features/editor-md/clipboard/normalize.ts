@@ -3,9 +3,9 @@ import { parseClipboardMatrix } from '../../../core/clipboardMatrix';
 import { clipboardMathElement, clipboardTextMath } from './htmlMath';
 import { figureCaptionText } from '../figureCaption';
 import { buildLogicalTableGrid } from '../tableGrid';
+import { CLIPBOARD_LIMITS, ClipboardImportError, checkClipboardHtmlNodes, checkClipboardStructure, validateClipboardStructure } from './limits';
+export { CLIPBOARD_LIMITS, ClipboardImportError } from './limits';
 
-/** Import limits bound DOM parsing, schema materialization and one final transaction. */
-export const CLIPBOARD_LIMITS = { characters: 16_000_000, nodes: 250_000, depth: 48, cells: 100_000, rules: 2_048, synchronous: 24_000 } as const;
 export interface ClipboardImportResult { content: JSONContent[]; diagnostics: string[]; nodes: number; openStart?: number; openEnd?: number; tableScope?: 'row' | 'column' | 'table' | 'cells' }
 export interface ExternalHtmlOptions {
   /** Foreign HTML in MD keeps portable semantics, without page appearance. Defaults to rich import. */
@@ -13,7 +13,6 @@ export interface ExternalHtmlOptions {
   /** Explicit web origin supplied by the clipboard transport, never the local editor URL. */
   sourceUrl?: string;
 }
-export class ClipboardImportError extends Error {}
 /** Bound text parsing before constructing either paragraph or Markdown trees. */
 export function clipboardTextLineCount(raw: string): number {
   if (raw.length > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴');
@@ -75,7 +74,7 @@ function clipboardWebBase(raw: string | null | undefined, base?: string): string
 /** DOM is detached; only a small allowlist is translated to schema data. No computed styles or HTML survives. */
 export function normalizeClipboardDocument(document: Document, inputCharacters: number, options: ExternalHtmlOptions = {}): ClipboardImportResult {
   if (inputCharacters > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴（每次最多 1600 万字符）');
-  const diagnostics = new Set<string>(); let nodes = 0, cells = 0;
+  const diagnostics = new Set<string>(); let htmlNodes = 0, cells = 0;
   const rich = options.preservePresentation !== false;
   const sourceUrl = clipboardWebBase(options.sourceUrl);
   const baseUrl = clipboardWebBase(document.querySelector('base[href]')?.getAttribute('href'), sourceUrl) ?? sourceUrl;
@@ -106,9 +105,10 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     for (const key of keys) Object.assign(result, styleRules.get(key));
     return Object.assign(result, declarations(element.getAttribute('style') ?? ''));
   }
-  function count(depth: number) {
-    if (++nodes > CLIPBOARD_LIMITS.nodes || depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构过大或嵌套过深，请分段粘贴');
-  }
+  const count = () => checkClipboardHtmlNodes(++htmlNodes);
+  const hidden = (element: Element, style: Style) => element.hasAttribute('hidden') || style.display === 'none' || style['content-visibility'] === 'hidden';
+  // Unlike display:none, visibility can be restored by a descendant.
+  const visibility = (style: Style, inherited: boolean) => style.visibility === 'visible' ? true : /^(hidden|collapse)$/.test(style.visibility ?? '') ? false : inherited;
   function marksFor(element: Element, inherited: Mark[], style: Style): Mark[] {
     const marks = [...inherited], tag = element.tagName.toUpperCase();
     const add = (type: string, attrs?: Record<string, unknown>) => { const at = marks.findIndex(mark => mark.type === type); if (at >= 0) marks.splice(at, 1); marks.push({ type, ...(attrs ? { attrs } : {}) }); };
@@ -169,55 +169,68 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     }
     return element.textContent ?? '';
   }
-  function inline(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false): JSONContent[] {
+  function inline(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false, visible = true): JSONContent[] {
+    checkClipboardStructure(0, depth);
     const result: JSONContent[] = [];
-    for (const node of Array.from(parent.childNodes)) {
-      count(depth);
-      if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) result.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
-      if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) result.push(fallback); continue; }
+    const stack = [{ next: parent.firstChild, inherited, preserve, visible }];
+    while (stack.length) {
+      const frame = stack[stack.length - 1], node = frame.next;
+      if (!node) { stack.pop(); continue; }
+      frame.next = node.nextSibling;
+      const { inherited, preserve, visible } = frame;
+      count();
+      if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (visible && text) result.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
+      if (node.nodeType !== 1) { const fallback = visible ? officeCommentImage(node) : null; if (fallback) result.push(fallback); continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
+      if (hidden(element, style)) continue;
+      const nextVisible = visibility(style, visible);
       const math = clipboardMathElement(element);
-      if (math && style.display !== 'none') { if (math.type === 'mathInline') math.marks = marksFor(element, inherited, style); result.push(math); continue; }
-      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
-      if (tag === 'BR') { result.push({ type: 'hardBreak' }); continue; }
-      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { if (!decorativeImage(element, style)) result.push(image(element)); continue; }
-      result.push(...inline(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
+      if (math) { if (nextVisible) { if (math.type === 'mathInline') math.marks = marksFor(element, inherited, style); result.push(math); } continue; }
+      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore') continue;
+      if (tag === 'BR') { if (nextVisible) result.push({ type: 'hardBreak' }); continue; }
+      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { if (nextVisible && !decorativeImage(element, style)) result.push(image(element)); continue; }
+      stack.push({ next: element.firstChild, inherited: marksFor(element, inherited, style), preserve: preserve || preservesSpaces(style), visible: nextVisible });
     }
     return result;
   }
-  function textBlock(element: Element, inherited: Mark[], depth: number): JSONContent[] {
+  function textBlock(element: Element, inherited: Mark[], depth: number, visible = true): JSONContent[] {
     const style = styleFor(element), marks = marksFor(element, inherited, style), attrs = alignment(element, style);
     const tag = element.tagName.toUpperCase(), type = /^H[1-6]$/.test(tag) ? 'heading' : 'paragraph';
     const output: JSONContent[] = []; let content: JSONContent[] = [];
     const flush = (trimEmpty = false) => { if (content.length && (!trimEmpty || content.some(node => node.type !== 'text' || node.text?.trim()))) output.push({ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}), content }); content = []; };
     // Split block images at their original inline position; no second descendant scan.
-    for (const child of clipboardTextMath(inline(element, marks, depth + 1, preservesSpaces(style)))) {
+    for (const child of clipboardTextMath(inline(element, marks, depth + 1, preservesSpaces(style), visible))) {
       if (child.type === 'image' || child.type === 'paragraph' || child.type === 'mathBlock') { flush(child.type === 'mathBlock'); output.push(child); }
       else content.push(child);
     }
-    flush(output.at(-1)?.type === 'mathBlock'); return output.length ? output : [{ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}) }];
+    flush(output.at(-1)?.type === 'mathBlock'); return output.length || !visible ? output : [{ type, ...(attrs || type === 'heading' ? { attrs: { ...attrs, ...(type === 'heading' ? { level: Number(tag[1]) } : {}) } } : {}) }];
   }
-  function list(element: Element, inherited: Mark[], depth: number): JSONContent {
+  function list(element: Element, inherited: Mark[], depth: number, visible: boolean): JSONContent {
     const content: JSONContent[] = [];
     for (const child of Array.from(element.children)) {
+      count();
       if (child.tagName.toUpperCase() !== 'LI') continue;
-      const body = flow(child, inherited, depth + 1); if (body[0]?.type !== 'paragraph') body.unshift(paragraph());
+      if (hidden(child, styleFor(child))) continue;
+      const body = flow(child, inherited, depth + 2, false, visibility(styleFor(child), visible)); if (body[0]?.type !== 'paragraph') body.unshift(paragraph());
       content.push({ type: 'listItem', content: body.length ? body : [paragraph()] });
     }
     return { type: element.tagName.toUpperCase() === 'OL' ? 'orderedList' : 'bulletList', ...(element.tagName.toUpperCase() === 'OL' ? { attrs: { start: Math.max(1, Number(element.getAttribute('start')) || 1) } } : {}), content: content.length ? content : [{ type: 'listItem', content: [paragraph()] }] };
   }
-  function table(element: Element, inherited: Mark[], depth: number): JSONContent {
+  function table(element: Element, inherited: Mark[], depth: number, visible: boolean): JSONContent {
     const rows: JSONContent[] = [];
     const spanEnds = new Map<number, number>(); let activeSpanWidth = 0, maximumWidth = 0;
     for (const row of Array.from(element.querySelectorAll('tr'))) {
       if (row.closest('table') !== element) continue;
+      count();
+      if (hidden(row, styleFor(row))) continue;
       const content: JSONContent[] = [];
       const rowIndex = rows.length; activeSpanWidth -= spanEnds.get(rowIndex) ?? 0;
       let rowWidth = activeSpanWidth;
       for (const cell of Array.from(row.children)) {
+        count();
         if (!['TD', 'TH'].includes(cell.tagName.toUpperCase())) continue;
         if (++cells > CLIPBOARD_LIMITS.cells) throw new ClipboardImportError('表格过大，请分段粘贴（每次最多 10 万个单元格）');
-        const style = styleFor(cell), align = alignment(cell, style), body = flow(cell, marksFor(cell, inherited, style), depth + 1, preservesSpaces(style));
+        const style = styleFor(cell), align = alignment(cell, style), body = hidden(cell, style) ? [] : flow(cell, marksFor(cell, inherited, style), depth + 3, preservesSpaces(style), visibility(style, visibility(styleFor(row), visible)));
         if (align) for (const block of body) if (['paragraph', 'heading'].includes(block.type ?? '')) block.attrs = { ...block.attrs, ...align };
         const span = (name: string) => Math.min(100, Math.max(1, Number(cell.getAttribute(name)) || 1));
         const colspan = span('colspan'), rowspan = span('rowspan'); rowWidth += colspan;
@@ -242,7 +255,22 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
     }
     return rows.length ? { type: 'table', content: rows } : paragraph();
   }
-  function flow(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false): JSONContent[] {
+  function codeText(parent: Element, visible: boolean): string {
+    const parts: string[] = [], stack = [{ next: parent.firstChild, visible }];
+    while (stack.length) {
+      const frame = stack[stack.length - 1], node = frame.next;
+      if (!node) { stack.pop(); continue; }
+      frame.next = node.nextSibling; count();
+      if (node.nodeType === 3) { if (frame.visible) parts.push(node.textContent ?? ''); continue; }
+      if (node.nodeType !== 1) continue;
+      const element = node as Element, style = styleFor(element);
+      if (hidden(element, style) || skipped.has(element.tagName.toUpperCase())) continue;
+      stack.push({ next: node.firstChild, visible: visibility(style, frame.visible) });
+    }
+    return parts.join('');
+  }
+  function flow(parent: globalThis.Node, inherited: Mark[], depth: number, preserve = false, visible = true): JSONContent[] {
+    checkClipboardStructure(0, depth);
     const result: JSONContent[] = []; let pending: JSONContent[] = [];
     const flush = () => {
       let text: JSONContent[] = [];
@@ -251,24 +279,31 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
       emit(); pending = [];
     };
     let wordLists: { level: number; id: string; node: JSONContent }[] = [];
-    // Transparent wrappers share the current inline run. Descendant blocks
-    // still own their boundaries, including nested HTML/BODY from CF_HTML.
-    // Visit each node once rather than scanning every wrapper's descendants.
-    const visit = (parent: globalThis.Node, inherited: Mark[], depth: number, preserve: boolean) => {
-    for (const node of Array.from(parent.childNodes)) {
-      count(depth);
-      if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
-      if (node.nodeType !== 1) { const fallback = officeCommentImage(node); if (fallback) { flush(); result.push(fallback); } continue; }
+    // Layout wrappers use an explicit stack. Only authored containers (lists,
+    // quotes and tables) increase semantic depth; block wrappers keep boundaries.
+    const stack = [{ next: parent.firstChild, inherited, preserve, visible, boundary: false }];
+    while (stack.length) {
+      const frame = stack[stack.length - 1], node = frame.next;
+      if (!node) { if (frame.boundary) { flush(); wordLists = []; } stack.pop(); continue; }
+      frame.next = node.nextSibling;
+      const { inherited, preserve, visible } = frame;
+      count();
+      if (node.nodeType === 3) { const text = preserve ? node.textContent ?? '' : (node.textContent ?? '').replace(/[\t\r\n ]+/g, ' '); if (visible && text) pending.push({ type: 'text', text, ...(inherited.length ? { marks: inherited } : {}) }); continue; }
+      if (node.nodeType !== 1) { const fallback = visible ? officeCommentImage(node) : null; if (fallback) { flush(); result.push(fallback); } continue; }
       const element = node as Element, tag = element.tagName.toUpperCase(), style = styleFor(element);
+      if (hidden(element, style)) continue;
+      const nextVisible = visibility(style, visible);
       const math = clipboardMathElement(element);
-      if (math && style.display !== 'none') {
-        if (math.type === 'mathBlock') { flush(); result.push(math); }
-        else { math.marks = marksFor(element, inherited, style); pending.push(math); }
+      if (math) {
+        if (nextVisible) {
+          if (math.type === 'mathBlock') { flush(); result.push(math); }
+          else { math.marks = marksFor(element, inherited, style); pending.push(math); }
+        }
         continue;
       }
-      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore' || style.display === 'none') continue;
+      if (skipped.has(tag) || style['mso-list']?.toLowerCase() === 'ignore') continue;
       if (decorativeImage(element, style)) continue;
-      if (tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
+      if (nextVisible && tag === 'FIGURE' && element.querySelectorAll('img').length === 1 && element.querySelector('figcaption')) {
         flush();
         const picture = image(element.querySelector('img')!), caption = element.querySelector('figcaption')!;
         if (picture.type === 'image' && rich) {
@@ -278,9 +313,9 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         } else result.push(picture, ...textBlock(caption, inherited, depth + 1));
         continue;
       }
-      if (tag === 'BR') { pending.push({ type: 'hardBreak' }); continue; }
+      if (tag === 'BR') { if (nextVisible) pending.push({ type: 'hardBreak' }); continue; }
       if (!blocks.has(tag) && tag !== 'IMG' && tag !== 'V:IMAGEDATA') {
-        visit(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style));
+        stack.push({ next: element.firstChild, inherited: marksFor(element, inherited, style), preserve: preserve || preservesSpaces(style), visible: nextVisible, boundary: false });
         continue;
       }
       flush();
@@ -289,7 +324,8 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         const id = (style['mso-list'] ?? '').replace(/\s*level\d+\s*/, ' ').trim();
         const marker = wordListMarker(element);
         const type = /^\s*(?:\d+|[a-zA-Z]+|[一二三四五六七八九十百]+)[.)、．]/.test(marker) ? 'orderedList' : 'bulletList';
-        const body = textBlock(element, inherited, depth), item: JSONContent = { type: 'listItem', content: body };
+        const body = textBlock(element, inherited, depth, nextVisible), item: JSONContent = { type: 'listItem', content: body };
+        if (!nextVisible && !body.length) continue;
         if (body[0]?.type !== 'paragraph') body.unshift(paragraph());
         while (wordLists.length && (wordLists.at(-1)!.id !== id || wordLists.at(-1)!.level > level || (wordLists.at(-1)!.level === level && wordLists.at(-1)!.node.type !== type))) wordLists.pop();
         let current = wordLists.at(-1);
@@ -301,19 +337,18 @@ export function normalizeClipboardDocument(document: Document, inputCharacters: 
         current.node.content!.push(item); continue;
       }
       wordLists = [];
-      if (tag === 'IMG' || tag === 'V:IMAGEDATA') result.push(image(element));
-      else if (tag === 'UL' || tag === 'OL') result.push(list(element, inherited, depth));
-      else if (tag === 'TABLE') result.push(table(element, inherited, depth));
-      else if (tag === 'HR') result.push({ type: 'horizontalRule' });
-      else if (tag === 'PRE') result.push({ type: 'codeBlock', content: element.textContent ? [{ type: 'text', text: element.textContent }] : [] });
-      else if (tag === 'BLOCKQUOTE') { const content = flow(element, inherited, depth + 1); result.push({ type: 'blockquote', content: content.length ? content : [paragraph()] }); }
-      else if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) result.push(...textBlock(element, inherited, depth));
-      else result.push(...flow(element, marksFor(element, inherited, style), depth + 1, preserve || preservesSpaces(style)));
+      if (tag === 'IMG' || tag === 'V:IMAGEDATA') { if (nextVisible) result.push(image(element)); }
+      else if (tag === 'UL' || tag === 'OL') result.push(list(element, inherited, depth, nextVisible));
+      else if (tag === 'TABLE') result.push(table(element, inherited, depth, nextVisible));
+      else if (tag === 'HR') { if (nextVisible) result.push({ type: 'horizontalRule' }); }
+      else if (tag === 'PRE') { const text = codeText(element, nextVisible); if (nextVisible || text) result.push({ type: 'codeBlock', content: text ? [{ type: 'text', text }] : [] }); }
+      else if (tag === 'BLOCKQUOTE') { const content = flow(element, inherited, depth + 1, false, nextVisible); if (nextVisible || content.length) result.push({ type: 'blockquote', content: content.length ? content : [paragraph()] }); }
+      else if (['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) for (const block of textBlock(element, inherited, depth, nextVisible)) result.push(block);
+      else stack.push({ next: element.firstChild, inherited: marksFor(element, inherited, style), preserve: preserve || preservesSpaces(style), visible: nextVisible, boundary: true });
     }
-    };
-    visit(parent, inherited, depth, preserve);
     flush(); return result;
   }
   const content = flow(document.body ?? document.documentElement, [], 0);
-  return { content: content.length ? content : [paragraph()], diagnostics: [...diagnostics], nodes };
+  if (!content.length) content.push(paragraph());
+  return { content, diagnostics: [...diagnostics], nodes: validateClipboardStructure(content) };
 }

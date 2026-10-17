@@ -3,6 +3,7 @@ import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { annotationBodiesForFragment, annotationBodyContent, remapAnnotationIds } from '../annotations/model';
 import { CLIPBOARD_LIMITS, ClipboardImportError, type ClipboardImportResult } from './normalize';
+import { validateClipboardStructure } from './limits';
 
 export function parseStructuredClipboard(raw: string, table = false, stripAnnotations = false): ClipboardImportResult {
   if (raw.length > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴');
@@ -10,12 +11,7 @@ export function parseStructuredClipboard(raw: string, table = false, stripAnnota
   if (payload.version !== 1 || !value || !Array.isArray(value.content) || !Number.isInteger(value.openStart ?? 0) || !Number.isInteger(value.openEnd ?? 0)
     || (value.openStart ?? 0) < 0 || (value.openEnd ?? 0) < 0 || (value.openStart ?? 0) > CLIPBOARD_LIMITS.depth || (value.openEnd ?? 0) > CLIPBOARD_LIMITS.depth
     || (table && !['row', 'column', 'table', 'cells'].includes(payload.scope))) throw new ClipboardImportError('剪贴板文档片段无效');
-  const stack = value.content.map((node: JSONContent) => ({ node, depth: 0 })); let nodes = 0;
-  while (stack.length) {
-    const { node, depth } = stack.pop()!;
-    if (!node || ++nodes > CLIPBOARD_LIMITS.nodes || depth > CLIPBOARD_LIMITS.depth || (node.content && !Array.isArray(node.content))) throw new ClipboardImportError('剪贴板结构超过导入限制');
-    for (const child of node.content ?? []) stack.push({ node: child, depth: depth + 1 });
-  }
+  const nodes = validateClipboardStructure(value.content);
   const content = stripAnnotations ? annotationBodyContent(value.content) : remapAnnotationIds({ type: 'doc', content: value.content }).content ?? [];
   return { content, nodes, diagnostics: [], openStart: value.openStart ?? 0, openEnd: value.openEnd ?? 0, ...(table ? { tableScope: payload.scope } : {}) };
 }

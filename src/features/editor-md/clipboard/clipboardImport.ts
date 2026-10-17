@@ -21,6 +21,7 @@ import { imageOnlySlice, imageInsertionTransaction, imageSlotPosition } from '..
 import { imageSelectionSlice, normalizeImageSlot } from '../imageCaptions';
 import { imageRemovalTransaction } from '../imageRemoval';
 import { editorDocumentFormat } from '../editorDocumentCodec';
+import { checkClipboardStructure } from './limits';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -73,7 +74,7 @@ export async function materializeClipboard(content: JSONContent[], schema: Schem
     if (signal?.aborted) throw new DOMException('已取消', 'AbortError');
     const frame = stack.pop()!;
     if (!frame.ready) {
-      if (++count > CLIPBOARD_LIMITS.nodes || frame.depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构超过导入限制');
+      checkClipboardStructure(++count, frame.depth);
       frame.ready = true; stack.push(frame);
       const children = frame.value.content ?? [];
       for (let index = children.length - 1; index >= 0; index--) stack.push({ value: children[index], parent: frame.children, depth: frame.depth + 1, ready: false, children: [] });
@@ -85,7 +86,7 @@ export async function materializeClipboard(content: JSONContent[], schema: Schem
 function synchronousNodes(content: JSONContent[], schema: Schema): PMNode[] {
   let count = 0;
   const make = (value: JSONContent, depth: number): PMNode => {
-    if (++count > CLIPBOARD_LIMITS.nodes || depth > CLIPBOARD_LIMITS.depth) throw new ClipboardImportError('剪贴板结构超过导入限制');
+    checkClipboardStructure(++count, depth);
     return supportedNode(schema, value, (value.content ?? []).map(child => make(child, depth + 1)));
   };
   return content.map(value => make(value, 0));
