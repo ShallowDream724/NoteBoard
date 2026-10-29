@@ -100,7 +100,7 @@ export class VisualHistoryGrouping {
       const caret = tr.selection.from;
       const query = caret > from && caret <= tr.doc.content.size
         ? tr.doc.textBetween(from, caret) : '';
-      if (editsQuery && tr.selection.empty && /^\/[^\s]*$/.test(query)) {
+      if (editsQuery && tr.selection.empty && /^\/[^\r\n]*$/.test(query)) {
         this.slashCaret = caret;
         return false;
       }

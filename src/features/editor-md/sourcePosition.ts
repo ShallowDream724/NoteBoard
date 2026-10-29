@@ -2,6 +2,9 @@ import type { Editor } from '@tiptap/core';
 import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { MarkdownManagerLike } from './serialize';
 import { diagramLanguage } from './diagramSyntax';
+import { parseAuthoringWith, type AuthoringManager } from '../declarative/codec';
+import type { AuthoringSpan } from '../declarative/types';
+import { captureAuthoringSelection, authoringToVisual, visualToAuthoring } from './authoringSourcePosition';
 
 interface Token { type: string; raw?: string; text?: string; lang?: string; ordered?: boolean; tokens?: Token[]; items?: Token[]; header?: Token[] | boolean; rows?: Token[][] }
 interface Span { from: number; to: number; source: number }
@@ -118,6 +121,16 @@ interface PositionIndex {
 // immutable root identity makes selection-only transactions a cheap cache hit;
 // weak ownership never keeps a closed editor or older document history alive.
 const positionIndexes = new WeakMap<object, PositionIndex>();
+const authoringIndexes = new WeakMap<object, { doc: DocumentNode; source: string; spans: AuthoringSpan[] }>();
+export function authoringPositionSpans(doc: DocumentNode, manager: { instance?: { lexer: (text: string) => unknown[] } } | undefined, source: string, owner: object = doc) {
+  if (!/^ {0,3}:{3,}[ \t]+[a-z]|\\[a-z]+(?:\[|{)/im.test(source) || typeof (manager as Partial<AuthoringManager> | undefined)?.parse !== 'function') return null;
+  let index = authoringIndexes.get(owner);
+  if (index?.doc !== doc || index.source !== source) {
+    index = { doc, source, spans: parseAuthoringWith(source, manager as AuthoringManager, doc.type.schema).spans };
+    authoringIndexes.set(owner, index);
+  }
+  return index.spans;
+}
 
 /** Marked normalizes newlines. Keep only line spans to recover original UTF-16
  * offsets, including CRLF; LF input reuses the supplied string without copying. */
@@ -211,6 +224,10 @@ export function mapModeSelection(editor: Editor, markdown: string, direction: 's
 export function mapDocumentSelection(doc: DocumentNode, manager: { instance?: { lexer: (text: string) => unknown[] } } | undefined,
   markdown: string, direction: 'source' | 'visual', selection: { anchor: number; head: number }, owner: object = doc) {
   if (!manager?.instance) return { anchor: 0, head: 0 };
+  const authoringSpans = authoringPositionSpans(doc, manager, markdown, owner);
+  if (authoringSpans) {
+    return clampSelection(direction === 'source' ? visualToAuthoring(doc, authoringSpans, selection) : authoringToVisual(doc, captureAuthoringSelection(authoringSpans, selection)), direction === 'source' ? markdown.length : doc.content.size);
+  }
   let index = positionIndexes.get(owner);
   if (index?.doc !== doc || index.markdown !== markdown) {
     const located = sourceLocation(markdown);

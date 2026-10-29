@@ -12,6 +12,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { Editor } from '@tiptap/core';
 import { emit } from '@/core/emitter';
 import { TooltipProvider } from '@/components/Tooltip';
+import { documentParser } from '@/features/editor-md/documentExtensions';
 
 // ── 模块级 mock（vi.mock 提升）：内核替身与序列化替身 ──
 
@@ -30,7 +31,7 @@ vi.mock('@/features/editor-md/VisualKernel', () => ({
         isFakeKernel: true,
         storage: {},
         chain: () => chain,
-        state: { history$: { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$1': { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$2': { done: { eventCount: 0 }, undone: { eventCount: 0 } } },
+        state: { doc: documentParser().schema.topNodeType.createAndFill()!, history$: { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$1': { done: { eventCount: 0 }, undone: { eventCount: 0 } }, 'history$2': { done: { eventCount: 0 }, undone: { eventCount: 0 } } },
       } as unknown as Editor;
       onReady(fake);
       return () => onReady(null);

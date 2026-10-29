@@ -45,7 +45,7 @@ describe('Markdown 数学公式', () => {
     editor.destroy();
   });
 
-  it('多行与单行块公式都应解析，并统一序列化为标准多行格式', () => {
+  it('多行与单行块公式都应解析，未编辑时保留各自的源码写法', () => {
     const editor = createMathEditor();
     const markdown = [
       '$$',
@@ -64,7 +64,7 @@ describe('Markdown 数学公式', () => {
 
     const serialized = serializeMarkdown(editor);
     expect(serialized).toContain('$$\n\\sum_{i=1}^n i = \\frac{n(n+1)}{2}\n$$');
-    expect(serialized).toContain('$$\nE = mc^2\n$$');
+    expect(serialized).toBe(markdown);
     editor.destroy();
   });
 

@@ -1,6 +1,6 @@
 import { StateEffect, StateField, type EditorState, type Text } from '@codemirror/state';
 import { documentParser } from '../editor-md/documentExtensions';
-import { presentationBody } from './presentationMetadata';
+import { presentationBody, presentationStyleFooter } from './presentationMetadata';
 import { applyStyleRanges, documentStyleRanges, mapStyleRanges, type SpanStyle, type StyleLayer } from './sourceStyleRanges';
 import { buildStyleSpans, replaceStyleSpans, styleSpans, type SpanTree } from './styleSpanTree';
 
@@ -58,9 +58,8 @@ export function materializeSourceStyles(text: Text, styles?: SourceStyles): stri
   const doc = schema.nodeFromJSON(manager.parse(source));
   const ranges = layers.flatMap(kind => [...styleSpans(styles.trees[kind] ?? null)]);
   const mapped = mapStyleRanges(doc, manager, body, 'visual', ranges);
-  const formatted = manager.serialize(applyStyleRanges(doc, mapped));
-  const footer = formatted.lastIndexOf('\n\n<!-- noteboard-styles ');
-  const content = body + (footer >= 0 ? formatted.slice(footer) : '');
+  const footer = presentationStyleFooter(applyStyleRanges(doc, mapped), schema);
+  const content = body + (footer ? '\n\n' + footer : '');
   materialized.set(text, { styles, content }); return content;
 }
 export function readSourceStyles(state: EditorState): SourceStyles | undefined {

@@ -6,7 +6,8 @@
 | --- | --- |
 | `core/nativeDocument` | 公开帧协议、元数据与错误记录，不依赖编辑器实例 |
 | `editorDocumentCodec` | 帧与不可变编辑树之间转换、块/行弱缓存 |
-| `document-format/capabilities`、`featureGate` | 格式能力判定、转换确认、选区恢复和安全回放 |
+| `declarative`、`authoringSourceSession` | MD/NB 的声明式正文编解码；NB 源码投影与磁盘帧、元数据、选区之间适配 |
+| `document-format/capabilities`、`featureGate` | 格式能力判定；MD 的声明式能力直接执行，明确要求 NB 的能力才走转换确认、选区恢复和安全回放 |
 | `convertDocument` | MD → NB 身份迁移，捕获/写入/提交边界 |
 | `documentSession` | 每文档串行写队列、会话代际、保存基线与脏态 |
 | `nativePersistence`、`nativeSaveAs` | 同一快照的 NB/MD 投影、路径重定位、版本条件 |
@@ -18,6 +19,8 @@
 | `nativeDocumentLifecycle` | 打开/保存/关闭事件及关联目录监听的生命周期 |
 
 工具栏不直接写文件。手动保存、自动保存、更新关联 Markdown 共用保存队列；另存为和格式转换复用身份迁移屏障。外部文件的明确覆盖操作仍走保存队列与版本条件，不绕开成对提交。
+
+MD 和 NB 均支持声明式源码与可视化模式，用 Ctrl+/ 切换；NB 普通源码只作为编辑投影，物化后仍经原生编解码保存 `#!noteboard 1` 帧。错误块的原始记录修复是独立入口，不把声明式正文当成磁盘帧写入。MD 直接保存扩展正文，增强内容不因此强制转 NB；通用 Markdown 降级导出仍独立。完整边界见 [声明式编写](declarative-authoring.md)。
 
 标题栏主页按钮之后、标签页之前提供常驻、可键盘操作的保存图标，调用同一 `saveDocument` 编排。未保存采用稳定暖色提示，保存失败采用错误色；只有实际保存期间显示忙碌状态，不持续闪烁。标题栏按钮与底部状态文字共用 `documentSaveStatus` 投影，只订阅所需状态，不复制或订阅完整正文。`saveActivityStore` 只保存短期活动数与错误，不把自动保存策略或未保存状态当成正在写盘。等待自动保存防抖时显示“未保存”；实际保存期间显示“正在保存”；失败显示“保存失败”并保留错误供查看和重试。只读文档的保存按钮禁用，不支持编辑的文件不显示保存操作。未命名或原文件已删除的文档仍显示“未保存”，保存进入另存为。编辑工具栏折叠不影响标题栏保存入口。
 
@@ -62,4 +65,4 @@ NB 的 `@meta.markdown` 保存相对路径、规范化文本 SHA-256 和投影�
 - 外部转换和合并临时文档树在 Worker 内，任务结束即释放。应用新外部版本时，已挂载编辑器仍需一次完整解析；当前不是全篇增量重建引擎。
 - 大型合并表格及单个巨大记录仍有实际布局/解析成本。虚拟表格、公式调度、导出布局各自有独立预算，不以文件语法名称推导性能结论。
 
-磁盘语法与可手写示例见 [NB 编写规范](native-authoring.md)，产品行为见 [格式与保存决策](native-format-and-save-decisions.md)。
+磁盘语法与工具读写示例见 [NB 原生磁盘协议](native-authoring.md)，可编辑正文与 AI 生成约定见 [声明式编写](declarative-authoring.md)，产品行为见 [格式与保存决策](native-format-and-save-decisions.md)。

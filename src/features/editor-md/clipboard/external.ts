@@ -72,6 +72,7 @@ export interface ExternalTextOptions extends ExternalHtmlOptions {
 
 /** A cheap gate only; the shared document grammar decides whether syntax is real. */
 function markdownCandidate(raw: string): boolean {
+  if (/(?:^|\n) {0,3}:{3,}[ \t]+[a-z]|\\[a-z]+(?:\[|\{)/i.test(raw)) return true;
   return /(^|\n) {0,3}(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s|`{3,}|~{3,}|(?:[-*_][ \t]*){3,}$)|[`*_$~]|\\[([]|!?\[[^\]\n]+\](?:\(|\[)|\n {0,3}(?:=+|-+)[ \t]*(?:\n|$)|\|[^\n]*\n[ \t]*\|?\s*:?-{3,}/m.test(raw);
 }
 

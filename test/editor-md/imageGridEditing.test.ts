@@ -4,7 +4,7 @@ import { buildDocumentExtensions } from '@/features/editor-md/documentExtensions
 import { parseNativeNode, serializeNativeNode } from '@/features/editor-md/editorDocumentCodec';
 import { resizeImageGrid } from '@/features/editor-md/rich-content/gridEditing';
 import { imageCollectionTemplate } from '@/features/editor-md/rich-content/commands';
-import { resizeImageGridItems } from '@/core/document/imageGrid';
+import { resizeImageGridItems, IMAGE_GRID_MAX_COLUMNS } from '@/core/document/imageGrid';
 import { projectRichContent } from '@/features/export/richProjection';
 const editors:Editor[]=[];
 afterEach(()=>editors.splice(0).forEach(e=>e.destroy()));
@@ -22,7 +22,7 @@ describe('editable image grid shape',()=>{
     const editor=create();resizeImageGrid(editor,0,3,2);
     expect(Array.from({length:6},(_,i)=>editor.state.doc.firstChild!.child(i).textContent)).toEqual(['A','B','','C','D','']);
     resizeImageGrid(editor,0,3,3);expect(editor.state.doc.firstChild!.childCount).toBe(9);expect(editor.state.doc.textContent).toBe('ABCD');
-    expect(resizeImageGrid(editor,0,7,3)).toBe(false);expect(resizeImageGrid(editor,0,3,0)).toBe(false);expect(resizeImageGrid(editor,0,6,1000000)).toBe(false);
+    expect(resizeImageGrid(editor,0,IMAGE_GRID_MAX_COLUMNS+1,3)).toBe(false);expect(resizeImageGrid(editor,0,3,0)).toBe(false);expect(resizeImageGrid(editor,0,6,1000000)).toBe(false);
   });
   it('keeps both two-cell orientations and exports arbitrary supported columns',()=>{
     expect(imageCollectionTemplate(2)).toMatchObject({attrs:{columns:2},content:[{type:'imageSlot'},{type:'imageSlot'}]});

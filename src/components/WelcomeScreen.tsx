@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { createFileTypeIcon, NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
 import { useSettingsStore } from '../stores/settingsStore';
+import { AuthoringGuideDialog } from '../features/authoring-guide/AuthoringGuide';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
 //    意图信号；空闲时机发起（不占首帧），点击新建/打开文件时资源已 ready，
 //    渲染同步命中 fulfilled lazy（零 fallback、远低于 1s 目标）。
@@ -78,6 +79,7 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
   const [showMoreFormats, setShowMoreFormats] = useState(false);
   const [openingShowcase, setOpeningShowcase] = useState(false);
+  const [showAuthoringGuide, setShowAuthoringGuide] = useState(false);
   const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
 
   // 常用新建操作列表（5 大核心卡片，排入 3 列网格）
@@ -320,6 +322,7 @@ export function WelcomeScreen({
           onClick={async () => { setOpeningShowcase(true); try { await openShowcase(); } finally { setOpeningShowcase(false); } }}>
           {openingShowcase ? '正在打开…' : '浏览功能示例'}
         </button>
+        <button type="button" className="nb-btn-secondary" style={{ padding: '6px 12px', fontSize: 'var(--ui-font-size,13px)' }} onClick={() => setShowAuthoringGuide(true)}>AI 编写指南</button>
         </div>
       </div>
 
@@ -630,6 +633,7 @@ export function WelcomeScreen({
           </button>
         ))}
       </div>
+      <AuthoringGuideDialog open={showAuthoringGuide} onOpenChange={setShowAuthoringGuide} />
     </div>
   );
 }

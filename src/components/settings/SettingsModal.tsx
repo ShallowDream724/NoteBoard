@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Palette, Type, Keyboard, Info, FileCode, Folder, FileOutput } from 'lucide-react';
+import { X, Palette, Type, Keyboard, Info, FileCode, Folder, FileOutput, BookOpen } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { NoteBoardFileIcon } from '../FileIcon';
 import { NavBtn } from './SettingsControls';
@@ -11,6 +11,7 @@ import { FilePanel } from './FilePanel';
 import { ShortcutsPanel } from './ShortcutsPanel';
 import { AboutPanel } from './AboutPanel';
 import { ExportPanel } from './ExportPanel';
+import { AuthoringGuideContent } from '../../features/authoring-guide/AuthoringGuide';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useUpdateStore } from '../../stores/updateStore';
 import './settings.css';
@@ -22,6 +23,7 @@ const PANELS = [
   { key: 'shortcuts', label: '快捷键', group: '工作方式', icon: Keyboard, content: ShortcutsPanel },
   { key: 'file', label: '文件与保存', group: '工作方式', icon: Folder, content: FilePanel },
   { key: 'export', label: '导出', group: '工作方式', icon: FileOutput, content: ExportPanel },
+  { key: 'authoring', label: 'AI 编写指南', group: '应用', icon: BookOpen, content: AuthoringGuideContent },
   { key: 'about', label: '关于', group: '应用', icon: Info, content: AboutPanel },
 ] as const;
 

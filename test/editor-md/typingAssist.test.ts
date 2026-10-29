@@ -141,13 +141,13 @@ describe('Markdown interactive conveniences', () => {
       expect(editor.state.selection.$from.node(-1).type.name).toBe('githubAlert');
     } finally { editor.destroy(); }
   });
-  it('source underline toggles but highlight never creates private source metadata', () => {
+  it('source underline and highlight toggle through the shared declarative syntax', () => {
     const view = new EditorView({ state: EditorState.create({ doc: 'text', selection: { anchor: 0, head: 4 } }) });
     try {
-      formatSourceMark(view, 'underline'); expect(view.state.doc.toString()).toBe('<u>text</u>');
+      formatSourceMark(view, 'underline'); expect(view.state.doc.toString()).toBe('\\u{text}');
       formatSourceMark(view, 'underline'); expect(view.state.doc.toString()).toBe('text');
-      expect(formatSourceMark(view, 'highlight', '#fef08a')).toBe(false);
-      expect(view.state.doc.toString()).toBe('text');
+      expect(formatSourceMark(view, 'highlight', '#fef08a')).toBe(true);
+      expect(view.state.doc.toString()).toBe('\\bg[#fef08a]{text}');
       formatSourceMark(view, 'highlight', undefined, true); expect(view.state.doc.toString()).toBe('text');
       setSourceHeading(view, 2); expect(view.state.doc.toString()).toBe('## text');
       setSourceHeading(view, 0); expect(view.state.doc.toString()).toBe('text');

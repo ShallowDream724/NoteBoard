@@ -67,3 +67,48 @@ it('a slash command undoes as one action, redoes exactly, and leaves no menu on 
     expect(document.querySelector('button[aria-label^="清除文字样式"]')).toBeTruthy();
   } finally { await act(async () => root.unmount()); host.remove(); }
 });
+
+it('application history restores a completed typed declaration and its caret in one undo', async () => {
+  const key = 'untitled:authoring-input-history';
+  useDocumentStore.getState().upsertFromPayload({ key, displayName: 'authoring.nb', dirPath: '', kind: 'noteboard', language: 'markdown', content: '', encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false });
+  useWindowStore.getState().openTab({ key, displayName: 'authoring.nb', path: null, kind: 'noteboard', language: 'markdown', isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
+  const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+  try {
+    await act(async () => { root.render(<TooltipProvider><TipTapEditor docKey={key} /></TooltipProvider>); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+    const editor = getMdTipTapEditor(key)!;
+    const source = '\\blur{答案}';
+    await act(async () => { editor.commands.insertContent(source.slice(0, -1)); });
+    await act(async () => {
+      const { from, to } = editor.state.selection;
+      editor.view.someProp('handleTextInput', handler => handler(editor.view, from, to, '}', () => editor.state.tr.insertText('}', from, to)));
+    });
+    expect(editor.state.doc.textContent).toBe('答案');
+    await act(async () => { editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })); });
+    expect(editor.state.doc.textContent).toBe(source);
+    expect(editor.state.selection.from).toBe(source.length + 1);
+    await act(async () => { editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'y', ctrlKey: true, bubbles: true, cancelable: true })); });
+    expect(editor.state.doc.textContent).toBe('答案');
+  } finally { await act(async () => root.unmount()); host.remove(); }
+});
+
+it('a parameterized slash command keeps its query and action in one application undo group', async () => {
+  const key = 'untitled:slash-parameters-history';
+  useDocumentStore.getState().upsertFromPayload({ key, displayName: 'parameters.nb', dirPath: '', kind: 'noteboard', language: 'markdown', content: '', encoding: 'utf8', eol: 'lf', size: 0, mtime: 0, readonly: false });
+  useWindowStore.getState().openTab({ key, displayName: 'parameters.nb', path: null, kind: 'noteboard', language: 'markdown', isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
+  const host = document.createElement('div'); document.body.appendChild(host); const root = createRoot(host);
+  try {
+    await act(async () => { root.render(<TooltipProvider><TipTapEditor docKey={key} /></TooltipProvider>); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+    const editor = getMdTipTapEditor(key)!;
+    await act(async () => { editor.commands.insertContent('Body '); });
+    const before = editor.state.doc.toJSON();
+    for (const part of ['/', 'table', ' ', '2*3']) await act(async () => { editor.commands.insertContent(part); });
+    const command = [...document.body.querySelectorAll('button')].find(button => button.getAttribute('aria-label')?.startsWith('表格 · 2*3'))!;
+    expect(command).toBeTruthy(); await act(async () => { command.click(); });
+    expect(editor.state.doc.child(1).type.name).toBe('table');
+    expect(editor.state.doc.child(1).childCount).toBe(2);
+    await act(async () => { editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })); });
+    expect(editor.state.doc.toJSON()).toEqual(before);
+  } finally { await act(async () => root.unmount()); host.remove(); }
+});

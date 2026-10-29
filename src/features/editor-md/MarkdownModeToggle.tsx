@@ -9,9 +9,10 @@ import { Tooltip } from '../../components/Tooltip';
 interface MarkdownModeToggleProps {
   viewMode: 'visual' | 'source';
   onToggle: (mode?: 'visual' | 'source') => void;
+  nativeDocument?: boolean;
 }
 
-export function MarkdownModeToggle({ viewMode, onToggle }: MarkdownModeToggleProps) {
+export function MarkdownModeToggle({ viewMode, onToggle, nativeDocument = false }: MarkdownModeToggleProps) {
   // 是否处于左下角热区内
   const [inHotZone, setInHotZone] = useState(false);
   // 是否直接悬停在胶囊按钮本体上
@@ -168,7 +169,7 @@ export function MarkdownModeToggle({ viewMode, onToggle }: MarkdownModeTogglePro
         </Tooltip>
 
         {/* 源码模式按钮 */}
-        <Tooltip content="源码模式 (Markdown 原文)" shortcut="Ctrl+/" side="top" sideOffset={6} disabled={!isVisible}>
+        <Tooltip content={nativeDocument ? '源码模式 (声明式文档)' : '源码模式 (Markdown 原文)'} shortcut="Ctrl+/" side="top" sideOffset={6} disabled={!isVisible}>
           <button
             type="button"
             onClick={() => {

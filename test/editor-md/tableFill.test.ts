@@ -8,6 +8,7 @@ import { fillTableSelection, selectTableScope, tableHeaderState, setSelectedTabl
 import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentationCommands';
 import { renderDocument } from '../../src/features/export/renderDocument';
 import { nativeTestEditor } from './nativeTestEditor';
+import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 
 const markdown = '| 编号 | 值 | 备注 |\n| --- | --- | --- |\n| 1 | a | b |\n| 2 | c | d |';
 function make() { const editor = new Editor({ extensions: buildDocumentExtensions() }); parseMarkdown(editor, markdown); return nativeTestEditor(editor); }
@@ -31,12 +32,12 @@ describe('table cell presentation', () => {
       editor.commands.redo(); expect(fill(editor, 'a')).toBe('#dbeafe');
     } finally { editor.destroy(); }
   });
-  it('keeps GFM content visible and roundtrips sparse fills through worker grammar and HTML', async () => {
+  it('roundtrips sparse fills through authoring and HTML while exporting visible GFM content', async () => {
     const editor = make();
     try {
       at(editor, 'a'); fillTableSelection(editor, 'column', '#fef3c7');
       const source = serializeMarkdown(editor);
-      expect(source).toContain('"fills"'); expect(source).toContain('| 1 | a | b |');
+      expect(source).toContain('::: native version=1'); expect(portableMarkdown(editor.getJSON())).toContain('| 1 | a | b |');
       expect(parseMarkdownDocument(source).toJSON()).toEqual(editor.state.doc.toJSON());
       const html = (await renderDocument(source, 'colors', '')).html;
       expect(html).toContain('data-cell-background="#fef3c7"'); expect(html).toContain('--nb-cell-background: #fef3c7');

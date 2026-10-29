@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { CellSelection } from '@tiptap/pm/tables';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { DocumentCapabilityGuard, transactionAddedCapability } from '../../src/features/document-format/capabilityGuard';
 import { initializeEditorDocument, serializeNativeNode } from '../../src/features/editor-md/editorDocumentCodec';
 import { setTextColor, setHighlightColor, setParagraphPresentation } from '../../src/features/document-style/documentStyles';
@@ -10,13 +10,22 @@ import { runWithDocumentCapability, ensureDocumentCapability } from '../../src/f
 import { registerMdTipTapEditor } from '../../src/features/editor-md/editorInstances';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { formatSupportsCapability, capabilityVisible } from '../../src/features/document-format/capabilities';
+import * as capabilityRegistry from '../../src/features/document-format/capabilities';
+import type { DocumentCapability, DocumentCapabilityId } from '../../src/features/document-format/capabilities';
 import { ClipboardImport, DOCUMENT_SLICE_MIME, importClipboardSnapshot } from '../../src/features/editor-md/clipboard/clipboardImport';
+import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 
 const requests = vi.hoisted(() => ({ confirm: vi.fn(), convert: vi.fn() }));
 vi.mock('../../src/features/document-format/NativeConversionDialog', () => ({ requestNativeConversion: requests.confirm }));
 vi.mock('../../src/features/document-format/convertDocument', () => ({ convertMarkdownToNative: requests.convert }));
 const editors: Editor[] = [];
 const cleanup: Array<() => void> = [];
+/** Future unsupported features still use the conversion gate; currently supported rich styles must not stand in for them. */
+function mockRequiresNoteboard(...ids: DocumentCapabilityId[]): void {
+  const declarations = new Map(ids.map(id => [id, { ...capabilityRegistry.DOCUMENT_CAPABILITIES[id], markdown: 'requires-noteboard' } satisfies DocumentCapability]));
+  vi.spyOn(capabilityRegistry, 'formatSupportsCapability').mockImplementation((format, id) =>
+    format === 'noteboard' || (declarations.get(id) ?? capabilityRegistry.DOCUMENT_CAPABILITIES[id]).markdown !== 'requires-noteboard');
+}
 function make(format: 'markdown' | 'noteboard' = 'markdown', key?: string, content = '<p>hello world</p>') {
   const editor = new Editor({ extensions: [...buildDocumentExtensions(), DocumentCapabilityGuard, ClipboardImport.configure({ docKey: key ?? '' })], content });
   initializeEditorDocument(editor, format === 'noteboard' ? serializeNativeNode(editor.state.doc) : 'hello world', format, '', key);
@@ -25,6 +34,7 @@ function make(format: 'markdown' | 'noteboard' = 'markdown', key?: string, conte
 afterEach(() => {
   cleanup.splice(0).forEach(dispose => dispose()); editors.splice(0).forEach(editor => editor.destroy());
   requests.confirm.mockReset(); requests.convert.mockReset();
+  vi.restoreAllMocks();
   useSettingsStore.setState(state => ({ settings: { ...state.settings, editor: { ...state.settings.editor, pureMarkdown: false } } }));
 });
 describe('document format capabilities', () => {
@@ -34,42 +44,71 @@ describe('document format capabilities', () => {
     expect(capabilityVisible('gallery', true)).toBe(false);
     expect(formatSupportsCapability('noteboard', 'annotation')).toBe(true);
   });
-  it('blocks unowned MD style commands without modifying content, but allows NB', () => {
+  it('preserves rich Markdown styling declaratively without conversion and continues to support NB', () => {
     const md = make(), native = make('noteboard');
     for (const editor of [md, native]) editor.commands.setTextSelection({ from: 1, to: 6 });
-    const before = md.state.doc;
-    expect(setTextColor(md, '#2563eb')).toBe(false);
-    expect(setHighlightColor(md, '#fef08a')).toBe(false);
-    expect(setParagraphPresentation(md, { textAlign: 'center' })).toBe(false);
-    expect(md.state.doc.eq(before)).toBe(true);
+    expect(setTextColor(md, '#2563eb80')).toBe(true);
+    expect(setHighlightColor(md, '#fef08a')).toBe(true);
+    expect(setParagraphPresentation(md, { textAlign: 'center' })).toBe(true);
+    expect(md.getAttributes('textColor').color).toBe('#2563eb80');
+    expect(md.getAttributes('highlight').color).toBe('#fef08a');
+    expect(md.state.doc.firstChild?.attrs.textAlign).toBe('center');
+    expect(parseMarkdownDocument(serializeMarkdown(md)).toJSON()).toEqual(md.getJSON());
+    expect(requests.confirm).not.toHaveBeenCalled(); expect(requests.convert).not.toHaveBeenCalled();
     expect(setTextColor(native, '#2563eb')).toBe(true);
     expect(native.getAttributes('textColor').color).toBe('#2563eb');
   });
-  it('blocks direct highlight, image layout and merged-cell transactions', async () => {
+  it('allows direct highlight, image layout and merged-cell transactions in Markdown', async () => {
     const editor = make(); editor.commands.setTextSelection({ from: 1, to: 6 });
     const before = editor.state.doc;
-    editor.commands.setHighlight({ color: '#fef08a' }); expect(editor.state.doc.eq(before)).toBe(true);
+    editor.commands.setHighlight({ color: '#fef08a' }); expect(editor.state.doc.eq(before)).toBe(false);
     editor.commands.insertContent({ type: 'image', attrs: { src: 'image.png' } });
     expect(editor.state.doc.textContent).toContain('world');
     const withImage = editor.state.doc;
     let imagePos = -1; withImage.descendants((node, pos) => { if (node.type.name === 'image') imagePos = pos; });
     expect(imagePos).toBeGreaterThanOrEqual(0);
     editor.view.dispatch(editor.state.tr.setNodeAttribute(imagePos, 'width', '50%'));
-    expect(editor.state.doc.eq(withImage)).toBe(true);
+    expect(editor.state.doc.nodeAt(imagePos)?.attrs.width).toBe('50%');
+    expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
     const table = make('markdown', undefined, '<table><tr><th>A</th><th>B</th></tr><tr><td>C</td><td>D</td></tr></table>');
     const cells: number[] = []; table.state.doc.descendants((node, pos) => { if (node.type.name === 'tableCell') cells.push(pos); });
     table.view.dispatch(table.state.tr.setSelection(CellSelection.create(table.state.doc, cells[0], cells[1])));
     const tableBefore = table.state.doc;
-    table.commands.mergeCells(); expect(table.state.doc.eq(tableBefore)).toBe(true);
+    table.commands.mergeCells(); expect(table.state.doc.eq(tableBefore)).toBe(false);
+    expect(table.state.doc.firstChild?.lastChild?.firstChild?.attrs.colspan).toBe(2);
+    expect(parseMarkdownDocument(serializeMarkdown(table)).toJSON()).toEqual(table.getJSON());
     await Promise.resolve(); expect(requests.confirm).not.toHaveBeenCalled();
   });
-  it('rejects a direct highlight shortcut at an empty caret before storing a rich typing mark', async () => {
+  it('keeps a direct highlight shortcut at an empty caret as a rich Markdown typing mark', async () => {
     const editor = make(); editor.commands.setTextSelection(3);
     editor.commands.toggleHighlight({ color: '#fef08a' });
-    expect(editor.state.storedMarks?.some(mark => mark.type.name === 'highlight') ?? false).toBe(false);
+    expect(editor.state.storedMarks?.some(mark => mark.type.name === 'highlight') ?? false).toBe(true);
     editor.commands.insertContent('x');
     expect(editor.state.doc.textContent).toBe('hexllo world');
+    expect(editor.state.doc.firstChild?.child(1).marks.some(mark => mark.type.name === 'highlight')).toBe(true);
+    expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
     await Promise.resolve(); expect(requests.confirm).not.toHaveBeenCalled();
+  });
+  it('blocks unowned commands when a future capability is explicitly declared requires-noteboard', () => {
+    mockRequiresNoteboard('textColor', 'highlight', 'alignment', 'imageLayout', 'tableMerge');
+    const editor = make(); editor.commands.setTextSelection({ from: 1, to: 6 });
+    const before = editor.state.doc;
+    expect(setTextColor(editor, '#2563eb')).toBe(false);
+    expect(setHighlightColor(editor, '#fef08a')).toBe(false);
+    expect(setParagraphPresentation(editor, { textAlign: 'center' })).toBe(false);
+    expect(editor.state.doc).toBe(before);
+    editor.commands.setHighlight({ color: '#fef08a' }); expect(editor.state.doc).toBe(before);
+    editor.commands.setTextSelection(3); editor.commands.toggleHighlight({ color: '#fef08a' });
+    expect(editor.state.storedMarks?.some(mark => mark.type.name === 'highlight') ?? false).toBe(false);
+    editor.commands.insertContent({ type: 'image', attrs: { src: 'image.png' } });
+    let imagePos = -1; editor.state.doc.descendants((node, pos) => { if (node.type.name === 'image') imagePos = pos; });
+    expect(imagePos).toBeGreaterThanOrEqual(0);
+    const withImage = editor.state.doc; editor.view.dispatch(editor.state.tr.setNodeAttribute(imagePos, 'width', '50%'));
+    expect(editor.state.doc).toBe(withImage);
+    const table = make('markdown', undefined, '<table><tr><td>A</td><td>B</td></tr></table>');
+    const cells: number[] = []; table.state.doc.descendants((node, pos) => { if (node.type.name === 'tableCell') cells.push(pos); });
+    table.view.dispatch(table.state.tr.setSelection(CellSelection.create(table.state.doc, cells[0], cells[1])));
+    const beforeMerge = table.state.doc; table.commands.mergeCells(); expect(table.state.doc).toBe(beforeMerge);
   });
   it('allows typing, basic formatting, default images and ordinary table operations', () => {
     const editor = make();
@@ -93,7 +132,7 @@ describe('document format capabilities', () => {
     editor.view.dispatch(editor.state.tr.addMark(1, 3, editor.schema.marks.highlight.create({ color: '#fef08a' })).setMeta('noteboard-document-replacement', 'history'));
     expect(editor.state.doc.firstChild?.firstChild?.marks.some(mark => mark.type.name === 'highlight')).toBe(true);
   });
-  it('allows default display math in Markdown while guarding custom alignment', () => {
+  it('allows default display math and preserves custom alignment in declarative Markdown', () => {
     const editor = make();
     const math = editor.schema.nodes.mathBlock.create({ latex: 'a+b' });
     const insert = editor.state.tr.insert(0, math);
@@ -103,8 +142,12 @@ describe('document format capabilities', () => {
     expect(transactionAddedCapability(editor.state.tr.setNodeAttribute(0, 'textAlign', 'right'))).toBe('alignment');
     const custom = editor.schema.nodes.mathBlock.create({ latex: 'a+b', textAlign: 'left' });
     expect(transactionAddedCapability(editor.state.tr.insert(0, custom))).toBe('alignment');
+    editor.view.dispatch(editor.state.tr.setNodeAttribute(0, 'textAlign', 'right'));
+    expect(editor.state.doc.firstChild?.attrs.textAlign).toBe('right');
+    expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
   });
   it('cancels conversion without changing the document or selection', async () => {
+    mockRequiresNoteboard('textColor');
     const editor = make('markdown', 'C:/note.md'); editor.commands.setTextSelection({ from: 2, to: 6 });
     const before = editor.state.doc, selection = editor.state.selection;
     requests.confirm.mockResolvedValue(null);
@@ -113,6 +156,7 @@ describe('document format capabilities', () => {
     expect(requests.convert).not.toHaveBeenCalled();
   });
   it('waits for registered NB, restores selection and applies the original action once', async () => {
+    mockRequiresNoteboard('textColor');
     const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
     editor.commands.setTextSelection({ from: 2, to: 6 });
     requests.confirm.mockResolvedValue({ removeMarkdown: false });
@@ -128,6 +172,7 @@ describe('document format capabilities', () => {
     expect(editor.getAttributes('textColor').color).toBeUndefined();
   });
   it('does not execute the action if the source changes while confirmation is open', async () => {
+    mockRequiresNoteboard('gallery');
     const editor = make('markdown', 'C:/note.md');
     let finish!: (value: { removeMarkdown: boolean }) => void;
     requests.confirm.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
@@ -137,6 +182,7 @@ describe('document format capabilities', () => {
     expect(await result).toBeNull(); expect(requests.convert).not.toHaveBeenCalled();
   });
   it('replays rejected internal rich paste once in the converted schema with one undo and redo', async () => {
+    mockRequiresNoteboard('textColor');
     const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
     const before = native.getJSON(); editor.commands.selectAll();
     requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
@@ -152,6 +198,7 @@ describe('document format capabilities', () => {
     expect(native.commands.redo()).toBe(true); expect(native.getJSON()).toEqual(pasted);
   });
   it('rebuilds stored marks in the converted schema before later typing', async () => {
+    mockRequiresNoteboard('highlight');
     const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
     editor.commands.setTextSelection(3); requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
     cleanup.push(registerMdTipTapEditor('C:/note.nb', native)); editor.commands.toggleHighlight({ color: '#fef08a' });
@@ -159,6 +206,7 @@ describe('document format capabilities', () => {
     native.commands.insertContent('x'); expect(native.state.doc.textContent).toBe('hexllo world'); expect(native.getAttributes('highlight').color).toBe('#fef08a');
   });
   it('rebuilds mark steps in the converted schema and refuses a changed destination', async () => {
+    mockRequiresNoteboard('highlight');
     const editor = make('markdown', 'C:/note.md'), native = make('noteboard', 'C:/note.nb');
     editor.commands.setTextSelection({ from: 1, to: 6 }); requests.confirm.mockResolvedValue({ removeMarkdown: false }); requests.convert.mockResolvedValue('C:/note.nb');
     cleanup.push(registerMdTipTapEditor('C:/note.nb', native)); editor.commands.setHighlight({ color: '#fef08a' });
@@ -171,6 +219,7 @@ describe('document format capabilities', () => {
     expect(native.state.doc.textContent).toContain('changed'); expect(native.state.doc.firstChild?.firstChild?.marks).toEqual([]);
   });
   it('leaves rejected rich paste unchanged after cancellation or source edits during confirmation', async () => {
+    mockRequiresNoteboard('textColor');
     for (const changed of [false, true]) {
       const editor = make('markdown', `C:/note-${changed}.md`); editor.commands.selectAll();
       let finish!: (value: { removeMarkdown: boolean } | null) => void;

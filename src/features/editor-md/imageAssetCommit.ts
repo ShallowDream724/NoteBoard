@@ -4,7 +4,8 @@ import { useWindowStore } from '../../stores/windowStore';
 import { synchronizeCurrentDocumentHistoryContent } from '../history/documentHistory';
 import { getMdSourceView, getMdTipTapEditor } from './editorInstances';
 import { rememberEditorDocumentSource, serializeEditorDocument } from './editorDocumentCodec';
-import { sourceReplacement } from './sourceDocumentSync';
+import { sourceReplacement, replaceSourceDocument } from './sourceDocumentSync';
+import { readSourceDocument, sourceDocumentAdapter } from './sourceDocumentAdapter';
 import type { PreparedImageSources } from './imageAssetSource';
 import { ImageSourcesStep } from './imageSourcesStep';
 import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from './visualSnapshot';
@@ -20,7 +21,7 @@ export function commitImageAssetSources(key: string, captured: string, prepared:
   // behind either live view while callers await a linked-file flush or import.
   if (mode === 'source') {
     flushPendingSourceSnapshot(key);
-    if (source && source.state.doc.toString() !== captured) return;
+    if (source && readSourceDocument(source) !== captured) return;
   } else {
     flushPendingVisualSnapshot(key);
     if (editor && serializeEditorDocument(editor) !== captured) return;
@@ -36,7 +37,10 @@ export function commitImageAssetSources(key: string, captured: string, prepared:
     if (patches.length) editor.view.dispatch(editor.state.tr.step(new ImageSourcesStep(patches)).setMeta('addToHistory', false).setMeta('noteboard-document-replacement', 'sync'));
     rememberEditorDocumentSource(editor, prepared.content);
   }
-  if (source && source.state.doc.toString() === captured) source.dispatch({ changes: prepared.changes, annotations: [Transaction.addToHistory.of(false), sourceReplacement.of(true)] });
+  if (source && readSourceDocument(source) === captured) {
+    if (sourceDocumentAdapter(source)) replaceSourceDocument(source, prepared.content);
+    else source.dispatch({ changes: prepared.changes, annotations: [Transaction.addToHistory.of(false), sourceReplacement.of(true)] });
+  }
   useDocumentStore.getState().setContent(key, prepared.content);
   synchronizeCurrentDocumentHistoryContent(key, prepared.content, mode);
 }

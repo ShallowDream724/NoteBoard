@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { CellSelection } from '@tiptap/pm/tables';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { MarkdownTable } from '../../src/features/editor-md/markdownTable';
 import { EfficientTableView } from '../../src/features/editor-md/tableView';
 import { TableRowLayout } from '../../src/features/editor-md/tableRowLayout';
@@ -19,6 +19,7 @@ import { renderDocument } from '../../src/features/export/renderDocument';
 import { pandocSource } from '../../src/features/export/pandocDocument';
 import { moveTopLevelBlock } from '../../src/features/editor-md/blockReorder';
 import { nativeTestEditor } from './nativeTestEditor';
+import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 
 const editors: Editor[] = [];
 function create(native = true) {
@@ -146,12 +147,13 @@ describe('whole-table notes and figure captions', () => {
     expect(restored.state.doc.firstChild!.attrs.caption).toBe('Results <safe>\nSecond line');
   });
 
-  it('gates caption changes in Markdown and preserves invalid native caption source', async () => {
+  it('preserves caption changes in declarative Markdown and preserves invalid native caption source', async () => {
     const editor = create(false), before = editor.state.doc;
-    expect(editFigureCaption(editor, 0)).toBe(false);
-    const tr = editor.state.tr.step(new BlockMetadataStep(0, 'caption', 'requires native'));
+    expect(editFigureCaption(editor, 0)).toBe(true);
+    const tr = editor.state.tr.step(new BlockMetadataStep(0, 'caption', 'Markdown table caption'));
     expect(transactionAddedCapability(tr)).toBe('figureCaption');
-    editor.view.dispatch(tr); await Promise.resolve(); expect(editor.state.doc).toBe(before);
+    editor.view.dispatch(tr); await Promise.resolve(); expect(editor.state.doc.firstChild?.attrs.caption).toBe('Markdown table caption');
+    expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
     const bad = serializeNativeNode(before).replace('"type":"table"', '"type":"table","attrs":{"caption":7}');
     const recovered = parseNativeNode(bad, editor.schema);
     expect(recovered.firstChild!.type.name).toBe('nativeError'); expect(serializeNativeNode(recovered)).toBe(bad);

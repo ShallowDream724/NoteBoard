@@ -43,6 +43,7 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { setMathPreviewSessionActive } from './mathPreviewSession';
 import { setBlockBoundaryActive } from './blockBoundary';
 import { transactionStart } from './transactionStart';
+import { bindRichDocumentStatistics } from '../document-statistics/richDocumentStatistics';
 import { selectContextMenuTarget } from './contextMenuSelection';
 
 interface VisualKernelProps {
@@ -152,6 +153,11 @@ export function VisualKernel({
       const diffPosition = startsNewGroup || !previousPendingExisted
         ? transactionStart(transaction.mapping.maps, transaction.steps)
         : undefined;
+      const inputSelection = transaction.getMeta('noteboard-before-selection') as { anchor: number; head: number } | undefined;
+      const beforeSelection = inputSelection && Number.isInteger(inputSelection.anchor) && Number.isInteger(inputSelection.head)
+        && inputSelection.anchor >= 0 && inputSelection.head >= 0
+        && inputSelection.anchor <= transaction.before.content.size && inputSelection.head <= transaction.before.content.size
+        ? inputSelection : diffPosition == null ? undefined : { anchor: diffPosition, head: diffPosition };
       stagePendingVisualSnapshot(docKey, {
         format: editorDocumentFormat(editor),
         directory: editorDocumentDirectory(editor),
@@ -167,7 +173,7 @@ export function VisualKernel({
         // 组起点选区：本组首事务的 before 位置（TipTap 事务不公开初始选区，
         // 文档首差异位置就是本次修改在旧文档中的稳定落点）
         groupStartBefore: startsNewGroup || !previousPendingExisted
-          ? (diffPosition == null ? undefined : { anchor: diffPosition, head: diffPosition })
+          ? beforeSelection
           : undefined,
         selection: {
           anchor: editor.state.selection.anchor,
@@ -204,6 +210,11 @@ export function VisualKernel({
       },
     },
   }, [docKey]);
+
+  useEffect(() => {
+    if (!editor) return;
+    return bindRichDocumentStatistics(docKey, editor);
+  }, [docKey, editor]);
 
   useEffect(() => {
     if (!editor) return;

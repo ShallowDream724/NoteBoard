@@ -4,13 +4,14 @@
 
 import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
-import { useMemo } from 'react';
 import { emit } from '../../core/emitter';
 import { Eye, Code } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
 import { getCodeLanguage } from '../../core/codeLanguages';
 import { useSaveActivityStore } from '../../stores/saveActivityStore';
 import { documentSaveStatus } from '../documentSaveStatus';
+import { useDocumentStatistics } from '../../features/document-statistics/useDocumentStatistics';
+import { DOCUMENT_STATISTICS_DESCRIPTION } from '../../features/document-statistics/documentStatistics';
 import './statusbar.css';
 
 export function StatusBar() {
@@ -18,15 +19,7 @@ export function StatusBar() {
   const activeTab = useWindowStore((s) => (activeKey ? s.getTab(activeKey) : undefined));
   const doc = useDocumentStore((s) => (activeKey ? s.documents.get(activeKey) : undefined));
   const activity = useSaveActivityStore(s => activeKey ? s.activities.get(activeKey) : undefined);
-  const textStatistics = useMemo(() => {
-    const content = doc?.content;
-    if (content == null || (doc?.kind === 'noteboard' && activeTab?.viewMode !== 'source')) return null;
-    let lines = 1;
-    for (let index = 0; index < content.length; index += 1) {
-      if (content.charCodeAt(index) === 10) lines += 1;
-    }
-    return { characters: content.length, lines };
-  }, [doc?.content, doc?.kind, activeTab?.viewMode]);
+  const textStatistics = useDocumentStatistics(activeKey, doc?.kind, doc?.content, activeTab?.viewMode !== 'source');
 
   if (!doc) {
     return (
@@ -106,13 +99,14 @@ export function StatusBar() {
       role="status"
     >
       <div className="nb-status-metadata">
-      {/* Native visual documents do not count their serialized frames as prose. */}
       {textStatistics && <>
-        <div style={sectionStyle}>
+        <Tooltip content={DOCUMENT_STATISTICS_DESCRIPTION} side="top" sideOffset={6}>
+        <div style={{ ...sectionStyle, cursor: 'default' }} aria-label="正文统计">
           <span>
-            {doc.kind === 'noteboard' ? '原始记录 ' : ''}{textStatistics.characters.toLocaleString()} {doc.kind === 'noteboard' ? '字符' : '字'} · {textStatistics.lines.toLocaleString()} 行
+            {textStatistics.characters.toLocaleString()} 字符 · {textStatistics.words.toLocaleString()} 字词
           </span>
         </div>
+        </Tooltip>
         <div style={dividerStyle} />
       </>}
 
@@ -131,7 +125,7 @@ export function StatusBar() {
 
       </>}
       {/* 类型 / 富文档模式切换 */}
-      {doc.kind === 'markdown' ? (
+      {doc.kind === 'markdown' || doc.kind === 'noteboard' ? (
         <Tooltip
           content={`当前：${typeLabel} (${activeTab?.viewMode === 'source' ? '源码模式' : '可视化模式'}) · 点击切换`}
           shortcut="Ctrl+/"

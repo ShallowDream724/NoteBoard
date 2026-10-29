@@ -23,7 +23,7 @@ function decorations(doc: Node, from: number, to: number): Decoration[] {
       const ownBorder = documentColor(attrs.borderColor);
       if (ownColor || ownBackground || ownBorder) result.push(Decoration.node(pos, pos + node.nodeSize, {
         class: `nb-screen-container${ownBackground ? ' nb-screen-fill' : ''}`,
-        style: `${readableInkStyle(color, background)}${ownBackground ? `;--nb-fill-dark:${darkBackground(ownBackground)}` : ''}${ownBorder ? `;--nb-border-dark:${readableInk(ownBorder, background ? darkBackground(background) : '#1e293b')}` : ''}`,
+        style: `${readableInkStyle(color, background)}${ownBackground ? `;--nb-fill-dark:${darkBackground(ownBackground)}` : ''}${ownBorder ? `;--nb-border-dark:${readableInk(ownBorder, background ? darkBackground(background) : '#1e293b', '#1e293b')}` : ''}`,
       }));
       inherited.push({ end: pos + node.nodeSize, color, background });
       return;

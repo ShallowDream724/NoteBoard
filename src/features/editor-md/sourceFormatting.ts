@@ -3,6 +3,8 @@ import { syntaxTree } from '@codemirror/language';
 import { ChangeSet } from '@codemirror/state';
 import { escapeMarkdownText } from './markdownTextEscape';
 import { guardContextualBlocks, type SourceParagraph } from './sourceBlockGuards';
+import { sourceFormatSnapshot, sourceFormatRange, applySourceSemanticMarks, hasSelectedDeclarativeFormatting, sourceParameterSelection } from './sourceSemanticFormatting';
+import { parseColor } from '../declarative/registry';
 
 /** Removing inline wrappers must not turn their text into a new block. Inspect
  * only touched paragraph lines on the existing syntax tree and shared text rope. */
@@ -36,6 +38,14 @@ export function clearSourceTextFormatting(view: EditorView, range?: { from: numb
   const selection = view.state.selection.main;
   const from = range?.from ?? (selection.empty ? view.state.doc.lineAt(selection.from).from : selection.from);
   const to = range?.to ?? (selection.empty ? view.state.doc.lineAt(selection.to).to : selection.to);
+  const semantic = sourceFormatSnapshot(view, true)!;
+  if (sourceParameterSelection(semantic, from, to)) return false;
+  // Declarative wrappers are removed through their semantic marks. Annotation
+  // references and concealment deliberately remain outside this formatting set.
+  if (hasSelectedDeclarativeFormatting(semantic, from, to)) {
+    const names = ['bold', 'italic', 'strike', 'underline', 'textColor', 'highlight', 'code'];
+    return applySourceSemanticMarks(view, names.filter(name => semantic.doc.type.schema.marks[name]).map(name => ({ type: semantic.doc.type.schema.marks[name], attrs: null })), { from, to }, true);
+  }
   const changes: { from: number; to: number; insert?: string }[] = [];
   const tags: { from: number; to: number; name: string; closing: boolean }[] = [];
   const tree = syntaxTree(view.state), bodies = new Map<number, number>(), paragraphs = new Map<number, SourceParagraph>();
@@ -113,17 +123,6 @@ export function restoreSourceParagraph(view: EditorView): boolean {
   return true;
 }
 
-function containsClosingTag(view: EditorView, from: number, to: number, tag: string) {
-  let tail = '';
-  const text = view.state.doc.iterRange(from, to);
-  while (!text.next().done) {
-    const chunk = tail + text.value;
-    if (chunk.includes(tag)) return true;
-    tail = chunk.slice(-(tag.length - 1));
-  }
-  return false;
-}
-
 export function setSourceHeading(view: EditorView, level: number) {
   if (!level) return restoreSourceParagraph(view);
   const selection = view.state.selection.main, line = view.state.doc.lineAt(selection.from);
@@ -138,7 +137,7 @@ export function setSourceHeading(view: EditorView, level: number) {
 /** Source shortcuts and toolbar actions operate on the same selection grammar. */
 export function runSourceFormatCommand(view: EditorView, id: string): boolean | undefined {
   if (id === 'markdown.underline') return formatSourceMark(view, 'underline');
-  if (id === 'markdown.highlight') return sourceMarkRange(view, 'highlight') ? formatSourceMark(view, 'highlight', undefined, true) : true;
+  if (id === 'markdown.highlight') return formatSourceMark(view, 'highlight');
   const delimiters: Record<string, string> = { 'markdown.bold': '**', 'markdown.italic': '*', 'markdown.strike': '~~', 'markdown.code': '`' };
   const delimiter = delimiters[id];
   const { from, to } = view.state.selection.main;
@@ -179,32 +178,21 @@ export function runSourceFormatCommand(view: EditorView, id: string): boolean | 
   return undefined;
 }
 
-/** Inspect only the selection boundary, never stringify or scan the whole document. */
+/** Toolbar rendering only reads an existing immutable semantic snapshot. */
 export function sourceMarkRange(view: EditorView, mark: 'underline' | 'highlight') {
+  const snapshot = sourceFormatSnapshot(view); if (!snapshot) return null;
+  const range = sourceFormatRange(view, snapshot); if (!range) return null;
+  const marks = range.leaves.map(leaf => leaf.node.marks.find(value => value.type.name === mark));
+  if (marks.some(value => !value)) return null;
   const { from, to } = view.state.selection.main;
-  const opening = mark === 'underline' ? /^<u>/ : /^<mark data-color="([^"<>]+)">/;
-  const closing = mark === 'underline' ? '</u>' : '</mark>';
-  const inside = opening.exec(view.state.sliceDoc(from, Math.min(from + 96, to)));
-  if (inside && to - from >= inside[0].length + closing.length && view.state.sliceDoc(to - closing.length, to) === closing
-    && !containsClosingTag(view, from + inside[0].length, to - closing.length, closing))
-    return { from, to, contentFrom: from + inside[0].length, contentTo: to - closing.length, color: inside[1] };
-  const before = view.state.sliceDoc(Math.max(0, from - 96), from);
-  const surrounding = (mark === 'underline' ? /<u>$/ : /<mark data-color="([^"<>]+)">$/).exec(before);
-  if (surrounding && view.state.sliceDoc(to, to + closing.length) === closing && !containsClosingTag(view, from, to, closing))
-    return { from: from - surrounding[0].length, to: to + closing.length, contentFrom: from, contentTo: to, color: surrounding[1] };
-  return null;
+  return { from, to, contentFrom: from, contentTo: to, color: marks.every(value => value?.attrs.color === marks[0]?.attrs.color) ? marks[0]?.attrs.color as string | undefined : undefined };
 }
 
 export function formatSourceMark(view: EditorView, mark: 'underline' | 'highlight', color?: string, remove = false) {
-  const current = sourceMarkRange(view, mark), selection = view.state.selection.main;
-  if (mark === 'highlight' && (!current || !remove)) return false;
-  const from = current?.from ?? selection.from, to = current?.to ?? selection.to;
-  if (remove && !current) return false;
-  const text = view.state.sliceDoc(current?.contentFrom ?? from, current?.contentTo ?? to);
-  const unset = remove || (mark === 'underline' && current !== null);
-  const open = unset ? '' : mark === 'underline' ? '<u>' : `<mark data-color="${color}">`;
-  const close = unset ? '' : mark === 'underline' ? '</u>' : '</mark>';
-  view.dispatch({ changes: { from, to, insert: open + text + close },
-    selection: { anchor: from + open.length, head: from + open.length + text.length }, scrollIntoView: true });
-  return true;
+  const snapshot = sourceFormatSnapshot(view, true)!;
+  const current = sourceMarkRange(view, mark);
+  const unset = remove || (current !== null && (mark === 'underline' || color === undefined));
+  const value = mark === 'highlight' && !unset ? parseColor(color ?? '#fef08a') : null;
+  if (mark === 'highlight' && !unset && !value) return false;
+  return applySourceSemanticMarks(view, [{ type: snapshot.doc.type.schema.marks[mark], attrs: unset ? null : mark === 'highlight' ? { color: value } : {} }]);
 }

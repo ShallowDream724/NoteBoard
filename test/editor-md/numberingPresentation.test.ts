@@ -8,6 +8,9 @@ import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { formatNumbering, NUMBERING_STYLES, normalizeNumberingStyle } from '../../src/features/editor-md/numbering/styles';
 import { listItemHorizontalBounds, orderedMarkerText, releaseListMarkerGeometry } from '../../src/features/editor-md/listMarkerGeometry';
 import { renderDocument } from '../../src/features/export/renderDocument';
+import { portableMarkdown } from '../../src/features/export/portableMarkdown';
+import { MarkdownManager } from '@tiptap/markdown';
+import { installPresentationCodec } from '../../src/features/document-style/presentationMetadata';
 
 describe('numbering presentation', () => {
   it('formats the same logical ordinal in every supported style', () => {
@@ -36,10 +39,11 @@ describe('numbering presentation', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<ol start="27" data-number-style="circle"><li><p>outer</p><ol start="3" data-number-style="chinese"><li><p>inner</p></li></ol></li><li><p>last</p></li></ol><p>gap</p><ol start="29" data-number-style="box" data-numbering="continue"><li><p>continued</p></li></ol>' });
     try {
       const markdown = serializeMarkdown(editor);
-      expect(markdown).toContain('27. outer');
-      expect(markdown).toContain('3. inner');
-      expect(markdown).toContain('29. continued');
-      expect(markdown).toContain('<!-- noteboard-styles ');
+      const portable = portableMarkdown(editor.getJSON());
+      expect(portable).toContain('27. outer');
+      expect(portable).toContain('3. inner');
+      expect(portable).toContain('29. continued');
+      expect(markdown).toContain('::: native version=1');
       expect(markdown).not.toContain('<ol');
       expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.getJSON());
       for (const mode of ['print', 'html'] as const) {
@@ -58,11 +62,15 @@ describe('numbering presentation', () => {
     const styled = new Editor({ extensions: buildDocumentExtensions(), content: '<ol start="3" data-number-style="paren"><li>unique</li></ol>' });
     try {
       expect(serializeMarkdown(plain)).not.toContain('noteboard-styles');
-      const markdown = serializeMarkdown(styled);
+      const legacy = new MarkdownManager({ extensions: buildDocumentExtensions(), marked: createMarkdownLexer() });
+      installPresentationCodec(legacy, styled.schema);
+      const markdown = legacy.serialize(styled.getJSON());
       const invalid = parseMarkdownDocument(markdown.replace('"numberStyle":"paren"', '"numberStyle":"invalid","numbering":"invalid"'));
       expect(invalid.firstChild?.attrs).toMatchObject({ numberStyle: null, numbering: null, start: 3 });
       const changed = parseMarkdownDocument(markdown.replace('unique', 'changed'));
       expect(changed.firstChild?.attrs).toMatchObject({ numberStyle: null, numbering: null, start: 3 });
+      const explicit = serializeMarkdown(styled).replace('unique', 'changed');
+      expect(parseMarkdownDocument(explicit).firstChild?.attrs).toMatchObject({ numberStyle: 'paren', start: 3 });
     } finally { plain.destroy(); styled.destroy(); }
   });
 
@@ -85,8 +93,7 @@ describe('numbering presentation', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: wrappers[context] });
     try {
       const markdown = serializeMarkdown(editor);
-      expect(markdown).toContain('"numbering":"restart"');
-      expect(markdown.match(/<!-- noteboard-list-boundary -->/g)).toHaveLength(3);
+      expect(markdown).toMatch(/"numbering"\s*:\s*"restart"/);
       const reopened = parseMarkdownDocument(markdown);
       expect(reopened.toJSON(), markdown).toEqual(editor.getJSON());
       expect(documentParser().manager.serialize(reopened.toJSON())).toBe(markdown);

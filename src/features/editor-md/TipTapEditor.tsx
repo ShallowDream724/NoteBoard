@@ -15,6 +15,14 @@ import type { Editor } from '@tiptap/core';
 import { mapModeSelection } from './sourcePosition';
 import { mapNativeDocumentSelection } from './nativeSourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
+import { readSourceSelection } from './nativeSourceDom';
+import { requestMathEditing } from './mathEditingRequest';
+import { AuthoringSourceSession, captureAuthoringSelection, authoringBookmarkSelection, authoringToVisual, visualToAuthoring, authoringNodePosition, authoringSourceOffset, type AuthoringSelectionBookmark } from './authoringSourceSession';
+import { readSourceDocument, setSourceDocumentAdapter, sourceDocumentAdapter } from './sourceDocumentAdapter';
+import { parseNativeNode } from './editorDocumentCodec';
+import { serializeAuthoring } from '../declarative/authoring';
+import { documentParser } from './documentExtensions';
+import { markdownMathPayload, markdownMathSelection } from './mathModePosition';
 import { focusedEditorControl } from './editorControlFocus';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Prec, Transaction as CodeMirrorTransaction } from '@codemirror/state';
@@ -117,7 +125,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const document = useDocumentStore.getState().getDocument(docKey);
     const verdict = judgeLargeDoc(document?.content ?? '', document?.size);
     const requested = useWindowStore.getState().getTab(docKey)?.viewMode ?? useSettingsStore.getState().settings.editor.defaultViewMode;
-    return { verdict, mode: document?.kind === 'noteboard' ? 'visual' as const : verdict.isLarge ? 'source' as const : requested };
+    return { verdict, mode: document?.kind !== 'noteboard' && verdict.isLarge ? 'source' as const : requested };
   }, [docKey]);
   const [viewMode, setViewMode] = useState<'visual' | 'source'>(initialView.mode);
   // 始终记录最新模式，供只在真正卸载时执行的清理逻辑读取
@@ -133,6 +141,12 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 持有最新 TipTap 实例，供仅按 docKey 注册的卸载清理读取，避免模式切换触发误清理
   const tipTapEditorRef = useRef<Editor | null>(null);
   const sourceViewRef = useRef<EditorView | null>(null);
+  const authoringSessionRef = useRef<AuthoringSourceSession | null>(null);
+  const rawRepairRef = useRef(false);
+  const [rawRepair, setRawRepair] = useState(false);
+  const authoringBookmarkRef = useRef<{ bookmark: AuthoringSelectionBookmark; visual: { anchor: number; head: number }; document: object } | null>(null);
+  const pendingMathSelectionRef = useRef<{ position: number; anchor: number; head: number } | null>(null);
+  const pendingAuthoringBookmarkRef = useRef<AuthoringSelectionBookmark | null>(null);
   const sourceContentRef = useRef<{ text: EditorView['state']['doc']; markdown: string } | null>(null);
   const sourceDivRef = useRef<HTMLDivElement>(null);
   const storeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -216,6 +230,15 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         view?.focus();
       } else {
         const currentEditor = tipTapEditorRef.current;
+        const math = pendingMathSelectionRef.current;
+        if (math && currentEditor && !currentEditor.isDestroyed) {
+          pendingMathSelectionRef.current = null;
+          const tr = currentEditor.state.tr;
+          requestMathEditing(tr, math.position, math.anchor, math.head);
+          currentEditor.view.dispatch(tr.scrollIntoView());
+          if (authoringBookmarkRef.current?.document === currentEditor.state.doc) authoringBookmarkRef.current.visual = { anchor: currentEditor.state.selection.anchor, head: currentEditor.state.selection.head };
+          return;
+        }
         if (selection && currentEditor && !currentEditor.isDestroyed) {
           if (nativeDocument) {
             const from = Math.min(selection.anchor, selection.head), node = currentEditor.state.doc.nodeAt(from);
@@ -223,6 +246,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
               currentEditor.chain().setNodeSelection(from).focus().scrollIntoView().run();
             } else currentEditor.chain().command(({ tr }) => { tr.setSelection(TextSelection.between(tr.doc.resolve(selection.anchor), tr.doc.resolve(selection.head))); return true; }).focus().scrollIntoView().run();
           } else currentEditor.chain().setTextSelection({ from: selection.anchor, to: selection.head }).focus().scrollIntoView().run();
+          if (authoringBookmarkRef.current?.document === currentEditor.state.doc) authoringBookmarkRef.current.visual = { anchor: currentEditor.state.selection.anchor, head: currentEditor.state.selection.head };
         }
       }
     });
@@ -337,6 +361,10 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   const readSourceContent = useCallback(() => {
     const text = sourceViewRef.current?.state.doc;
     if (!text) return undefined;
+    if (authoringSessionRef.current) {
+      authoringSessionRef.current.materialize(text);
+      return authoringSessionRef.current.text;
+    }
     if (sourceContentRef.current?.text !== text) {
       sourceContentRef.current = { text, markdown: readStyledSource(sourceViewRef.current!.state) };
     }
@@ -346,11 +374,21 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 初始化 source 模式编辑器（CM6 + markdown）
   const initSourceEditor = useCallback((content: string) => {
     if (!sourceDivRef.current) return;
+    const nativeAuthoring = nativeDocument && !rawRepairRef.current;
+    const currentEditor = tipTapEditorRef.current;
+    const schema = nativeAuthoring ? currentEditor?.schema ?? documentParser().schema : null;
 
     // 已创建的源码编辑器必须复用；模式同步只更新视图，不得写入文件级或原生历史
     if (sourceViewRef.current) {
-      const currentContent = readSourceContent();
-      if (currentContent !== content) {
+      const view = sourceViewRef.current;
+      if (schema) {
+        if (!authoringSessionRef.current) {
+          const authoredDocument = currentEditor && !hasMarkdownContentChanged(currentEditor, content) ? currentEditor.state.doc : undefined;
+          const session = new AuthoringSourceSession(view, schema, useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '', content, undefined, authoredDocument);
+          authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.replace(content);
+        } else if (readSourceDocument(view) !== content) authoringSessionRef.current.replace(content);
+        sourceContentRef.current = null;
+      } else if (readSourceContent() !== content) {
         sourceViewRef.current.dispatch({
           changes: {
             from: 0,
@@ -363,6 +401,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         sourceContentRef.current = { text: sourceViewRef.current.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
       }
       registerMdSourceView(docKey, sourceViewRef.current);
+      emit('md-source-selection-changed', { key: docKey });
       return;
     }
 
@@ -370,6 +409,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged || update.selectionSet) emit('md-source-selection-changed', { key: docKey });
       if (!update.docChanged || update.transactions.some(transaction => transaction.annotation(sourceReplacement))) return;
+      sourceContentRef.current = null;
       // 🔴 内容版本递增：源码模式真实修改同样推进 revision
       bumpDocumentRevision(docKey);
 
@@ -383,6 +423,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const previousPendingExisted = hasPendingSourceSnapshot(docKey);
       stagePendingSourceSnapshot(docKey, {
         text: update.state.doc,
+        materialize: sourceDocumentAdapter(update.view)?.materialize,
         styles: readSourceStyles(update.state),
         revision: getDocumentRevision(docKey),
         isNewGroup: startsNewGroup,
@@ -415,8 +456,11 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       }, 800);
     });
 
+    const authoredDocument = schema ? currentEditor && !hasMarkdownContentChanged(currentEditor, content) ? currentEditor.state.doc : parseNativeNode(content, schema) : undefined;
+    const serializedSource = authoredDocument ? serializeAuthoring(authoredDocument) : null;
+    const displayContent = serializedSource?.text ?? content;
     const state = EditorState.create({
-      doc: content,
+      doc: displayContent,
       extensions: [
         // 最高优先级接管源码快捷键，禁止回落到 CodeMirror 的局部历史
         Prec.highest(keymap.of([
@@ -446,7 +490,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         ...createBaseExtensions(useSettingsStore.getState().settings.editor),
         textAnalysisLifecycle,
         liveEditorSettings,
-        ...(nativeDocument ? [] : [markdown({ extensions: sourceFormattingGrammar }), sourceTypingAssist, sourceStylesField]),
+        markdown({ extensions: sourceFormattingGrammar }), sourceTypingAssist,
+        ...(nativeDocument ? [] : [sourceStylesField]),
         // 裸 `[文本]` 是普通正文时取消 CodeMirror 的链接下划线与括号框，真实链接保持高亮。
         ...(nativeDocument ? [] : [markdownPlainBracketExtension]),
         nbSyntaxHighlighting,
@@ -485,8 +530,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     });
 
     sourceViewRef.current = view;
-    sourceContentRef.current = { text: view.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
+    if (schema) {
+      const session = new AuthoringSourceSession(view, schema, useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '', content, serializedSource!, authoredDocument);
+      authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.bind();
+    }
+    sourceContentRef.current = { text: view.state.doc, markdown: displayContent.replace(/\r\n?/g, '\n') };
     registerMdSourceView(docKey, view);
+    emit('md-source-selection-changed', { key: docKey });
   }, [docKey, nativeDocument, readSourceContent]);
 
   // 当前可见模式负责呈现统一历史节点，另一内核会在下次切换时无历史地同步到同一内容
@@ -502,12 +552,10 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           diskTimerRef.current = setTimeout(() => { void autoSaveDocument(docKey, content); }, 800);
         };
         if (viewModeRef.current === 'source') {
-          if (!sourceViewRef.current) {
-            initSourceEditor(entry.content);
-          }
+          initSourceEditor(entry.content);
           const view = sourceViewRef.current;
           if (!view) throw new Error('源码编辑器尚未就绪');
-          const content = entry.content.replace(/\r\n?/g, '\n');
+          const content = view.state.doc.toString();
           const preferredSelection = navigation.selectionMode === 'source'
             ? navigation.selection
             : undefined;
@@ -524,8 +572,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
             effects: resetSourceStyles.of(null),
             scrollIntoView: true,
           });
-          synchronizeCurrentDocumentHistoryContent(docKey, content, 'source');
-          publish(content);
+          synchronizeCurrentDocumentHistoryContent(docKey, entry.content, 'source');
+          publish(entry.content);
           view.focus();
           return;
         }
@@ -573,6 +621,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     initializedDocKeyRef.current = docKey;
     visualSyncedRef.current = false;
     pendingVisualContentRef.current = null;
+    rawRepairRef.current = false; setRawRepair(false);
+    authoringBookmarkRef.current = null; pendingMathSelectionRef.current = null; pendingAuthoringBookmarkRef.current = null;
 
     const content = currentDoc.content ?? '';
 
@@ -654,6 +704,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     try {
       const baseline = getBaseline(docKey);
       parseEditorDocument(editor, content);
+      authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
 
       // 与初始解析序列化结果严格对齐，消除格式化差异导致的假脏态；
       // visual 表示下历史首节点采用序列化结果
@@ -677,7 +728,14 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     restoreMarkdownViewState();
     focusNewDocument();
     if (pendingSourceSelectionRef.current) {
-      const selection = nativeDocument ? mapNativeDocumentSelection(editor.state.doc, content, 'visual', pendingSourceSelectionRef.current, editor) : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
+      const bookmark = pendingAuthoringBookmarkRef.current;
+      const selection = bookmark ? authoringToVisual(editor.state.doc, bookmark) : nativeDocument ? mapNativeDocumentSelection(editor.state.doc, content, 'visual', pendingSourceSelectionRef.current, editor) : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
+      if (bookmark) {
+        authoringBookmarkRef.current = { bookmark, visual: selection, document: editor.state.doc };
+        const position = authoringNodePosition(editor.state.doc, bookmark.head), node = position === undefined ? null : editor.state.doc.nodeAt(position);
+        if (position !== undefined && bookmark.head.kind === 'attribute' && node && ['mathInline', 'mathBlock'].includes(node.type.name)) pendingMathSelectionRef.current = { position, anchor: bookmark.anchor.offset, head: bookmark.head.offset };
+      } else if (!nativeDocument) pendingMathSelectionRef.current = markdownMathSelection(editor, content, pendingSourceSelectionRef.current, selection);
+      pendingAuthoringBookmarkRef.current = null;
       pendingSourceSelectionRef.current = null;
       scheduleModeSelection('visual', selection);
     }
@@ -686,9 +744,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 切换可视化 / 源码模式（可指定目标模式 targetMode，只影响当前活动文档）
   const toggleViewMode = useCallback((targetMode?: 'visual' | 'source', nativeRepair = false) => {
     const nextMode = targetMode ?? (viewModeRef.current === 'visual' ? 'source' : 'visual');
-    if (nextMode === viewModeRef.current) return;
-    // Native records are a recovery surface, not an ordinary authoring mode.
-    if (nativeDocument && nextMode === 'source' && !nativeRepair) return;
+    if (nextMode === viewModeRef.current && !(nativeDocument && nativeRepair && !rawRepairRef.current)) return;
 
     if (nextMode === 'source') {
       // 可视化 → 源码模式
@@ -696,12 +752,33 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         ? (getCurrentDocumentHistoryContent(docKey) ?? serializeEditorDocument(editor))
         : (getCurrentDocumentHistoryContent(docKey) ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '');
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
+      if (nativeDocument && nativeRepair !== rawRepairRef.current) {
+        if (sourceViewRef.current) setSourceDocumentAdapter(sourceViewRef.current, null);
+        authoringSessionRef.current = null;
+        authoringBookmarkRef.current = null;
+      }
+      rawRepairRef.current = nativeDocument && nativeRepair; setRawRepair(rawRepairRef.current);
       useDocumentStore.getState().setContent(docKey, md);
       initSourceEditor(md);
       const embedded = editor ? embeddedEditingPosition(editor) : null;
       const sourceText = readSourceContent() ?? md;
       const visualSelection = editor && (embedded == null ? editor.state.selection : { anchor: embedded, head: embedded });
-      const selection = editor && visualSelection ? nativeDocument ? mapNativeDocumentSelection(editor.state.doc, sourceText, 'source', visualSelection, editor) : mapModeSelection(editor, sourceText, 'source', visualSelection) : null;
+      let selection = editor && visualSelection ? nativeDocument ? rawRepairRef.current
+        ? mapNativeDocumentSelection(editor.state.doc, sourceText, 'source', visualSelection, editor)
+        : visualToAuthoring(editor.state.doc, authoringSessionRef.current?.spans ?? [], visualSelection)
+        : mapModeSelection(editor, sourceText, 'source', visualSelection) : null;
+      const remembered = authoringBookmarkRef.current;
+      if (editor && embedded === null && authoringSessionRef.current && remembered?.document === editor.state.doc && remembered.visual.anchor === editor.state.selection.anchor && remembered.visual.head === editor.state.selection.head) {
+        selection = authoringBookmarkSelection(authoringSessionRef.current.spans, remembered.bookmark);
+      } else if (editor && embedded !== null && authoringSessionRef.current) {
+        const control = focusedEditorControl(editor.view), caret = control ? readSourceSelection(control) : null;
+        const span = authoringSessionRef.current.spans.find(span => span.kind === 'attribute' && authoringNodePosition(editor.state.doc, { path: span.path, offset: 0, kind: 'attribute', source: span.from }) === embedded);
+        if (span && caret) selection = { anchor: authoringSourceOffset(span, caret.anchor), head: authoringSourceOffset(span, caret.head) };
+      } else if (editor && embedded !== null && !nativeDocument) {
+        const control = focusedEditorControl(editor.view), caret = control ? readSourceSelection(control) : null;
+        const payload = markdownMathPayload(editor, sourceText, embedded);
+        if (payload && caret) selection = { anchor: Math.min(payload.to, payload.from + caret.anchor), head: Math.min(payload.to, payload.from + caret.head) };
+      }
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'source';
       setViewMode('source');
@@ -721,23 +798,25 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         return;
       }
       const materializedSource = flushPendingSourceSnapshot(docKey);
-      if (materializedSource !== null && sourceDocument) {
+      if (materializedSource !== null && sourceDocument && !authoringSessionRef.current) {
         sourceContentRef.current = { text: sourceDocument, markdown: materializedSource };
       }
       const historyContent = getCurrentDocumentHistoryContent(docKey);
-      const md = readSourceContent()
+      const md = (sourceViewRef.current ? readSourceDocument(sourceViewRef.current) : undefined)
         ?? historyContent ?? useDocumentStore.getState().getDocument(docKey)?.content ?? '';
       // 模式同步不产生历史节点；文件级时间线已经逐步记录了源码阶段的真实编辑
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       useDocumentStore.getState().setContent(docKey, md);
 
       const sourceSelection = sourceViewRef.current?.state.selection.main ?? { anchor: 0, head: 0 };
+      const authoringBookmark = authoringSessionRef.current ? captureAuthoringSelection(authoringSessionRef.current.spans, sourceSelection) : null;
 
       if (!editor) {
         // 🔴 S08：内核尚未创建（source 初始模式）——惰性挂载 VisualKernel，
         //    内容填充由「visual 填充 effect」在内核 ready 后执行
         pendingVisualContentRef.current = md;
         pendingSourceSelectionRef.current = { anchor: sourceSelection.anchor, head: sourceSelection.head };
+        pendingAuthoringBookmarkRef.current = authoringBookmark;
         setHasVisualKernel(true);
         markDocumentHistoryModeBoundary(docKey);
         viewModeRef.current = 'visual';
@@ -754,10 +833,13 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         try {
           // 只同步目标视图，明确不加入 TipTap 局部历史
           parseEditorDocument(editor, md);
+          authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
         } finally {
           isInitializingRef.current = false;
         }
       }
+
+      if (!hasCrossModeChanges) authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
 
       // 不变式 I-14 检查：切回 visual 后内容是否与基线一致
       const baseline = getBaseline(docKey);
@@ -776,10 +858,31 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       setViewMode('visual');
       useWindowStore.getState().setTabViewMode(docKey, 'visual');
       emit('view-mode-changed', { key: docKey, mode: 'visual' });
-      const visualSelection = nativeDocument ? mapNativeDocumentSelection(editor.state.doc, md, 'visual', sourceSelection, editor) : mapModeSelection(editor, md, 'visual', sourceSelection);
+      const visualSelection = authoringBookmark ? authoringToVisual(editor.state.doc, authoringBookmark) : nativeDocument ? mapNativeDocumentSelection(editor.state.doc, md, 'visual', sourceSelection, editor) : mapModeSelection(editor, md, 'visual', sourceSelection);
+      if (authoringBookmark) {
+        authoringBookmarkRef.current = { bookmark: authoringBookmark, visual: visualSelection, document: editor.state.doc };
+        const nodePosition = authoringNodePosition(editor.state.doc, authoringBookmark.head);
+        const node = nodePosition === undefined ? null : editor.state.doc.nodeAt(nodePosition);
+        if (nodePosition !== undefined && authoringBookmark.head.kind === 'attribute' && node && ['mathInline', 'mathBlock'].includes(node.type.name)) {
+          pendingMathSelectionRef.current = { position: nodePosition, anchor: authoringBookmark.anchor.offset, head: authoringBookmark.head.offset };
+        }
+      } else if (!nativeDocument) pendingMathSelectionRef.current = markdownMathSelection(editor, md, sourceSelection, visualSelection);
       scheduleModeSelection('visual', visualSelection);
     }
   }, [editor, docKey, nativeDocument, initSourceEditor, readSourceContent, scheduleModeSelection]);
+
+  // TipTap and embedded node views may own separate React portal roots. Bind to
+  // the actual DOM host so their native events always cross the same boundary.
+  useEffect(() => {
+    const host = editorRef.current; if (!host) return;
+    const handleModeKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || useWindowStore.getState().activeKey !== docKey) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key !== '/') return;
+      event.preventDefault(); event.stopPropagation(); toggleViewMode();
+    };
+    host.addEventListener('keydown', handleModeKey, true);
+    return () => host.removeEventListener('keydown', handleModeKey, true);
+  }, [docKey, toggleViewMode]);
 
   // 监听来自状态栏或外部的模式切换请求
   useEffect(() => {
@@ -802,11 +905,11 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   useEffect(() => {
     const unreg = registerShortcut({
       key: 'Ctrl+/',
-      when: () => useWindowStore.getState().activeKey === docKey && (!nativeDocument || viewModeRef.current === 'source'),
+      when: () => useWindowStore.getState().activeKey === docKey,
       action: () => toggleViewMode(),
       stopPropagation: true,
       scope: 'global',
-      description: '切换 Markdown 可视化 / 源码模式',
+      description: '切换文档可视化 / 源码模式',
     });
     return () => {
       unreg();
@@ -823,7 +926,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const currentMode = useWindowStore.getState().getTab(docKey)?.viewMode ?? viewModeRef.current;
       const latestContent = currentMode === 'source' && sourceViewRef.current
         ? materializedSource
-          ?? readStyledSource(sourceViewRef.current.state)
+          ?? readSourceDocument(sourceViewRef.current)
         : materializedVisual
           ?? (tipTapEditorRef.current
             ? serializeEditorDocument(tipTapEditorRef.current)
@@ -837,10 +940,12 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
       if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
       if (sourceViewRef.current) {
+        setSourceDocumentAdapter(sourceViewRef.current, null);
         sourceViewRef.current.destroy();
         sourceViewRef.current = null;
       }
       sourceContentRef.current = null;
+      authoringSessionRef.current = null; authoringBookmarkRef.current = null;
       tipTapEditorRef.current = null;
       unregisterMdSourceView(docKey);
       // 兜底：清理任何残留暂存（如物化降级路径失败）
@@ -851,7 +956,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
   return (
     <div style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} ref={editorRef}>
-      {nativeDocument && viewMode === 'source' && (
+      {nativeDocument && rawRepair && viewMode === 'source' && (
         <div role="region" aria-label="原始记录修复" style={{ flexShrink: 0, padding: '8px 16px', background: 'var(--editor-surface)', borderBottom: '1px solid var(--editor-border)', display: 'flex', gap: 12, alignItems: 'center', fontSize: 'var(--ui-font-size,13px)' }}>
           <span>修复原始记录后，返回文档查看结果。</span>
           <button type="button" className="nb-btn-secondary" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={() => toggleViewMode('visual')}>返回文档</button>
@@ -907,7 +1012,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       </div>
 
       {/* 底部左侧模式切换器：可视化 / 源码模式，具备热区靠近唤出与 Hover、Active 状态反馈，仅对当前文档生效 */}
-      {!nativeDocument && <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} />}
+      <MarkdownModeToggle viewMode={viewMode} onToggle={toggleViewMode} nativeDocument={nativeDocument} />
       </div>
     </div>
   );

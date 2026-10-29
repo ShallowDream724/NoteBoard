@@ -1,4 +1,4 @@
-import { type AnyExtension, type Extensions, type JSONContent, getSchema } from '@tiptap/core';
+import { type AnyExtension, type Extensions, type JSONContent, type MarkdownRendererHelpers, getSchema } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Code } from '@tiptap/extension-code';
 import CodeBlock from '@tiptap/extension-code-block';
@@ -22,7 +22,8 @@ import { BlockAppearance } from '../document-style/blockAppearanceSchema';
 import { inlineCodeComposition, inlineCodeInputRule, mapInlineCodeComposition } from './inlineCodeInput';
 import { Plugin } from '@tiptap/pm/state';
 import { InlineFormattingInput, withoutFormattingRules } from './inlineFormattingInput';
-import { pairedFormattingTokenizer } from './inlineFormattingMask';
+import { declarativeGrammar } from '../declarative/grammar';
+import { installAuthoringCodec } from '../declarative/codec';
 import { ScopedListCommands } from './scopedListCommands';
 import { ParagraphCommands } from './paragraphCommands';
 import { ListNumbering } from './numbering/extension';
@@ -30,7 +31,12 @@ import { ProseLink } from './proseLink';
 
 const ConsistentStarterKit = StarterKit.extend({
   addExtensions() { return (this.parent?.() ?? []).map(extension => withoutFormattingRules(extension.name === 'underline'
-    ? extension.extend({ markdownTokenizer: pairedFormattingTokenizer('underline', '++') }) : extension)); },
+    ? extension.extend({
+      // Plus signs are prose/code, never an underline delimiter. Keep HTML for
+      // portable Markdown; the authoring codec writes the explicit \\u command.
+      markdownTokenizer: { name: 'underline', level: 'inline', start: () => -1, tokenize: () => undefined },
+      renderMarkdown(node: JSONContent, helpers: MarkdownRendererHelpers) { return `<u>${helpers.renderChildren(node)}</u>`; },
+    }) : extension)); },
 });
 
 // Markdown permits marks around inline code. Application layout owns Ctrl+Shift+B.
@@ -51,6 +57,7 @@ const PresentedMarkdown = Markdown.extend({ onBeforeCreate(event) {
   const content = this.editor.options.content, contentType = this.editor.options.contentType;
   this.parent?.(event);
   installPresentationCodec(this.storage.manager, this.editor.schema);
+  installAuthoringCodec(this.storage.manager, this.editor.schema);
   if (contentType === 'markdown' && typeof content === 'string') this.editor.options.content = this.storage.manager.parse(content);
 } });
 
@@ -69,7 +76,7 @@ export function buildDocumentExtensions(views: Record<string, AnyExtension> = {}
     withoutFormattingRules(MarkdownHighlight.configure({ multicolor: true })), InlineFormattingInput, TextColor, BlockPresentation, BlockAppearance, MarkdownCode, MarkdownBlockquote, ImageNode,
     MarkdownOrderedList, MarkdownTaskList, TaskItem.configure({ nested: true, HTMLAttributes: { 'data-type': 'taskItem' } }), ScopedListCommands, ParagraphCommands, ListNumbering,
     MarkdownTable.configure({ resizable: true, cellMinWidth: 40, HTMLAttributes: { class: 'nb-table' } }), SizedTableRow, PresentedTableCell, PresentedTableHeader,
-    MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, NativeError, ...richContentGrammar, ...annotationSchemaExtensions,
+    MathInlineNode, MathBlockNode, MermaidNode, PlantUmlNode, InfographicNode, CodeBlock, AlertNode, DocumentPresentation, NativeError, ...richContentGrammar, ...annotationSchemaExtensions, ...declarativeGrammar,
     PresentedMarkdown.configure({ marked: createMarkdownLexer() }),
   ].map(extension => views[extension.name] ?? extension);
 }
@@ -80,6 +87,7 @@ export function documentParser() {
     const extensions = buildDocumentExtensions();
     parser = { manager: new MarkdownManager({ extensions, marked: createMarkdownLexer() }), schema: getSchema(extensions) };
     installPresentationCodec(parser.manager, parser.schema);
+    installAuthoringCodec(parser.manager, parser.schema);
   }
   return parser;
 }

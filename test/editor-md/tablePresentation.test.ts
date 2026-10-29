@@ -9,6 +9,9 @@ import { documentTableStyle } from '../../src/features/editor-md/documentPresent
 import { setDocumentTableStyle } from '../../src/features/editor-md/documentPresentationCommands';
 import { isTopLevelBlockMoveAllowed } from '../../src/features/editor-md/blockReorder';
 import { nativeTestEditor } from './nativeTestEditor';
+import { portableMarkdown } from '../../src/features/export/portableMarkdown';
+import { MarkdownManager } from '@tiptap/markdown';
+import { createMarkdownLexer } from '../../src/features/editor-md/markdownLexer';
 
 const source = '| 编号 | 备注 |\n| --- | --- |\n| 1 | target |\n| 2 | last |';
 function editorFor(text = source) {
@@ -29,7 +32,7 @@ describe('table presentation roundtrip', () => {
       dom.forEach((node, i) => expect(editor.view.dom.querySelectorAll('table')[i]).toBe(node));
       expect(editor.view.dom.dataset.tableStyle).toBe('three-line');
       const md = serializeMarkdown(editor);
-      expect(md.match(/noteboard-document/g)).toHaveLength(1);
+      expect(parseMarkdownDocument(md).content.content.filter(node => node.type.name === 'documentPresentation')).toHaveLength(1);
       expect(documentTableStyle(parseMarkdownDocument(md))).toBe('three-line');
       expect(isTopLevelBlockMoveAllowed(editor.state.doc, 0, editor.state.doc.content.size)).toBe(false);
       expect(isTopLevelBlockMoveAllowed(editor.state.doc, 1, 0)).toBe(false);
@@ -47,7 +50,7 @@ describe('table presentation roundtrip', () => {
       });
       editor.view.dispatch(tr); setDocumentTableStyle(editor, 'three-line');
       const expected = editor.state.doc, md = serializeMarkdown(editor);
-      expect(md).toContain('noteboard-table');
+      expect(md).toContain('::: native version=1');
       expect(parseMarkdownDocument(md).toJSON()).toEqual(expected.toJSON());
       let pos = 0; expected.descendants((node, at) => { if (node.text === 'target') pos = at + 3; });
       expect(mapModeSelection(editor, md, 'source', { anchor: pos, head: pos }).head).toBe(md.indexOf('target') + 3);
@@ -67,18 +70,21 @@ describe('table presentation roundtrip', () => {
     try { const md = serializeMarkdown(editor); expect(md.length).toBeLessThan(long.length + 100); expect(md).not.toMatch(/ {20}|-{20}/); }
     finally { editor.destroy(); }
   });
-  it('emits every GFM separator when all rows cover the same merged column', () => {
+  it('exports every GFM separator while preserving merged cells in editable source', () => {
     const editor = editorFor('<table><tr><th colspan="2">LEFT</th><th>RIGHT</th></tr><tr><td colspan="2">BODY</td><td>TAIL</td></tr></table>');
     try {
       const markdown = serializeMarkdown(editor);
-      expect(markdown).toContain('| --- | --- | --- |');
+      expect(portableMarkdown(editor.getJSON())).toContain('| --- | --- | --- |');
       expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.state.doc.toJSON());
     } finally { editor.destroy(); }
   });
   it('keeps source text entered into an old merged placeholder by discarding stale spans', () => {
+    // A legacy fixture exercises the reader even though new authoring output
+    // no longer creates invisible cells plus positional metadata.
     const editor = editorFor('<table><tr><th colspan="2">LEFT</th><th>RIGHT</th></tr><tr><td colspan="2">BODY</td><td>TAIL</td></tr></table>');
+    const legacy = new MarkdownManager({ extensions: buildDocumentExtensions(), marked: createMarkdownLexer() });
+    const markdown = legacy.serialize(editor.getJSON()).replace('| LEFT |  | RIGHT |', '| LEFT | NEW | RIGHT |');
     try {
-      const markdown = serializeMarkdown(editor).replace('| LEFT |  | RIGHT |', '| LEFT | NEW | RIGHT |');
       const reparsed = parseMarkdownDocument(markdown);
       expect(reparsed.textContent).toContain('LEFTNEWRIGHT');
       expect(reparsed.firstChild?.firstChild?.childCount).toBe(3);

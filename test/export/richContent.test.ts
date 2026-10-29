@@ -138,7 +138,7 @@ describe('rich document export conservation', () => {
     expect(projection.content![1].content![0].content!.filter(node => node.type === 'paragraph')).toHaveLength(1);
   });
 
-  it('keeps shared annotation IDs and orphan bodies while adding read-only code controls only to HTML', async () => {
+  it('keeps shared annotation IDs and leaves unused definitions out of rendered exports without deleting source bodies', async () => {
     const source: JSONContent = { type: 'doc', content: [
       { ...paragraph('一处锚点'), attrs: { annotationId: 'shared' } },
       { type: 'codeBlock', attrs: { language: 'py', annotationId: 'shared' }, content: [{ type: 'text', text: 'print("<tag>")\n  # keep spaces' }] },
@@ -152,7 +152,8 @@ describe('rich document export conservation', () => {
     const root = document.createElement('div'); root.innerHTML = html.html;
     expect(root.querySelectorAll('[data-export-annotation="shared"]')).toHaveLength(2);
     expect(root.querySelectorAll('[data-annotation-body="shared"]')).toHaveLength(1);
-    expect(root.querySelector('.export-annotations [data-annotation-body="orphan"]')?.textContent).toContain('没有锚点但必须可读');
+    expect(root.querySelector('[data-annotation-body="orphan"]')).toBeNull();
+    expect(html.html).not.toContain('没有锚点但必须可读');
     expect(root.querySelector('.export-code-language')?.textContent).toBe('Python');
     expect(root.querySelector('.export-code-block pre code')?.textContent).toBe('print("<tag>")\n  # keep spaces');
     expect(root.querySelector('[data-code-copy]')).not.toBeNull();

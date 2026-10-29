@@ -52,6 +52,8 @@ import { useWindowStore } from '../../stores/windowStore';
 import { emit } from '../../core/emitter';
 import { INFOGRAPHIC_TEMPLATES } from '../infographic/infographicTemplates';
 import { IMAGE_TEMPLATES, insertDisclosure, insertImageCollection } from './rich-content/commands';
+import { commandSpec } from '../declarative/registry';
+import { authoringBlockTemplate } from './authoringInput';
 
 /** 叶子具体执行命令项 */
 export interface LeafCommandItem {
@@ -280,7 +282,7 @@ const TABLE_LEAFS: LeafCommandItem[] = [
     groupLabel: '表格',
     shortcutHint: '/table',
     icon: <TableIcon size={17} />,
-    aliases: ['biaoge', 'bg', 'table', 'grid', '3x3'],
+    aliases: ['biaoge', 'bg', 'table', 'tbl', '3x3'],
     keywords: '表格 table grid biaoge bg',
     action: (editor, range) => { insertDocumentTable(editor, 3, 3, range); },
   },
@@ -503,7 +505,7 @@ const IMAGE_COLLECTION_LEAFS: LeafCommandItem[] = IMAGE_TEMPLATES.map(({ templat
   groupLabel: '图片',
   shortcutHint: template === 'carousel' ? '/carousel' : `/grid${template}`,
   icon: <ImageTemplateIcon template={template} size={17}/>,
-  aliases: template === 'carousel' ? ['carousel', 'lunbo', 'lb'] : [`grid${template}`, `gongge${template}`, 'grid'],
+  aliases: template === 'carousel' ? ['slide', 'carousel', 'lunbo', 'lb'] : [`grid${template}`, `gongge${template}`, 'pic', 'grid'],
   keywords: `图片 相册 拼图 宫格 轮播 gallery image ${label}`,
   action: (editor, range) => {
     editor.chain().focus().deleteRange(range).run();
@@ -513,7 +515,7 @@ const IMAGE_COLLECTION_LEAFS: LeafCommandItem[] = IMAGE_TEMPLATES.map(({ templat
 
 const DISCLOSURE_LEAF: LeafCommandItem = {
   id: 'disclosure', label: '折叠块', description: '可展开的内容区域', shortcutHint: '/fold',
-  icon: <PanelTopClose size={17} />, aliases: ['fold', 'collapse', 'disclosure', 'zhedie'],
+  icon: <PanelTopClose size={17} />, aliases: ['fold', 'details', 'collapse', 'disclosure', 'zhedie'],
   keywords: '折叠 展开 内容 disclosure fold',
   action: (editor, range) => {
     editor.chain().focus().deleteRange(range).run();
@@ -691,9 +693,12 @@ const ROOT_MENU_ENTRIES: MenuEntry[] = [
 ];
 
 /** 全局打平搜索逻辑 */
-function searchLeafCommands(query: string): LeafCommandItem[] {
+export function searchLeafCommands(query: string): LeafCommandItem[] {
   const q = query.toLowerCase().trim();
   if (!q) return ALL_LEAFS;
+
+  const parameterized = parameterizedSlashCommand(query);
+  if (/\s/.test(q)) return parameterized ? [parameterized] : [];
 
   const scored: { item: LeafCommandItem; score: number }[] = [];
 
@@ -721,6 +726,27 @@ function searchLeafCommands(query: string): LeafCommandItem[] {
 
   scored.sort((a, b) => b.score - a.score);
   return scored.map((s) => s.item);
+}
+
+/** Parameterized menu entries use exactly the declaration parser used by typing
+ * and paste. In particular `/img 1*2` creates slots and never opens a file dialog. */
+export function parameterizedSlashCommand(query: string): LeafCommandItem | null {
+  const match = /^([a-z]+)\s+(.+)$/i.exec(query.trim());
+  const name = match && slashDeclarationName(match[1]);
+  const spec = name && commandSpec(name, true);
+  if (!spec || ['annotation', 'explain', 'native'].includes(spec.name)) return null;
+  const document = authoringBlockTemplate(`::: ${spec.name} ${match![2]}`);
+  if (!document) return null;
+  return {
+    id: `authoring-${spec.name}`, label: `${spec.description} · ${match![2]}`,
+    description: `插入${spec.description}`, icon: spec.name === 'table' ? <TableIcon size={17} /> : <Boxes size={17} />,
+    shortcutHint: `/${query.trim()}`,
+    action: (editor, range) => { editor.chain().focus().insertContentAt(range, document.content!).run(); },
+  };
+}
+
+function slashDeclarationName(name: string): string {
+  return ({ img: 'pic', grid: 'pic', carousel: 'slide', details: 'fold', tbl: 'table' } as Record<string, string>)[name.toLowerCase()] ?? name.toLowerCase();
 }
 
 /** 斜杠命令菜单组件（支持右键风格的悬展式二级菜单） */
@@ -821,6 +847,7 @@ function SlashMenu({
   // 键盘导航
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
       if (displayedEntries.length === 0) return;
 
       if (isFocusInSubmenu && activeGroup) {
@@ -1305,6 +1332,12 @@ function SlashMenu({
 /** 斜杠命令 suggestion 配置 */
 export const slashSuggestion = {
   char: '/',
+  allowSpaces: true,
+  allow: ({ state, range }: { state: import('@tiptap/pm/state').EditorState; range: Range }) => {
+    const query = state.doc.textBetween(range.from + 1, range.to);
+    if (!/\s/.test(query)) return true;
+    return !!commandSpec(slashDeclarationName(query.split(/\s/, 1)[0]), true);
+  },
   // History restoration can legitimately put /query back into the document.
   // That text is a snapshot, not a fresh invitation to reopen the menu.
   shouldShow: (() => {

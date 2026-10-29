@@ -8,6 +8,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { sourceBookmarkSnapshot } from './sourcePersistence';
 import { createBookmarkPresentation } from './presentation';
+import { readSourceDocument } from '../editor-md/sourceDocumentAdapter';
 
 export const bookmarkKey = new PluginKey<readonly DocumentBookmark[]>('noteboard-document-bookmarks');
 export const DocumentBookmarks = Extension.create<{ docKey: string }>({
@@ -37,7 +38,7 @@ export const DocumentBookmarks = Extension.create<{ docKey: string }>({
           const records = bookmarkKey.getState(view.state) ?? [];
           const tab = useWindowStore.getState().tabs.find(tab => tab.key === docKey);
           if (tab?.viewMode === 'source') {
-            const editor = getMdTipTapEditor(docKey), source = getMdSourceView(docKey)?.state.doc.toString() ?? useDocumentStore.getState().getDocument(docKey)?.content;
+            const editor = getMdTipTapEditor(docKey), sourceView = getMdSourceView(docKey), source = sourceView ? readSourceDocument(sourceView) : useDocumentStore.getState().getDocument(docKey)?.content;
             if (editor && source !== undefined && source !== null) {
               try {
                 const snapshot = sourceBookmarkSnapshot(editor, source, records);

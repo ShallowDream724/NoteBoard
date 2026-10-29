@@ -7,8 +7,8 @@ export interface RichExportSummary { grids: number; carousels: number; disclosur
 const knownNodes = new Set(['doc', 'text', 'paragraph', 'heading', 'hardBreak', 'codeBlock', 'blockquote', 'horizontalRule',
   'bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem', 'table', 'tableRow', 'tableCell', 'tableHeader',
   'image', 'mathInline', 'mathBlock', 'mermaidBlock', 'plantumlBlock', 'infographicBlock', 'githubAlert', 'documentPresentation',
-  'imageCollection', 'imageSlot', 'disclosure', 'annotationStore', 'annotationBody', 'nativeError']);
-const knownMarks = new Set(['bold', 'italic', 'strike', 'underline', 'code', 'link', 'highlight', 'textColor', 'conceal', 'annotationReference']);
+  'imageCollection', 'imageSlot', 'disclosure', 'annotationStore', 'annotationBody', 'nativeError', 'authoringRaw']);
+const knownMarks = new Set(['bold', 'italic', 'strike', 'underline', 'code', 'link', 'highlight', 'textColor', 'conceal', 'annotationReference', 'authoringLiteral']);
 const paragraph = (content: JSONContent[] = []): JSONContent => ({ type: 'paragraph', content });
 const text = (value: string, bold = false): JSONContent => ({ type: 'text', text: value, ...(bold ? { marks: [{ type: 'bold' }] } : {}) });
 const referenceId = (value: JSONContent) => value.marks?.find(mark => mark.type === 'annotationReference')?.attrs?.id as string | undefined;
@@ -40,12 +40,13 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
   };
   index(source, '正文');
   for (const id of references) if (!bodies.has(id)) throw new Error(`补充说明 ${id} 缺少正文，无法完整导出。`);
-  const ids = [...references, ...[...bodies.keys()].filter(id => !references.has(id))];
+  const ids = [...references];
   const numbers = new Map(ids.map((id, index) => [id, index + 1]));
   summary.annotations = ids.length;
   const reference = (id: string): JSONContent => ({ type: 'text', text: `[${numbers.get(id)}]`,
     ...(mode !== 'portable' ? { marks: [{ type: 'link', attrs: { href: `#export-note-${numbers.get(id)}` } }] } : {}) });
   const project = (value: JSONContent): JSONContent[] => {
+    if (value.type === 'authoringRaw') return [{ type: 'codeBlock', content: value.content }];
     if (!knownNodes.has(value.type ?? '') || value.type === 'nativeError') {
       const raw = typeof value.attrs?.raw === 'string' ? value.attrs.raw : JSON.stringify(value);
       return [{ type: 'codeBlock', content: raw ? [text(raw)] : [] }];
@@ -67,7 +68,7 @@ export function projectRichContent(source: JSONContent, mode: ExportProjection) 
     const attrs = { ...value.attrs };
     if (mode !== 'html') delete attrs.annotationId;
     if (mode !== 'html') delete attrs.concealed;
-    const marks = value.marks?.filter(mark => mode === 'html' || (mark.type !== 'annotationReference' && mark.type !== 'conceal'));
+    const marks = value.marks?.filter(mark => mark.type !== 'authoringLiteral' && (mode === 'html' || (mark.type !== 'annotationReference' && mark.type !== 'conceal')));
     const clean: JSONContent = { ...value, attrs, ...(marks ? { marks } : {}), ...(value.content ? { content } : {}) };
     const caption = ['table', 'image'].includes(value.type ?? '') ? normalizeFigureCaption(attrs.caption) : null;
     if (mode === 'portable') { delete attrs.caption; delete attrs.captionContent; }

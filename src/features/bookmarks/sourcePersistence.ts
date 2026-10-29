@@ -8,6 +8,10 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { getMdSourceView, getMdTipTapEditor } from '../editor-md/editorInstances';
 import { getDocumentRevision } from '../../core/editor/editorRegistry';
 import { getSessionGeneration } from '../session/documentSession';
+import { readSourceDocument } from '../editor-md/sourceDocumentAdapter';
+import { editorDocumentFormat, parseNativeNode } from '../editor-md/editorDocumentCodec';
+
+const currentSourceDocument = (key: string) => { const view = getMdSourceView(key); return view ? readSourceDocument(view) : useDocumentStore.getState().getDocument(key)?.content; };
 
 // A failed save or transfer can repeat its barrier before the disk baseline
 // advances. Retain only the small baseline anchor seed, never source text/docs.
@@ -30,7 +34,7 @@ useWindowStore.subscribe((state, previous) => {
  * be serialized as source authority, nor parsed on each CodeMirror keystroke. */
 export function sourceBookmarkSnapshot(editor: Editor, source: string, records: readonly DocumentBookmark[]): readonly DocumentBookmark[] {
   if (!records.length) return records;
-  const parsed = getMarkdownManager(editor)?.parse?.(source);
+  const parsed = editorDocumentFormat(editor) === 'noteboard' ? parseNativeNode(source, editor.schema).toJSON() : getMarkdownManager(editor)?.parse?.(source);
   if (!parsed) throw new Error('无法解析最新源码中的书签位置');
   const doc = withEditableTail(editor, editor.schema.nodeFromJSON(parsed));
   const tr = editor.state.tr.replaceWith(0, editor.state.doc.content.size, doc.content).setMeta('noteboard-document-replacement', 'sync');
@@ -44,7 +48,7 @@ export async function captureSourceBookmarks(docKey: string, currentSource?: str
   const records = loadBookmarks(docKey);
   if (!records.length) { sourceSeeds.delete(docKey); return true; }
   const document = useDocumentStore.getState().getDocument(docKey);
-  const source = currentSource ?? getMdSourceView(docKey)?.state.doc.toString() ?? document?.content;
+  const source = currentSource ?? currentSourceDocument(docKey);
   const baseline = document?.baselineContent ?? document?.persistedContent;
   if (source == null || baseline == null) return true;
   const generation = getSessionGeneration(docKey), revision = getDocumentRevision(docKey);
@@ -57,14 +61,20 @@ export async function captureSourceBookmarks(docKey: string, currentSource?: str
   }
   const isCurrent = () => getSessionGeneration(docKey) === generation && getDocumentRevision(docKey) === revision &&
     !hasBookmarkPersistence(docKey) && useWindowStore.getState().getTab(docKey)?.viewMode === 'source' &&
-    (getMdSourceView(docKey)?.state.doc.toString() ?? useDocumentStore.getState().getDocument(docKey)?.content) === source &&
+    currentSourceDocument(docKey) === source &&
     useDocumentStore.getState().getDocument(docKey)?.baselineContent === document?.baselineContent;
   try {
     const [{ parseMarkdownDocument }, { EditorState }] = await Promise.all([
       import('../editor-md/documentExtensions'), import('@tiptap/pm/state'),
     ]);
     if (!isCurrent()) return false;
-    const before = parseMarkdownDocument(baseline), after = parseMarkdownDocument(source);
+    let parse = parseMarkdownDocument;
+    if (document?.kind === 'noteboard') {
+      const { documentParser } = await import('../editor-md/documentExtensions');
+      const schema = documentParser().schema;
+      parse = source => parseNativeNode(source, schema);
+    }
+    const before = parse(baseline), after = parse(source);
     const restored = recoverBookmarks(before, input);
     const transaction = EditorState.create({ doc: before }).tr.replaceWith(0, before.content.size, after.content)
       .setMeta('noteboard-document-replacement', 'sync');
@@ -120,7 +130,7 @@ export async function discardDocumentBookmarks(docKey: string): Promise<boolean>
       if (seed?.generation === generation && seed.baseline === fingerprint(baseline)) {
         snapshot = captureBookmarkContexts(target, recoverBookmarks(target, seed.records));
       } else {
-        const source = getMdSourceView(docKey)?.state.doc.toString() ?? document?.content ?? baseline;
+        const source = currentSourceDocument(docKey) ?? baseline;
         const before = parse(source), restored = recoverBookmarks(before, records);
         const tr = EditorState.create({ doc: before }).tr.replaceWith(0, before.content.size, target.content).setMeta('noteboard-document-replacement', 'sync');
         const mapped = mapBookmarks(tr, restored), disk = recoverBookmarks(target, records);

@@ -34,7 +34,7 @@ export const InlineFormattingInput = Extension.create<{ canApply: (editor: Edito
     const editor = this.editor;
     return [new InputRule({
       find: text => {
-        if (!/[*_~+=]$/.test(text)) return null;
+        if (!/[*_~=]$/.test(text)) return null;
         const instance = grammar(editor); if (!instance) return null;
         const previous = getTextContentFromNodes(editor.state.selection.$from);
         if (!text.startsWith(previous)) return null;
@@ -44,7 +44,7 @@ export const InlineFormattingInput = Extension.create<{ canApply: (editor: Edito
         // text node. Bound our lexer explicitly, including that case.
         const cut = Math.max(0, text.length - 4096);
         const match = formattingMatches(instance, text.slice(cut) + after).find(item => item.to === text.length - cut);
-        if (!match || cut > 0 && match.from === 0) return null;
+        if (!match || match.spans.some(span => span.mark === 'underline') || cut > 0 && match.from === 0) return null;
         if (!this.options.canApply(editor, match.spans.map(span => span.mark))) return null;
         // While __ / *** is still being closed, do not turn its first closer
         // into italic and consume an opener intended for the longer run.
@@ -66,8 +66,8 @@ export const InlineFormattingInput = Extension.create<{ canApply: (editor: Edito
     const editor = this.editor;
     return [new PasteRule({
       find: text => {
-        const instance = grammar(editor); if (!instance || !/[*_~+=]/.test(text)) return [];
-        return formattingMatches(instance, text).filter(match => this.options.canApply(editor, match.spans.map(span => span.mark)))
+        const instance = grammar(editor); if (!instance || !/[*_~=]/.test(text)) return [];
+        return formattingMatches(instance, text).filter(match => !match.spans.some(span => span.mark === 'underline') && this.options.canApply(editor, match.spans.map(span => span.mark)))
           .map(match => ({ index: match.from, text: match.raw, data: match }));
       },
       handler: ({ state, range, match }) => {

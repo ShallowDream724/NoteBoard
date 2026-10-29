@@ -7,6 +7,16 @@ import { applyTextStyle, setParagraphPresentation } from '../../src/features/doc
 import { sourceStylesField, readStyledSource, resetSourceStyles } from '../../src/features/document-style/sourceStyleTracking';
 import { buildStyleSpans, replaceStyleSpans, spanValueAt, styleSpans, type SpanTree } from '../../src/features/document-style/styleSpanTree';
 import { nativeTestEditor } from './nativeTestEditor';
+import { MarkdownManager } from '@tiptap/markdown';
+import { installPresentationCodec } from '../../src/features/document-style/presentationMetadata';
+
+// This suite exercises the compatibility tracker for existing private footers.
+// New authoring serialization intentionally emits the readable declarative DSL.
+function legacySource(editor: Editor) {
+  const manager = new MarkdownManager({ extensions: buildDocumentExtensions() });
+  installPresentationCodec(manager, editor.schema);
+  return manager.serialize(editor.getJSON());
+}
 
 function seed() {
   const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>before</p><p>red words</p><p>after</p>' });
@@ -14,7 +24,7 @@ function seed() {
   editor.commands.setTextSelection({ from: 9, to: 18 });
   applyTextStyle(editor, { color: '#dc2626', background: '#fef08a' });
   setParagraphPresentation(editor, { textAlign: 'center' });
-  const content = serializeMarkdown(editor); editor.destroy(); return content;
+  const content = legacySource(editor); editor.destroy(); return content;
 }
 it('tracks source insert/delete and block splits while retaining paired styles and body spelling', () => {
   const initial = seed(); let state = EditorState.create({ doc: initial, extensions: [sourceStylesField] });

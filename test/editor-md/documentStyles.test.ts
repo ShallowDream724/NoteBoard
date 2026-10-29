@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import MarkdownIt from 'markdown-it';
 import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
-import { serializeMarkdown } from '../../src/features/editor-md/serialize';
+import { parseMarkdown, serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { setParagraphPresentation, setTextColor } from '../../src/features/document-style/documentStyles';
 import { nativeTestEditor } from './nativeTestEditor';
 import { renderDocument } from '../../src/features/export/renderDocument';
+import { portableMarkdown } from '../../src/features/export/portableMarkdown';
 
 describe('body-first document styles', () => {
   it('centers display math by default and preserves left/right alignment in native, Markdown metadata, and HTML export', async () => {
@@ -37,15 +38,18 @@ describe('body-first document styles', () => {
       editor.commands.setTextSelection({ from: 5, to: 13 }); editor.commands.setHighlight({ color: '#fef08a' });
       setParagraphPresentation(editor, { textAlign: 'center', indentBy: 1 });
       const markdown = serializeMarkdown(editor);
-      expect(markdown).toContain('one **two** three'); expect(markdown).toContain('<!-- noteboard-styles ');
+      // Indent has no concise authoring command yet; the explicit native block
+      // preserves it without a positional metadata footer.
+      expect(markdown).toContain('::: native version=1');
       expect(markdown).not.toContain('<mark'); expect(markdown).not.toContain('<span');
       expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.getJSON());
-      const preview = new MarkdownIt({ html: true }).render(markdown);
+      const portable = portableMarkdown(editor.getJSON());
+      const preview = new MarkdownIt({ html: true }).render(portable);
       expect(preview.replace(/<!--[\s\S]*?-->/g, '').trim()).toBe('<p>one <strong>two</strong> three</p>');
-      expect(new MarkdownIt({ html: false }).render(markdown)).toContain('&lt;!-- noteboard-styles');
+      expect(portable).not.toContain('::: native');
     } finally { editor.destroy(); }
   });
-  it('keeps duplicate paragraphs distinct on roundtrip, but rejects changed/ambiguous anchors', () => {
+  it('keeps duplicate paragraph styles attached to their explicit content after inserting or editing text', () => {
     const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p>same</p><p>same</p><p>unique</p>' });
     try {
       nativeTestEditor(editor);
@@ -55,20 +59,22 @@ describe('body-first document styles', () => {
       const markdown = serializeMarkdown(editor);
       expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.getJSON());
       const changed = parseMarkdownDocument('inserted\n\n' + markdown);
-      expect(changed.child(1).firstChild?.marks).toHaveLength(0);
-      expect(changed.child(2).firstChild?.marks).toHaveLength(0);
+      expect(changed.child(1).firstChild?.marks.find(mark => mark.type.name === 'textColor')?.attrs.color).toBe('#dc2626');
+      expect(changed.child(2).firstChild?.marks.find(mark => mark.type.name === 'textColor')?.attrs.color).toBe('#2563eb');
       expect(changed.child(3).firstChild?.marks[0]?.type.name).toBe('highlight');
-      expect(parseMarkdownDocument(markdown.replace('unique', 'edited')).child(2).firstChild?.marks).toHaveLength(0);
+      expect(parseMarkdownDocument(markdown.replace('unique', 'edited')).child(2).firstChild?.marks[0]?.type.name).toBe('highlight');
     } finally { editor.destroy(); }
   });
-  it('reads legacy highlight markup and writes safe standalone annotations on the next save', () => {
-    const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<mark data-color="#fef08a">old **bold**</mark>', contentType: 'markdown' });
+  it('preserves untouched legacy markup and keeps examples literal in code fences', () => {
+    const source = '<mark data-color="#fef08a">old **bold**</mark>';
+    const editor = new Editor({ extensions: buildDocumentExtensions(), content: source, contentType: 'markdown' });
     try {
+      parseMarkdown(editor, source);
       const markdown = serializeMarkdown(editor);
-      expect(markdown).not.toContain('<mark'); expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.getJSON());
+      expect(markdown).toBe(source); expect(parseMarkdownDocument(markdown).toJSON()).toEqual(editor.getJSON());
       const escapedExample = parseMarkdownDocument('```text\n' + markdown + '\n```');
       expect(escapedExample.firstChild?.type.name).toBe('codeBlock');
-      expect(escapedExample.firstChild?.textContent).toContain('noteboard-styles');
+      expect(escapedExample.firstChild?.textContent).toBe(source);
     } finally { editor.destroy(); }
   });
   it('retains nested table/list text ranges and cell alignment through the shared worker grammar', () => {

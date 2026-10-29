@@ -7,6 +7,7 @@ import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 import { ALERT_META, matchAlertChoices } from './alertPresentation';
 import { normalizeAlertInput } from './calloutPresentation';
 import { clearSourceTextFormatting, formatSourceMark, setSourceHeading, runSourceFormatCommand } from './sourceFormatting';
+import { authoringCompletionSource } from './authoringSourceAssist';
 
 function insideCode(state: EditorState, position: number) {
   for (let node = syntaxTree(state).resolveInner(position, -1); node; node = node.parent!) {
@@ -33,7 +34,7 @@ export const sourceTypingAssist = [
       return true;
     } },
   ])),
-  autocompletion({ activateOnTypingDelay: 0, interactionDelay: 0, override: [context => {
+  autocompletion({ activateOnTypingDelay: 0, interactionDelay: 0, override: [authoringCompletionSource, context => {
     const line = context.state.doc.lineAt(context.pos);
     if (line.length > 20 || insideCode(context.state, context.pos)) return null;
     const match = /^(>\s*)?\[!([a-z]*)\]?$/i.exec(normalizeAlertInput(line.text.slice(0, context.pos - line.from)));

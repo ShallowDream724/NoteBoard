@@ -27,7 +27,8 @@ export function normalizeNativeStructure(doc: JSONContent): JSONContent {
     for (const child of node.content ?? []) stack.push({ node: child, parent: node.type ?? '', inAnnotation: inAnnotation || node.type === 'annotationBody' });
   }
   for (const id of referenced) if (!ids.has(id)) throw new Error(`找不到补充说明正文：${id}`);
-  for (const id of ids) if (!referenced.has(id)) throw new Error(`补充说明没有对应的正文锚点：${id}`);
+  // Authoring source may define a note before adding its first anchor. Keep the
+  // definition for later editing; only dangling references are invalid.
   const presentation = doc.content?.filter(node => node.type === 'documentPresentation') ?? [];
   if (presentation.length > 1) throw new Error('文档只能有一个全局排版设置。');
   if (store || presentation.length) doc.content = [...presentation, ...(store ? [store] : []), ...(doc.content ?? []).filter(node => node !== store && node.type !== 'documentPresentation')];

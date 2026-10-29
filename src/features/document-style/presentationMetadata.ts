@@ -86,6 +86,27 @@ function guard(node: JSONContent) {
   return `${signature.length.toString(36)}:${(a >>> 0).toString(16)}:${(b >>> 0).toString(16)}`;
 }
 function canonical(schema: Schema, json: JSONContent): JSONContent { return schema.nodeFromJSON(json).toJSON(); }
+function presentationParts(json: JSONContent, schema: Schema) {
+  const blocks: BlockEntry[] = [];
+  const clean = { ...json, content: (json.content ?? []).map((block, index) => {
+    const records: RecordEntry[] = [], stripped = extract(block, [], records);
+    if (records.length) blocks.push({ index, guard: '', records });
+    return stripped;
+  }) };
+  if (!blocks.length) return null;
+  if (blocks.length > MAX_RECORDS || blocks.reduce((sum, block) => sum + block.records.length, 0) > MAX_RECORDS
+    || blocks.some(block => block.records.some(record => (record.ranges?.length ?? 0) > MAX_RECORDS))) throw new Error('独立样式范围过多，请简化样式后保存');
+  const normalized = canonical(schema, clean);
+  for (const block of blocks) block.guard = guard(normalized.content![block.index]);
+  const metadata = JSON.stringify({ version: 1, guard: guard(normalized), blocks }).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('--', '\\u002d\\u002d');
+  if (metadata.length > MAX_BYTES) throw new Error('样式数据过大，请减少独立样式范围后保存');
+  return { normalized, footer: `${PREFIX}${metadata} -->` };
+}
+/** Compatibility source tracking retains an existing body verbatim and refreshes
+ * only its legacy footer, independently of the current authoring serializer. */
+export function presentationStyleFooter(json: JSONContent, schema: Schema): string | null {
+  return presentationParts(json, schema)?.footer ?? null;
+}
 function applyRanges(node: JSONContent, ranges: Range[]) {
   const groups = ['highlight', 'textColor'].map(kind => ranges.filter(range => range.kind === kind).sort((a,b) => a.from - b.from));
   for (const group of groups) for (let index = 1; index < group.length; index++) if (group[index].from < group[index-1].to) return;
@@ -155,20 +176,9 @@ export function installPresentationCodec<T extends Manager>(manager: T, schema: 
   const serialize = manager.serialize.bind(manager), parse = manager.parse.bind(manager);
   manager.serialize = json => {
     if (json.type !== 'doc') return serialize(json);
-    const blocks: BlockEntry[] = [];
-    const clean = { ...json, content: (json.content ?? []).map((block, index) => {
-      const records: RecordEntry[] = [], stripped = extract(block, [], records);
-      if (records.length) blocks.push({ index, guard: '', records });
-      return stripped;
-    }) };
-    if (!blocks.length) return serialize(json);
-    if (blocks.length > MAX_RECORDS || blocks.reduce((sum, block) => sum + block.records.length, 0) > MAX_RECORDS
-      || blocks.some(block => block.records.some(record => (record.ranges?.length ?? 0) > MAX_RECORDS))) throw new Error('独立样式范围过多，请简化样式后保存');
-    const normalized = canonical(schema, clean), raw = serialize(normalized);
-    for (const block of blocks) block.guard = guard(normalized.content![block.index]);
-    const metadata = JSON.stringify({ version: 1, guard: guard(normalized), blocks }).replaceAll('<', '\\u003c').replaceAll('>', '\\u003e').replaceAll('--', '\\u002d\\u002d');
-    if (metadata.length > MAX_BYTES) throw new Error('样式数据过大，请减少独立样式范围后保存');
-    return `${raw.trimEnd()}\n\n${PREFIX}${metadata} -->`;
+    const parts = presentationParts(json, schema);
+    if (!parts) return serialize(json);
+    return `${serialize(parts.normalized).trimEnd()}\n\n${parts.footer}`;
   };
   manager.parse = markdown => {
     // Only a standalone final HTML token may carry metadata. A code fence or a

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { StatusBar } from '../../src/components/statusbar/StatusBar';
@@ -9,6 +9,7 @@ import { useWindowStore, type Tab } from '../../src/stores/windowStore';
 import { emit } from '../../src/core/emitter';
 import { saveDocument } from '../../src/features/editor-code/orchestration/saveDocument';
 import { recordSaveError, trackDocumentSave } from '../../src/stores/saveActivityStore';
+import { countDocumentSource } from '../../src/features/document-statistics/documentSourceStatistics';
 
 vi.mock('../../src/features/editor-code/orchestration/saveDocument', () => ({ saveDocument: vi.fn() }));
 vi.mock('../../src/core/emitter', () => ({ emit: vi.fn() }));
@@ -16,6 +17,7 @@ vi.mock('../../src/core/emitter', () => ({ emit: vi.fn() }));
 let container: HTMLDivElement;
 let root: Root;
 const nativeSource = '#!noteboard 1\n@block {"type":"paragraph","content":[{"type":"text","text":"Hello"}]}';
+beforeAll(async () => { await countDocumentSource('', 'markdown'); }, 20000);
 
 function openText(kind: 'noteboard' | 'markdown' | 'code', content: string, viewMode: Tab['viewMode'] = 'visual'): void {
   const key = 'untitled:status-test';
@@ -45,34 +47,39 @@ afterEach(() => {
 });
 
 describe('document status information', () => {
-  it('offers native file metadata without a raw source switch or counting serialized frames as prose', () => {
+  it('offers native file metadata, a source switch and semantic body statistics', async () => {
     openText('noteboard', nativeSource);
     act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
     expect(container.textContent).toContain('UTF-8');
     expect(container.textContent).toContain('CRLF');
     expect(container.textContent).toContain('NoteBoard 文档');
-    expect(container.textContent).not.toContain('字');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+    expect(container.textContent).toContain('5 字符 · 1 字词');
     expect(container.textContent).not.toContain(' 行');
     const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="切换为源码模式"]');
-    expect(toggle).toBeNull();
-    expect(emit).not.toHaveBeenCalledWith('toggle-md-view-mode', expect.anything());
+    expect(toggle).not.toBeNull();
+    act(() => toggle!.click());
+    expect(emit).toHaveBeenCalledWith('toggle-md-view-mode', { key: 'untitled:status-test' });
   });
 
-  it('labels native source statistics explicitly and removes them when returning to visual mode', () => {
+  it('counts the same native body in source and visual modes without counting file records', async () => {
     openText('noteboard', nativeSource, 'source');
     act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
-    expect(container.textContent).toContain(`原始记录 ${nativeSource.length} 字符 · 2 行`);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+    expect(container.textContent).toContain('5 字符 · 1 字词');
+    expect(container.textContent).toContain('NoteBoard 文档 (源码)');
     expect(container.textContent).toContain('NoteBoard 文档');
     act(() => useWindowStore.getState().setTabViewMode('untitled:status-test', 'visual'));
-    expect(container.textContent).not.toContain('字符');
+    expect(container.textContent).toContain('5 字符 · 1 字词');
     expect(container.textContent).toContain('UTF-8');
     expect(container.textContent).toContain('CRLF');
   });
 
-  it.each(['markdown', 'code'] as const)('keeps %s text metadata and never invents a cursor position', kind => {
+  it.each(['markdown', 'code'] as const)('keeps %s text metadata and never invents a cursor position', async kind => {
     openText(kind, 'Hello\nworld', 'source');
     act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
-    expect(container.textContent).toContain('11 字 · 2 行');
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+    expect(container.textContent).toContain('10 字符 · 2 字词');
     expect(container.textContent).toContain('UTF-8');
     expect(container.textContent).toContain('CRLF');
     expect(container.textContent).not.toContain('行 1, 列 1');

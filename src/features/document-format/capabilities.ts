@@ -1,7 +1,7 @@
 export type DocumentFormat = 'markdown' | 'noteboard';
 export interface DocumentCapability {
   label: string;
-  markdown: 'native' | 'html' | 'requires-noteboard';
+  markdown: 'native' | 'html' | 'declarative' | 'requires-noteboard';
   native: string;
   transaction: 'text' | 'mark' | 'node' | 'table' | 'document';
   resources: 'none' | 'images';
@@ -12,7 +12,7 @@ export interface DocumentCapability {
 }
 const rich = (label: string, native: string, transaction: DocumentCapability['transaction'], markdownProjection: string,
   pdf: DocumentCapability['pdf'] = 'styled', resources: DocumentCapability['resources'] = 'none'): DocumentCapability => ({
-  label, markdown: 'requires-noteboard', native, transaction, resources, pdf, pandoc: 'project', markdownProjection,
+  label, markdown: 'declarative', native, transaction, resources, pdf, pandoc: 'project', markdownProjection,
   diagnostic: `${label}无法由通用 Markdown 完整表达`,
 });
 
@@ -45,5 +45,5 @@ export function formatSupportsCapability(format: DocumentFormat, capability: Doc
   return format === 'noteboard' || DOCUMENT_CAPABILITIES[capability].markdown !== 'requires-noteboard';
 }
 export function capabilityVisible(capability: DocumentCapabilityId, pureMarkdown: boolean): boolean {
-  return !pureMarkdown || formatSupportsCapability('markdown', capability);
+  return !pureMarkdown || (DOCUMENT_CAPABILITIES[capability].markdown !== 'declarative' && formatSupportsCapability('markdown', capability));
 }

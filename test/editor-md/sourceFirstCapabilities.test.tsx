@@ -2,7 +2,7 @@
 // 覆盖：source 首开（无 TipTap 实例）即注册 Markdown 能力；flush 物化 source pending；
 //       source 模式下搜索目标/代码操作能力可用（CM 视图分派）。
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
 import { Text } from '@codemirror/state';
@@ -36,7 +36,7 @@ vi.mock('@codemirror/state', async original => ({
   ...await original<typeof import('@codemirror/state')>(),
   Text: { of(parts: unknown[]) { return { toString: () => parts.join('') }; } },
   EditorState: {
-    create(config: { doc: unknown }) { return { doc: config.doc }; },
+    create(config: { doc: unknown }) { const doc = config.doc; return { doc: typeof doc === 'string' ? { toString: () => doc, length: doc.length } : doc }; },
   },
   Prec: { highest: (ext: unknown) => ext },
   Transaction: { addToHistory: { of: (v: unknown) => v } },
@@ -103,6 +103,11 @@ describe('🔴 R3-02 Markdown source 首开能力注册（宿主级）', () => {
     root = createRoot(container);
   });
 
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  });
+
   it('source 首开（无 TipTap 实例）：能力注册完成 + flush 物化 source pending', async () => {
     vi.useFakeTimers();
     await act(async () => {
@@ -143,6 +148,29 @@ describe('🔴 R3-02 Markdown source 首开能力注册（宿主级）', () => {
     expect(useDocumentStore.getState().getDocument(KEY)?.content).toBe('typed-in-source');
 
     discardPendingSourceSnapshot(KEY);
+  });
+
+  it('NB source starts as declarative text and Ctrl+/ reuses its source view without changing native storage', async () => {
+    const native = '#!noteboard 1\n@block {"type":"paragraph","content":[{"type":"text","text":"native body"}]}\n';
+    useDocumentStore.getState().upsertFromPayload({
+      key: KEY, displayName: 'source-first.nb', dirPath: 'C:\\t', kind: 'noteboard', language: 'markdown',
+      content: native, encoding: 'utf8', eol: 'lf', size: native.length, mtime: 0, readonly: false,
+    });
+    getBaseline(KEY).updateBaseline(native);
+    await act(async () => { root.render(<TipTapEditor docKey={KEY} />); });
+    expect(String(sourceViewInstances.at(-1)!.state.doc)).toBe('native body');
+    const count = sourceViewInstances.length;
+    const host = container.firstElementChild!;
+    const suspended = container.querySelector('.nb-markdown-source')!;
+    suspended.setAttribute('data-shortcuts-suspended', '');
+    await act(async () => { suspended.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true })); });
+    expect(useWindowStore.getState().getTab(KEY)?.viewMode).toBe('visual');
+    await act(async () => { host.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true })); });
+    expect(useWindowStore.getState().getTab(KEY)?.viewMode).toBe('source');
+    expect(sourceViewInstances).toHaveLength(count);
+    const captured = await getEditorCapabilities(KEY)!.flush('save');
+    expect(captured?.content).toBe(native);
+    expect(useDocumentStore.getState().getDocument(KEY)?.isDirty).toBe(false);
   });
 
   it('saveAs 直达入口也先物化 pending（Ctrl+Shift+S source 首开路径）', async () => {

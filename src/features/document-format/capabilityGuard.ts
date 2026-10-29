@@ -148,7 +148,7 @@ export const DocumentCapabilityGuard = Extension.create({
       if (!tr.docChanged && !tr.storedMarksSet || editorDocumentFormat(editor) === 'noteboard'
         || tr.getMeta('noteboard-document-replacement') || tr.getMeta('history$') || tr.getMeta(guardKey)) return true;
       const capability = transactionAddedCapability(tr, editor.state.storedMarks);
-      if (!capability) return true;
+      if (!capability || formatSupportsCapability(editorDocumentFormat(editor), capability)) return true;
       const before = tr.before, selection = tr.selection.toJSON(), steps = tr.steps.map(step => step.toJSON());
       const storedMarksSet = tr.storedMarksSet, storedMarks = tr.storedMarks?.map(mark => mark.toJSON()) ?? null;
       const directory = editorDocumentDirectory(editor);

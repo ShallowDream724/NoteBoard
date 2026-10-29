@@ -162,6 +162,7 @@ import { DocumentCapabilityGuard, supportsAutomaticMarks } from '../../document-
 import { InlineFormattingInput } from '../inlineFormattingInput';
 import { EditorDragActivity } from '../editorDragActivity';
 import { withApplicationHistory } from '../nativeHistory';
+import { AuthoringInput } from '../authoringInput';
 
 export interface BuildExtensionsOptions {
   onOpenLinkModal?: () => void;
@@ -182,7 +183,7 @@ export function buildExtensions(docKey = '', options?: BuildExtensionsOptions): 
       tableCell: EditableTableCell, tableHeader: EditableTableHeader, nativeError: NativeErrorView,
       imageCollection: withRichPresentation(InteractiveImageCollection), imageSlot: InteractiveImageSlot.configure({ docKey }), disclosure: withRichPresentation(InteractiveDisclosure),
       table: InteractiveTable.configure({ resizable: false, cellMinWidth: 40, View: EfficientTableView, HTMLAttributes: { class: 'nb-table' } }) }).map(withApplicationHistory),
-    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, BlockBoundary, MediaEditing, EditorDragActivity, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
+    UnifiedDocumentHistoryKeys.configure({ docKey }), DocumentCapabilityGuard, BlockBoundary, MediaEditing, EditorDragActivity, AuthoringInput, MarkdownTypingKeys, AlertCompletion, ContainerSelectAll,
     LinkClickHandler.configure({ onOpenLinkModal: options?.onOpenLinkModal }),
     ImageAssetLifecycle.configure({ docKey }),
     DocumentBookmarks.configure({ docKey }),

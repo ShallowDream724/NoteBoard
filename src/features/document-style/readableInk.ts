@@ -1,4 +1,4 @@
-import { contrastRatio, parseColor } from '../../core/theme/contrast';
+import { compositeColor, contrastRatio, parseColor, parseColorWithAlpha } from '../../core/theme/contrast';
 
 // The raised/code surface is the lighter of the two dark reading backgrounds;
 // a color readable here also clears the document's #0f172a canvas.
@@ -10,21 +10,21 @@ const hex = (channels: number[]) => `#${channels.map(value => Math.round(value).
 
 /** Rendering only. Preserve a readable authored color, otherwise make the
  * smallest sRGB mix toward dark/light that clears ordinary text contrast. */
-export function readableInk(color: string, background: string): string {
-  const key = `${color}:${background}`, found = cache.get(key);
+export function readableInk(color: string, background: string, canvas = '#ffffff'): string {
+  const key = `${color}:${background}:${canvas}`, found = cache.get(key);
   if (found) return found;
   let result = color;
   try {
-    if (contrastRatio(color, background) < 4.5) {
-      const channels = parseColor(color);
+    if (contrastRatio(color, background, canvas) < 4.5) {
+      const channels = parseColor(compositeColor(color, compositeColor(background, canvas)));
       const candidates = [0, 255].map(endpoint => {
         const target = hex([endpoint, endpoint, endpoint]);
-        if (contrastRatio(target, background) < 4.5) return { amount: Infinity, color: target };
+        if (contrastRatio(target, background, canvas) < 4.5) return { amount: Infinity, color: target };
         let low = 0, high = 1;
         for (let i = 0; i < 12; i++) {
           const amount = (low + high) / 2;
           const mixed = hex(channels.map(value => value + (endpoint - value) * amount));
-          if (contrastRatio(mixed, background) >= 4.5) high = amount; else low = amount;
+          if (contrastRatio(mixed, background, canvas) >= 4.5) high = amount; else low = amount;
         }
         return { amount: high, color: hex(channels.map(value => value + (endpoint - value) * high)) };
       });
@@ -41,7 +41,7 @@ export function readableInk(color: string, background: string): string {
 export function readableInkVariables(color: string | null | undefined, background?: string | null): Record<string, string> {
   if (!color && !background) return {};
   const light = background ? readableInk(color || DEFAULT_INK, background) : color!;
-  return { '--nb-ink-light': light, '--nb-ink-dark': background ? readableInk(color || '#c6cfdd', darkBackground(background)) : readableInk(color!, DARK_SURFACE) };
+  return { '--nb-ink-light': light, '--nb-ink-dark': background ? readableInk(color || '#c6cfdd', darkBackground(background), DARK_SURFACE) : readableInk(color!, DARK_SURFACE) };
 }
 export function readableInkStyle(color: string | null | undefined, background?: string | null): string {
   return Object.entries(readableInkVariables(color, background)).map(([name, value]) => `${name}:${value}`).join(';');
@@ -60,7 +60,8 @@ export function darkBackground(color: string): string {
       const hue = !delta ? 0 : (max === r ? ((g - b) / delta + 6) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4);
       const chroma = .4 * Math.min(.52, saturation * .75), x = chroma * (1 - Math.abs(hue % 2 - 1)), m = .2 - chroma / 2;
       const channels = hue < 1 ? [chroma,x,0] : hue < 2 ? [x,chroma,0] : hue < 3 ? [0,chroma,x] : hue < 4 ? [0,x,chroma] : hue < 5 ? [x,0,chroma] : [chroma,0,x];
-      result = hex(channels.map(channel => (channel + m) * 255));
+      const alpha = parseColorWithAlpha(color)[3];
+      result = hex(channels.map(channel => (channel + m) * 255)) + (alpha < 1 ? Math.round(alpha * 255).toString(16).padStart(2, '0') : '');
     }
   } catch { /* Keep unknown legacy CSS colors unchanged. */ }
   if (backgrounds.size >= 256) backgrounds.delete(backgrounds.keys().next().value!);

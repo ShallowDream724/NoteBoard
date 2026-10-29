@@ -9,6 +9,8 @@ import type { Editor, JSONContent } from '@tiptap/core';
 import { reconcileDocumentHistory } from './documentReconciliation';
 import { markDocumentReplacement } from './documentReplacement';
 import { escapeMarkdownText } from './markdownTextEscape';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { hasAuthoringSource, rememberAuthoringSource, serializeAuthoring } from '../declarative/codec';
 
 // Unicode 标点与符号类别用于发现“可能是转义前缀”的反斜杠，不按具体字符逐项维护。
 const UNICODE_PUNCTUATION_OR_SYMBOL = /[\p{P}\p{S}]/u;
@@ -325,6 +327,14 @@ export function serializeMarkdownFromDoc(
   }
   const cached = lastSerialized.get(manager);
   if (cached?.doc === doc) return cached.markdown;
+  // Source provenance belongs to this immutable document, not to a global
+  // content fingerprint shared by other tabs with identical prose.
+  const semanticDoc = doc as ProseMirrorNode;
+  if (semanticDoc.type?.schema && hasAuthoringSource(semanticDoc)) {
+    const markdown = serializeAuthoring(semanticDoc).text;
+    lastSerialized.set(manager, { doc, markdown });
+    return markdown;
+  }
   const originalEscaper = manager.escapeMarkdownSyntax;
   if (typeof originalEscaper === 'function') {
     // TipTap 暂未开放文本转义策略配置；在同步序列化期间临时替换其内部转义器，
@@ -464,6 +474,7 @@ function deduplicateParsedMarkdownMarks(root: ParsedMarkdownNode): void {
 export function rememberMarkdownSource(editor: Editor, markdown: string): void {
   const manager = getMarkdownManager(editor);
   if (manager) lastSerialized.set(manager, { doc: editor.state.doc, markdown });
+  rememberAuthoringSource(editor.state.doc, markdown);
 }
 
 function parseMarkdownJSON(editor: Editor, markdown: string): JSONContent | null {
@@ -485,6 +496,7 @@ export function initializeMarkdownContent(editor: Editor, markdown: string): voi
   catch (error) { console.error('[NoteBoard] Markdown 解析失败，保留原文:', error); }
   doc ??= editor.schema.topNodeType.create(null, editor.schema.nodes.paragraph.create(null, markdown ? editor.schema.text(markdown) : undefined));
   doc = withEditableTail(editor, doc);
+  rememberAuthoringSource(doc, markdown);
   // Tiptap accepts a ProseMirror Node directly, despite the narrower public type.
   editor.options.content = doc as unknown as Editor['options']['content'];
   lastParsed.set(editor, { doc, markdown });
@@ -539,6 +551,7 @@ export function parseMarkdown(
         editor.chain().setContent(parsed, { contentType: 'json' }),
         origin,
       );
+      rememberAuthoringSource(editor.state.doc, markdown);
       lastParsed.set(editor, { doc: editor.state.doc, markdown });
       return;
     }

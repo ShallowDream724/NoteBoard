@@ -24,7 +24,7 @@ import {
   type EditorTarget,
 } from '../search/searchController';
 import { serializeEditorDocument } from './editorDocumentCodec';
-import { readStyledSource } from '../document-style/sourceStyleTracking';
+import { readSourceDocument } from './sourceDocumentAdapter';
 import {
   handleExpandJson,
   handleMinifyJson,
@@ -125,7 +125,7 @@ export function createMarkdownEditorCapabilities(
         }
         const view = getMdSourceView(docKey);
         if (!view) return null;
-        const content = readStyledSource(view.state);
+        const content = readSourceDocument(view);
         // 🔴 N04：提交携带会话代际（旧会话迟到 flush 丢弃）
         submitCapturedContent(docKey, { instanceId, revision: getDocumentRevision(docKey), content }, sessionGeneration);
         return { docKey, instanceId, revision: getDocumentRevision(docKey), content };
@@ -203,7 +203,7 @@ export function createMarkdownEditorCapabilities(
       if (currentMode(docKey) === 'source') {
         const view = getMdSourceView(docKey);
         if (!view) return false;
-        return readStyledSource(view.state) !== doc.content;
+        return readSourceDocument(view) !== doc.content;
       }
       const editor = getMdTipTapEditor(docKey);
       if (!editor) return false;

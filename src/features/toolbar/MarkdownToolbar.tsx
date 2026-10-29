@@ -70,6 +70,7 @@ import { TextResetControl } from './TextResetControl';
 import { setTextColor, applyTextStyle, setHighlightColor } from '../document-style/documentStyles';
 import { AlignmentMenu } from '../document-style/AlignmentMenu';
 import { applySourceTextStyle, sourceTextStyle } from '../document-style/sourceDocumentStyle';
+import { sourceDocumentAdapter } from '../editor-md/sourceDocumentAdapter';
 import { AnnotationButton, ImageInsertItems, ImageInsertMenu, RichSelectionMenu } from '../editor-md/rich-content/menus';
 import { insertDisclosure } from '../editor-md/rich-content/commands';
 import { useNativeFeatureVisibility } from '../document-format/featureGate';
@@ -413,7 +414,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
     if (scope?.kind === 'tiptap') currentEditor.view.dom.focus({ preventScroll: true });
   };
 
-  if (isSourceMode && document?.kind === 'noteboard') return null;
+  if (isSourceMode && document?.kind === 'noteboard' && (!sourceView || !sourceDocumentAdapter(sourceView))) return null;
   return (
     <ResponsiveToolbar onLayoutChange={() => {
       setHeadingDropdownOpen(false);
@@ -572,7 +573,7 @@ export function MarkdownToolbar({ docKey, editor: propEditor, viewMode }: Markdo
         onClick={() => toggleMark('code')}
       />
 
-      {nativeFeaturesVisible && canTextStyle && <HighlightControl
+      {(nativeFeaturesVisible || isSourceMode) && canTextStyle && <HighlightControl
         onApplyStyle={pair => { if (!isCurrentTarget()) return; if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, pair); }); else if (editor) applyTextStyle(editor, pair); }}
         textColor={isSourceMode ? sourceStyle?.color : editor?.getAttributes('mathBlock').textColor ?? editor?.getAttributes('textColor').color}
         onTextColor={color => { if (!isCurrentTarget()) return; if (isSourceMode) executeSourceAction(view => { applySourceTextStyle(view, { color }); }); else if (editor) setTextColor(editor, color); }}

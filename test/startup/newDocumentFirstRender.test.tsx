@@ -61,7 +61,7 @@ function seedUntitled(n: number): string {
 }
 
 describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
-  it('NB ignores restored source mode; explicit record repair preserves styles, position and undo', async () => {
+  it('NB restores declarative source lazily; explicit record repair preserves styles, position and undo', async () => {
     const key = 'untitled:native';
     useDocumentStore.getState().upsertFromPayload({
       key, displayName: '未命名.nbdoc', dirPath: '', kind: 'noteboard', language: 'plaintext',
@@ -74,11 +74,22 @@ describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
     try {
       await act(async () => { root.render(<TipTapEditor docKey={key} />); });
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
+      expect(getMdTipTapEditor(key)).toBeUndefined();
+      expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('source');
+      const retainedSource = getMdSourceView(key)!;
+      expect(retainedSource.state.doc.toString()).toBe('\\b{红色文字}');
+      expect(useDocumentStore.getState().getDocument(key)?.isDirty).toBe(false);
+      await act(async () => { emit('toggle-md-view-mode', { key, mode: 'visual' }); });
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 100)); });
       expect(getMdTipTapEditor(key)?.isEditable).toBe(true);
+      const retainedVisual = getMdTipTapEditor(key)!;
+      await act(async () => { retainedVisual.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', ctrlKey: true, bubbles: true, cancelable: true })); });
+      expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('source');
+      expect(getMdSourceView(key)).toBe(retainedSource);
+      expect(retainedSource.state.doc.toString()).toBe('\\b{红色文字}');
+      await act(async () => { retainedSource.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', ctrlKey: true, bubbles: true, cancelable: true })); });
       expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
-      expect(getMdSourceView(key)).toBeFalsy();
-      await act(async () => { emit('toggle-md-view-mode', { key, mode: 'source' }); });
-      expect(getMdSourceView(key)).toBeFalsy();
+      expect(getMdTipTapEditor(key)).toBe(retainedVisual);
       await act(async () => { emit('toggle-md-view-mode', { key, mode: 'source', reason: 'repair-native-record' }); });
       const source = getMdSourceView(key)!;
       expect(source.state.doc.toString()).toContain('#!noteboard 1');

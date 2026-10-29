@@ -61,7 +61,7 @@ it('source clearing keeps lists, links, images, math, escaped markers and fenced
   const doc = '- [**中文**](https://example.com/a_b?x=**keep**) 与 ~~字~~ ++线++ `x_y` $a_b$ ![图](a_b.png) \\*literal\\*\n\n```txt\n**keep**\n```';
   const view = source(doc, 0, doc.length);
   expect(clearSourceTextFormatting(view)).toBe(true);
-  expect(view.state.doc.toString()).toBe('- [中文](https://example.com/a_b?x=**keep**) 与 字 线 x\\_y $a_b$ ![图](a_b.png) \\*literal\\*\n\n```txt\n**keep**\n```');
+  expect(view.state.doc.toString()).toBe('- [中文](https://example.com/a_b?x=**keep**) 与 字 ++线++ x\\_y $a_b$ ![图](a_b.png) \\*literal\\*\n\n```txt\n**keep**\n```');
   expect(undo(view)).toBe(true); expect(view.state.doc.toString()).toBe(doc);
 });
 

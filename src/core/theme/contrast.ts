@@ -4,62 +4,37 @@
 
 import type { ThemeId } from '../ipc/types';
 
-/**
- * 将 #RRGGBB / #RGB 色值解析为 [r, g, b]（0-255 整数）
- * 支持 `#fff`、`#ffffff`、`rgb(1,2,3)`
- */
-export function parseColor(hex: string): [number, number, number] {
-  const trimmed = hex.trim();
-
-  // rgb()/rgba() 格式
-  if (trimmed.startsWith('rgb')) {
-    const nums = trimmed.match(/\d+/g);
-    if (nums && nums.length >= 3) {
-      return [parseInt(nums[0], 10), parseInt(nums[1], 10), parseInt(nums[2], 10)];
-    }
-  }
-
-  // 去掉 # 和可能的 alpha 后缀
-  let h = trimmed.replace(/^#/, '');
-
-  // 去掉 rgba 的 hex alpha（#RRGGBBAA → #RRGGBB）
-  if (h.length === 8) h = h.slice(0, 6);
-
-  // 展开 #RGB → #RRGGBB
-  if (h.length === 3) {
-    h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  }
-
-  if (h.length !== 6) {
-    throw new Error(`无法解析颜色值: ${hex}`);
-  }
-
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
+/** RGB channels only. Use parseColorWithAlpha/compositeColor when transparency affects the displayed result. */
+export function parseColor(color: string): [number, number, number] {
+  const [r, g, b] = parseColorWithAlpha(color);
   return [r, g, b];
 }
 
-/**
- * 将 rgba 字符串解析为 [r, g, b, a]
- * 如果传入纯 hex，alpha = 1
- */
+/** Supports RGB/RGBA functions and HEX3/HEX4/HEX6/HEX8, preserving alpha. */
 export function parseColorWithAlpha(c: string): [number, number, number, number] {
   const trimmed = c.trim();
-  if (trimmed.startsWith('rgba')) {
-    const nums = trimmed.match(/[\d.]+/g);
-    if (nums && nums.length >= 4) {
-      return [parseFloat(nums[0]), parseFloat(nums[1]), parseFloat(nums[2]), parseFloat(nums[3])];
+  const functional = /^rgba?\(\s*([^()]+)\s*\)$/i.exec(trimmed);
+  if (functional) {
+    const parts = functional[1].trim().split(/[\s,/]+/);
+    if ((parts.length === 3 || parts.length === 4) && parts.every(value => /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/.test(value))) {
+      const channel = (value: string, maximum: number) => Math.max(0, Math.min(maximum, value.endsWith('%') ? parseFloat(value) / 100 * maximum : parseFloat(value)));
+      return [channel(parts[0], 255), channel(parts[1], 255), channel(parts[2], 255), parts[3] === undefined ? 1 : channel(parts[3], 1)];
     }
   }
-  if (trimmed.startsWith('rgb')) {
-    const nums = trimmed.match(/\d+/g);
-    if (nums && nums.length >= 3) {
-      return [parseInt(nums[0], 10), parseInt(nums[1], 10), parseInt(nums[2], 10), 1];
-    }
-  }
-  const [r, g, b] = parseColor(c);
-  return [r, g, b, 1];
+  const match = /^#?([\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.exec(trimmed);
+  if (!match) throw new Error(`无法解析颜色值: ${c}`);
+  const value = match[1].length <= 4 ? [...match[1]].map(character => character + character).join('') : match[1];
+  return [parseInt(value.slice(0, 2), 16), parseInt(value.slice(2, 4), 16), parseInt(value.slice(4, 6), 16), value.length === 8 ? parseInt(value.slice(6, 8), 16) / 255 : 1];
+}
+
+const mix = (foreground: [number, number, number, number], background: readonly number[]) =>
+  foreground.slice(0, 3).map((channel, index) => Math.round(channel * foreground[3] + background[index] * (1 - foreground[3])));
+const hex = (channels: readonly number[]) => `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+
+/** Opaque screen result: source-over background; a translucent background itself is laid over white. Never persists the result. */
+export function compositeColor(color: string, background = '#ffffff'): string {
+  const surface = mix(parseColorWithAlpha(background), [255, 255, 255]);
+  return hex(mix(parseColorWithAlpha(color), surface));
 }
 
 /** sRGB 通道值 → 线性光 */
@@ -72,17 +47,11 @@ function channelToLinear(c: number): number {
  * 计算相对亮度（WCAG 2.1）
  * https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
  */
-export function relativeLuminance(color: string): number {
-  const [r, g, b, a] = parseColorWithAlpha(color);
-  // 如果有 alpha，先与白色混合（简化处理，因为实际背景可能是白）
-  // 实际使用中多数颜色是纯 hex
-  const r2 = a < 1 ? Math.round(r * a + 255 * (1 - a)) : r;
-  const g2 = a < 1 ? Math.round(g * a + 255 * (1 - a)) : g;
-  const b2 = a < 1 ? Math.round(b * a + 255 * (1 - a)) : b;
-
-  const rl = channelToLinear(r2);
-  const gl = channelToLinear(g2);
-  const bl = channelToLinear(b2);
+export function relativeLuminance(color: string, background = '#ffffff'): number {
+  const [r, g, b] = parseColor(compositeColor(color, background));
+  const rl = channelToLinear(r);
+  const gl = channelToLinear(g);
+  const bl = channelToLinear(b);
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
 
@@ -92,26 +61,10 @@ export function relativeLuminance(color: string): number {
  *
  * 如果有 alpha，先与指定背景混合（alpha 合成）
  */
-export function contrastRatio(fg: string, bg: string): number {
-  const fgAlpha = parseColorWithAlpha(fg);
-  const bgRgb = parseColorWithAlpha(bg);
-
-  // 如果 fg 有 alpha，先与 bg 合成
-  let fgR = fgAlpha[0];
-  let fgG = fgAlpha[1];
-  let fgB = fgAlpha[2];
-  const a = fgAlpha[3];
-  if (a < 1) {
-    fgR = Math.round(fgAlpha[0] * a + bgRgb[0] * (1 - a));
-    fgG = Math.round(fgAlpha[1] * a + bgRgb[1] * (1 - a));
-    fgB = Math.round(fgAlpha[2] * a + bgRgb[2] * (1 - a));
-  }
-
-  const fgHex = `#${[fgR, fgG, fgB].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-  const bgHex = `#${[bgRgb[0], bgRgb[1], bgRgb[2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
-
-  const l1 = relativeLuminance(fgHex);
-  const l2 = relativeLuminance(bgHex);
+export function contrastRatio(fg: string, bg: string, canvas = '#ffffff'): number {
+  const background = compositeColor(bg, canvas);
+  const l1 = relativeLuminance(compositeColor(fg, background));
+  const l2 = relativeLuminance(background);
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);

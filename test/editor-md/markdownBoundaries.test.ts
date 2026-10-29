@@ -7,7 +7,7 @@ import { buildDocumentExtensions, parseMarkdownDocument, materializeDocument } f
 import { sourceFormattingGrammar } from '../../src/features/editor-md/sourceFormattingGrammar';
 import { closeHistory } from '@tiptap/pm/history';
 import { InlineFormattingInput } from '../../src/features/editor-md/inlineFormattingInput';
-import { supportsAutomaticMarks, DocumentCapabilityGuard } from '../../src/features/document-format/capabilityGuard';
+import { DocumentCapabilityGuard } from '../../src/features/document-format/capabilityGuard';
 
 vi.stubGlobal('ClipboardEvent', class extends Event { clipboardData = null; });
 afterAll(() => vi.unstubAllGlobals());
@@ -15,7 +15,7 @@ afterAll(() => vi.unstubAllGlobals());
 const cases = [
   ['**', ['bold'], 'StrongEmphasis'], ['*', ['italic'], 'Emphasis'], ['***', ['bold', 'italic'], 'StrongEmphasis'],
   ['__', ['bold'], 'StrongEmphasis'], ['_', ['italic'], 'Emphasis'], ['___', ['bold', 'italic'], 'StrongEmphasis'],
-  ['~~', ['strike'], 'Strikethrough'], ['==', ['highlight'], 'NBHighlight'], ['++', ['underline'], 'NBUnderline'],
+  ['~~', ['strike'], 'Strikethrough'], ['==', ['highlight'], 'NBHighlight'],
 ] as const;
 function input(editor: Editor, text: string) {
   const { from, to } = editor.state.selection;
@@ -85,9 +85,9 @@ describe('one CJK formatting grammar', () => {
       { text: '*code*', marks: expect.arrayContaining(['bold', 'code']) },
     ]));
   });
-  it.each(['==', '++'])('protects code delimiters inside %s', delimiter => {
+  it.each(['=='])('protects code delimiters inside %s', delimiter => {
     const result = marks(`前${delimiter}甲。 \`${delimiter}\` 乙。${delimiter}后`);
-    expect(result).toContainEqual({ text: delimiter, marks: expect.arrayContaining(['code', delimiter === '==' ? 'highlight' : 'underline']) });
+    expect(result).toContainEqual({ text: delimiter, marks: expect.arrayContaining(['code', 'highlight']) });
     expect(result.at(-1)).toEqual({ text: '后', marks: [] });
   });
   it('protects formula delimiters inside emphasis', () => {
@@ -107,11 +107,26 @@ describe('one CJK formatting grammar', () => {
       editor.commands.redo(); expect(editor.state.doc.firstChild!.lastChild!.marks.map(mark => mark.type.name)).toContain('bold');
     } finally { editor.destroy(); }
   });
-  it('retains literal keystrokes when the document format cannot automatically apply a mark', () => {
-    const editor = new Editor({ extensions: [...buildDocumentExtensions({ inlineFormattingInput: InlineFormattingInput.configure({ canApply: supportsAutomaticMarks }) }), DocumentCapabilityGuard], content: '<p></p>' });
+  it('retains literal keystrokes when the editing policy declines an automatic mark', () => {
+    const editor = new Editor({ extensions: [...buildDocumentExtensions({ inlineFormattingInput: InlineFormattingInput.configure({ canApply: () => false }) }), DocumentCapabilityGuard], content: '<p></p>' });
     try {
       for (const character of '==中文。==') input(editor, character);
       expect(editor.state.doc.textContent).toBe('==中文。==');
+      expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
+    } finally { editor.destroy(); }
+  });
+  it.each(['C++ + 中文 + English', '++重要++', 'a++ + b++'])('keeps plus signs literal across parsing, typing and paste: %s', source => {
+    expect(parseMarkdownDocument(source).textContent).toBe(source);
+    expect(marks(source).flatMap(node => node.marks)).not.toContain('underline');
+    const state = EditorState.create({ doc: source, extensions: [markdown({ extensions: sourceFormattingGrammar })] });
+    expect(syntaxTree(state).toString()).not.toContain('NBUnderline');
+    const editor = new Editor({ extensions: buildDocumentExtensions(), content: '<p></p>' });
+    try {
+      for (const character of source) input(editor, character);
+      expect(editor.state.doc.textContent).toBe(source);
+      expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
+      editor.commands.clearContent(); editor.view.pasteText(source);
+      expect(editor.state.doc.textContent).toBe(source);
       expect(editor.state.doc.firstChild!.firstChild!.marks).toHaveLength(0);
     } finally { editor.destroy(); }
   });

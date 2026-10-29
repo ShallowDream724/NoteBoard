@@ -211,13 +211,13 @@ describe('serialize 真实往返集成（真实 TipTap Editor）', () => {
     editor.destroy();
   });
 
-  it('setext 标题往返（=== 下划线形式 → ATX 形式）', () => {
+  it('setext 标题未编辑时保留原始写法', () => {
     const editor = createEditor();
     const md = 'Title\n=====\n';
     parseMarkdown(editor, md);
     const out = serializeMarkdown(editor);
-    // setext 标题解析为 heading，序列化为 ATX 形式 # Title
-    expect(out).toMatch(/^#\s+Title/m);
+    expect(editor.state.doc.firstChild?.type.name).toBe('heading');
+    expect(out).toBe(md);
     editor.destroy();
   });
 

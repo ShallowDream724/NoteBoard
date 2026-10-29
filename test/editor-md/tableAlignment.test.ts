@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { MarkdownTable } from '../../src/features/editor-md/markdownTable';
 import { EfficientTableView } from '../../src/features/editor-md/tableView';
 import { setTableAlignment } from '../../src/features/editor-md/tableAlignmentCommands';
@@ -24,7 +24,7 @@ function create(native = true, source = content) {
 }
 
 describe('whole-table alignment', () => {
-  it('centers ordinary inserted MD tables without introducing a native-only attribute', () => {
+  it('centers ordinary inserted MD tables using the default position', () => {
     const editor = create(false, '<p></p>');
     try {
       expect(editor.commands.insertTable({ rows: 2, cols: 2 })).toBe(true);
@@ -49,7 +49,7 @@ describe('whole-table alignment', () => {
       editor.commands.redo(); expect(editor.state.doc.firstChild!.attrs.tableAlign).toBe('center');
     } finally { editor.destroy(); }
   });
-  it('preserves native position and column widths in HTML, while clean Markdown omits position', () => {
+  it('preserves position in native, declarative Markdown and HTML, while portable Markdown omits it', () => {
     const editor = create();
     try {
       const plain = portableMarkdown(editor.getJSON()), originalMarkdown = serializeMarkdown(editor);
@@ -58,7 +58,8 @@ describe('whole-table alignment', () => {
       expect(parsed.firstChild!.attrs.tableAlign).toBe('right');
       expect(parsed.eq(editor.state.doc)).toBe(true);
       expect(portableMarkdown(editor.getJSON())).toBe(plain);
-      expect(serializeMarkdown(editor)).toBe(originalMarkdown);
+      expect(serializeMarkdown(editor)).not.toBe(originalMarkdown);
+      expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
       expect(withoutPresentation(editor.getJSON()).content?.[0].attrs).not.toHaveProperty('tableAlign');
       const html = document.createElement('div'); html.innerHTML = editor.getHTML();
       const table = html.querySelector('table')!;
@@ -85,17 +86,19 @@ describe('whole-table alignment', () => {
       }
     } finally { editor.destroy(); }
   });
-  it('gates commands, direct attribute changes and aligned HTML insertion in Markdown', async () => {
+  it('preserves commands, direct attribute changes and aligned HTML insertion in declarative Markdown', async () => {
     const editor = create(false);
     try {
-      const before = editor.state.doc;
-      expect(setTableAlignment(editor, 0, 'center')).toBe(false);
+      expect(setTableAlignment(editor, 0, 'center')).toBe(true);
+      expect(editor.state.doc.firstChild?.attrs.tableAlign).toBe('center');
       const tr = editor.state.tr.setNodeAttribute(0, 'tableAlign', 'right');
       expect(transactionAddedCapability(tr)).toBe('tableAlignment');
-      editor.view.dispatch(tr); expect(editor.state.doc).toBe(before);
+      editor.view.dispatch(tr); expect(editor.state.doc.firstChild?.attrs.tableAlign).toBe('right');
       editor.commands.insertContentAt(0, '<table data-table-align="center"><tr><td>pasted</td></tr></table>');
-      expect(editor.state.doc).toBe(before);
-      await Promise.resolve(); expect(editor.state.doc).toBe(before);
+      expect(editor.state.doc.firstChild?.attrs.tableAlign).toBe('center');
+      expect(editor.state.doc.firstChild?.textContent).toBe('pasted');
+      await Promise.resolve();
+      expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
     } finally { editor.destroy(); }
   });
   it('updates a large table position without traversing rows or replacing column DOM', () => {

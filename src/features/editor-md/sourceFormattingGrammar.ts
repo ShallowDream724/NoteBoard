@@ -5,7 +5,7 @@ import { formattingSpan, inlineTokens, type FormattingSpan } from './inlineForma
 
 type Configuration = NonNullable<NonNullable<Parameters<typeof markdown>[0]>['extensions']>;
 const nodes = { bold: 'StrongEmphasis', italic: 'Emphasis', strike: 'NBStrikethrough', highlight: 'NBHighlight', underline: 'NBUnderline' };
-const starts = new Set([42, 95, 126, 61, 43, 36, 92]);
+const starts = new Set([42, 95, 126, 61, 36, 92]);
 
 /** The source parser keeps its incremental block/code/link machinery. Its
  * inline formatting comes from the same grammar as visual mode. One temporary

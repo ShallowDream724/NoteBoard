@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { Step } from '@tiptap/pm/transform';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
 import { parseMarkdown, serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { columnWidthsStep, resizedColumnWidth, resizedColumnPair } from '../../src/features/editor-md/tableColumnWidths';
 
@@ -40,7 +40,8 @@ describe('table column gestures', () => {
       expect(editor.state.doc.textContent).toBe(before.textContent);
       expect(editor.state.selection.toJSON()).toEqual(selection);
       paragraphs.forEach((p, i) => expect(editor.view.dom.querySelectorAll('p')[i]).toBe(p));
-      expect(serializeMarkdown(editor)).toContain('"widths":[120,240]');
+      expect(serializeMarkdown(editor)).toContain('widths=[120,240]');
+      expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
       expect(Step.fromJSON(editor.schema, tr.steps[0].toJSON()).apply(before).doc?.eq(editor.state.doc)).toBe(true);
       editor.commands.undo(); expect(editor.state.doc.eq(before)).toBe(true);
       editor.commands.redo(); expect(editor.state.doc.firstChild?.firstChild?.firstChild?.attrs.colwidth).toEqual([120]);

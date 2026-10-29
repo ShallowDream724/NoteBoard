@@ -22,7 +22,9 @@ export function useSourceFormattingUpdates(docKey: string, enabled: boolean) {
   const [, update] = useReducer(value => value + 1, 0);
   useEffect(() => {
     if (!enabled) return;
-    let frame = 0;
+    // The source view is registered by a sibling's mount effect. Refresh once
+    // after effects settle so a source-first toolbar can discover that view.
+    let frame = requestAnimationFrame(() => { frame = 0; update(); });
     const change = ({ key }: { key: string }) => {
       if (key === docKey && !frame) frame = requestAnimationFrame(() => { frame = 0; update(); });
     };

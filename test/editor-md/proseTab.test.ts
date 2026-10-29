@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { buildDocumentExtensions } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
+import { serializeMarkdown } from '../../src/features/editor-md/serialize';
 import { MarkdownTypingKeys, handleProseTab } from '../../src/features/editor-md/typingAssist';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { nativeTestEditor } from './nativeTestEditor';
@@ -54,14 +55,15 @@ describe('visual editor Tab semantics', () => {
     } finally { table.destroy(); list.destroy(); code.destroy(); }
   });
 
-  it('requires the existing alignment capability for heading Tab and divider indent', () => {
+  it('persists heading and divider indent in Markdown through its supported declarative capability', () => {
     const editor = new Editor({ extensions: [...buildDocumentExtensions(), MarkdownTypingKeys, DocumentCapabilityGuard], content: '<h2>heading</h2><hr>' });
     try {
       editor.commands.setTextSelection(3); const before = editor.state.doc;
-      expect(tab(editor).defaultPrevented).toBe(true); expect(editor.state.doc.eq(before)).toBe(true);
+      expect(tab(editor).defaultPrevented).toBe(true); expect(editor.state.doc.firstChild!.attrs.indent).toBe(1);
       const pos = before.firstChild!.nodeSize, tr = editor.state.tr.setNodeAttribute(pos, 'indent', 1);
       expect(transactionAddedCapability(tr)).toBe('alignment');
-      editor.view.dispatch(tr); expect(editor.state.doc.eq(before)).toBe(true);
+      editor.view.dispatch(tr); expect(editor.state.doc.nodeAt(pos)!.attrs.indent).toBe(1);
+      expect(parseMarkdownDocument(serializeMarkdown(editor)).toJSON()).toEqual(editor.getJSON());
     } finally { editor.destroy(); }
   });
 });

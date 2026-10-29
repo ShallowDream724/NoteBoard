@@ -1,6 +1,6 @@
 /** Geometry shared by editing, public HTML and all export projections. */
-export const IMAGE_GRID_MAX_COLUMNS = 6;
-export const IMAGE_GRID_MAX_CELLS = 96;
+export const IMAGE_GRID_MAX_COLUMNS = 32;
+export const IMAGE_GRID_MAX_CELLS = 1024;
 export const isImageGridColumns = (value: unknown): value is number =>
   Number.isInteger(value) && Number(value) >= 1 && Number(value) <= IMAGE_GRID_MAX_COLUMNS;
 export const imageGridColumns = (value: unknown): number => isImageGridColumns(value) ? value : 2;

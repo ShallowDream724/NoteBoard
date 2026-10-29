@@ -125,7 +125,7 @@ describe.each<RichDocumentFormat>(['noteboard', 'markdown'])('%s external clipbo
   it('keeps a linked scientific report with display math and tables in its original format', async () => {
     const source = '## 研究交付\n\n**已完成推导** [原文](https://example.com/paper)\n\n\\[\n\\Delta p=\\frac{p_0}{1+RG}\n\\]\n\n| 条件 | 结果 |\n|---|---|\n| A | \\(r^4\\) |\n\n结束';
     const html = '<h2>研究交付</h2><p style="background:#000;color:#fff"><strong>已完成推导</strong> <a href="https://example.com/paper" style="color:#36a4dc">原文</a></p><div class="katex-display"><span class="katex"><math><annotation encoding="application/x-tex">\\Delta p=\\frac{p_0}{1+RG}</annotation></math><span aria-hidden="true">duplicate glyphs</span></span></div><table><tr><th>条件</th><th>结果</th></tr><tr><td>A</td><td>\\(r^4\\)</td></tr></table><p>结束</p>';
-    for (const formats of [{ 'text/plain': source }, { 'text/html': html, 'text/plain': source }]) {
+    for (const formats of [{ 'text/plain': source }, { 'text/html': html, 'text/plain': source }] as Array<Record<string, string>>) {
       const editor = create(format);
       paste(editor, formats); await Promise.resolve();
       expect(conversion.confirm).not.toHaveBeenCalled();

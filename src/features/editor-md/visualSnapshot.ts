@@ -175,6 +175,7 @@ interface PendingSourceSnapshot {
   /** 🔴 R3-01：稳定组身份 */
   groupId: number;
   text: CodeMirrorText;
+  materialize?: (text: CodeMirrorText) => string;
   styles?: SourceStyles;
   revision: number;
   /** 🔴 R3-01：本组相对已提交历史是否新组（同组后续事务不覆盖） */
@@ -202,6 +203,7 @@ export function stagePendingSourceSnapshot(
   docKey: string,
   snapshot: {
     text: CodeMirrorText;
+    materialize?: (text: CodeMirrorText) => string;
     styles?: SourceStyles;
     revision: number;
     isNewGroup: boolean;
@@ -233,7 +235,7 @@ export function flushPendingSourceSnapshot(docKey: string): string | null {
   }
 
   // CM Text 为不可变结构，toString 是对捕获快照的全量读取（不依赖活视图）
-  const content = materializeSourceStyles(pending.text, pending.styles);
+  const content = pending.materialize ? pending.materialize(pending.text) : materializeSourceStyles(pending.text, pending.styles);
   pendingSourceByDoc.delete(docKey);
 
   recordDocumentChange(docKey, content, {

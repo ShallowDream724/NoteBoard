@@ -1,6 +1,6 @@
-# 编写 NoteBoard 原生文档
+# NoteBoard 原生磁盘协议
 
-`.nb` 与 `.nbdoc` 是同一种 UTF-8 文本文档。文件使用独立记录帧，每条记录的载荷是单行语义 JSON，可以手写、由脚本生成，或由 AI 根据本规范生成。无需二进制编码、DOM 路径、内部对象 ID 或像素坐标。字段顺序不重要，默认属性可以省略。
+`.nb` 与 `.nbdoc` 是同一种 UTF-8 文本文档。磁盘文件仍使用 v1 独立记录帧，每条记录的载荷是单行语义 JSON；工具可以按本文读写，不需要二进制编码、DOM 路径、内部对象 ID 或像素坐标。字段顺序不重要，默认属性可以省略。日常编写和 AI 生成使用 Markdown 加扩展的声明式正文，见 [声明式编写](declarative-authoring.md) 与内置 [AI 编写 Skill](../../skills/noteboard-authoring/SKILL.md)；应用负责把 `.nb` 的编辑源码转换为磁盘记录，不要求 AI 生成帧。
 
 ## 最小文档
 
@@ -26,7 +26,7 @@
 
 可选的 `@meta {…}` 只出现在文档头后、首个正文块前。Markdown 关联为 `{"markdown":{"path":"./note.md","baselineHash":"最后一致版本摘要","projectionVersion":1}}`。关联基准由保存服务维护，手写文档可省略。未来元数据按命名空间扩展：名字由字母开头，后续只用字母、数字、点或连字符；每个命名空间的值必须是 JSON 对象，未知命名空间完整保留。
 
-普通写作使用 NB 可视化编辑器，不提供原始记录模式切换。坏记录显示可定位的局部错误块，可通过“修复原始记录”进入恢复视图；原文保留，后面的有效 `@block` 仍可显示。未知节点、样式和属性也保留原文，修复前导出会明确降级或报错。不要把错误块当成可丢弃的内容。损坏文档头无法保证原先的结构，应用只恢复可可靠识别的边界；内部旧整篇 JSON 不作为另一种受支持格式。
+普通写作支持可视化与声明式源码双模式，用 Ctrl+/ 切换；`.md` 与 `.nb` 共用正文语法。NB 普通源码是编辑模型的投影，与磁盘记录分离，未映射的原生内容通过保留语法承载。坏记录显示可定位的局部错误块，通过“修复原始记录”进入独立的帧恢复视图；原文保留，后面的有效 `@block` 仍可显示。未知节点、样式和属性也保留原文，修复前导出会明确降级或报错。不要把错误块当成可丢弃的内容。损坏文档头无法保证原先的结构，应用只恢复可可靠识别的边界；内部旧整篇 JSON 不作为另一种受支持格式。
 
 ## 常用内容
 
@@ -49,7 +49,7 @@
 | mermaidBlock / plantumlBlock / infographicBlock | `code` 保存完整源码 |
 | horizontalRule | 分隔线，无子内容 |
 
-行内 marks：`bold`、`italic`、`underline`、`strike`、`code` 不需要属性；`link` 使用 `href`，`textColor` 与 `highlight` 使用六位十六进制 `color`。例如：
+行内 marks：`bold`、`italic`、`underline`、`strike`、`code` 不需要属性；`link` 使用 `href`，`textColor` 与 `highlight` 使用六位或八位十六进制 `color`（`#RRGGBB` / `#RRGGBBAA`，透明度在最后）。声明式输入还接受短 HEX、RGB/RGBA 与登记的色名，并归一到此语义值。例如：
 
 ```json
 {"type":"text","text":"重点","marks":[{"type":"textColor","attrs":{"color":"#dc2626"}},{"type":"highlight","attrs":{"color":"#fef08a"}}]}
@@ -65,9 +65,9 @@
 @block {"type":"githubAlert","attrs":{"kind":"tip","title":"","icon":"🌱","borderColor":"#bbf7d0","backgroundColor":"#f0fdf4"},"content":[{"type":"paragraph","content":[{"type":"text","text":"给每一个灵感留一点空间。"}]},{"type":"paragraph","content":[{"type":"text","text":"这里可以继续写第二段。"}]}]}
 ```
 
-`icon` 省略或 `null` 跟随预设 SVG，可指定五种 `kind` 值或 `success`（圆圈对勾）选择 SVG，也可写一个 emoji 字形（支持肤色、旗帜及组合 emoji，最多 32 UTF-16 单元）。`success` 只改变图标，保留原有类型、标题和配色；NB 与 HTML/PDF 保留图标，Markdown 导出沿用原有 GFM 类型。`textColor`、`borderColor`、`backgroundColor` 为可选的 `#RRGGBB`，`null` 恢复主题默认。显式背景未指定文字色时，视图按亮度自动选择文字色；这一显示计算不增加存储字段。行内 `textColor` 优先于提示块文字色。
+`icon` 省略或 `null` 跟随预设 SVG，可指定五种 `kind` 值或 `success`（圆圈对勾）选择 SVG，也可写一个 emoji 字形（支持肤色、旗帜及组合 emoji，最多 32 UTF-16 单元）。`success` 只改变图标，保留原有类型、标题和配色；NB 与 HTML/PDF 保留图标，通用 Markdown 导出沿用原有 GFM 类型。`textColor`、`borderColor`、`backgroundColor` 为可选的 `#RRGGBB` 或 `#RRGGBBAA`，`null` 恢复主题默认。显式背景未指定文字色时，视图按亮度自动选择文字色；这一显示计算不增加存储字段。行内 `textColor` 优先于提示块文字色。
 
-通用插入默认无标题、有图标。GFM 预设输入保留预设标题；空段落直接输入 `[!]`、`【！】`（括号和感叹号可中英文混用）显示补全，也可输入完整 `[!TIP]` 后回车。Markdown 导入仍使用 `> [!TIP]`。自定义标题、图标与颜色属于 NB 能力；基本五种预设可直接保存在 MD。HTML/PDF 保留外观；通用 Markdown 保留 GFM 标记、自定义标题、语义 emoji 和全部正文，降级颜色与 SVG 图标；Pandoc 保留标题、emoji 和正文。
+通用插入显示默认标题与图标，标题可以明确隐藏。GFM 预设输入保留预设标题；空段落直接输入 `[!]`、`【！】`（括号和感叹号可中英文混用）显示补全，也可输入完整 `[!TIP]` 后回车。Markdown 导入仍支持 `> [!TIP]`。自定义标题、图标与颜色可通过声明式语法保存于 MD 或 NB，不再因这些属性强制转换格式。HTML/PDF 保留外观；独立的通用 Markdown 导出保留 GFM 标记、自定义标题、语义 emoji 和全部正文，降级颜色与 SVG 图标；Pandoc 保留标题、emoji 和正文。
 
 ## 图注与表注
 
@@ -79,7 +79,7 @@
 @child {"type":"tableRow","content":[{"type":"tableHeader","content":[{"type":"paragraph","content":[{"type":"text","text":"样本"}]}]}]}
 ```
 
-图注与表注属于 NB 能力。HTML/PDF 保留行内样式与链接，Pandoc 使用 Figure/Table 的 Caption，通用 Markdown 在图或表后输出保留格式的段落。图片组合继续使用槽中的图注 paragraph。
+图注与表注可通过声明式语法保存于 MD 或 NB。HTML/PDF 保留行内样式与链接，Pandoc 使用 Figure/Table 的 Caption，通用 Markdown 在图或表后输出保留格式的段落。图片组合继续使用槽中的图注 paragraph。
 
 单图图注独立于替代文本 `alt` 和链接提示 `title`。鼠标进入图片或表格时显示下方添加入口，与宫格和轮播共用紧凑按钮及蓝色悬停、键盘焦点反馈。空注入口保留 6px 主体间距及 24px 点击区域，参与布局以避免覆盖相邻内容，不创建空段落，打印时隐藏；图、表块菜单也提供添加/编辑入口。已有图注可点击编辑，选中文字显示共用浮动文字工具栏，可修改文字颜色、高亮等行内格式。编辑即时进入文档和自动保存，Enter 换行，Escape 或移出编辑区域结束编辑，清空文字删除图注；Ctrl+Z/Y 使用正文的撤销历史。仅活动图注按需加载并挂载轻量编辑器，结束后释放，静态图注不各自持有编辑器实例。`FigureCaptionTransition` 在加载期间保留原图注或添加入口及其布局，编辑器内容就绪后才切换显示并聚焦；等待时移开焦点、点击别处、按 Escape/Tab 或离开窗口会取消请求，加载失败保留原内容并允许重试。可编辑入口在 pointerdown/mousedown 阶段保留正文选区，首次 click 直接进入图注。表注的静态入口覆盖整个 caption 行盒（含文字上方间距），不只覆盖文字 span；点击不继续冒泡到表格或正文，避免浏览器先将光标放入首格。补充说明按钮与已打开的图注编辑器保持各自的点击处理。
 
@@ -93,9 +93,9 @@
 @child {"type":"imageSlot"}
 ```
 
-`layout` 为 `grid` 或 `carousel`，`columns` 为 2 或 3；四宫格为 4 槽/2 列，六宫格为 6 槽/3 列，九宫格为 9 槽/3 列。每槽允许空白，或一张 image 后接一个可选图注 paragraph。不要用表格模拟图片模板。轮播也使用相同子结构，打印将全部图片排入网格，不需要另存打印副本。
+`layout` 为 `grid` 或 `carousel`，`columns` 为 1–32 的整数；宫格最多 1024 格，四/六/九宫格只是常用模板。几何限制由 `core/document/imageGrid.ts` 统一定义。每槽允许空白，或一张 image 后接一个可选图注 paragraph。不要用表格模拟图片模板。轮播也使用相同子结构，打印将全部图片排入网格，`columns` 对应声明式 `slide` 的 `print-cols`，不需要另存打印副本。
 
-集合可加 `width: "75%"` 与 `align: "left"`。宽度是正文区域的百分比（整数 1–100%，默认 `100%`），统一缩放整组，无需改写每个 image。宫格对齐为 `left`、`center`、`right`，默认居中；轮播始终居中。块菜单提供 100%、75%、50%、25% 与宫格对齐。NB、HTML 和 PDF 保留集合宽度；Markdown/Pandoc 的静态网格以内容保真为准，不承诺相同版面。点击宫格/轮播的图片可打开全屏查看，滚动轮播不修改文档。
+集合可加 `width: "75%"` 与 `align: "left"`。宽度按正文区域的百分比计算，默认 `100%`，统一缩放整组，无需改写每个 image。宫格与轮播对齐均为 `left`、`center`、`right`，默认居中。块菜单提供常用宽度与对齐；声明式语法支持大于 0 且不超过 100% 的显式百分比。MD 扩展源码、NB、HTML 和 PDF 保留集合布局意图；通用 Markdown/Pandoc 的静态投影以内容保真为准，不承诺相同版面。点击宫格/轮播的图片可打开全屏查看，滚动轮播不修改文档。
 
 图片保留正常相对路径或 HTTP(S) 地址。相对路径相对于文档所在目录；移动文件时需同时携带图片目录。不建议把大图的 Base64 嵌入文档：外部资源可以独立加载与回收，正文历史不必反复保存二进制数据。
 
@@ -122,7 +122,7 @@
 @block {"type":"paragraph","content":[{"type":"text","text":"观察方法","marks":[{"type":"annotationReference","attrs":{"id":"method-note"}}]}]}
 ```
 
-为整张图片、公式或其他支持的块添加说明时，在该块 `attrs` 中写 `annotationId`。ID 必须非空、不超过 128 字符，正文与引用一一可解析；多个锚点可以引用同一说明。不允许缺失正文、重复 ID 或无锚点说明。说明正文内部不再嵌套补充说明。浮窗位置、大小和固定状态无需写入文件，不影响 AI 生成的文档布局。
+为整张图片、公式或其他支持的块添加说明时，在该块 `attrs` 中写 `annotationId`。ID 必须非空、不超过 128 字符，正文与引用一一可解析；多个锚点可以引用同一说明。不允许引用缺失正文或重复 ID。尚无锚点的说明定义保留，供后续编写引用；声明式解析可报告“未引用”提示，不删除定义。说明正文内部不再嵌套补充说明。浮窗位置、大小和固定状态无需写入文件，不影响 AI 生成的文档布局。
 
 ## 生成优雅文档
 
@@ -132,4 +132,4 @@
 - 表格用真正的表头和单元格；合并应表达关系。避免用固定行高裁内容，行高本来就是最小值。
 - 可以导出干净 Markdown，但图片布局、折叠和浮窗等交互会降级；所有正文、图片及说明内容仍保留。原生文件是完整可编辑的交付物。
 
-该规范和 `examples/rich-document.nb` 是后续生成技能的依据。应用不对预发布历史文件添加迁移层；未来正式格式版本变化应单独评估。
+本文与 `examples/rich-document.nb` 说明磁盘模型；面向 AI 的正文生成约定维护在 [内置 Skill](../../skills/noteboard-authoring/SKILL.md)，入口与解析边界见 [声明式编写](declarative-authoring.md)。应用不对预发布历史文件添加迁移层；未来正式格式版本变化应单独评估。
