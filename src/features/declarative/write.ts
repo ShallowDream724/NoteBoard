@@ -7,7 +7,9 @@ import { nativeInlineEncoding, nativeJsonSpans } from './nativeJsonSpans';
 
 export interface WrittenAuthoring { text: string; spans: AuthoringSpan[] }
 const quote = (value: unknown) => JSON.stringify(String(value ?? ''));
-const escapeText = (text: string) => text.replace(/[\\`*_[\]{}<>!~|#$+=.\-:&]/g, '\\$&');
+// Escape the closing bracket to protect literal links. Escaping both brackets
+// would turn prose such as files=[a, b] into a TeX display-math delimiter pair.
+const escapeText = (text: string) => text.replace(/[\\`*_\]{}<>!~|#$+=.\-:&]/g, '\\$&');
 export function writeAuthoring(document: JSONContent, schema?: Schema): WrittenAuthoring {
   let text = ''; const spans: AuthoringSpan[] = [];
   const append = (value: string) => { text += value; };
@@ -120,6 +122,9 @@ export function writeAuthoring(document: JSONContent, schema?: Schema): WrittenA
       annotationStore: [], annotationBody: ['id'], authoringRaw: [],
     };
     if (!allowed[type] || unexpected(node, allowed[type]) || node.marks?.length) { native(node, path); return; }
+    // ATX headings end at a physical newline. Rich editing can produce a
+    // single heading containing several lines, which must remain one node.
+    if (type === 'heading' && node.content?.some(child => child.type === 'hardBreak' || /[\r\n]/.test(child.text ?? ''))) { native(node, path); return; }
     if (type === 'image' && !imageSupported(node) || type === 'table' && !captionSupported(attrs) || type === 'disclosure' && (typeof attrs.title !== 'string' || !attrs.title.trim() || /[\r\n\t]/.test(attrs.title))) { native(node, path); return; }
     if (type === 'mathBlock') { const delimiter = String(attrs.delimiter ?? '$$'), latex = String(attrs.latex ?? ''), match = readMathBlock(delimiter + '\n' + latex + '\n' + (delimiter === '\\[' ? '\\]' : delimiter)); if (!['$$', '\\['].includes(delimiter) || !match || match.latex !== latex) { native(node, path); return; } }
     if (type === 'codeBlock' && (attrs.language !== null && (typeof attrs.language !== 'string' || !/^[a-zA-Z0-9_+.-]+$/.test(attrs.language)))) { native(node, path); return; }

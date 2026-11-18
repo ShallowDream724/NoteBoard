@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { MarkdownManager } from '@tiptap/markdown';
 import type { JSONContent } from '@tiptap/core';
-import { documentParser, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
+import { buildDocumentExtensions, documentParser, materializeDocument, parseMarkdownDocument } from '../../src/features/editor-md/documentExtensions';
+import { createMarkdownLexer } from '../../src/features/editor-md/markdownLexer';
+import { installAuthoringCodec } from '../../src/features/declarative/codec';
 import { parseAuthoring } from '../../src/features/declarative/authoring';
 import { writeAuthoring } from '../../src/features/declarative/write';
 
@@ -61,6 +64,42 @@ describe('declarative serialization preservation guards', () => {
     expect(manager.serialize(align)).toContain('::: right');
     const indent = schema.nodeFromJSON({ type: 'doc', content: [{ ...paragraph(), attrs: { indent: 2 } }] }).toJSON();
     expect(manager.serialize(indent)).toContain('native');
+  });
+  it('keeps aligned GFM, Markdown emphasis and default highlights beside an authored block without source provenance', () => {
+    const plain = '| **Item** | ==Detail== |\n| :--- | ---: |\n| one-two | 1.25 |';
+    const table = parseMarkdownDocument(plain).firstChild!.toJSON();
+    const { markdown, doc } = materializeDocument({ type: 'doc', content: [
+      table, { ...paragraph('Styled'), attrs: { textAlign: 'right' } },
+    ] });
+    expect(markdown).toContain(plain);
+    expect(markdown).toContain('::: right');
+    expect(markdown).not.toMatch(/::: table|noteboard-styles|\\native/);
+    expect(parseMarkdownDocument(markdown).eq(doc)).toBe(true);
+  });
+  it('preserves list-shaped prose on the first save beside and inside enhanced Markdown blocks', () => {
+    const text = 'files=[{"path": ...}, ...]';
+    const { markdown, doc } = materializeDocument({ type: 'doc', content: [
+      paragraph(text), { ...paragraph(text), attrs: { textAlign: 'right' } },
+    ] });
+    expect(markdown).toContain(text);
+    expect(parseMarkdownDocument(markdown).eq(doc)).toBe(true);
+  });
+  it('checks a full mixed document with one parse regardless of paragraph count', () => {
+    const manager = new MarkdownManager({ extensions: buildDocumentExtensions(), marked: createMarkdownLexer() });
+    const parse = vi.spyOn(manager, 'parse'), { schema } = documentParser();
+    installAuthoringCodec(manager, schema);
+    const content = Array.from({ length: 250 }, (_, i) => paragraph('Section ' + i));
+    content.push({ ...paragraph('Styled'), attrs: { textAlign: 'right' } });
+    expect(manager.serialize(schema.nodeFromJSON({ type: 'doc', content }).toJSON())).toContain('Section 249\n\n::: right');
+    expect(parse).toHaveBeenCalledTimes(1);
+  });
+  it('keeps code payload newlines, distinct empty paragraphs and multiline heading text on first save', () => {
+    const { markdown, doc } = materializeDocument({ type: 'doc', content: [
+      { type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'First\nSecond' }] },
+      { type: 'codeBlock', attrs: { language: 'ts' }, content: [{ type: 'text', text: 'first\n\n' }] },
+      { type: 'paragraph' }, { type: 'paragraph' }, paragraph('last'),
+    ] });
+    expect(parseMarkdownDocument(markdown).eq(doc), markdown).toBe(true);
   });
   it('keeps literal text from becoming block syntax, formulas or HTML entities', () => {
     for (const value of ['# 标题', '- 列表', '1. 顺序', '::: tip', '$x$', '&amp;', '    四个空格', '甲  \n乙', '甲\n\n乙']) preserves([paragraph(value)]);

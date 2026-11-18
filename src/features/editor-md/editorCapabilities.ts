@@ -44,9 +44,10 @@ import { submitCapturedContent } from '../session/documentSession';
 import { flushPendingVisualSnapshot, flushPendingSourceSnapshot, hasPendingSnapshot } from './visualSnapshot';
 import { hasAnnotationDraft } from './annotations/panelSession';
 
-/** 读取文档当前视图模式（无 tab 信息时默认 visual） */
+/** Before the first explicit toggle, a tab follows its initial preference and
+ * has only one kernel. A source-first tab can already save and flush here. */
 function currentMode(docKey: string): 'visual' | 'source' {
-  return useWindowStore.getState().getTab(docKey)?.viewMode ?? 'visual';
+  return useWindowStore.getState().getTab(docKey)?.viewMode ?? (getMdSourceView(docKey) ? 'source' : 'visual');
 }
 
 /** 当前内核目标（CodeMirror 源码视图或 TipTap 编辑器） */

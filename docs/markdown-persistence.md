@@ -4,6 +4,29 @@
 conversion and export. UI extensions must extend these definitions instead of
 introducing a separate Markdown representation.
 
+## Editing an existing Markdown file
+
+The file text seeds the history and saved baseline. Source edits, manual saves,
+autosaves, view switches and undo/redo use that text. An inline HTML style is
+part of the body. Only a file with an existing, recognized legacy style footer
+needs the footer's position tracking.
+
+Visual edits use the parsed document's source ranges. A text edit patches the
+changed characters. Inserting or removing paragraphs splices blocks between
+unchanged siblings. The editor reparses a candidate before adopting it. When a
+change needs a new representation, ordinary Markdown blocks use Markdown syntax;
+blocks requiring NoteBoard extensions can use the authoring grammar. For example,
+adding a paragraph after a GFM table keeps its pipes and emphasis as written.
+Standalone tag-like names containing underscores are literal Markdown text, so a
+following list or code span is parsed normally. Disk encoding and line-ending
+selection still follow the file's save settings.
+
+Regression tests: `markdownSourceFidelity.test.ts` (real visual editor),
+`markdownSourceSave.test.tsx` (source editing, history and disk-write paths)
+and `markdownTagNames.test.ts` (literal tag names and HTML).
+
+## Format details
+
 - Mermaid, PlantUML (`plantuml`, `uml`, `puml`) and infographic (`infographic`,
   `info`) fences parse to their diagram nodes. Their serializers write a canonical
   language and choose a backtick fence longer than any run in the body. Diagram

@@ -76,7 +76,7 @@ describe('serialize 真实往返集成（真实 TipTap Editor）', () => {
     expect(() => parseMarkdown(editor, '')).not.toThrow();
     expect(() => parseMarkdown(editor, '   \n  ')).not.toThrow();
     const out = serializeMarkdown(editor);
-    expect(out).toBe('');
+    expect(out).toBe('   \n  ');
     editor.destroy();
   });
 
@@ -327,7 +327,7 @@ describe('serialize 真实往返集成（真实 TipTap Editor）', () => {
     expect(serialized).toContain('\\*');
     expect(serialized).toContain('\\~');
     expect(serialized).toContain('\\`');
-    expect(serialized).toContain('\\[');
+    expect(serialized).toContain('\\]');
     editor.destroy();
   });
 

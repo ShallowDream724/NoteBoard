@@ -13,10 +13,13 @@ export interface SourceStyles {
 export const resetSourceStyles = StateEffect.define<null>();
 function initialize(text: Text): SourceStyles {
   const source = text.toString();
-  if (!source.includes('<!-- noteboard-styles ') && !source.includes('<mark') && !source.includes('data-text-color')) {
+  if (!source.includes('<!-- noteboard-styles ')) {
     return { bodyEnd: text.length, trees: {}, dirty: false };
   }
   const { manager, schema } = documentParser(), body = presentationBody(source, manager.instance);
+  // Inline HTML carries its own formatting. Only an existing legacy footer
+  // needs its positional records updated when the source body changes.
+  if (body === source) return { bodyEnd: text.length, trees: {}, dirty: false };
   const doc = schema.nodeFromJSON(manager.parse(source));
   const ranges = mapStyleRanges(doc, manager, body, 'source', documentStyleRanges(doc));
   const trees: SourceStyles['trees'] = {};

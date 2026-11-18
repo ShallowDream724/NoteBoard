@@ -129,4 +129,17 @@ describe('declarative authoring language', () => {
     json.content![0].content![0].content![0].text = '修改'; const after = schema().nodeFromJSON(json); inheritAuthoringSource(before, after);
     expect(serializeAuthoring(after).text).toBe(source.replace('内容', '修改'));
   });
+
+  it('keeps list marker spelling, reference links and emphasis when inserting an item', () => {
+    const source = '+ __甲__\n+ [乙][ref]\n\n[ref]: https://example.org\n';
+    const parsed = parseAuthoring(source), original = schema().nodeFromJSON(parsed.document);
+    rememberAuthoringSource(original, parsed);
+    const list = original.firstChild!;
+    const item = schema().node('listItem', null, schema().node('paragraph', null, schema().text('丙')));
+    const edited = original.copy(original.content.replaceChild(0, list.copy(list.content.addToEnd(item))));
+    inheritAuthoringSource(original, edited);
+    const result = serializeAuthoring(edited).text;
+    expect(result).toBe(source.replace('+ [乙][ref]', '+ [乙][ref]\n+ 丙'));
+    expect(schema().nodeFromJSON(parseAuthoring(result).document).eq(edited)).toBe(true);
+  });
 });

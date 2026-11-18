@@ -1,5 +1,5 @@
 const punctuation = new Set([..."!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"]);
-const delimiters = new Set(['`', '*', '_', '[', ']', '~', '=', '$']);
+const delimiters = new Set(['`', '*', '_', ']', '~', '=', '$']);
 // Escaping a closing bracket already prevents links. Leaving opening brackets
 // and parentheses bare avoids creating our backslash-based TeX delimiters.
 const literalPunctuation = new Set([...punctuation].filter(character => !'[()'.includes(character)));

@@ -15,7 +15,17 @@ function cjkRules(rules: Rules): Rules {
   return adapted;
 }
 
-class CjkTokenizer extends Tokenizer {
+// Marked accepts underscores in HTML tag names. In Markdown such a name is
+// prose: treating its line as raw HTML also consumes adjacent lists or headings.
+const underscoredTagName = /^ {0,3}<\/?[a-z][a-z\d-]*_/i;
+
+class DocumentTokenizer extends Tokenizer {
+  override html(source: string) {
+    return underscoredTagName.test(source) ? undefined : super.html(source);
+  }
+  override tag(source: string) {
+    return underscoredTagName.test(source) ? undefined : super.tag(source);
+  }
   private boundary(masked: string, source: string, previous = '') {
     this.rules = cjkRules(this.rules);
     // Marked's previous character may be one UTF-16 code unit. The mask keeps
@@ -37,7 +47,7 @@ class CjkTokenizer extends Tokenizer {
  * Tiptap types this option as the callable default export but consumes only the
  * methods and constructors also provided by a Marked instance. */
 export function createMarkdownLexer(): typeof marked {
-  return new Marked().setOptions({ tokenizer: new CjkTokenizer() })
+  return new Marked().setOptions({ tokenizer: new DocumentTokenizer() })
     .use({ hooks: { emStrongMask: source => formattingMask(source) }, extensions: [{
       name: 'noteboardListBoundary', level: 'block', start: () => -1,
       tokenizer(source) {

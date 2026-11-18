@@ -45,3 +45,28 @@ it('keeps the original text when initial parsed JSON is invalid for the schema',
     expect(editor.state.doc.textContent).toBe(markdown);
   } finally { editor.destroy(); error.mockRestore(); }
 });
+
+it('rebinds the exact source when history keeps the same document tree', () => {
+  const editor = new Editor({ extensions: buildDocumentExtensions() });
+  try {
+    parseMarkdown(editor, '**same**\n');
+    const doc = editor.state.doc;
+    expect(serializeMarkdown(editor)).toBe('**same**\n');
+    parseMarkdown(editor, '__same__\r\n', 'history');
+    expect(editor.state.doc).toBe(doc);
+    expect(serializeMarkdown(editor)).toBe('__same__\r\n');
+  } finally { editor.destroy(); }
+});
+
+it('keeps source bytes through synchronizing a file with an unavailable parser', () => {
+  const editor = new Editor({ extensions: buildDocumentExtensions() });
+  const manager = getMarkdownManager(editor)!;
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const source = '\r\n__original__   \r\n';
+  try {
+    manager.parse = () => { throw new Error('parser unavailable'); };
+    parseMarkdown(editor, source);
+    expect(editor.state.doc.textContent).toBe(source);
+    expect(serializeMarkdown(editor)).toBe(source);
+  } finally { editor.destroy(); error.mockRestore(); }
+});

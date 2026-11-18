@@ -50,6 +50,7 @@ import { liveEditorSettings } from '../editor-code/editorSettingsBinding';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { normalizeDocumentEol } from '../../core/documentText';
 import { registerShortcut } from '../../core/shortcuts';
 import { on, off, emit, type AppEvents } from '../../core/emitter';
 import { MarkdownModeToggle } from './MarkdownModeToggle';
@@ -62,7 +63,6 @@ import {
   redoDocumentHistory,
   registerDocumentHistoryAdapter,
   registerHistoryMaterializeHook,
-  synchronizeCurrentDocumentHistoryContent,
   undoDocumentHistory,
 } from '../history/documentHistory';
 
@@ -388,7 +388,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.replace(content);
         } else if (readSourceDocument(view) !== content) authoringSessionRef.current.replace(content);
         sourceContentRef.current = null;
-      } else if (readSourceContent() !== content) {
+      } else if (readSourceContent() !== normalizeDocumentEol(content)) {
         sourceViewRef.current.dispatch({
           changes: {
             from: 0,
@@ -398,7 +398,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
           effects: resetSourceStyles.of(null),
         });
-        sourceContentRef.current = { text: sourceViewRef.current.state.doc, markdown: content.replace(/\r\n?/g, '\n') };
+        sourceContentRef.current = { text: sourceViewRef.current.state.doc, markdown: normalizeDocumentEol(content) };
       }
       registerMdSourceView(docKey, sourceViewRef.current);
       emit('md-source-selection-changed', { key: docKey });
@@ -534,7 +534,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const session = new AuthoringSourceSession(view, schema, useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '', content, serializedSource!, authoredDocument);
       authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.bind();
     }
-    sourceContentRef.current = { text: view.state.doc, markdown: displayContent.replace(/\r\n?/g, '\n') };
+    sourceContentRef.current = { text: view.state.doc, markdown: normalizeDocumentEol(displayContent) };
     registerMdSourceView(docKey, view);
     emit('md-source-selection-changed', { key: docKey });
   }, [docKey, nativeDocument, readSourceContent]);
@@ -555,24 +555,18 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
           initSourceEditor(entry.content);
           const view = sourceViewRef.current;
           if (!view) throw new Error('源码编辑器尚未就绪');
-          const content = view.state.doc.toString();
+          const length = view.state.doc.length;
           const preferredSelection = navigation.selectionMode === 'source'
             ? navigation.selection
             : undefined;
           // 可视化历史切到源码呈现时，用 Markdown 文本首差异位置作为可靠落点
           const fallbackPosition = entry.content.slice(0, navigation.changeOffset).replace(/\r\n?/g, '\n').length;
-          const anchor = Math.max(0, Math.min(preferredSelection?.anchor ?? fallbackPosition, content.length));
-          const head = Math.max(0, Math.min(preferredSelection?.head ?? anchor, content.length));
+          const anchor = Math.max(0, Math.min(preferredSelection?.anchor ?? fallbackPosition, length));
+          const head = Math.max(0, Math.min(preferredSelection?.head ?? anchor, length));
           view.dispatch({
-            changes: view.state.doc.toString() === content
-              ? undefined
-              : { from: 0, to: view.state.doc.length, insert: content },
             selection: { anchor, head },
-            annotations: [CodeMirrorTransaction.addToHistory.of(false), sourceReplacement.of(true)],
-            effects: resetSourceStyles.of(null),
             scrollIntoView: true,
           });
-          synchronizeCurrentDocumentHistoryContent(docKey, entry.content, 'source');
           publish(entry.content);
           view.focus();
           return;
@@ -589,9 +583,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         }
         releaseNativeHistory(editor.view);
         visualUndoDepthRef.current = 0;
-        const content = serializeEditorDocument(editor);
-        synchronizeCurrentDocumentHistoryContent(docKey, content, 'visual');
-        publish(content);
+        publish(entry.content);
         // A surviving embedded control owns its caret. Removing its node tears
         // down that control, then the document resumes at a legal selection.
         if (activeControl?.isConnected && editor.view.dom.contains(activeControl)) return;
@@ -626,58 +618,28 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
     const content = currentDoc.content ?? '';
 
-    // 大文档判定
+    // The initial file text seeds history and the disk comparison in either mode.
     const verdict = initialView.verdict;
     setLargeVerdict(verdict);
-    // 先确定初始模式，文件历史的首节点必须采用当前权威内核实际展示的内容
-    // 🔴 R4-03/D02：resolvedMode 单次决策——"用户意图（标签/设置）+ 大文档限制"
-    //    合并后只应用一次，分支间不得互相覆盖。大文档强制 source（visual 内核
-    //    不挂载）；resolvedMode 决定后续全部初始化（内核/历史/基线），不再被
-    //    tab 恢复的 initialMode 二次改写。
     const resolvedMode = initialView.mode;
-    const historyInitialContent = content;
-
-    if (verdict.isLarge && !nativeDocument) {
-      setShowLargeBanner(true);
-      // 强制 source 模式；大文档不设置内容到 TipTap（太大会卡）→ visual 内核保持未挂载
-      setViewMode('source');
-      viewModeRef.current = 'source';
-      useWindowStore.getState().setTabViewMode(docKey, 'source');
-      setHasVisualKernel(false);
-    } else {
-      setShowLargeBanner(false);
-      // source 初始模式：TipTap 内核惰性挂载（S08 判定：源码首屏不创建隐藏实例）
-      setHasVisualKernel(resolvedMode === 'visual');
-      // 初始为可视化模式时：内容将在内核 ready 后以序列化结果对齐历史首节点
-      //（初始 visual 下 historyInitialContent 由填充 effect 的序列化结果同步）
-      if (resolvedMode === 'visual') {
-        pendingVisualContentRef.current = content;
-      } else {
-        // 初始 source：基线对齐（脏文档无基线时以原始内容为基线）
-        const baseline = getBaseline(docKey);
-        if (!currentDoc.isDirty) {
-          baseline.setBaseline(content);
-          useDocumentStore.getState().setBaselineContent(docKey, content);
-        } else if (baseline.getBaseline() === null) {
-          baseline.setBaseline(currentDoc.baselineContent ?? content);
-        }
-      }
+    const baseline = getBaseline(docKey);
+    if (!currentDoc.isDirty) {
+      baseline.setBaseline(content);
+      useDocumentStore.getState().setBaselineContent(docKey, content);
+    } else if (baseline.getBaseline() === null) {
+      baseline.setBaseline(currentDoc.baselineContent ?? content);
     }
 
-    // 🔴 R4-03：resolvedMode 统一应用（大文档分支已按同一值设置，这里幂等；
-    //    历史与 source 内核按 resolvedMode 初始化——不再被 initialMode 覆盖）
+    setShowLargeBanner(verdict.isLarge && !nativeDocument);
+    setHasVisualKernel(resolvedMode === 'visual');
+    if (resolvedMode === 'visual') pendingVisualContentRef.current = content;
     viewModeRef.current = resolvedMode;
     setViewMode(resolvedMode);
-    if (nativeDocument) useWindowStore.getState().setTabViewMode(docKey, resolvedMode);
-    initializeDocumentHistory(docKey, historyInitialContent, resolvedMode);
+    if (nativeDocument || verdict.isLarge) useWindowStore.getState().setTabViewMode(docKey, resolvedMode);
+    initializeDocumentHistory(docKey, content, resolvedMode);
     if (resolvedMode === 'source') {
-      const baseline = getBaseline(docKey);
-      if (!currentDoc.isDirty) {
-        baseline.setBaseline(content);
-        useDocumentStore.getState().setBaselineContent(docKey, content);
-      } else if (baseline.getBaseline() === null) baseline.setBaseline(currentDoc.baselineContent ?? content);
       // The source host is permanent and is mounted before this effect.
-      initSourceEditor(historyInitialContent);
+      initSourceEditor(content);
       restoreMarkdownViewState();
       isInitializingRef.current = false;
       focusNewDocument();
@@ -702,23 +664,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     // 🔴 程序化内容设置：同步作用域初始化锁（显示即输入——无 50ms 忽略窗口）
     isInitializingRef.current = true;
     try {
-      const baseline = getBaseline(docKey);
       parseEditorDocument(editor, content);
       authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
-
-      // 与初始解析序列化结果严格对齐，消除格式化差异导致的假脏态；
-      // visual 表示下历史首节点采用序列化结果
-      const initialSerialized = serializeEditorDocument(editor);
-      synchronizeCurrentDocumentHistoryContent(docKey, initialSerialized, 'visual');
-      if (!currentDoc.isDirty) {
-        baseline.setBaseline(initialSerialized);
-        useDocumentStore.getState().setContent(docKey, initialSerialized);
-        useDocumentStore.getState().setBaselineContent(docKey, initialSerialized);
-        useDocumentStore.getState().setDirty(docKey, false);
-        useWindowStore.getState().setTabDirty(docKey, false);
-      } else if (baseline.getBaseline() === null) {
-        baseline.setBaseline(currentDoc.baselineContent ?? content);
-      }
     } finally {
       // 同步作用域结束即解锁：真实输入立即生效
       isInitializingRef.current = false;
@@ -841,18 +788,6 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       if (!hasCrossModeChanges) authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
 
-      // 不变式 I-14 检查：切回 visual 后内容是否与基线一致
-      const baseline = getBaseline(docKey);
-      const serialized = hasCrossModeChanges ? serializeEditorDocument(editor) : md;
-      // Markdown 等价格式的规范化只更新当前节点表示，不得伪造成新的编辑步骤
-      if (hasCrossModeChanges) synchronizeCurrentDocumentHistoryContent(docKey, serialized, 'visual');
-      if (baseline.isClean(serialized)) {
-        // 内容未变，保持非脏态
-        useDocumentStore.getState().setDirty(docKey, false);
-        useWindowStore.getState().setTabDirty(docKey, false);
-      } else {
-        useDocumentStore.getState().setContent(docKey, serialized);
-      }
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'visual';
       setViewMode('visual');
@@ -921,19 +856,10 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     return () => {
       // 组件卸载前立即刷新当前模式的最新内容，防止快速切换标签页导致防抖镜像落后
       // 🔴 J2：先物化 visual/source 暂存快照（同步序列化——组末端与镜像一次对齐）
-      const materializedVisual = flushPendingVisualSnapshot(docKey);
-      const materializedSource = flushPendingSourceSnapshot(docKey);
-      const currentMode = useWindowStore.getState().getTab(docKey)?.viewMode ?? viewModeRef.current;
-      const latestContent = currentMode === 'source' && sourceViewRef.current
-        ? materializedSource
-          ?? readSourceDocument(sourceViewRef.current)
-        : materializedVisual
-          ?? (tipTapEditorRef.current
-            ? serializeEditorDocument(tipTapEditorRef.current)
-            : useDocumentStore.getState().getDocument(docKey)?.content ?? '');
-      if (materializedVisual === null && materializedSource === null) {
-        useDocumentStore.getState().setContent(docKey, latestContent);
-      }
+      // An unchanged editor has no pending snapshot. Keep its existing mirror
+      // (including source spelling and line endings) when releasing the views.
+      flushPendingVisualSnapshot(docKey);
+      flushPendingSourceSnapshot(docKey);
       initializedDocKeyRef.current = null;
       if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
       pendingRestoredStateRef.current = null;
