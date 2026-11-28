@@ -36,6 +36,7 @@ import { createCodeNavigation } from './codeNavigation';
 import { supportsCodeSymbols } from './codeSymbols';
 import { codeCursorTracker } from './codeCursorTracker';
 import { sourceReadingPlugin } from './sourceReading';
+import { textToolbarKind } from '../../core/fileFormats';
 
 /**
  * 构造 code 编辑器的能力对象。
@@ -55,6 +56,8 @@ export function createCodeEditorCapabilities(
   //    同路径会话已换代（关闭重开）则提交被丢弃
   const sessionGeneration = getSessionGeneration(docKey);
   const getLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
+  const format = textToolbarKind(docKey.startsWith('untitled:') ? useDocumentStore.getState().getDocument(docKey)?.displayName ?? docKey : docKey);
+  const operationLanguage = () => format === 'json' || format === 'xml' ? format : getLanguage();
   const codeNavigation = createCodeNavigation(view, getLanguage);
   const reading = view.plugin(sourceReadingPlugin);
   // 搜索能力：包装统一搜索控制器（CodeMirror 分支），行为与改造前完全一致
@@ -70,12 +73,12 @@ export function createCodeEditorCapabilities(
 
   // 代码操作能力：JSON/XML/大小写转换，内部持有内核视图
   const codeOps: CodeOpsCapabilities = {
-    expandJson: (options) => handleExpandJson(view, { ...options, lang: getLanguage() }),
-    minifyJson: (scope) => handleMinifyJson(view, { scope, lang: getLanguage() }),
-    validateJson: (scope) => handleValidateJson(view, { scope, lang: getLanguage() }),
+    expandJson: (options) => handleExpandJson(view, { ...options, lang: operationLanguage() }),
+    minifyJson: (scope) => handleMinifyJson(view, { scope, lang: operationLanguage() }),
+    validateJson: (scope) => handleValidateJson(view, { scope, lang: operationLanguage() }),
     transformCase: (mode) => handleTransformCase(view, mode),
-    formatXml: (scope) => handleFormatXml(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
-    validateSyntax: (scope) => validateTextLanguage(view, getLanguage(), { scope }),
+    formatXml: (scope) => handleFormatXml(view, { scope, lang: operationLanguage() }),
+    validateSyntax: (scope) => validateTextLanguage(view, operationLanguage(), { scope }),
   };
 
   return {

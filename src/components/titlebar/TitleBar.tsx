@@ -9,6 +9,7 @@ import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
 import { NewDocumentMenu } from './NewDocumentMenu';
 import { SaveDocumentButton } from './SaveDocumentButton';
+import { OpenFileExternally } from './OpenFileExternally';
 import { Tooltip } from '../Tooltip';
 import { emit } from '../../core/emitter';
 import { useLayoutStore } from '../../stores/layoutStore';
@@ -17,8 +18,6 @@ import { SidebarToggle } from '../SidebarToggle';
 import { useWindowStore } from '../../stores/windowStore';
 import { useExportStore } from '../../features/export/exportStore';
 import { UpdateNotice } from '../UpdateNotice';
-import { getFileFormat } from '../../core/fileFormats';
-import { HtmlViewToggle } from './HtmlViewToggle';
 import './titlebar.css';
 
 interface TitleBarProps {
@@ -33,10 +32,6 @@ export function TitleBar({ referenceKey, onOpenReference, onQuickOpen }: TitleBa
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
   const toggleExplorer = useLayoutStore((s) => s.toggleExplorer);
   const hasTabs = useWindowStore((s) => s.tabs.length > 0);
-  const htmlKey = useWindowStore(s => {
-    const tab = s.activeTab();
-    return tab?.kind === 'code' && getFileFormat(tab.key).preview === 'html' ? tab.key : null;
-  });
   const canExportDocument = useWindowStore((s) => isRichDocument(s.tabs.find(tab => tab.key === s.activeKey)?.kind));
   // 当前是否有打开的标题栏/标签页菜单
   const hasActiveMenu = useLayoutStore((s) => s.activeMenuCount > 0);
@@ -99,7 +94,7 @@ export function TitleBar({ referenceKey, onOpenReference, onQuickOpen }: TitleBa
 
       {/* 文档导出 */}
       <div className="titlebar-utility-actions">
-      {htmlKey && <HtmlViewToggle docKey={htmlKey}/>}
+      <OpenFileExternally/>
       <Tooltip content="快速打开文件或运行命令" shortcut="Ctrl+Alt+P" side="bottom">
         <button type="button" className="titlebar-action" aria-label="快速打开文件或运行命令" aria-haspopup="dialog"
           onClick={onQuickOpen}><Search size={16} /></button>

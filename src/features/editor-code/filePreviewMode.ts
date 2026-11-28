@@ -18,3 +18,8 @@ export function switchFilePreviewMode(docKey: string, mode: FilePreviewMode) {
   }
   store.setTabViewMode(docKey, mode === 'source' ? 'source' : 'visual');
 }
+
+export function toggleFilePreviewMode(docKey: string) {
+  const tab = useWindowStore.getState().getTab(docKey);
+  if (tab) switchFilePreviewMode(docKey, tab.viewMode === 'source' ? 'preview' : 'source');
+}

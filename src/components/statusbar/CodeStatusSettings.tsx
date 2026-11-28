@@ -12,15 +12,15 @@ import './codeStatusSettings.css';
 interface CodeStatusSettingsProps {
   docKey: string;
   language: LanguageId;
+  preview?: boolean;
 }
 
 const autoLabel = '按文件名自动识别';
 const indentWidths = [1, 2, 3, 4, 5, 6, 7, 8];
 
-export function CodeStatusSettings({ docKey, language }: CodeStatusSettingsProps) {
+export function CodeStatusSettings({ docKey, language, preview }: CodeStatusSettingsProps) {
   return <div className="nb-code-status-settings" key={docKey}>
-    <CursorPosition docKey={docKey} />
-    <IndentationPicker />
+    {!preview && <><CursorPosition docKey={docKey} /><IndentationPicker /></>}
     <LanguagePicker docKey={docKey} language={language} />
   </div>;
 }

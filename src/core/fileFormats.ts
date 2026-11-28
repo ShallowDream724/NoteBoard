@@ -46,10 +46,21 @@ export function getFileFormat(path: string): FileFormat {
     ?? getFileFormatByExtension(fileExtension(name));
 }
 
+const textDocumentNames = new Set(['license', 'licence', 'copying', 'authors']);
+
+/** Known prose formats have writing tools; logs, subtitles and ignore files are line-oriented. */
+export function textToolbarKind(path: string): 'text' | 'json' | 'xml' | undefined {
+  const format = getFileFormat(path);
+  if (format.kind !== 'code') return;
+  if (format.language === 'json' || format.language === 'xml') return format.language;
+  if (['txt', 'text'].includes(fileExtension(path)) || textDocumentNames.has(fileBasename(path))) return 'text';
+}
+
 export function isCodeSourceFile(path: string, language: LanguageId = 'plaintext'): boolean {
   const format = getFileFormat(path);
   return format.kind === 'code'
-    && (format.language !== 'plaintext' || format.preview === 'delimited' || language !== 'plaintext');
+    && (format.language !== 'plaintext' || format.preview === 'delimited' || language !== 'plaintext'
+      || format.id === 'code-plaintext' && textToolbarKind(path) !== 'text');
 }
 
 // Retain the old public maps for callers; all are now derived from one catalog.

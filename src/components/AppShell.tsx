@@ -734,7 +734,8 @@ export function AppShell(_props: { children?: React.ReactNode }) {
       </div>
 
       {/* 状态栏 */}
-      {!isBoardPresentationMode && statusBarVisible && <StatusBar key="app-statusbar" />}
+      {!isBoardPresentationMode && statusBarVisible && <StatusBar key="app-statusbar"
+        referencePdfKey={referenceTab?.kind === 'pdf' ? referenceTab.key : undefined}/>}
       <UnsavedGuardDialog
         dirtyTabs={dirtyPendingTabs}
         visible={dirtyPendingTabs.length > 0}

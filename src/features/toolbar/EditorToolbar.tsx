@@ -8,7 +8,9 @@ import type { Editor } from '@tiptap/core';
 import { useWindowStore, type Tab } from '../../stores/windowStore';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { DeferredMarkdownToolbar } from './DeferredMarkdownToolbar';
-import { CodeToolbar } from './CodeToolbar';
+import { isRichDocument } from '../../core/docKind';
+import { textToolbarKind } from '../../core/fileFormats';
+import { TextFileToolbar } from './TextFileToolbar';
 import { FloatingExpandHandle } from './FloatingExpandHandle';
 import { ToolbarButton } from './ToolbarComponents';
 import { EditorMenuScope } from '../../components/EditorMenuScope';
@@ -21,11 +23,12 @@ interface EditorToolbarProps {
 export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
   const { editorToolbarVisible, setEditorToolbarVisible } = useLayoutStore();
   const transferring = useWindowStore(state => !!activeTab && state.isTransferring(activeTab.key));
+  const textTools = activeTab?.kind === 'code' ? textToolbarKind(activeTab.path ?? activeTab.displayName) : undefined;
 
   // 若当前无激活标签页、非文本格式或为纯前端工具视图（如文本对比），不渲染操作栏
   if (
     !activeTab ||
-    (!isRichDocument(activeTab.kind) && activeTab.kind !== 'code') ||
+    (!isRichDocument(activeTab.kind) && !textTools) ||
     activeTab.toolKind === 'textdiff' || (activeTab.kind === 'noteboard' && activeTab.viewMode === 'source')
   ) {
     return null;
@@ -62,18 +65,11 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
       }}
     >
       {/* 格式针对性工具集 */}
-      {isRichDocument(activeTab.kind) ? (
-        <DeferredMarkdownToolbar
+      {textTools ? <TextFileToolbar docKey={activeTab.key} kind={textTools} /> : <DeferredMarkdownToolbar
           docKey={activeTab.key}
           editor={activeEditor}
           viewMode={activeTab.viewMode}
-        />
-      ) : activeTab.kind === 'code' ? (
-        <CodeToolbar
-          docKey={activeTab.key}
-          language={activeTab.language}
-        />
-      ) : null}
+      />}
 
       {/* 右侧收起按钮 */}
       <div style={{ marginLeft: 8, display: 'flex', alignItems: 'center', flexShrink: 0 }} data-toolbar-layout-controls>
@@ -86,4 +82,3 @@ export function EditorToolbar({ activeTab, activeEditor }: EditorToolbarProps) {
     </div></EditorMenuScope>
   );
 }
-import { isRichDocument } from '../../core/docKind';

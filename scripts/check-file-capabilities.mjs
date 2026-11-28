@@ -131,10 +131,10 @@ try {
   await page.screenshot({ path: `${out}/config.png` });
   await close('.env.production');
   await open('main.go');
-  await page.getByRole('button', { name: 'Go · 代码查看', exact: true }).click();
-  await page.getByText('语法高亮', { exact: true }).hover();
-  await page.getByText('Python', { exact: true }).click();
-  await page.getByRole('button', { name: 'Python · 代码查看', exact: true }).waitFor();
+  await page.getByRole('button', { name: '语法高亮语言：Go', exact: true }).click();
+  await page.getByRole('combobox', { name: '搜索语言名称或扩展名' }).fill('.py');
+  await page.getByRole('option', { name: /Python/ }).click();
+  await page.getByRole('button', { name: '语法高亮语言：Python', exact: true }).waitFor();
   assert((await page.locator('.cm-content:visible').innerText()).includes('package main'));
   report.liveLanguageSwitch = true;
   await close('main.go');

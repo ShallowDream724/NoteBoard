@@ -445,6 +445,10 @@ export const TreeNode = memo(function TreeNode({
             />
           )}
 
+          {!node.isDir && <ContextMenuItem icon={ExternalLink} label="用系统默认应用打开" onClick={() => {
+            setMenuPos(null);
+            void ipc.openWithDefaultApp(node.path).catch(error => showToast(`打开失败：${error}`, 'error'));
+          }}/>}
           {/* 目录特有菜单项：在此新建文件与新建文件夹 */}
           {node.isDir && (
             <>

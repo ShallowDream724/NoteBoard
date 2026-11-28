@@ -531,9 +531,9 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       onClick={e => { if (e.target === e.currentTarget) viewRef.current?.focus(); }}>
       <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />
     </div>}
+    {hasPreview && <CodeFileModeToggle key={docKey} docKey={docKey} formatId={format.id} mode={fileMode} isHtml={format.preview === 'html'} />}
   </div>;
 }
-    {hasPreview && <CodeFileModeToggle key={docKey} docKey={docKey} formatId={format.id} mode={fileMode} isHtml={format.preview === 'html'} />}
 
 function CodeFileModeToggle({ docKey, formatId, mode, isHtml }: { docKey: string; formatId: string; mode: FilePreviewMode; isHtml: boolean }) {
   const active = useWindowStore(state => state.activeKey === docKey);
