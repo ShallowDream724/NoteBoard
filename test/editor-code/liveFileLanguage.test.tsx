@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
+import { CodeStatusSettings } from '../../src/components/statusbar/CodeStatusSettings';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import { useWindowStore } from '../../src/stores/windowStore';
@@ -28,8 +29,8 @@ afterEach(() => { act(() => root.unmount()); host.remove(); useSettingsStore.set
 function showLineNumbers(enabled: boolean) {
   useSettingsStore.setState(({ settings }) => ({ settings: { ...settings, editor: { ...settings.editor, showLineNumbers: enabled } } }));
 }
-function seed(path = key) {
-  useDocumentStore.getState().upsertFromPayload({ key: path, displayName: path, dirPath: 'C:\\test', kind: 'code', language: 'plaintext', content: 'hello', encoding: 'utf8', eol: 'lf', size: 5, mtime: 0, readonly: false });
+function seed(path = key, content = 'hello') {
+  useDocumentStore.getState().upsertFromPayload({ key: path, displayName: path, dirPath: 'C:\\test', kind: 'code', language: 'plaintext', content, encoding: 'utf8', eol: 'lf', size: content.length, mtime: 0, readonly: false });
 }
 
 describe('file syntax and preview lifecycle', () => {
@@ -62,6 +63,35 @@ describe('file syntax and preview lifecycle', () => {
     expect(host.querySelector('.cm-lineNumbers')).toBeNull();
     expect(EditorView.findFromDOM(host.querySelector('.cm-editor')!)).toBe(view);
     await act(async () => { expect((await getEditorCapabilities(key)!.flush('save'))!.content).toBe('hello world'); });
+  });
+
+  it('follows the active source cursor through edits and switches, and opens that editor’s jump-to-line command', async () => {
+    const other = 'C:\\test\\other.txt';
+    seed(key, 'abc\ndef');
+    seed(other);
+    const renderStatusFor = async (docKey: string) => await act(async () => root.render(<>
+      <CodeEditor docKey={key} />
+      <CodeEditor docKey={other} />
+      <CodeStatusSettings docKey={docKey} language="plaintext" />
+    </>));
+    const position = () => host.querySelector<HTMLButtonElement>('[aria-label^="跳转到行，当前"]')!;
+
+    await renderStatusFor(key);
+    const [first, second] = Array.from(host.querySelectorAll<HTMLElement>('.cm-editor'), element => EditorView.findFromDOM(element)!);
+    expect(position().textContent).toBe('第 1 行，第 1 列');
+    await act(async () => first.dispatch({ selection: { anchor: 0, head: 5 } }));
+    expect(position().textContent).toBe('第 2 行，第 2 列');
+    await act(async () => first.dispatch({ changes: { from: 0, insert: 'new\n' } }));
+    expect(position().textContent).toBe('第 3 行，第 2 列');
+
+    await act(async () => second.dispatch({ selection: { anchor: 3 } }));
+    await renderStatusFor(other);
+    expect(position().textContent).toBe('第 1 行，第 4 列');
+    await act(async () => first.dispatch({ selection: { anchor: 0 } }));
+    expect(position().textContent).toBe('第 1 行，第 4 列');
+    await act(async () => position().click());
+    expect(first.dom.querySelector('input[name="line"]')).toBeNull();
+    expect(second.dom.querySelector('input[name="line"]')).toBeTruthy();
   });
 
   it('keeps line numbers on a recognized code file despite the plain-text setting', async () => {

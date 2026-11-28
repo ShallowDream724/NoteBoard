@@ -34,6 +34,7 @@ import { getDocumentRevision } from '../../core/editor/editorRegistry';
 import { getSessionGeneration, submitCapturedContent } from '../session/documentSession';
 import { createCodeNavigation } from './codeNavigation';
 import { supportsCodeSymbols } from './codeSymbols';
+import { codeCursorTracker } from './codeCursorTracker';
 
 /**
  * 构造 code 编辑器的能力对象。
@@ -128,6 +129,7 @@ export function createCodeEditorCapabilities(
     codeOps,
     get codeNavigation() { return supportsCodeSymbols(getLanguage()) ? codeNavigation : undefined; },
     codeView: {
+      cursor: view.plugin(codeCursorTracker) ?? undefined,
       goToLine: () => { gotoLine(view); },
       toggleFold: () => { toggleFold(view); view.focus(); },
       unfoldAll: () => { unfoldAll(view); view.focus(); },

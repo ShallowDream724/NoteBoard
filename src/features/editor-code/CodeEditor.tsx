@@ -44,6 +44,7 @@ import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
 import { takeViewState } from '../session/editorSuspension';
 import { foldEffect } from '@codemirror/language';
 import { createCodeEditorCapabilities } from './editorCapabilities';
+import { codeCursorTracker } from './codeCursorTracker';
 import { codeJumpHistory } from './codeNavigation';
 import { createCodeSnapshot } from './codeSnapshot';
 import { FileTextPreview } from './FileTextPreview';
@@ -356,6 +357,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       doc: currentDoc.content ?? '',
       extensions: [
         customCodeMirrorShortcuts('code'),
+        codeCursorTracker,
         codeJumpHistory,
         unifiedHistoryKeymap,
         ...createBaseExtensions(readEditorSettings()),

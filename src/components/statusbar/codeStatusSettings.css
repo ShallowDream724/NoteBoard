@@ -29,6 +29,7 @@
   background: var(--editor-border);
 }
 .nb-code-status-trigger > span { overflow: hidden; text-overflow: ellipsis; }
+.nb-code-status-position { font-variant-numeric: tabular-nums; }
 .nb-code-status-trigger:hover, .nb-code-status-trigger[data-state='open'] {
   color: var(--editor-text);
   background: var(--toolbar-hover);

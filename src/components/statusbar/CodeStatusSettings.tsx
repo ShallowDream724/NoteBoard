@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Check, Search } from 'lucide-react';
 import { languageFromPath } from '../../core/docKind';
+import { getEditorCapabilities, subscribeEditorCapabilities } from '../../core/editor/editorRegistry';
 import type { LanguageId } from '../../core/ipc/types';
 import { getTextLanguageLabel, searchTextLanguages } from '../../core/textLanguageTools';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -11,20 +12,38 @@ import './codeStatusSettings.css';
 interface CodeStatusSettingsProps {
   docKey: string;
   language: LanguageId;
-  showLanguage?: boolean;
 }
 
 const autoLabel = '按文件名自动识别';
 const indentWidths = [1, 2, 3, 4, 5, 6, 7, 8];
 
-export function CodeStatusSettings({ docKey, language, showLanguage = true }: CodeStatusSettingsProps) {
+export function CodeStatusSettings({ docKey, language }: CodeStatusSettingsProps) {
   return <div className="nb-code-status-settings" key={docKey}>
-    {showLanguage && <LanguagePicker docKey={docKey} language={language} />}
+    <CursorPosition docKey={docKey} />
     <IndentationPicker />
+    <LanguagePicker docKey={docKey} language={language} />
   </div>;
 }
 
-function LanguagePicker({ docKey, language }: Pick<CodeStatusSettingsProps, 'docKey' | 'language'>) {
+const noSubscription = () => () => {};
+const noPosition = () => undefined;
+
+function CursorPosition({ docKey }: { docKey: string }) {
+  const cursor = useSyncExternalStore(
+    useCallback(listener => subscribeEditorCapabilities(key => { if (key === docKey) listener(); }), [docKey]),
+    useCallback(() => getEditorCapabilities(docKey)?.codeView?.cursor, [docKey]),
+  );
+  const position = useSyncExternalStore(cursor?.subscribe ?? noSubscription, cursor?.getSnapshot ?? noPosition);
+  if (!position) return null;
+
+  const label = `第 ${position.line} 行，第 ${position.column} 列`;
+  return <button type="button" className="nb-code-status-trigger nb-code-status-position" aria-label={`跳转到行，当前${label}`}
+    title="跳转到行" onClick={() => getEditorCapabilities(docKey)?.codeView?.goToLine()}>
+    <span>{label}</span>
+  </button>;
+}
+
+function LanguagePicker({ docKey, language }: CodeStatusSettingsProps) {
   const [open, setOpen] = useState(false);
   const label = getTextLanguageLabel(language);
 

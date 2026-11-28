@@ -62,13 +62,13 @@ it('chooses syntax by extension with the keyboard and restores filename detectio
   expect(useDocumentStore.getState().getDocument(docKey)?.language).toBe('python');
 });
 
-it('persists indentation from the HTML-source status without exposing a language override', async () => {
+it('persists indentation from the HTML-source status alongside the language chooser', async () => {
   const startingSettings = useSettingsStore.getState().settings;
   vi.mocked(patchSettings).mockImplementation(async () => ({ ...useSettingsStore.getState().settings, revision: useSettingsStore.getState().settings.revision + 1 }));
   try {
-    await act(async () => root.render(<CodeStatusSettings docKey="test.html" language="html" showLanguage={false} />));
-    const trigger = host.querySelector<HTMLButtonElement>('button')!;
-    expect(host.querySelectorAll('button')).toHaveLength(1);
+    await act(async () => root.render(<CodeStatusSettings docKey="test.html" language="html" />));
+    const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="缩进：空格 2"]')!;
+    expect(host.querySelector('button[aria-label="语法高亮语言：HTML"]')).toBeTruthy();
     expect(trigger.textContent).toBe('空格 2');
     await act(async () => trigger.click());
 

@@ -81,8 +81,19 @@ export interface CodeOpsCapabilities {
   validateSyntax?(scope?: 'all' | 'selection'): void;
 }
 
+export interface CodeCursorPosition {
+  readonly line: number;
+  readonly column: number;
+}
+
+export interface CodeCursorSource {
+  getSnapshot(): CodeCursorPosition;
+  subscribe(listener: () => void): () => void;
+}
+
 /** Lightweight viewing commands, implemented by the mounted code editor. */
 export interface CodeViewCapabilities {
+  readonly cursor?: CodeCursorSource;
   goToLine(): void;
   toggleFold(): void;
   unfoldAll(): void;
