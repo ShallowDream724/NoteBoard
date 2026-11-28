@@ -8,9 +8,9 @@
 
 `core/codeLanguages.ts` 提供代码块与代码文件共用的纯语言元数据，TypeScript LanguageId 由它推导。所有代码块语言都有常见文件后缀覆盖；有歧义的 `.h` 默认 C，`.m` 默认 MATLAB，`.conf` 默认 INI。JavaScript/TypeScript 的 JSX/TSX、Shell 和配置别名保留统一语言标签。文件查看以阅读和基础编辑为限，没有编译器、调试器或项目索引。
 
-状态栏与代码工具栏使用文档的当前语言元数据。工具栏可手动选择高亮语言或恢复文件名识别；选择只影响当前打开会话，不改文件内容、文档类型或脏态。CodeMirror compartment 热重配保留原实例、光标和历史，异步加载与旧语言校验会取消或丢弃过期结果。工具可用性由轻量 `textLanguageTools.ts` 描述，XML 格式化不出现在其它语言菜单里。未提供可靠 formatter 的语言保留高亮和基础编辑，不假装提供全语言格式化。
+独立代码编辑器的状态栏显示当前高亮语言，可按语言名称、常用别名或文件扩展名搜索，可选择纯文本或恢复文件名识别。手动选择只影响当前打开会话，保持文件内容、文档类型和脏态。CodeMirror compartment 热重配保留原实例、光标和历史，异步加载与旧语言校验会取消或丢弃过期结果。高亮语言和语言相关工具的可用性由轻量 `textLanguageTools.ts` 描述，XML 格式化仅在 XML 编辑器提供。HTML 文件的状态栏使用源码／预览切换入口。
 
-文件编辑器保留原生 CodeMirror 语法，并为 Python、C/C++、PHP、JavaScript/TypeScript、CSS 按需载入原生解析器；其余语言按模块懒加载 `@codemirror/legacy-modes` 的 StreamLanguage。解析由 CodeMirror 增量、分时执行，保留多行词法状态，不在按键处理器中调用全文高亮。原生语法保留结构折叠，StreamLanguage 提供词法高亮与缩进；工具栏提供语言名称、跳转行、折叠及展开入口，并复用已有查找、换行、行号和原生复制。代码块的后台高亮服务独立保留。
+文件编辑器保留原生 CodeMirror 语法，并为 Python、C/C++、PHP、JavaScript/TypeScript、CSS 按需载入原生解析器；其余语言按模块懒加载 `@codemirror/legacy-modes` 的 StreamLanguage。解析由 CodeMirror 增量、分时执行，保留多行词法状态，不在按键处理器中调用全文高亮。原生语法保留结构折叠，StreamLanguage 提供词法高亮与缩进。工具栏提供跳转行、折叠及展开入口，并复用已有查找、换行、行号和原生复制。代码块的后台高亮服务独立保留。
 
 代码输入通过实例内 `codeSnapshot` 暂存当前历史组的一份不可变 CodeMirror Text，组内每次输入不展开全文、不做全文差异比较。新组开始、500ms 空闲、保存、撤销/重做、视图捕获或卸载时物化快照，复用统一历史的 materialize hook 和文档提交屏障。初次输入立即标记待确认内容并启用撤销；物化后按基线恢复精确脏态。快照同时核对会话代际和能力注册实例，旧实例的定时器、flush、清理不能覆盖同路径新会话。仅缓存当前 Text 对应的一份物化字符串，卸载释放。
 
