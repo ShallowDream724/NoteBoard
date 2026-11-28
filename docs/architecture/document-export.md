@@ -35,7 +35,7 @@ HTML 与 PDF 的内容样式统一入口为 `documentContent.css`，包含表格
 
 HTML 投影保留说明 ID、正文实体和原位置锚点，不生成文末编号。阅读页一次建立 ID 索引，一个共享浮层在打开时移动对应实体，关闭时归还，不为每次点击复制正文或注册监听器；同一说明的多个锚点共享正文。鼠标悬停可预览，点击保持打开，Enter/Space 与 Escape 支持键盘操作。无锚点的说明仍可在文末读取；禁用脚本或打印时完整展示说明正文。PDF 与便携格式继续使用各自的文末说明或脚注，不受 HTML 交互逻辑影响。
 
-应用内 HTML 预览以文档的本地 Windows 路径为资源基址，并解析第一个 HTML `<base href>`。预览按 HTML 源位置替换同盘的相对图片地址，包括图片候选集、视频封面、SVG 图片及内联 CSS 的 `url()`。转换仅作用于 iframe 的 `srcDoc`。本地资源由 `convertFileSrc` 生成应用的 asset protocol URL，浏览器按 iframe 的 CSP 和隔离策略加载资源。
+应用内 HTML 预览以文档的本地 Windows 路径为资源基址，并解析第一个 HTML `<base href>`。宿主使用应用的 asset protocol 读取同盘相对引用中的图片和内联 CSS 字体，按文件去重、限制并发并校验资源类型。预览按 HTML 源位置将读取成功的资源置入 iframe 的 `srcDoc`，覆盖图片候选集、视频封面、SVG 图片及内联 CSS 的 `url()`，保留 SVG 片段和候选集描述符。隔离 iframe 可直接加载生成的 data URL。切换文档或离开预览会取消当前读取。
 
 独立 HTML 的正文不整体横向滚动：即使只有 2px 的溢出，横向滚动也会裁掉所有提示块的左边框。HTML 投影在现有 DOM 序列化前给每张表加局部滚动容器，保留手动表宽；阅读页只让表格和块公式在窄窗内横向滚动。打印时取消这些裁剪，PDF 的表格树不加入该容器。`scripts/check-html-export.mjs` 覆盖 818px 与 360px 的页面宽度、提示块边缘和 450px 手动表宽。
 
