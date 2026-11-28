@@ -1,12 +1,14 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { EditorState, Transaction, type TransactionSpec } from '@codemirror/state';
-import { isolateHistory } from '@codemirror/commands';
+import { isolateHistory, undoDepth } from '@codemirror/commands';
 import type { EditorView, ViewUpdate } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeEditor } from '@/features/editor-code/CodeEditor';
 import { getEditorCapabilities, resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { flushDocument, writeDocumentWithBarrier } from '@/features/session/documentSession';
+import { readExternalChangeComparison } from '@/features/external/externalChangeComparison';
+import { reloadFromDisk } from '@/features/external/externalChangeActions';
 import { clearAllDocumentHistories, clearDocumentHistory, getCurrentDocumentHistoryContent,
   getDocumentHistoryAvailability, redoDocumentHistory, subscribeDocumentHistory, undoDocumentHistory,
 } from '@/features/history/documentHistory';
@@ -48,9 +50,12 @@ vi.mock('@/features/editor-code/textAnalysisLifecycle', () => ({
 }));
 vi.mock('@/features/editor-code/languages', () => ({ loadLanguageExtension: async () => [] }));
 vi.mock('@/features/editor-code/lint', () => ({ getLinterForLanguage: () => null }));
-vi.mock('@/features/staging/stagingManager', () => ({ releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn() }));
+vi.mock('@/features/staging/stagingManager', () => ({
+  discardStagedDocuments: vi.fn().mockResolvedValue(undefined), releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn(),
+}));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({
+  readDocument: vi.fn(),
   setDocumentDirty: vi.fn().mockResolvedValue(undefined),
   writeDocument: vi.fn().mockResolvedValue({ ok: true, mtime: 1, size: 1, error: null }),
 }));
@@ -100,6 +105,48 @@ afterEach(async () => {
 });
 
 describe('code immutable input snapshots', () => {
+  it('compares with pending edits intact and applies the disk text only on reload', async () => {
+    const key = 'C:/test/conflict.txt';
+    const documents = useDocumentStore.getState();
+    seed(key, 'before');
+    const { view, host } = await mount(key);
+    await type(view, ' local');
+    await act(async () => documents.setExternalStatus(key, 'modified'));
+    expect(host.querySelector('[aria-haspopup="dialog"]')?.textContent).toBe('查看差异');
+
+    const disk = { key, displayName: 'conflict.txt', dirPath: 'C:/test', kind: 'code', language: 'plaintext',
+      content: 'disk\r\ntext', encoding: 'utf8', eol: 'crlf', size: 10, mtime: 2, readonly: false } as const;
+    vi.mocked(ipc.readDocument).mockResolvedValue(disk);
+    const beforeComparison = documents.getDocument(key);
+    await expect(readExternalChangeComparison(key, new AbortController().signal)).resolves.toEqual({
+      editorText: 'before local', diskText: 'disk\ntext',
+    });
+    expect(ipc.readDocument).toHaveBeenCalledWith(key, 512 * 1024);
+    expect(documents.getDocument(key)).toBe(beforeComparison);
+    expect(getEditorCapabilities(key)?.hasUnconfirmedInput?.()).toBe(true);
+    expect(ipc.writeDocument).not.toHaveBeenCalled();
+
+    await act(async () => { expect(await reloadFromDisk(key)).toBe(true); });
+    expect(view.state.doc.toString()).toBe('disk\ntext');
+    expect(documents.getDocument(key)).toMatchObject({ content: disk.content, persistedContent: disk.content,
+      eol: 'crlf', isDirty: false, externalStatus: 'clean' });
+    expect(getDocumentHistoryAvailability(key)).toEqual({ canUndo: false, canRedo: false });
+    expect(undoDepth(view.state)).toBe(0);
+  });
+
+  it('rejects oversized pending text without flattening it', async () => {
+    const key = 'C:/test/large-conflict.txt';
+    seed(key, 'x'.repeat(250_000));
+    const { view } = await mount(key);
+    await type(view, 'y');
+    await act(async () => useDocumentStore.getState().setExternalStatus(key, 'modified'));
+    vi.mocked(ipc.readDocument).mockResolvedValue({ key, displayName: 'large-conflict.txt', dirPath: 'C:/test',
+      kind: 'code', language: 'plaintext', content: 'disk', encoding: 'utf8', eol: 'lf', size: 4, mtime: 2,
+      readonly: false });
+    await expect(readExternalChangeComparison(key, new AbortController().signal)).rejects.toThrow('文件超过差异查看上限');
+    expect(view.flatten.at(-1)).not.toHaveBeenCalled();
+  });
+
   it('keeps 6 MiB continuous input unflattened and saves its current text immediately', async () => {
     const key = 'C:/test/large.txt';
     const content = `${'x'.repeat(63)}\n`.repeat(6 * 1024 * 1024 / 64);

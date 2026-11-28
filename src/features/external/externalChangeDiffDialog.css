@@ -1,0 +1,41 @@
+.nb-external-diff {
+  overflow: hidden;
+  border: 1px solid var(--editor-border);
+  border-radius: 8px;
+}
+
+.nb-external-diff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.nb-external-diff-toolbar > span {
+  margin-inline-end: auto;
+  color: var(--editor-text-muted);
+}
+
+.nb-external-diff-toolbar button { padding: 4px 8px; }
+
+.nb-external-diff-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-block: 1px solid var(--editor-border);
+  background: var(--editor-bg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nb-external-diff-labels > span { padding: 8px 12px; }
+.nb-external-diff-labels > span + span { border-inline-start: 1px solid var(--editor-border); }
+
+.nb-external-diff-host { height: min(62vh, 620px); }
+.nb-external-diff-host > .cm-mergeView { height: 100%; overflow: auto; }
+.nb-external-diff-host .cm-mergeViewEditors { min-height: 100%; }
+.nb-external-diff-host .cm-mergeViewEditor { flex: 1 1 0; min-width: 0; }
+.nb-external-diff-host .cm-mergeViewEditor + .cm-mergeViewEditor { border-inline-start: 1px solid var(--editor-border); }
+.nb-external-diff-host .cm-editor { height: auto; min-height: 100%; }
+.nb-external-diff-message { margin: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

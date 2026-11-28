@@ -8,10 +8,12 @@ import {
   EditorView,
   keymap,
 } from '@codemirror/view';
-import { EditorState, Prec, Transaction } from '@codemirror/state';
+import { Annotation, EditorState, Prec, Transaction } from '@codemirror/state';
 import { undoDepth as cmUndoDepth } from '@codemirror/commands';
 import {
   createBaseExtensions,
+  editorHistory,
+  historyCompartment,
   languageCompartment,
   typographyCompartment,
 } from './setup';
@@ -43,6 +45,7 @@ import { foldEffect } from '@codemirror/language';
 import { createCodeEditorCapabilities } from './editorCapabilities';
 import { createCodeSnapshot } from './codeSnapshot';
 import { FileTextPreview } from './FileTextPreview';
+import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
 import { getFileFormat } from '../../core/fileFormats';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { saveViewState } from '../session/editorSuspension';
@@ -63,6 +66,7 @@ import {
 
 /** CodeMirror 实例代际序号：同一 docKey 重挂载时递增，用于注册表删除保护 */
 let nextEditorInstanceId = 0;
+const replaceFromDiskTransaction = Annotation.define<boolean>();
 
 // ── React 组件 ──
 
@@ -175,11 +179,13 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     const updateListener = EditorView.updateListener.of((update) => {
       if (!update.docChanged || !isCurrent()) return;
 
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (autoSaveTimer) clearTimeout(autoSaveTimer);
+      // The conflict resolver publishes the revision and disk baseline together.
+      if (update.transactions.some(tr => tr.annotation(replaceFromDiskTransaction))) return;
       // 🔴 内容版本递增：真实修改（含撤销/重做引起的变化）都推进 revision，
       //    供注册表 flush 快照与后续迁移校验使用
       const revision = bumpDocumentRevision(docKey);
-      if (debounceTimer) clearTimeout(debounceTimer);
-      if (autoSaveTimer) clearTimeout(autoSaveTimer);
       // The history adapter already owns the exact restored string. It updates
       // the mirror after dispatch, without creating a delayed input group.
       if (isApplyingDocumentHistory(docKey)) return;
@@ -394,6 +400,17 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
 
     // 将统一历史节点应用到当前代码编辑器；程序化替换明确不进入原生历史
     const unregisterHistoryAdapter = registerDocumentHistoryAdapter(docKey, {
+      replaceFromDisk: (content) => {
+        if (view.composing) throw new Error('请先完成当前输入，再重新加载。');
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: content },
+          annotations: [Transaction.addToHistory.of(false), replaceFromDiskTransaction.of(true)],
+          effects: historyCompartment.reconfigure([]),
+        });
+        view.dispatch({ effects: historyCompartment.reconfigure(editorHistory) });
+        snapshot.accept(view.state.doc, normalizeEol(content));
+        return 'code';
+      },
       applyEntry: (entry, navigation) => {
         const documentLength = view.state.doc.length;
         const preferredSelection = navigation.selectionMode === 'code'
@@ -479,6 +496,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   if (!doc) return null;
 
   return <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--editor-bg)' }}>
+    <ExternalChangeBanner docKey={docKey} />
     {hasPreview && <div role="group" aria-label={`${format.preview === 'html' ? 'HTML' : format.id.toUpperCase()} 视图`} style={{ display: 'flex', gap: 2, flex: 'none', padding: '7px 12px', borderBottom: '1px solid var(--editor-border, #e2e8f0)' }}>
       {(['preview', 'source'] as const).map(mode => <button key={mode} type="button" aria-pressed={fileMode === mode}
         onClick={() => showFileMode(mode)}

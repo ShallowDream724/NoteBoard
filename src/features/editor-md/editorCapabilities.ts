@@ -111,6 +111,16 @@ export function createMarkdownEditorCapabilities(
     docKey,
     instanceId,
     getRevision: () => getDocumentRevision(docKey),
+    readTextSnapshot: (maxChars) => {
+      if (currentMode(docKey) === 'source') {
+        const view = getMdSourceView(docKey);
+        if (!view) return null;
+        return view.state.doc.length > maxChars ? 'too-large' : { content: readSourceDocument(view) };
+      }
+      const editor = getMdTipTapEditor(docKey);
+      if (!editor || editor.isDestroyed) return null;
+      return editor.state.doc.content.size > maxChars ? 'too-large' : { content: serializeEditorDocument(editor) };
+    },
     flush: async (reason: FlushReason): Promise<CapturedContent | null> => {
       if (hasAnnotationDraft(getMdTipTapEditor(docKey)) && ['transfer', 'close', 'evict', 'switch-mode'].includes(reason)) {
         throw new Error('请先保存或取消说明草稿，再关闭、迁移或切换编辑模式。');

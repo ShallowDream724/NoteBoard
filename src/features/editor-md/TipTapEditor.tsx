@@ -54,7 +54,7 @@ import { normalizeDocumentEol } from '../../core/documentText';
 import { registerShortcut } from '../../core/shortcuts';
 import { on, off, emit, type AppEvents } from '../../core/emitter';
 import { MarkdownModeToggle } from './MarkdownModeToggle';
-import { ExternalChangeBanner } from './ExternalChangeBanner';
+import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
 import { markdownPlainBracketExtension } from './sourcePlainBracket';
 import {
   getCurrentDocumentHistoryContent,

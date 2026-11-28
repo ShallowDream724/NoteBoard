@@ -20,9 +20,9 @@ export function applyDocumentFromDisk(docKey: string, payload: DocumentPayload):
   const tabs = useWindowStore.getState();
   const mode = tabs.getTab(docKey)?.viewMode === 'source' ? 'source' : 'visual';
   const editor = getEditorCapabilities(docKey);
-  if (doc.kind === 'markdown' || doc.kind === 'noteboard') {
+  if (doc.kind === 'markdown' || doc.kind === 'noteboard' || doc.kind === 'code') {
     if (editor?.hasExplicitDraft?.()) return false;
-    if (!resetDocumentHistoryFromDisk(docKey, payload.content, mode, !!editor)) return false;
+    if (!resetDocumentHistoryFromDisk(docKey, payload.content, doc.kind === 'code' ? 'code' : mode, !!editor)) return false;
   } else {
     flushPendingSourceSnapshot(docKey);
     flushPendingVisualSnapshot(docKey);

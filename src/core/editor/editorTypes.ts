@@ -104,6 +104,8 @@ export interface EditorCapabilities {
    * 实例已无法产出权威内容时返回 null，由调用方保留镜像或中止操作。
    */
   flush(reason: FlushReason): Promise<CapturedContent | null>;
+  /** Read the current text for comparison without publishing it to the session or consuming pending input. */
+  readTextSnapshot?(maxChars: number): { content: string } | 'too-large' | null;
   focus(): void;
   getSelectedText(): string;
   /** 是否可安全回收渲染实例（S11 起逐类型验证接入；未验证类型必须返回 false） */

@@ -75,6 +75,10 @@ export function createCodeEditorCapabilities(
     docKey,
     instanceId,
     getRevision: () => getDocumentRevision(docKey),
+    readTextSnapshot: (maxChars) => {
+      const text = view.state.doc;
+      return text.length > maxChars ? 'too-large' : { content: text.toString() };
+    },
     flush: async () => {
       // CodeMirror 的 doc 是不可变结构，toString 即为权威快照；
       // 🔴 R03：镜像写入经统一提交屏障（旧实例/旧 revision 快照不得覆盖新内容）

@@ -1,16 +1,20 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { TooltipProvider } from './Tooltip';
 
-export function DialogShell({ title, description, children, onDismiss, width = 480 }: {
+export function DialogShell({ title, description, children, onDismiss, width = 480, restoreFocusTo }: {
   title: string; description: string; children: ReactNode; onDismiss: () => void; width?: number;
+  restoreFocusTo?: RefObject<HTMLElement | null>;
 }) {
   return <Dialog.Root open onOpenChange={(open) => { if (!open) onDismiss(); }}>
     <Dialog.Portal>
       <Dialog.Overlay style={{ position: 'fixed', inset: 0, background: 'rgb(0 0 0 / 30%)', zIndex: 10000 }} />
-      <Dialog.Content data-shortcuts-suspended style={{
+      <Dialog.Content data-shortcuts-suspended onCloseAutoFocus={restoreFocusTo && ((event) => {
+        event.preventDefault();
+        restoreFocusTo.current?.focus({ preventScroll: true });
+      })} style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
         width: `min(${width}px, calc(100vw - 40px))`, boxSizing: 'border-box', padding: 24,
         background: 'var(--editor-surface)', color: 'var(--editor-text)',

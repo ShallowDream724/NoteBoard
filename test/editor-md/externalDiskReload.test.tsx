@@ -137,6 +137,36 @@ it('keeps new source input and the conflict when the disk read resolves later', 
   } finally { await unmount(); }
 });
 
+it('opens the conflict comparison with both versions read-only and returns focus on close', async () => {
+  const initial = payload('markdown', 'Initial text', 'old.md');
+  const { key } = initial;
+  const unmount = await mount(initial, 'source');
+  try {
+    await act(async () => { typeAtStart(key, 'source', 'Local '); markConflict(key); });
+    vi.mocked(readDocument).mockResolvedValue(payload('markdown', 'Disk text', 'new.md'));
+    const trigger = document.querySelector<HTMLButtonElement>('.nb-external-change-actions [aria-haspopup="dialog"]')!;
+    trigger.focus();
+    await act(async () => {
+      trigger.click();
+      await vi.dynamicImportSettled();
+    });
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"] [aria-label="当前编辑内容"]')?.textContent).toBe('Local Initial text'));
+    const views = Array.from(document.querySelectorAll('[role="dialog"] [aria-readonly="true"]'));
+    expect(views.map(view => view.textContent)).toEqual(['Local Initial text', 'Disk text']);
+    expect(views.every(view => view.getAttribute('contenteditable') === 'false')).toBe(true);
+    expect(document.querySelector('[role="dialog"] .cm-changedText')).not.toBeNull();
+    expect(documentText(key, 'source')).toBe('Local Initial text');
+    expect(useDocumentStore.getState().getDocument(key)).toMatchObject({
+      persistedContent: initial.content, isDirty: true, externalStatus: 'modified',
+    });
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="关闭"]')!.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(useDocumentStore.getState().getDocument(key)?.externalStatus).toBe('modified');
+  } finally { await unmount(); }
+});
+
 it('retains the conflict, disk baseline and live source when reading fails', async () => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
   const initial = payload('markdown', 'Initial text', 'old.md');

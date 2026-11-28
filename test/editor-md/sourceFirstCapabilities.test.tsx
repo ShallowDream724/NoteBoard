@@ -59,7 +59,7 @@ vi.mock('@/features/editor-md/serialize', async (original) => ({
   serializeMarkdown: () => 'serialized-visual',
 }));
 vi.mock('@/features/editor-md/MarkdownModeToggle', () => ({ MarkdownModeToggle: () => null }));
-vi.mock('@/features/editor-md/ExternalChangeBanner', () => ({ ExternalChangeBanner: () => null }));
+vi.mock('@/features/external/ExternalChangeBanner', () => ({ ExternalChangeBanner: () => null }));
 vi.mock('@tiptap/react', () => ({ useEditor: () => null, EditorContent: () => null }));
 vi.mock('@/features/editor-md/extensions', () => ({ buildExtensions: () => [] }));
 vi.mock('@/features/editor-md/bubbleMenu', () => ({ EditorBubbleMenu: () => null, TableToolbar: () => null }));

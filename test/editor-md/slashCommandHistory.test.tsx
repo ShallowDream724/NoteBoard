@@ -13,7 +13,7 @@ vi.mock('@/features/editor-md/blockDragHandle', () => ({ BlockDragHandle: () => 
 vi.mock('@/features/editor-md/EditorContextMenu', () => ({ EditorContextMenu: () => null }));
 vi.mock('@/features/editor-md/LinkModal', () => ({ LinkModal: () => null }));
 vi.mock('@/features/editor-md/MarkdownModeToggle', () => ({ MarkdownModeToggle: () => null }));
-vi.mock('@/features/editor-md/ExternalChangeBanner', () => ({ ExternalChangeBanner: () => null }));
+vi.mock('@/features/external/ExternalChangeBanner', () => ({ ExternalChangeBanner: () => null }));
 vi.mock('@/features/editor-md/imagePaste', () => ({ handlePastedImageFile: vi.fn() }));
 vi.mock('@/features/editor-md/markdownAutoSave', () => ({ autoSaveDocument: vi.fn() }));
 

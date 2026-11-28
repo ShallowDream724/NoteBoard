@@ -196,6 +196,11 @@ export const HISTORY_NEW_GROUP_DELAY_MS = 300;
  * 保存只更新磁盘基线，不清空这部分历史，因此保存前后的内容仍可继续撤销和重做。
  */
 export const HISTORY_MIN_DEPTH = 200;
+export const historyCompartment = new Compartment();
+export const editorHistory = history({
+  minDepth: HISTORY_MIN_DEPTH,
+  newGroupDelay: HISTORY_NEW_GROUP_DELAY_MS,
+});
 
 // ── 基础扩展集 ──
 
@@ -203,10 +208,7 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
   return [
     EditorState.phrases.of({ 'Go to line': '跳转到行', go: '跳转' }),
     // 编辑历史：缩短合并窗口并扩大容量，减少单次回退过多，同时保留更长的前后变化链
-    history({
-      minDepth: HISTORY_MIN_DEPTH,
-      newGroupDelay: HISTORY_NEW_GROUP_DELAY_MS,
-    }),
+    historyCompartment.of(editorHistory),
     // 行号（通过 compartment 切换）
     lineNumberCompartment.of(
       options?.showLineNumbers !== false ? [lineNumbers(), highlightActiveLineGutter()] : [],
