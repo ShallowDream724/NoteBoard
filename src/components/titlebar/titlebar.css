@@ -53,3 +53,7 @@
 .nb-tab[data-edge-last="true"]::after { opacity:0; }
 @media (prefers-reduced-motion:reduce) { .titlebar-action, .nb-tab-close { transition:none; } }
 @media (prefers-reduced-motion:reduce) { .titlebar-save-spinner { animation:none; } }
+.nb-tab-reference {
+  flex: 0 0 auto;
+  color: var(--editor-accent);
+}

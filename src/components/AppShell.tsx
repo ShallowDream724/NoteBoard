@@ -16,7 +16,7 @@ import { WelcomeScreen } from './WelcomeScreen';
 import { UnsupportedView } from './UnsupportedView';
 import { ToastContainer } from './Toast';
 import { FileDropOverlay } from './FileDropOverlay';
-import { useWindowStore } from '../stores/windowStore';
+import { useWindowStore, type Tab } from '../stores/windowStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import {
   useLayoutStore,
@@ -73,10 +73,34 @@ import { checkActiveDocumentStillExists } from '../features/external/missingFile
 import { usePracticeStore } from '../features/learning/practiceStore';
 import { trackPracticeTab } from '../features/learning/practiceLifecycle';
 import { relinquishDocumentBookmarks } from '../features/bookmarks/storage';
+import { ReferencePane } from '../features/reference-pane/ReferencePane';
+import { supportsReference } from '../features/reference-pane/referenceDocument';
 
 // ── AppShell ──
 const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
 const InteractivePracticePanel = lazy(() => import('../features/learning/InteractivePracticePanel'));
+
+function DocumentWorkspace({ children, referenceTab, onCloseReference }: {
+  children: React.ReactNode;
+  referenceTab?: Tab;
+  onCloseReference: () => void;
+}) {
+  return (
+    <Panel id="nb-editor" minSize="30%">
+      <Group id="nb-document-layout" orientation="horizontal" style={{ width: '100%', height: '100%' }}>
+        <Panel id="nb-primary-document" minSize="35%">{children}</Panel>
+        {referenceTab && (
+          <>
+            <PanelResizeHandle label="调整右侧预览宽度" />
+            <Panel id="nb-reference-document" defaultSize="45%" minSize="24%">
+              <ReferencePane tab={referenceTab} onClose={onCloseReference} />
+            </Panel>
+          </>
+        )}
+      </Group>
+    </Panel>
+  );
+}
 
 export function AppShell(_props: { children?: React.ReactNode }) {
   useEffect(() => {
@@ -89,6 +113,22 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   }, []);
   const tabs = useWindowStore((s) => s.tabs);
   const activeKey = useWindowStore((s) => s.activeKey);
+  const [referenceKey, setReferenceKey] = useState<string | null>(null);
+  const referenceTab = tabs.find(tab => tab.key === referenceKey && supportsReference(tab));
+  const openReference = useCallback((key: string) => {
+    const store = useWindowStore.getState();
+    const tab = store.getTab(key);
+    if (!tab || !supportsReference(tab)) return;
+    if (tab.isPreview) store.setTabPreview(key, false);
+    setReferenceKey(key);
+  }, []);
+  const closeReference = () => {
+    if (referenceTab) document.querySelector<HTMLElement>(`[data-tab-key="${CSS.escape(referenceTab.key)}"]`)?.focus();
+    setReferenceKey(null);
+  };
+  useEffect(() => {
+    if (referenceKey && !referenceTab) setReferenceKey(null);
+  }, [referenceKey, referenceTab]);
   const practiceSessionKey = usePracticeStore((s) => s.sessionKey);
   const navigationPanelMode = useSettingsStore(s => s.settings.editor.navigationPanelMode ?? 'floating');
   // Session ownership survives hidden panels, including board presentation mode.
@@ -460,7 +500,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   return (
     <div className="nb-app-shell" data-presentation={isBoardPresentationMode || undefined}>
       {/* 标题栏 */}
-      {!isBoardPresentationMode && <TitleBar key="app-titlebar" />}
+      {!isBoardPresentationMode && <TitleBar key="app-titlebar" referenceKey={referenceTab?.key ?? null} onOpenReference={openReference} />}
 
       {/* 主区域 */}
       <div
@@ -509,10 +549,10 @@ export function AppShell(_props: { children?: React.ReactNode }) {
           )}
 
           {/* 编辑区 */}
-          <Panel
+          <DocumentWorkspace
             key="nb-editor-panel"
-            id="nb-editor"
-            minSize="30%"
+            referenceTab={isBoardPresentationMode ? undefined : referenceTab}
+            onCloseReference={closeReference}
           >
             <div
               className="nb-editor-area"
@@ -683,7 +723,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                 {!isBoardPresentationMode && <SearchReplaceBar />}
               </div>
             </div>
-          </Panel>
+          </DocumentWorkspace>
 
         </Group>
       </div>

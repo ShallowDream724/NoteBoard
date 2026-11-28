@@ -19,7 +19,12 @@ import { useExportStore } from '../../features/export/exportStore';
 import { UpdateNotice } from '../UpdateNotice';
 import './titlebar.css';
 
-export function TitleBar() {
+interface TitleBarProps {
+  referenceKey: string | null;
+  onOpenReference: (key: string) => void;
+}
+
+export function TitleBar({ referenceKey, onOpenReference }: TitleBarProps) {
   const settingsButton = useRef<HTMLButtonElement>(null);
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
@@ -59,7 +64,10 @@ export function TitleBar() {
       </div>
 
       {/* Tab 栏 */}
-      <div className="titlebar-tab-group" data-file-drop-zone="open">{hasTabs && <TabBar />}<NewDocumentMenu /></div>
+      <div className="titlebar-tab-group" data-file-drop-zone="open">
+        {hasTabs && <TabBar referenceKey={referenceKey} onOpenReference={onOpenReference} />}
+        <NewDocumentMenu />
+      </div>
 
       {/* 拖拽空白区：当有菜单打开时临时解除 drag-region，点击直接关闭菜单且避免触发原生窗口拖动；无菜单时保留原生拖拽，双击最大化 */}
       <div

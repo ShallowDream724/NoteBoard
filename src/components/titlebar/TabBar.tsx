@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Trash2,
   GitCompare,
+  PanelRight,
   Star,
 } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
@@ -45,6 +46,7 @@ import { moveToNewWindow } from '../../features/window/windowManager';
 import * as ipc from '../../core/ipc/commands';
 import { getFileIcon } from '../FileIcon';
 import { checkOpenDocumentStillExists } from '../../features/external/missingFileGuard';
+import { supportsReference } from '../../features/reference-pane/referenceDocument';
 
 // ── 类型图标映射 ──
 
@@ -74,11 +76,13 @@ function getTabIcon(tab: Tab) {
 interface TabItemProps {
   tab: Tab;
   isActive: boolean;
+  isReference: boolean;
   onActivate: () => void;
   onClose: () => void;
+  onOpenReference: (key: string) => void;
 }
 
-function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
+function TabItem({ tab, isActive, isReference, onActivate, onClose, onOpenReference }: TabItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: tab.key });
 
@@ -153,8 +157,9 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           }}
           role="tab"
           aria-selected={isActive}
+          data-tab-key={tab.key}
           data-last-tab={currentIndex === tabs.length - 1 ? 'true' : undefined}
-          aria-label={`${tab.displayName}${tab.isDirty ? '，有未保存的修改' : ''}`}
+          aria-label={`${tab.displayName}${tab.isDirty ? '，有未保存的修改' : ''}${isReference ? '，已在右侧打开' : ''}`}
         >
           {/* 未保存圆点 */}
           {tab.isDirty && (
@@ -181,6 +186,9 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           >
             {tab.displayName}
           </span>
+          {isReference && (
+            <PanelRight size={12} className="nb-tab-reference" aria-hidden="true" />
+          )}
 
           {/* 关闭按钮（固定靠在 Tab 最右侧） */}
           <button
@@ -311,6 +319,24 @@ function TabItem({ tab, isActive, onActivate, onClose }: TabItemProps) {
           {!tab.toolKind && (
             <>
               <div style={{ height: 1, background: 'var(--editor-border)', margin: '4px 0' }} />
+
+              {supportsReference(tab) && (
+                <button
+                  type="button"
+                  style={getMenuItemStyle(false)}
+                  onClick={() => {
+                    setMenuPos(null);
+                    onOpenReference(tab.key);
+                  }}
+                  onMouseEnter={handleMenuItemMouseEnter}
+                  onMouseLeave={handleMenuItemMouseLeave}
+                  onMouseDown={handleMenuItemMouseDown}
+                  onMouseUp={handleMenuItemMouseUp}
+                >
+                  <PanelRight size={13} />
+                  <span>在右侧打开</span>
+                </button>
+              )}
 
               {/* 在独立新窗口中打开 */}
               <button
@@ -468,7 +494,12 @@ function handleMenuItemMouseUp(e: React.MouseEvent<HTMLButtonElement>) {
 
 // ── TabBar ──
 
-export function TabBar() {
+interface TabBarProps {
+  referenceKey: string | null;
+  onOpenReference: (key: string) => void;
+}
+
+export function TabBar({ referenceKey, onOpenReference }: TabBarProps) {
   const { tabs, activeKey, activateTab, requestCloseTab, reorderTabs } = useWindowStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -543,8 +574,10 @@ export function TabBar() {
                 key={tab.key}
                 tab={tab}
                 isActive={tab.key === activeKey}
+                isReference={tab.key === referenceKey}
                 onActivate={() => handleActivateTab(tab.key)}
                 onClose={() => requestCloseTab(tab.key)}
+                onOpenReference={onOpenReference}
               />
             ))}
           </SortableContext>
