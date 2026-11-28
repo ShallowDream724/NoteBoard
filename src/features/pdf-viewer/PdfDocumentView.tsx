@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, RefObject } from 'react';
+import type { RefObject } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { Minus, Plus } from 'lucide-react';
 import type { ReadingState } from '../../core/ipc/types';
+import { PdfDocumentControls } from './PdfDocumentControls';
 import { PdfDrawQueue, PdfPage } from './PdfPage';
+import type { PdfPane } from './PdfStatusSlot';
 import { clamp, createPdfPageLayout, MAX_ZOOM, MIN_ZOOM, PAGE_MARGIN, validPageSize } from './pdfPageLayout';
 import type { PdfPageSize } from './pdfPageLayout';
 
@@ -17,15 +18,17 @@ const MAX_STAGE_HEIGHT = 24 * 1024 * 1024;
 type ZoomAnchor = { page: number; fractionX: number; fractionY: number; x: number; y: number };
 type VisibleRange = { first: number; last: number; current: number; offset: number };
 
-export function PdfDocumentView({ pdf, viewport, position }: {
+export function PdfDocumentView({ pdf, viewport, position, pane, documentKey, fileName }: {
   pdf: PDFDocumentProxy;
   viewport: RefObject<HTMLDivElement | null>;
   position: RefObject<PdfReadingState>;
+  pane: PdfPane;
+  documentKey?: string;
+  fileName?: string;
 }) {
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [sizes, setSizes] = useState<ReadonlyMap<number, PdfPageSize>>(() => new Map());
   const [zoom, setZoom] = useState(position.current.zoom);
-  const [input, setInput] = useState<string | null>(null);
   const [visible, setVisible] = useState<VisibleRange | null>(null);
   const current = useRef(position.current.page);
   const queue = useMemo(() => new PdfDrawQueue(() => current.current), []);
@@ -160,12 +163,9 @@ export function PdfDocumentView({ pdf, viewport, position }: {
     if (element) scaleAt(value, element.clientWidth / 2, element.clientHeight / 2);
   }
 
-  function jump(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function jump(page: number) {
     const element = viewport.current;
-    const page = input?.trim() ? Number(input) : NaN;
-    setInput(null);
-    if (!element || !Number.isSafeInteger(page)) return;
+    if (!element) return;
     element.scrollTop = (layout.pageRect(clamp(page, 1, pdf.numPages)).top - PAGE_MARGIN) / scrollScale;
     restoring.current = null;
     reportViewport(element);
@@ -193,21 +193,7 @@ export function PdfDocumentView({ pdf, viewport, position }: {
         })}
       </div>}
     </div>
-    <div className="nb-pdf-toolbar" role="group" aria-label="页面导航与缩放">
-      <form onSubmit={jump}>
-        <input aria-label="页码" inputMode="numeric" value={input ?? (visible?.current ?? position.current.page)}
-          onChange={event => setInput(event.target.value)} onBlur={() => setInput(null)} />
-        <span aria-label={`共 ${pdf.numPages} 页`}>/ {pdf.numPages}</span>
-      </form>
-      <div className="nb-pdf-zoom" role="group" aria-label="缩放">
-        <button type="button" title="缩小" aria-label="缩小" disabled={zoom <= MIN_ZOOM}
-          onClick={() => zoomTo(zoom / 1.2)}><Minus size={16} /></button>
-        <button type="button" title="适合宽度" aria-label="适合宽度" onClick={() => zoomTo(1)}>
-          {Math.round(zoom * 100)}%
-        </button>
-        <button type="button" title="放大" aria-label="放大" disabled={zoom >= MAX_ZOOM}
-          onClick={() => zoomTo(zoom * 1.2)}><Plus size={16} /></button>
-      </div>
-    </div>
+    <PdfDocumentControls pane={pane} documentKey={documentKey} fileName={fileName}
+      page={visible?.current ?? position.current.page} pageCount={pdf.numPages} zoom={zoom} onJump={jump} onZoom={zoomTo} />
   </>;
 }

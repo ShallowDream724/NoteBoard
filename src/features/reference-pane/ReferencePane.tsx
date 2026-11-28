@@ -68,7 +68,7 @@ function TextReference({ tab }: { tab: Tab }) {
 
 function ReferenceContent({ tab }: { tab: Tab }) {
   if (tab.lazySource) return <RestoredReference docKey={tab.key} />;
-  if (tab.path && tab.kind === 'pdf') return <PdfViewer filePath={tab.path} fileName={tab.displayName} />;
+  if (tab.path && tab.kind === 'pdf') return <PdfViewer filePath={tab.path} fileName={tab.displayName} referenceKey={tab.key} />;
   if (tab.path && tab.kind === 'image') return <ImageReference filePath={tab.path} fileName={tab.displayName} />;
   return <TextReference tab={tab} />;
 }

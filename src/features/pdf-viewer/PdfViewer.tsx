@@ -14,13 +14,14 @@ interface PdfViewerProps {
   active?: boolean;
   /** Only the host tab owns persistent editor view state. */
   docKey?: string;
+  referenceKey?: string;
 }
 
 const DEFAULT_POSITION: PdfReadingState = { kind: 'pdf', page: 1, zoom: 1, scrollLeft: 0, scrollTop: 0 };
 const MAX_REFERENCE_POSITIONS = 24;
 const referencePositions = new Map<string, PdfReadingState>();
 
-function LocalPdfReader({ filePath, fileName, active = true, docKey }: PdfViewerProps) {
+function LocalPdfReader({ filePath, fileName, active = true, docKey, referenceKey }: PdfViewerProps) {
   const [attempt, setAttempt] = useState(0);
   const [externalError, setExternalError] = useState('');
   const viewport = useRef<HTMLDivElement>(null);
@@ -69,7 +70,8 @@ function LocalPdfReader({ filePath, fileName, active = true, docKey }: PdfViewer
       </div>
       {externalError && <p role="alert">{externalError}</p>}
     </div>}
-    {result?.pdf && <PdfDocumentView pdf={result.pdf} viewport={viewport} position={position} />}
+    {result?.pdf && <PdfDocumentView pdf={result.pdf} viewport={viewport} position={position} fileName={fileName}
+      pane={referenceKey ? 'reference' : 'primary'} documentKey={referenceKey ?? docKey} />}
   </section>;
 }
 

@@ -1,4 +1,5 @@
 .nb-pdf-reader {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -12,66 +13,90 @@
   font-size: 13px;
 }
 
-.nb-pdf-toolbar,
-.nb-pdf-toolbar form,
+.nb-pdf-status-slot:empty {
+  display: none;
+}
+
+.nb-pdf-controls,
+.nb-pdf-controls form,
 .nb-pdf-zoom,
 .nb-pdf-status-actions {
   display: flex;
   align-items: center;
+}
+
+.nb-pdf-controls {
   gap: 6px;
+  padding-inline: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.nb-pdf-toolbar {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  padding: 4px 10px;
-  border-top: 1px solid var(--editor-border);
-  background: var(--editor-bg);
+.nb-pdf-controls form {
+  gap: 4px;
 }
 
-.nb-pdf-toolbar button,
-.nb-pdf-toolbar input {
+.nb-pdf-controls button,
+.nb-pdf-controls input {
   box-sizing: border-box;
-  min-height: 28px;
-  border-radius: 4px;
+  height: max(20px, calc(var(--ui-font-size, 13px) + 5px));
+  border-radius: var(--radius-sm);
   color: inherit;
   font: inherit;
 }
 
-.nb-pdf-toolbar button {
+.nb-pdf-controls button {
   display: inline-grid;
-  min-width: 28px;
+  min-width: 21px;
   place-items: center;
-  padding: 0 5px;
+  padding: 0 3px;
   border: 0;
   background: transparent;
   cursor: pointer;
 }
 
-.nb-pdf-toolbar button:hover:not(:disabled) {
-  background: var(--editor-surface);
+.nb-pdf-controls button:hover:not(:disabled) {
+  background: var(--toolbar-hover);
 }
 
-.nb-pdf-toolbar button:disabled {
+.nb-pdf-controls button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.nb-pdf-toolbar input {
-  width: 6ch;
-  padding: 0 3px;
+.nb-pdf-controls input {
+  padding: 0 2px;
   border: 1px solid var(--editor-border);
-  background: var(--editor-bg);
+  background: transparent;
   text-align: center;
 }
 
-.nb-pdf-toolbar span {
-  color: var(--editor-text-muted);
+.nb-pdf-controls :is(button, input):focus-visible {
+  outline: 1px solid var(--editor-accent);
+  outline-offset: -1px;
 }
 
-.nb-pdf-zoom {
-  margin-inline-start: 8px;
+.nb-pdf-reference-icon {
+  display: inline-flex;
+}
+
+.nb-pdf-controls-floating {
+  position: absolute;
+  z-index: 1;
+  inset-inline: 6px;
+  inset-block-end: 8px;
+  width: max-content;
+  max-width: calc(100% - 12px);
+  margin-inline: auto;
+  justify-content: center;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding-block: 3px;
+  border: 1px solid var(--editor-border);
+  border-radius: var(--radius-sm);
+  background: var(--statusbar-bg);
+  color: var(--statusbar-text);
+  box-shadow: var(--shadow-md);
 }
 
 .nb-pdf-viewport {
@@ -169,6 +194,7 @@
 .nb-pdf-status-actions {
   flex-wrap: wrap;
   justify-content: center;
+  gap: 6px;
 }
 
 .nb-pdf-page-error {

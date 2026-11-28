@@ -2,9 +2,11 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { expect, it, vi } from 'vitest';
+import { PdfDocumentControls } from '../../src/features/pdf-viewer/PdfDocumentControls';
 import { PdfDocumentView } from '../../src/features/pdf-viewer/PdfDocumentView';
 import type { PdfReadingState } from '../../src/features/pdf-viewer/PdfDocumentView';
 import { createPdfPageLayout } from '../../src/features/pdf-viewer/pdfPageLayout';
+import { PdfStatusSlot } from '../../src/features/pdf-viewer/PdfStatusSlot';
 import { readingState } from '../../src/features/session/readingState';
 
 vi.mock('../../src/core/pdf/pdfRuntime', () => ({
@@ -60,7 +62,10 @@ it('uses the saved page-local offset and replaces a scaled canvas only after the
   const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(500);
   const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(500 * 816);
   try {
-    await act(async () => root.render(<PdfDocumentView pdf={pdf} viewport={viewport} position={position} />));
+    await act(async () => root.render(<>
+      <PdfDocumentView pdf={pdf} viewport={viewport} position={position} pane="primary" documentKey="book.pdf" />
+      <footer><PdfStatusSlot pane="primary" documentKey="book.pdf" /></footer>
+    </>));
     expect(viewport.current?.scrollTop).toBe(120 * 816 + 200);
     expect(pdf.getPage).toHaveBeenCalledWith(121);
     expect(pdf.getPage).not.toHaveBeenCalledWith(100);
@@ -73,7 +78,7 @@ it('uses the saved page-local offset and replaces a scaled canvas only after the
     expect(original?.width).toBeGreaterThan(0);
     expect(layer?.textContent).toBe('PDF text');
 
-    const plus = host.querySelector<HTMLButtonElement>('[aria-label="放大"]')!;
+    const plus = host.querySelector<HTMLButtonElement>('footer [aria-label="放大"]')!;
     const center = () => (viewport.current!.scrollTop + 250 - parseFloat(sheet().style.top)) / parseFloat(sheet().style.height);
     const originalCenter = center();
     await act(async () => plus.click());
@@ -103,5 +108,56 @@ it('uses the saved page-local offset and replaces a scaled canvas only after the
     scrollHeight.mockRestore();
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  }
+});
+
+it('keeps the two readers independent when they show the same file and moves the controls when the status bar is hidden', async () => {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const primaryJump = vi.fn();
+  const referenceJump = vi.fn();
+  const zoom = vi.fn();
+  function render(statusVisible: boolean, primaryKey: string) {
+    return act(() => root.render(<>
+      <main>
+        {primaryKey === 'book.pdf' && <PdfDocumentControls pane="primary" documentKey="book.pdf" page={1} pageCount={120}
+          zoom={1} onJump={primaryJump} onZoom={zoom} />}
+        <PdfDocumentControls pane="reference" documentKey="book.pdf" page={42} pageCount={120}
+          zoom={1.2} onJump={referenceJump} onZoom={zoom} />
+      </main>
+      {statusVisible && <footer>
+        <PdfStatusSlot pane="primary" documentKey={primaryKey} className="primary" />
+        <PdfStatusSlot pane="reference" documentKey="book.pdf" className="reference" />
+      </footer>}
+    </>));
+  }
+
+  try {
+    await render(true, 'book.pdf');
+    expect(host.querySelector('main .nb-pdf-controls')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.primary input')?.value).toBe('1');
+    const input = host.querySelector<HTMLInputElement>('.reference input')!;
+    expect(input.value).toBe('42');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '100');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(referenceJump).toHaveBeenCalledWith(100);
+    expect(primaryJump).not.toHaveBeenCalled();
+
+    await render(true, 'other.pdf');
+    expect(host.querySelector('.primary .nb-pdf-controls')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('.reference input')?.value).toBe('42');
+    await render(false, 'other.pdf');
+    expect(host.querySelectorAll('main .nb-pdf-controls-floating')).toHaveLength(1);
+    expect(host.querySelector<HTMLInputElement>('main input')?.value).toBe('42');
+    await render(true, 'book.pdf');
+    expect(host.querySelector('main .nb-pdf-controls')).toBeNull();
+    expect(host.querySelectorAll('footer .nb-pdf-controls')).toHaveLength(2);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
   }
 });
