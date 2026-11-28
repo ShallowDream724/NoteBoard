@@ -1,126 +1,98 @@
-// NoteBoard 🔴 R3-10 外部修改冲突处理编排
-//
-// ExternalChangeBanner 的“重新加载 / 覆盖磁盘文件”此前只 setExternalStatus(clean)——
-// 既不读盘也不写盘，旧正文保留、自动保存保护解除（反例：用户处理链断开）。
-// 本模块提供真正的处理链：
-//   重新加载 = 确认磁盘内容 → 应用到内核/store（含历史基线重置）→ 解除冲突；
-//   覆盖 = 受保护保存（flush 权威内容 → 写队列落盘 → 基线对齐）→ 解除冲突；
-//   失败 = 保持冲突状态（不解除保护），可重试。
+// 外部修改冲突处理：重载读取磁盘，覆盖保存当前编辑内容。
 
 import * as ipc from '../../core/ipc/commands';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
-import { getEditorCapabilities } from '../../core/editor/editorRegistry';
-import { serializeMarkdown, getBaseline } from '../editor-md/serialize';
-import {
-  initializeDocumentHistory,
-  synchronizeCurrentDocumentHistoryContent,
-} from '../history/documentHistory';
+import { getDocumentRevision, getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { showToast } from '../../stores/toastStore';
 import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '../../core/editor/pendingSnapshots';
+import { enqueueDocumentWrite, flushDocument, getSessionGeneration, isClosing, writeDocumentWithBarrier } from '../session/documentSession';
+import { discardStagedDocuments } from '../staging/stagingManager';
+import { applyDocumentFromDisk } from './diskDocumentSnapshot';
 
-/**
- * 🔴 R3-10：重新加载——确认并应用磁盘内容到当前会话。
- * 读盘成功：正文进 store、内核经能力 flush 语义对齐（无实例则只改镜像——挂载时
- * 以 store 内容重建）、基线重置为磁盘内容、历史首节点同步、解除冲突；
- * 读盘失败（外部删除/权限）：保持冲突状态，提示可重试。
- */
+/** Read after any queued writes and replace the live document in the same session. */
 export async function reloadFromDisk(docKey: string): Promise<boolean> {
+  const generation = getSessionGeneration(docKey);
+  const revision = getDocumentRevision(docKey);
+  const isCurrentConflict = () => getSessionGeneration(docKey) === generation
+    && useDocumentStore.getState().getDocument(docKey)?.externalStatus === 'modified'
+    && !isClosing(docKey) && !useWindowStore.getState().isTransferring(docKey);
+  if (!isCurrentConflict()) return false;
   try {
-    const payload = await ipc.readDocument(docKey);
-    const store = useDocumentStore.getState();
-    const doc = store.getDocument(docKey);
-    if (!doc) return false;
-    // 先物化 J2 暂存（未物化输入不落历史孤儿）
-    flushPendingSourceSnapshot(docKey);
-    flushPendingVisualSnapshot(docKey);
-    // 应用磁盘内容：store 镜像 + 基线 + 历史（DocumentPayload.content 类型含 null——
-    // 读盘成功路径必为字符串；null 视为失败保持冲突状态）
-    const diskContent = payload.content;
-    if (diskContent == null) {
-      showToast('读取到的文件内容为空引用，冲突状态保留', 'error');
-      return false;
-    }
-    store.setContent(docKey, diskContent);
-    store.updateBaseline(docKey, diskContent, payload.mtime, payload.size);
-    getBaseline(docKey).updateBaseline(diskContent);
-    store.setDirty(docKey, false);
-    useWindowStore.getState().setTabDirty(docKey, false);
-    // 内核对齐：无实例（后台/未挂载）时挂载以 store 重建；有实例时经能力 flush
-    // 的镜像屏障之后，模式切换/挂载流程应用新内容；统一历史以新内容为首节点基准
-    const capabilities = getEditorCapabilities(docKey);
-    if (!capabilities) {
-      initializeDocumentHistory(docKey, diskContent, 'code');
-    } else {
-      // 有实例时以当前模式对齐（内核经挂载/模式切换应用 store 内容）
-      const mode = useWindowStore.getState().getTab(docKey)?.viewMode === 'source' ? 'source' : 'visual';
-      synchronizeCurrentDocumentHistoryContent(docKey, diskContent, mode);
-    }
-    // 解除冲突（文档与标签双侧）
-    store.setExternalStatus(docKey, 'clean');
-    useWindowStore.getState().setTabExternalStatus(docKey, 'clean');
-    showToast('已从磁盘重新加载', 'success');
-    return true;
-  } catch (e) {
-    console.error('重新加载失败:', e);
-    showToast('重新加载失败（文件可能已被删除或无法访问），冲突状态保留', 'error');
+    return await enqueueDocumentWrite(docKey, async () => {
+      if (!isCurrentConflict()) return false;
+      const payload = await ipc.readDocument(docKey);
+      if (!isCurrentConflict()) return false;
+      if (getDocumentRevision(docKey) !== revision) {
+        showToast('读取期间有新的编辑，请再次选择重新加载。', 'warning');
+        return false;
+      }
+      if (getEditorCapabilities(docKey)?.hasExplicitDraft?.()) {
+        showToast('请先保存或取消说明草稿，再重新加载。', 'warning');
+        return false;
+      }
+      if (!applyDocumentFromDisk(docKey, payload)) throw new Error('无法应用磁盘内容。');
+      void discardStagedDocuments([docKey]).catch(error => console.warn('清理暂存失败:', error));
+      showToast('已从磁盘重新加载', 'success');
+      return true;
+    });
+  } catch (error) {
+    if (!isCurrentConflict()) return false;
+    console.error('重新加载失败:', error);
+    const detail = error instanceof Error ? ` ${error.message}` : '';
+    showToast(`重新加载失败，已保留当前内容。${detail}`, 'error');
     return false;
   }
 }
 
-/**
- * 🔴 R3-10：覆盖磁盘文件——受保护保存当前权威内容。
- * flush 权威内容（编辑器内核/J2 暂存/镜像逐级回退）→ 每文档写队列落盘 →
- * 基线对齐 → 解除冲突。写盘失败：保持冲突状态（不解除自动保存保护），可重试。
- */
+/** 将当前编辑内容写入磁盘。写盘成功后才解除该会话的冲突。 */
 export async function overwriteFromEditor(docKey: string): Promise<boolean> {
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
-  if (!doc) return false;
-  // 权威内容：能力 flush（含 J2 暂存物化）→ 镜像
-  const capabilities = getEditorCapabilities(docKey);
-  let content: string | null = null;
-  if (capabilities) {
-    const captured = await capabilities.flush('save');
-    content = captured?.content ?? null;
-  }
-  if (content === null) {
-    flushPendingSourceSnapshot(docKey);
-    content = flushPendingVisualSnapshot(docKey)
-      ?? store.getDocument(docKey)?.content
-      ?? null;
-  }
-  if (content === null) {
-    showToast('无法获取文档正文，覆盖已取消（冲突状态保留）', 'warning');
-    return false;
-  }
+  if (!doc || doc.externalStatus !== 'modified') return false;
+  const generation = getSessionGeneration(docKey);
+  const isCurrentConflict = () => getSessionGeneration(docKey) === generation
+    && store.getDocument(docKey)?.externalStatus === 'modified';
 
   try {
-    // 受保护保存：写队列内落盘（基线更新为实际写入内容）
-    const { writeDocumentWithBarrier } = await import('../session/documentSession');
+    const captured = await flushDocument(docKey, 'save');
+    if (!isCurrentConflict()) return false;
+    const content = captured?.content
+      ?? flushPendingSourceSnapshot(docKey)
+      ?? flushPendingVisualSnapshot(docKey)
+      ?? store.getDocument(docKey)?.content;
+    if (content == null) {
+      showToast('无法获取文档正文，覆盖已取消（冲突状态保留）', 'warning');
+      return false;
+    }
+
     let expectedNativeHash: string | undefined;
     if (doc.kind === 'noteboard') {
+      // 以用户确认覆盖时的磁盘版本为条件，保留原生保存对后续修改的保护。
       const disk = await ipc.readDocument(docKey);
       if (disk.content == null) throw new Error('无法读取目标文档。');
       const { documentTextHash } = await import('../../core/nativeDocumentIO');
       expectedNativeHash = await documentTextHash(disk.content);
     }
+    if (!isCurrentConflict()) return false;
     const ok = await writeDocumentWithBarrier(docKey, content, { expectedNativeHash });
+    if (getSessionGeneration(docKey) !== generation) return false;
     if (!ok) {
-      showToast('覆盖磁盘失败，冲突状态保留，可重试', 'error');
+      if (isCurrentConflict()) showToast('覆盖磁盘失败，冲突状态保留，可重试', 'error');
       return false;
     }
-    // 解除冲突（文档与标签双侧）
-    store.setExternalStatus(docKey, 'clean');
-    useWindowStore.getState().setTabExternalStatus(docKey, 'clean');
+    if (isCurrentConflict()) {
+      store.setExternalStatus(docKey, 'clean');
+      useWindowStore.getState().setTabExternalStatus(docKey, 'clean');
+    }
     showToast('已用当前内容覆盖磁盘文件', 'success');
     return true;
   } catch (e) {
-    console.error('覆盖磁盘失败:', e);
-    showToast('覆盖磁盘失败，冲突状态保留，可重试', 'error');
+    if (isCurrentConflict()) {
+      console.error('覆盖磁盘失败:', e);
+      const reason = e instanceof Error ? e.message : String(e);
+      showToast(`覆盖磁盘失败，冲突状态保留。${reason}`, 'error');
+    }
     return false;
   }
 }
-
-// 供测试断言/后续“覆盖所有可写类型入口”扩展引用（serializeMarkdown 保持模块边界内可用）
-void serializeMarkdown;

@@ -166,6 +166,35 @@ describe('🔴 N09 外部正文修改核对链', () => {
     release();
   });
 
+  it('a delayed disk read cannot reopen a conflict resolved while it was in flight', async () => {
+    seedOpenDocument('editor version', 'editor version');
+    const docs = useDocumentStore.getState(), tabs = useWindowStore.getState();
+    docs.setExternalStatus(KEY, 'modified');
+    tabs.setTabExternalStatus(KEY, 'modified');
+    const release = watchDirectory(DIR);
+    let finishRead!: (value: { content: string }) => void;
+    readDocumentMock.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      watchHandler?.({ type: 'write', paths: [KEY] });
+      await vi.advanceTimersByTimeAsync(700);
+      // Overwriting can keep the previous baseline text byte-for-byte.
+      docs.updateBaseline(KEY, 'editor version', 3, 14);
+      docs.setExternalStatus(KEY, 'clean');
+      tabs.setTabExternalStatus(KEY, 'clean');
+      finishRead({ content: 'old external version' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(docs.getDocument(KEY)?.externalStatus).toBe('clean');
+      expect(tabs.getTab(KEY)?.externalStatus).toBe('clean');
+
+      readDocumentMock.mockResolvedValue({ content: 'a later external edit' });
+      await vi.advanceTimersByTimeAsync(700);
+      expect(docs.getDocument(KEY)?.externalStatus).toBe('modified');
+    } finally {
+      release();
+    }
+  });
+
   it('自身写入静默窗口内的事件延迟复核：外部紧随修改不被吞', async () => {
     seedOpenDocument('draft', 'draft');
     const release = watchDirectory(DIR);

@@ -66,6 +66,7 @@ let recheckTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** 待核对文档路径（事件风暴去抖合并——600ms 内多事件一次读取） */
 const pendingDocRechecks = new Set<string>();
+const activeDocReads = new Map<string, symbol>();
 let docRecheckTimer: ReturnType<typeof setTimeout> | null = null;
 /** 自身写静默窗口内命中的文档路径（延迟到窗口结束后核对，不吞外部紧随修改） */
 const deferredDocRechecks = new Set<string>();
@@ -94,6 +95,10 @@ function scheduleDocumentRecheck(rawPath: string): void {
   const tab = useWindowStore.getState().getTab(docKey);
   // 只核对已打开且已加载（非 lazy）的文档
   if (!doc || !tab || tab.lazySource) return;
+  queueDocumentRecheck(docKey);
+}
+
+function queueDocumentRecheck(docKey: string): void {
   // 🔴 R3-10：不再跳过已 modified/deleted 的文档——外部写回基线（内容恢复
   // 一致）时仍需复核恢复 clean；modified 期间重复核对幂等（内容比较）
   pendingDocRechecks.add(docKey);
@@ -119,21 +124,28 @@ async function recheckDocument(docKey: string): Promise<void> {
   // 🔴 R3-10：捕获读取时刻的基线与会话代际——异步返回后校验（旧读取迟到不误标新会话）
   const docAtStart = useDocumentStore.getState().getDocument(docKey);
   if (!docAtStart) return;
-  const baselineAtStart = docAtStart.persistedContent;
+  const { persistedContent: baselineAtStart, mtime, externalStatus } = docAtStart;
   if (baselineAtStart == null) return;
   const generationAtStart = getSessionGeneration(docKey);
+  const read = Symbol();
+  activeDocReads.set(docKey, read);
+  function currentDocument() {
+    if (activeDocReads.get(docKey) !== read || getSessionGeneration(docKey) !== generationAtStart) return;
+    const current = useDocumentStore.getState().getDocument(docKey);
+    if (!current) return;
+    if (current.persistedContent !== baselineAtStart || current.mtime !== mtime || current.externalStatus !== externalStatus) {
+      // A save or conflict decision completed during I/O. Only a fresh disk
+      // read can say whether the file subsequently changed again.
+      queueDocumentRecheck(docKey);
+      return;
+    }
+    return current;
+  }
   try {
     const payload = await ipc.readDocument(docKey);
-    // 🔴 R3-10：读取返回后校验会话未换代（同路径重开——旧读取结果不适用于新会话）
-    if (getSessionGeneration(docKey) !== generationAtStart) return;
-    const docNow = useDocumentStore.getState().getDocument(docKey);
-    if (!docNow) return;
-    // 🔴 R3-10：基线在读取期间变化（自身保存完成）→ 按新基线重新比较（不吞也不误报）
-    const effectiveBaseline = docNow.persistedContent !== baselineAtStart
-      ? docNow.persistedContent
-      : baselineAtStart;
-    if (effectiveBaseline == null || payload.content == null) return;
-    const nextStatus = normalizeDocumentEol(payload.content) === normalizeDocumentEol(effectiveBaseline) ? 'clean' : 'modified';
+    const docNow = currentDocument();
+    if (!docNow || payload.content == null) return;
+    const nextStatus = normalizeDocumentEol(payload.content) === normalizeDocumentEol(baselineAtStart) ? 'clean' : 'modified';
     if (docNow.externalStatus !== nextStatus) {
       useDocumentStore.getState().setExternalStatus(docKey, nextStatus);
       useWindowStore.getState().setTabExternalStatus(docKey, nextStatus);
@@ -142,9 +154,7 @@ async function recheckDocument(docKey: string): Promise<void> {
     // 读取失败：区分删除与权限（仅确认删除才标记；权限问题保持现状）
     try {
       const state = await ipc.pathExists(docKey);
-      // 🔴 R3-10：同样按会话代际条件提交
-      if (getSessionGeneration(docKey) !== generationAtStart) return;
-      const docNow = useDocumentStore.getState().getDocument(docKey);
+      const docNow = currentDocument();
       if (!docNow) return;
       if (!state.exists && docNow.externalStatus !== 'deleted') {
         useDocumentStore.getState().setExternalStatus(docKey, 'deleted');
@@ -153,6 +163,8 @@ async function recheckDocument(docKey: string): Promise<void> {
     } catch {
       // 无法确认：保持现状
     }
+  } finally {
+    if (activeDocReads.get(docKey) === read) activeDocReads.delete(docKey);
   }
 }
 

@@ -4,6 +4,12 @@ The document timeline owns undo/redo across visual and source editors. It stores
 bounded checkpoints and reversible text patches; editor-local history supplies
 group boundaries, not a second user-visible timeline.
 
+Accepting an external disk version starts a new timeline at the exact text read
+from disk. The history adapter first replaces the document in the active editor
+and cancels autosave timers for the discarded edits. The first edit after reload
+can be undone back to that disk version. A failed read or a newer local edit
+during the read leaves the current timeline available.
+
 `visualHistoryGrouping.ts` adds semantic boundaries at the shared visual capture
 point. A structural creation, deletion, conversion or explicit discrete action
 is isolated from both preceding and following typing, even when an insertion

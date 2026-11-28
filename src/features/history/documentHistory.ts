@@ -54,6 +54,8 @@ export interface DocumentHistoryNavigation {
 /** 当前挂载编辑器提供的快照应用器 */
 export interface DocumentHistoryAdapter {
   applyEntry: (entry: DocumentHistoryEntry, navigation: DocumentHistoryNavigation) => void;
+  /** Apply a disk snapshot in the current mode before its new timeline is published. */
+  replaceFromDisk?: (content: string) => DocumentHistoryMode;
 }
 
 /** 可逆文本替换补丁：next = prev[0..prefixLen) + inserted + prev[prefixLen+removed.length..) */
@@ -306,6 +308,22 @@ export function initializeDocumentHistory(
   }
   histories.set(docKey, createHistory(content, mode));
   notifyHistoryChange(docKey);
+}
+
+/** Start a fresh timeline after replacing the live document, keeping its adapter registered. */
+export function resetDocumentHistoryFromDisk(
+  docKey: string,
+  content: string,
+  mode: DocumentHistoryMode,
+  requireEditor: boolean,
+): boolean {
+  const adapter = adapters.get(docKey);
+  if ((requireEditor && !adapter?.replaceFromDisk) || histories.get(docKey)?.isApplying) return false;
+  materializePending(docKey);
+  const currentMode = adapter?.replaceFromDisk?.(content) ?? mode;
+  histories.set(docKey, createHistory(content, currentMode));
+  notifyHistoryChange(docKey);
+  return true;
 }
 
 /** 注册当前挂载编辑器的历史快照应用器 */

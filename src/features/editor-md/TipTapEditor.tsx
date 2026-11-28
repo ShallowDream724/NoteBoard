@@ -541,7 +541,36 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
   // 当前可见模式负责呈现统一历史节点，另一内核会在下次切换时无历史地同步到同一内容
   useEffect(() => {
+    const replaceVisualDocument = (editor: Editor, content: string) => {
+      // Shared history applies only the changed slice; unaffected views keep
+      // their media, syntax decorations and rendering state.
+      parseEditorDocument(editor, content, 'history');
+      releaseNativeHistory(editor.view);
+      visualUndoDepthRef.current = 0;
+    };
     return registerDocumentHistoryAdapter(docKey, {
+      replaceFromDisk: (content) => {
+        const mode = viewModeRef.current;
+        if (mode === 'source') {
+          if (sourceViewRef.current?.composing) throw new Error('请先完成当前输入，再重新加载。');
+          initSourceEditor(content);
+          if (!sourceViewRef.current) throw new Error('源码编辑器尚未就绪。');
+        } else {
+          const editor = tipTapEditorRef.current;
+          if (!editor || editor.isDestroyed) throw new Error('编辑器尚未就绪。');
+          if (editor.view.composing) throw new Error('请先完成当前输入，再重新加载。');
+          replaceVisualDocument(editor, content);
+        }
+        if (storeTimerRef.current) clearTimeout(storeTimerRef.current);
+        if (diskTimerRef.current) clearTimeout(diskTimerRef.current);
+        if (focusFrameRef.current !== null) cancelAnimationFrame(focusFrameRef.current);
+        pendingVisualContentRef.current = null;
+        pendingSourceSelectionRef.current = null;
+        authoringBookmarkRef.current = null;
+        pendingAuthoringBookmarkRef.current = null;
+        pendingMathSelectionRef.current = null;
+        return mode;
+      },
       applyEntry: (entry, navigation) => {
         const publish = (content: string) => {
           bumpDocumentRevision(docKey);
@@ -576,13 +605,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         if (!editor || editor.isDestroyed) throw new Error('编辑器尚未就绪');
         const activeControl = focusedEditorControl(editor.view);
         const previousVisualDocument = editor.state.doc;
-        if (hasMarkdownContentChanged(editor, entry.content)) {
-          // Shared history applies only the changed slice; unaffected views keep
-          // their media, syntax decorations and rendering state.
-          parseEditorDocument(editor, entry.content, 'history');
-        }
-        releaseNativeHistory(editor.view);
-        visualUndoDepthRef.current = 0;
+        replaceVisualDocument(editor, entry.content);
         publish(entry.content);
         // A surviving embedded control owns its caret. Removing its node tears
         // down that control, then the document resumes at a legal selection.
@@ -892,8 +915,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         <span>此文件较大，使用源码模式编辑。</span>
         <button className="nb-btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => setShowLargeBanner(false)}>知道了</button>
       </div>}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       <ExternalChangeBanner docKey={docKey} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
       {/* 🔴 S08：visual 运行时（惰性挂载；TipTap 内核随本组件创建/销毁） */}
       {hasVisualKernel && (
         <VisualKernel

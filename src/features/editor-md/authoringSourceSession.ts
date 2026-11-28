@@ -41,7 +41,6 @@ export class AuthoringSourceSession implements SourceDocumentAdapter {
   };
   replace(storage: string) {
     const bookmark = captureAuthoringSelection(this.spans, this.view.state.selection.main);
-    this.metadata = readNativeMetadata(storage);
     let serialized = { text: this.source, spans: this.spans };
     if (storage !== this.storage) {
       let previous = this.parsedDocument ?? this.provenanceDocument.deref();
@@ -53,6 +52,7 @@ export class AuthoringSourceSession implements SourceDocumentAdapter {
       inheritAuthoringSource(previous, doc);
       serialized = serializeAuthoring(doc); this.provenanceDocument = new WeakRef(doc);
     }
+    this.metadata = readNativeMetadata(storage);
     this.source = serialized.text; this.spans = serialized.spans; this.storage = storage;
     this.parsedDocument = null;
     const selection = authoringBookmarkSelection(this.spans, bookmark);

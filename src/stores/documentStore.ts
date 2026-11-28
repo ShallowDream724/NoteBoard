@@ -74,6 +74,8 @@ interface DocumentStore {
   setBaselineContent: (key: string, baselineContent: string) => void;
   /** 使用实际写入磁盘的内容更新基线（保存后调用） */
   updateBaseline: (key: string, savedContent: string, mtime: number, size: number, persistedContent?: string | null) => void;
+  /** Adopt an already applied text snapshot and its current disk metadata together. */
+  acceptDiskContent: (key: string, payload: DocumentPayload) => void;
   /** 同步刷新所有文档的保存策略（设置改变时调用） */
   syncSavePolicies: () => void;
   /** 设置外部变更状态 */
@@ -214,6 +216,28 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         isDirty,
       });
       return { documents: newMap };
+    });
+  },
+
+  acceptDiskContent: (key, payload) => {
+    set((state) => {
+      const doc = state.documents.get(key);
+      if (!doc || payload.content == null) return state;
+      const documents = new Map(state.documents);
+      documents.set(key, {
+        ...doc,
+        content: payload.content,
+        baselineContent: payload.content,
+        persistedContent: payload.content,
+        encoding: payload.encoding,
+        eol: payload.eol,
+        mtime: payload.mtime,
+        size: payload.size,
+        readonly: payload.readonly,
+        isDirty: false,
+        externalStatus: 'clean',
+      });
+      return { documents };
     });
   },
 

@@ -173,12 +173,13 @@ export function parseEditorDocument(editor: Editor, content: string, origin: 'sy
   if (!hasEditorDocumentChanged(editor, content)) return;
   const doc = parseNativeNode(content, editor.schema);
   const original = originalSources.get(doc)!;
+  if (!doc.eq(editor.state.doc)) {
+    if (origin === 'history') reconcileDocumentHistory(editor, doc);
+    else editor.chain().setContent(doc, { contentType: 'json' }).command(({ tr }) => {
+      markDocumentReplacement(tr, origin);
+      return true;
+    }).run();
+  }
   setEditorNativeMetadata(editor, original.metadata);
-  if (doc.eq(editor.state.doc)) { originalSources.set(editor.state.doc, original); return; }
-  if (origin === 'history') reconcileDocumentHistory(editor, doc);
-  else editor.chain().setContent(doc, { contentType: 'json' }).command(({ tr }) => {
-    markDocumentReplacement(tr, origin);
-    return true;
-  }).run();
   originalSources.set(editor.state.doc, original);
 }
