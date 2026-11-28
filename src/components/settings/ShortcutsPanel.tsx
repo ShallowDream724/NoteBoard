@@ -8,7 +8,7 @@ import { checkShortcutSystem, useShortcutDiagnosticsStore } from '../../stores/s
 import { showToast } from '../../stores/toastStore';
 import './shortcutsPanel.css';
 
-const scopes: Record<ShortcutContext, string> = { app: '全局', markdown: 'Markdown 正文', source: 'Markdown 源码', code: '代码与纯文本', explorer: '资源管理器', diagram: '图表源码', mindmap: '思维导图', search: '查找与替换' };
+const scopes: Record<ShortcutContext, string> = { app: '全局', markdown: 'Markdown 正文', source: 'Markdown 源码', html: 'HTML 预览与源码', code: '代码与纯文本', explorer: '资源管理器', diagram: '图表源码', mindmap: '思维导图', search: '查找与替换' };
 const EMPTY_OVERRIDES: Record<string, string[] | null> = {};
 type Feedback = { kind: 'error' | 'success' | 'pending'; text: string } | null;
 

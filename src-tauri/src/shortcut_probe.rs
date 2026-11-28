@@ -39,23 +39,44 @@ pub(crate) fn validate_overrides(overrides: &BTreeMap<String, Vec<String>>) -> R
 #[serde(rename_all = "camelCase")]
 pub struct ShortcutProbe { binding: String, status: &'static str, error_code: Option<i32> }
 
+const SPECIAL_KEYS: &[(&str, u32)] = &[
+    ("Enter", 0x0d), ("Space", 0x20), ("Tab", 0x09), ("Escape", 0x1b),
+    ("Backspace", 0x08), ("Delete", 0x2e), ("Insert", 0x2d),
+    ("Home", 0x24), ("End", 0x23), ("PageUp", 0x21), ("PageDown", 0x22),
+    ("ArrowLeft", 0x25), ("ArrowUp", 0x26), ("ArrowRight", 0x27), ("ArrowDown", 0x28),
+    ("/", 0xbf), (".", 0xbe), (",", 0xbc), ("-", 0xbd), ("=", 0xbb),
+    (";", 0xba), ("'", 0xde), ("[", 0xdb), ("]", 0xdd), ("\\", 0xdc), ("`", 0xc0),
+];
+
 fn native_key(binding: &str) -> Option<(u32, u32)> {
     let mut parts: Vec<_> = binding.split('+').collect();
     let key = parts.pop()?;
     let mut modifiers = 0;
     for part in parts { modifiers |= match part { "Ctrl" => 2, "Alt" => 1, "Shift" => 4, "Meta" => 8, _ => return None }; }
     let vk = match key {
-        "Enter" => 0x0d, "Space" => 0x20, "Tab" => 0x09, "Escape" => 0x1b,
-        "Backspace" => 0x08, "Delete" => 0x2e, "Insert" => 0x2d,
-        "Home" => 0x24, "End" => 0x23, "PageUp" => 0x21, "PageDown" => 0x22,
-        "ArrowLeft" => 0x25, "ArrowUp" => 0x26, "ArrowRight" => 0x27, "ArrowDown" => 0x28,
-        "/" => 0xbf, "." => 0xbe, "," => 0xbc, "-" => 0xbd, "=" => 0xbb,
-        ";" => 0xba, "'" => 0xde, "[" => 0xdb, "]" => 0xdd, "\\" => 0xdc, "`" => 0xc0,
         key if key.len() == 1 && key.as_bytes()[0].is_ascii_alphanumeric() => key.as_bytes()[0].to_ascii_uppercase() as u32,
         key if key.starts_with('F') => { let function: u32 = key[1..].parse().ok()?; if !(1..=24).contains(&function) { return None; } 0x6f + function },
-        _ => return None,
+        _ => SPECIAL_KEYS.iter().find(|(name, _)| *name == key)?.1,
     };
     Some((modifiers, vk))
+}
+
+#[cfg(windows)]
+pub(crate) fn binding_for_native_key(modifiers: u32, vk: u32) -> Option<String> {
+    // Bare editing keys are not configurable app shortcuts.
+    if modifiers & 3 == 0 && !(0x70..=0x87).contains(&vk) { return None; }
+    let key = match vk {
+        0x30..=0x39 | 0x41..=0x5a => char::from(vk as u8).to_string(),
+        0x70..=0x87 => format!("F{}", vk - 0x6f),
+        0x6f => "/".to_owned(), // VK_DIVIDE
+        _ => SPECIAL_KEYS.iter().find(|(_, code)| *code == vk)?.0.to_owned(),
+    };
+    let mut binding = String::new();
+    if modifiers & 2 != 0 { binding.push_str("Ctrl+"); }
+    if modifiers & 4 != 0 { binding.push_str("Shift+"); }
+    if modifiers & 1 != 0 { binding.push_str("Alt+"); }
+    binding.push_str(&key);
+    Some(binding)
 }
 
 #[tauri::command]

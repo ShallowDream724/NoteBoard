@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { isTauri } from '@tauri-apps/api/core';
 import { openWithDefaultApp } from '../../core/ipc/commands';
+import { onHtmlPreviewAccelerator } from '../../core/ipc/events';
+import { commandBindings } from '../../core/shortcutBindings';
 import { showToast } from '../../stores/toastStore';
 import enhancementUrl from '../export/standaloneEnhancement.runtime.js?url';
 import { loadHtmlPreviewAssets, planHtmlPreview } from './htmlPreviewAssets';
@@ -11,6 +14,27 @@ const generatedHead = /^<!doctype html>\s*<html lang="zh-CN" data-noteboard-expo
 export function HtmlPreview({ html, title, directory, savedPath, onShowSource }: {
   html: string; title: string; directory: string; savedPath?: string; onShowSource: () => void;
 }) {
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void onHtmlPreviewAccelerator(binding => {
+      const frame = frameRef.current;
+      if (!disposed && frame && document.activeElement === frame && document.hasFocus()
+          && commandBindings('markdown.mode').includes(binding)) {
+        onShowSource();
+      }
+    }).then(dispose => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    }).catch(error => console.warn('HTML preview shortcut listener unavailable', error));
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [onShowSource]);
+
   const interactive = generatedHead.test(html);
   const preview = useMemo(() => {
     try {
@@ -51,7 +75,7 @@ export function HtmlPreview({ html, title, directory, savedPath, onShowSource }:
   return <>
     {preview.hasScripts && <PreviewMessage message={message} savedPath={savedPath} onShowSource={onShowSource} />}
     {srcDoc === null ? <div role="status" style={{ padding: 24 }}>正在打开预览…</div> :
-      <iframe title={`${title} HTML 预览`} sandbox={interactive ? 'allow-scripts' : ''} referrerPolicy="no-referrer"
+      <iframe ref={frameRef} title={`${title} HTML 预览`} sandbox={interactive ? 'allow-scripts' : ''} referrerPolicy="no-referrer"
         srcDoc={srcDoc} style={{ width: '100%', flex: 1, minHeight: 0, border: 0, background: '#fff' }} />}
   </>;
 }

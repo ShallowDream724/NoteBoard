@@ -20,6 +20,8 @@ pub mod favorites;
 pub mod perf;
 pub mod export;
 mod shortcut_probe;
+#[cfg(windows)]
+mod html_preview_shortcut;
 mod clipboard_image;
 mod shell_open;
 
@@ -38,6 +40,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(window::geometry::plugin())
+        .plugin(tauri::plugin::Builder::<_, ()>::new("html-preview-shortcut")
+            .on_webview_ready(|_webview| {
+                #[cfg(windows)]
+                html_preview_shortcut::attach(&_webview);
+            })
+            .build())
         .manage(Mutex::new(AppState::for_startup()))
         .manage(export::ExportJobs::default())
         .manage(export::pandoc::PandocJobs::default())

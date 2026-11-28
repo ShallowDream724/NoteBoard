@@ -17,6 +17,7 @@ interface ShortcutEntry {
   preventDefault?: boolean;
   /** 布局等应用级组合键不能继续触发编辑器命令。 */
   stopPropagation?: boolean;
+  allowRepeat?: boolean;
   /** A mounted but inactive editor must not consume another editor's binding. */
   when?: () => boolean;
 }
@@ -138,7 +139,7 @@ export function initShortcuts(): () => void {
     if (match) {
       if (match.preventDefault !== false) e.preventDefault();
       if (match.stopPropagation) e.stopPropagation();
-      match.action();
+      if (match.allowRepeat !== false || !e.repeat) match.action();
     }
   };
 

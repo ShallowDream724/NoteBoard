@@ -7,10 +7,13 @@ import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { standaloneHtml } from '../../src/features/export/standaloneHtml';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore } from '../../src/stores/windowStore';
-import { HtmlViewToggle } from '../../src/components/titlebar/HtmlViewToggle';
+import { HtmlViewToggle } from '../../src/features/toolbar/HtmlViewToggle';
 import { TooltipProvider } from '../../src/components/Tooltip';
 import { undoDocumentHistory } from '../../src/features/history/documentHistory';
 import * as commands from '../../src/core/ipc/commands';
+import * as events from '../../src/core/ipc/events';
+import { initShortcuts } from '../../src/core/shortcuts';
+import { setShortcutOverrides } from '../../src/core/shortcutBindings';
 
 const path = 'C:\\notes\\page.html';
 let host: HTMLDivElement;
@@ -29,7 +32,53 @@ beforeEach(() => {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
 });
 
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+  host.remove();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  setShortcutOverrides({});
+});
+
+it('switches the active HTML document with Ctrl+/ and restores editor focus', async () => {
+  const dispose = initShortcuts();
+  try {
+    await act(async () => root.render(<CodeEditor docKey={path} />));
+    await act(() => vi.dynamicImportSettled());
+    const pressModeShortcut = (target: EventTarget, repeat = false) => act(async () => {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', ctrlKey: true, bubbles: true, cancelable: true, repeat }));
+    });
+    await pressModeShortcut(host);
+    const content = host.querySelector('.cm-content')!;
+    expect(document.activeElement).toBe(content);
+    await pressModeShortcut(content, true);
+    expect(useWindowStore.getState().getTab(path)?.viewMode).toBe('source');
+    await pressModeShortcut(content);
+    expect(host.querySelector('iframe')).not.toBeNull();
+    expect(useDocumentStore.getState().getDocument(path)?.content).toBe('<h1>原文</h1>');
+  } finally {
+    dispose();
+  }
+});
+
+it('uses the configured binding only when the active HTML preview frame has focus', async () => {
+  vi.stubGlobal('isTauri', true);
+  setShortcutOverrides({ 'markdown.mode': ['Ctrl+Shift+M'] });
+  let receiveAccelerator: ((binding: string) => void) | undefined;
+  vi.spyOn(events, 'onHtmlPreviewAccelerator').mockImplementation(async callback => {
+    receiveAccelerator = callback;
+    return () => { receiveAccelerator = undefined; };
+  });
+  await act(async () => root.render(<CodeEditor docKey={path} />));
+  await act(() => vi.dynamicImportSettled());
+  await act(async () => receiveAccelerator!('Ctrl+Shift+M'));
+  expect(useWindowStore.getState().getTab(path)?.viewMode).toBe('visual');
+  host.querySelector('iframe')!.focus();
+  await act(async () => receiveAccelerator!('Ctrl+/'));
+  expect(useWindowStore.getState().getTab(path)?.viewMode).toBe('visual');
+  await act(async () => receiveAccelerator!('Ctrl+Shift+M'));
+  expect(useWindowStore.getState().getTab(path)?.viewMode).toBe('source');
+});
 
 it('opens an isolated reading preview and refreshes it from unsaved source edits', async () => {
   await act(async () => root.render(<TooltipProvider><HtmlViewToggle docKey={path} /><CodeEditor docKey={path} /></TooltipProvider>));

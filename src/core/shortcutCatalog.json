@@ -171,7 +171,8 @@
     "group": "Markdown",
     "contexts": [
       "markdown",
-      "source"
+      "source",
+      "html"
     ],
     "defaults": [
       "Ctrl+/"

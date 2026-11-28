@@ -22,6 +22,7 @@ export const EVENTS = {
   CLOSE_REQUESTED: 'nb://close-requested',
   FONT_PACK_DOWNLOAD_PROGRESS: 'noteboard-font-pack-download-progress',
   FONT_PACK_CHANGED: 'noteboard-font-pack-changed',
+  HTML_PREVIEW_ACCELERATOR: 'nb://html-preview-accelerator',
 } as const;
 
 // ── 监听封装 ──
@@ -90,6 +91,11 @@ export function onFontPackDownloadProgress(cb: (progress: DownloadProgress) => v
 /** 多窗口同步字体包安装、修复和删除结果。 */
 export function onFontPackChanged(cb: (status: FontPackStatus) => void): Promise<UnlistenFn> {
   return listen<FontPackStatus>(EVENTS.FONT_PACK_CHANGED, (e) => cb(e.payload));
+}
+
+/** Native keydowns that do not bubble out of a sandboxed preview frame. */
+export function onHtmlPreviewAccelerator(cb: (binding: string) => void): Promise<UnlistenFn> {
+  return getCurrentWebview().listen<string>(EVENTS.HTML_PREVIEW_ACCELERATOR, event => cb(event.payload));
 }
 
 // ── 系统文件拖拽监听 ──
