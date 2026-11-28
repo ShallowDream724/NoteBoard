@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import './imageGestures.css';
 
 export interface ImageTransform { scale: number; x: number; y: number }
-export function zoomImageAt(current: ImageTransform, delta: number, point: { x: number; y: number }, min: number, max: number, sensitivity = .008): ImageTransform {
-  const scale = Math.max(min, Math.min(max, current.scale * Math.exp(-delta * sensitivity)));
+export function scaleImageAt(current: ImageTransform, scale: number, point: { x: number; y: number }): ImageTransform {
   const ratio = scale / current.scale;
   return { scale, x: point.x - (point.x - current.x) * ratio, y: point.y - (point.y - current.y) * ratio };
+}
+export function zoomImageAt(current: ImageTransform, delta: number, point: { x: number; y: number }, min: number, max: number, sensitivity = .008): ImageTransform {
+  const scale = Math.max(min, Math.min(max, current.scale * Math.exp(-delta * sensitivity)));
+  return scaleImageAt(current, scale, point);
 }
 
 /** Chromium emits trackpad pinch as ctrl+wheel. A native non-passive listener

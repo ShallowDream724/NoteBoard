@@ -3,7 +3,9 @@
 //           恢复不抢焦点、缺失文件跳过、暂存副本的关闭保护。
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { restoreLastClosedWindow, loadRestoredTab, saveCurrentWindowSnapshot, ensureWritableContent } from '@/features/session/closedWindowSession';
+import { restoreLastClosedWindow, resumeWorkspace, loadRestoredTab, saveCurrentWindowSnapshot, ensureWritableContent } from '@/features/session/closedWindowSession';
+import { peekViewState, saveViewState, resetSuspensionForTest } from '@/features/session/editorSuspension';
+import { workspaceHistory, clearWorkspaceHistory } from '@/features/session/workspaceHistory';
 import * as ipc from '@/core/ipc/commands';
 import { getEditorCapabilities, resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { useDocumentStore } from '@/stores/documentStore';
@@ -68,7 +70,40 @@ describe('S10 会话恢复轻量描述符', () => {
     useExplorerStore.getState().clear();
     useLayoutStore.setState({ explorerVisible: false, outlineVisible: false });
     resetEditorRegistryForTest();
+    resetSuspensionForTest();
+    clearWorkspaceHistory();
     openDocumentMock.mockResolvedValue('opened');
+  });
+
+  it('切换项目后从首页继续，按需恢复原文件和源码阅读位置', async () => {
+    const root = 'C:\\t';
+    const tab = { key: KEY_A, displayName: 'a.md', path: KEY_A, kind: 'markdown', language: 'markdown',
+      viewMode: 'source', isDirty: false, isPreview: false, isDetached: false, externalStatus: null } as const;
+    await openExplorerDirectory(root);
+    useWindowStore.getState().openTab(tab);
+    const reading = { kind: 'markdown', mode: 'source', selection: { anchor: 17, head: 19 }, scrollTop: 740, scrollLeft: 0 };
+    saveViewState(KEY_A, reading);
+    await openExplorerDirectory('D:\\other');
+    const [saved] = workspaceHistory();
+    expect(saved.root).toBe(root);
+    expect(saved.window.tabs[0].readingState).toEqual(reading);
+    useWindowStore.setState({ tabs: [], activeKey: null });
+    resetSuspensionForTest();
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: true, isDir: false });
+    await resumeWorkspace(saved.window);
+    expect(useWindowStore.getState().activeKey).toBe(KEY_A);
+    expect(useWindowStore.getState().getTab(KEY_A)?.lazySource).toBe(KEY_A);
+    expect(peekViewState(KEY_A)).toEqual(reading);
+    expect(openDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('浏览目录保留显式工作区，并在原树展开其子目录', async () => {
+    await openExplorerDirectory('C:\\t');
+    await openExplorerDirectory('C:\\t\\images', undefined, 'browse');
+    expect(useExplorerStore.getState().root).toBe('C:\\t');
+    expect(useExplorerStore.getState().isExpanded('C:\\t\\images')).toBe(true);
+    await openExplorerDirectory('D:\\papers', undefined, 'browse');
+    expect(useExplorerStore.getState()).toMatchObject({ root: 'D:\\papers', workspaceRoot: 'C:\\t' });
   });
 
   it('Home 不创建编辑器：恢复只建轻量描述符（零读盘、零编辑器能力注册）', async () => {

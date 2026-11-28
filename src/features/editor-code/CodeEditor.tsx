@@ -379,9 +379,10 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       foldedRanges: Array<{ from: number; to: number }>;
     } | null;
     if (restoredState?.kind === 'code') {
-      if (restoredState.foldedRanges.length > 0) {
+      const validFolds = restoredState.foldedRanges.filter(range => range.from >= 0 && range.from < range.to && range.to <= view.state.doc.length);
+      if (validFolds.length > 0) {
         view.dispatch({
-          effects: restoredState.foldedRanges.map((range) => foldEffect.of(range)),
+          effects: validFolds.map((range) => foldEffect.of(range)),
         });
       }
       if (restoredState.selection) {

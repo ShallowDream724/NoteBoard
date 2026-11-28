@@ -4,6 +4,7 @@ import { findScrollContainer } from '../../core/dom/scrollContainer';
 import type { DocumentBookmark } from './model';
 import { validRange } from './rangeAnchors';
 import { BOOKMARK_FLASH_META } from './presentation';
+import { rememberReadingPlace } from '../outline/readingNavigation';
 
 /** Scroll the owning document, never nested formula/table scrollports. */
 export function navigateBookmark(editor: Editor, record: DocumentBookmark): boolean {
@@ -14,7 +15,7 @@ export function navigateBookmark(editor: Editor, record: DocumentBookmark): bool
   const tr = editor.state.tr.setMeta(BOOKMARK_FLASH_META, record.id).setMeta('addToHistory', false);
   // Navigation never turns a media block into a persistent blue node selection.
   if (selection instanceof TextSelection) tr.setSelection(selection);
-  editor.view.dispatch(tr);
+  editor.view.dispatch(rememberReadingPlace(editor, tr, record.id));
   const dom = range ? editor.view.domAtPos(record.pos).node : editor.view.nodeDOM(record.pos);
   const element = dom instanceof HTMLElement ? dom : dom?.parentElement;
   if (!element) return false;

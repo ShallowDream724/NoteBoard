@@ -24,6 +24,10 @@ export function saveViewState(docKey: string, state: unknown): void {
   suspendedViewStates.set(docKey, state);
 }
 
+export function peekViewState(docKey: string): unknown {
+  return suspendedViewStates.get(docKey);
+}
+
 /**
  * 取走保存的视图状态（挂载恢复后调用，一次性消费）。
  * 同路径文档关闭再打开是新的文档生命周期，旧状态不再适用。

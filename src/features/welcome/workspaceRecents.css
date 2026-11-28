@@ -1,0 +1,7 @@
+.nb-workspace-recents { width:100%; max-width:840px; margin-top:12px; font-size:13px; }
+.nb-workspace-recents summary { color:var(--editor-text-secondary); cursor:pointer; width:fit-content; padding:4px 0; }
+.nb-workspace-recents > div { display:grid; gap:2px; margin-top:4px; }
+.nb-workspace-recents button { display:flex; align-items:center; gap:10px; padding:6px 8px; border:0; border-radius:4px; background:transparent; color:var(--editor-text); text-align:left; cursor:pointer; }
+.nb-workspace-recents button:hover,.nb-workspace-recents button:focus-visible { background:var(--toolbar-hover); }
+.nb-workspace-recents small,.nb-workspace-recents strong { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nb-workspace-recents small { flex:1; color:var(--editor-text-muted); }

@@ -10,14 +10,17 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useExplorerStore } from '../explorer/explorerStore';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { getStagedPath, stashPendingDocuments, registerRestoredStagedPath } from '../staging/stagingManager';
-import { kindFromPath, languageFromPath } from '../../core/docKind';
+import { isEditable, kindFromPath, languageFromPath } from '../../core/docKind';
 import { useDocumentStore } from '../../stores/documentStore';
 import type { Tab } from '../../stores/windowStore';
 import { hasUnsavedWork } from '../staging/stagingPolicy';
 import { showToast } from '../../stores/toastStore';
-import { currentExplorerNavigation, isCurrentNavigation, readExplorerDirectory, type ExplorerNavigation } from '../explorer/explorerActions';
+import { currentExplorerNavigation, isCurrentNavigation, openExplorerDirectory, readExplorerDirectory, type ExplorerNavigation } from '../explorer/explorerActions';
 import { isSubPath, parentDirectory, sameKey } from '../explorer/pathUtils';
 import { getSessionGeneration } from './documentSession';
+import { readingState, captureReadingState } from './readingState';
+import { saveViewState } from './editorSuspension';
+import { rememberWorkspace } from './workspaceHistory';
 
 let windowHadTabs = false;
 
@@ -53,7 +56,10 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
 
   // 纯 Home 启动后直接退出不覆盖旧快照；曾打开标签后变空则说明用户已逐个关闭，应清除旧快照。
   if (tabs.length === 0) {
-    if (windowHadTabs) await ipc.clearSession();
+    if (windowHadTabs) {
+      rememberWorkspace(useExplorerStore.getState().workspaceRoot, excludeKeys);
+      await ipc.clearSession();
+    }
     return true;
   }
 
@@ -65,6 +71,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
   const snapshotTabs: SessionTabSnapshot[] = tabs.map((tab) => ({
     key: tab.key,
     isPinned: false,
+    readingState: captureReadingState(tab.key),
     viewMode: tab.viewMode,
     sourcePath: tab.path,
     stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
@@ -90,6 +97,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
     }],
   };
   await ipc.saveSession(snapshot);
+  rememberWorkspace(snapshot.windows[0].explorerWorkspaceRoot ?? null, excludeKeys);
   return true;
 }
 
@@ -104,10 +112,26 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
   const snapshot = await ipc.loadSession();
   const windowSnapshot = snapshot?.windows[0];
   if (!windowSnapshot || windowSnapshot.tabs.length === 0) return false;
+  return restoreWindowTabs(windowSnapshot, navigation, false);
+}
+
+export async function resumeWorkspace(snapshot: SessionWindowSnapshot) {
+  if (!snapshot.explorerWorkspaceRoot) return;
+  const initialActive = useWindowStore.getState().activeKey;
+  await openExplorerDirectory(snapshot.explorerWorkspaceRoot);
+  if (!sameKey(useExplorerStore.getState().workspaceRoot, snapshot.explorerWorkspaceRoot)
+    || useWindowStore.getState().activeKey !== initialActive) return;
+  await restoreWindowTabs(snapshot, currentExplorerNavigation(), true);
+}
+
+async function restoreWindowTabs(windowSnapshot: SessionWindowSnapshot, navigation: ExplorerNavigation, explicit: boolean): Promise<boolean> {
+  const initialActive = useWindowStore.getState().activeKey;
+  const stillResuming = () => !explicit || (isCurrentNavigation(navigation) && useWindowStore.getState().activeKey === initialActive);
 
   let skippedMissing = 0;
   let retainedNamedStagingCopies = 0;
   const restoredTabs: Tab[] = [];
+  const candidates: { tab: SessionTabSnapshot; candidate: string; sourcePath: string | null }[] = [];
   for (const tab of windowSnapshot.tabs) {
     let candidate: string | null = null;
     // 🔴 N02：区分"字段不存在（旧格式，按 key 回退）"与"显式 null（未命名）"——
@@ -129,11 +153,14 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     }
 
     // 重启恢复只跳过已删除文件，不创建“丢失文件”标签或处置弹窗。
+    if (!stillResuming()) return false;
     if (!candidate) {
       skippedMissing += 1;
       continue;
     }
-
+    candidates.push({ tab, candidate, sourcePath });
+  }
+  for (const { tab, candidate, sourcePath } of candidates) {
     // 🔴 N02：同路径已有标签或已加载会话（恢复期间用户手动打开/前一轮恢复已
     //    处理）——不建占位：content:null 会覆盖用户正在编辑的正文
     const existingTab = useWindowStore.getState().getTab(candidate);
@@ -154,6 +181,8 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     //    命名文件按原路径恢复（正文未知但磁盘为权威基线），暂存修改保留在
     //    磁盘暂存区、脱离内存暂存管理（与原实现语义一致），不标脏。
     const isStagedRestore = !sourcePath;
+    const reading = readingState(tab.readingState);
+    if (reading) saveViewState(candidate, reading);
 
     useDocumentStore.getState().upsertFromPayload({
       key: candidate,
@@ -196,8 +225,20 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
     // 批量加入标签（不激活、不动 activeKey：恢复期间用户交互不被抢焦点；Home 保持首屏）
     useWindowStore.getState().addRestoredTabs(restoredTabs);
     // 标签描述符建立后再应用布局，避免资源管理器状态覆盖原窗口布局
+    if (!explicit) {
+      useLayoutStore.getState().restoreFrom(windowSnapshot.layout);
+      await restoreExplorerRoots(windowSnapshot, navigation);
+    }
+  }
+  if (explicit) {
     useLayoutStore.getState().restoreFrom(windowSnapshot.layout);
-    await restoreExplorerRoots(windowSnapshot, navigation);
+    useLayoutStore.getState().setExplorerVisible(true);
+    const existing = useWindowStore.getState().tabs;
+    const next = existing.find(tab => sameKey(tab.key, windowSnapshot.activeKey))
+      ?? existing.find(tab => tab.path && windowSnapshot.tabs.some(saved => sameKey(saved.sourcePath, tab.path)));
+    if (next) useWindowStore.getState().activateTab(next.key);
+    else showToast('这个工作区上次打开的文件已移走', 'info');
+    return Boolean(next);
   }
   // 🔴 R01：恢复事务落盘——把恢复出的标签（含未加载条目的原暂存路径）重写回会话，
   //    而不是 clearSession：未加载标签在进程异常退出后仍可再次恢复；
@@ -220,6 +261,7 @@ export async function restoreLastClosedWindow(): Promise<boolean> {
         tabs: restoredTabs.map((tab) => ({
           key: tab.key,
           isPinned: false,
+          readingState: captureReadingState(tab.key),
           viewMode: tab.viewMode,
           sourcePath: tab.path,
           stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
@@ -331,7 +373,7 @@ export async function loadRestoredTab(key: string): Promise<LazyLoadResult> {
     // 必须验证本 key 的会话确实拿到载荷（focused 可能仅激活另一窗口）。
     const doc = useDocumentStore.getState().getDocument(key);
     if (!doc || doc.loadState !== 'loaded'
-      || (doc.content == null && doc.kind !== 'image' && doc.kind !== 'unsupported')) {
+      || (doc.content == null && isEditable(doc.kind))) {
       return 'stale';
     }
     // 资源查看器使用路径；文本编辑器使用正文。两者都须完成载荷交付。

@@ -11,12 +11,13 @@ import { getBookmarkStorageError, subscribeBookmarkStorage } from './storage';
 import { BookmarkContextMenu, type BookmarkMenuAnchor } from './BookmarkContextMenu';
 import { BookmarkPreview } from './BookmarkPreview';
 import { BOOKMARK_PANEL_REVEAL, pendingBookmarkReveal, consumeBookmarkReveal } from './panelNavigation';
+import { readingNavigationKey } from '../outline/readingNavigation';
 
-interface Snapshot { records: readonly DocumentBookmark[]; doc: PMNode | null }
-const EMPTY: Snapshot = { records: [], doc: null };
+interface Snapshot { records: readonly DocumentBookmark[]; doc: PMNode | null; selected: string | null }
+const EMPTY: Snapshot = { records: [], doc: null, selected: null };
 
 export function BookmarkPanel({ editor }: { editor: Editor | null }) {
-  const [{ records, doc }, setSnapshot] = useState<Snapshot>(EMPTY);
+  const [{ records, doc, selected }, setSnapshot] = useState<Snapshot>(EMPTY);
   const [message, setMessage] = useState<string | null>(null);
   const [batch, setBatch] = useState(false);
   const [menu, setMenu] = useState<BookmarkMenuAnchor | null>(null);
@@ -45,7 +46,8 @@ export function BookmarkPanel({ editor }: { editor: Editor | null }) {
     if (!editor) { setSnapshot(EMPTY); return; }
     const update = () => {
       const records = bookmarkKey.getState(editor.state) ?? EMPTY.records, doc = editor.state.doc;
-      setSnapshot(previous => previous.records === records && previous.doc === doc ? previous : { records, doc });
+      const selected = readingNavigationKey.getState(editor.state)?.bookmarkId ?? null;
+      setSnapshot(previous => previous.records === records && previous.doc === doc && previous.selected === selected ? previous : { records, doc, selected });
     };
     update(); editor.on('transaction', update);
     return () => { editor.off('transaction', update); };
@@ -100,7 +102,7 @@ export function BookmarkPanel({ editor }: { editor: Editor | null }) {
           style={{ color: BOOKMARK_COLORS.find(color => color.value === (record.color ?? 'amber'))?.css }}
           onClick={event => openMenu(record, event.currentTarget, undefined, undefined, true)} onKeyDown={event => keydown(event, record)}><Bookmark size={15}/></button></Tooltip>
         <Tooltip content={record.missing ? `${record.label}（内容已删除或无法唯一定位）` : record.label} side="left">
-          <button className="nb-bookmark-target" type="button" disabled={record.missing} aria-label={record.label}
+          <button className="nb-bookmark-target" type="button" disabled={record.missing} aria-label={record.label} aria-current={record.id === selected ? 'location' : undefined}
             onClick={() => editor && navigateBookmark(editor, record)} onKeyDown={event => keydown(event, record)}>
             {doc ? <BookmarkPreview doc={doc} record={record}/> : <span>{record.label}</span>}{record.missing && <small>内容已失效</small>}
           </button>

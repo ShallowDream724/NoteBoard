@@ -52,6 +52,8 @@ pub struct SessionLayout {
 #[serde(rename_all = "camelCase")]
 pub struct SessionTab {
     pub key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reading_state: Option<serde_json::Value>,
     pub is_pinned: bool,
     pub view_mode: Option<String>,
     // 原文件路径优先用于恢复；未命名文档为空。

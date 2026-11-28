@@ -4,19 +4,19 @@
 // 详见 docs/09-开发路线图.md 9.2-9.10
 
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronsRight } from 'lucide-react';
+import { ArrowLeft, ChevronsRight } from 'lucide-react';
 import { DisclosureTriangle } from '../../components/DisclosureTriangle';
 import type { Editor } from '@tiptap/core';
-import { TextSelection } from '@tiptap/pm/state';
 import { Tooltip } from '../../components/Tooltip';
 import { useHeadings, type HeadingItem } from './useHeadings';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { HeadingGeometry } from './headingGeometry';
 import { useLayoutStore } from '../../stores/layoutStore';
-import { revealEditorBlock } from '../editor-md/editorViewport';
 import { BookmarkPanel } from '../bookmarks/BookmarkPanel';
 import { headingFoldingKey } from '../editor-md/headingFolding';
 import { bindEdgePanelResize } from '../../core/dom/edgePanelResize';
+import { readingNavigationKey, returnToReadingPlace } from './readingNavigation';
+import { navigateHeading } from './navigateHeading';
 import './outlinePanel.css';
 
 interface OutlinePanelProps {
@@ -40,6 +40,13 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   const tab = useLayoutStore(state => state.navigationTab);
   const setTab = useLayoutStore(state => state.setNavigationTab);
   const preferredWidth = useLayoutStore(state => state.outlineWidth);
+  const [canReturn, setCanReturn] = useState(false);
+  useEffect(() => {
+    const update = () => setCanReturn(Boolean(editor && readingNavigationKey.getState(editor.state)?.trail.length));
+    update();
+    editor?.on('transaction', update);
+    return () => { editor?.off('transaction', update); };
+  }, [editor]);
   const panelRef = useRef<HTMLElement>(null), resizeRef = useRef<HTMLDivElement>(null);
   const resizeController = useRef<ReturnType<typeof bindEdgePanelResize> | null>(null);
   useLayoutEffect(() => {
@@ -129,13 +136,7 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
   const handleHeadingClick = useCallback(
     (heading: HeadingItem) => {
       if (!editor || editor.isDestroyed) return;
-      const { pos } = heading;
-      const docSize = editor.state.doc.content.size;
-      const targetPos = Math.min(pos + 1, docSize);
-
-      editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(targetPos))));
-      editor.view.focus();
-      const scroller = revealEditorBlock(editor.view, pos, 'start');
+      const scroller = navigateHeading(editor, heading);
       // Keep a clicked heading current when the document's end clamps its top
       // alignment. A subsequent scroll away resumes geometry-based tracking.
       navigationRef.current = scroller ? { id: heading.id, scrollTop: scroller.scrollTop } : null;
@@ -266,6 +267,10 @@ export function OutlinePanel({ editor }: OutlinePanelProps) {
             setTab(next); document.getElementById(`nb-navigation-tab-${next}`)?.focus();
           }}>{value === 'outline' ? '大纲' : '书签'}</button>)}
         </div>
+        {canReturn && <Tooltip content="返回跳转前的位置" side="bottom">
+          <button type="button" className="nb-outline-toggle nb-navigation-back" aria-label="返回跳转前的位置"
+            onClick={() => { navigationRef.current = null; if (editor) returnToReadingPlace(editor); }}><ArrowLeft size={16}/></button>
+        </Tooltip>}
       </div>
 
       {/* 标题列表 */}

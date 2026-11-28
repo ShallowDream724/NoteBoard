@@ -230,6 +230,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
         return message;
       }
       if (patch.file?.restoreSession === false) {
+        const { clearWorkspaceHistory } = await import('../features/session/workspaceHistory');
+        clearWorkspaceHistory();
         try { await ipc.clearSession(); }
         catch (error) { const message = `设置已保存，但清理旧窗口记录失败：${String(error)}`; set({ saveError: message }); return message; }
       }

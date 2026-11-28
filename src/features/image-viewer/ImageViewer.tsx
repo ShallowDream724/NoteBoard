@@ -29,7 +29,7 @@ import * as ipc from '../../core/ipc/commands';
 import { extFromPath } from '../../core/docKind';
 import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../../components/Tooltip';
-import { useImageWheelGesture } from './imageWheelGesture';
+import { scaleImageAt, useImageWheelGesture } from './imageWheelGesture';
 import { formatFileSize } from '../../core/formatFileSize';
 import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
@@ -143,7 +143,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       instanceId,
       getRevision: () => 0,
       flush: async () => ({ docKey, instanceId, revision: 0, content: null, readonly: true }),
-      focus: () => sourceViewerRef.current?.focus(),
+      focus: () => sourceViewerRef.current ? sourceViewerRef.current.focus() : containerRef.current?.focus({ preventScroll: true }),
       getSelectedText: () => sourceViewerRef.current?.getSelectedText() ?? '',
       canSuspend: () => true,
       captureViewState: () => ({
@@ -169,7 +169,8 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const wheelGesture = useImageWheelGesture(containerRef, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: .05, max: 20 });
+  const wheelGesture = useImageWheelGesture(containerRef, { scale, ...translate }, next => { setScale(next.scale); setTranslate({ x: next.x, y: next.y }); }, { min: Math.min(.05, scale), max: 20 });
+  const pointer = useRef<{ x: number; y: number } | null>(null);
 
   // 自适应窗口缩放
   const fitToWindow = useCallback(() => {
@@ -193,7 +194,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
     const scaleY = availH / curH;
     const fitScale = Math.min(scaleX, scaleY, 1); // 默认最大不超过 100%
 
-    setScale(Math.max(Number(fitScale.toFixed(3)), 0.1));
+    setScale(fitScale);
     setTranslate({ x: 0, y: 0 });
   }, [naturalSize, transform.rotation]);
 
@@ -210,7 +211,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       const scaleX = (cw - padding) / naturalWidth;
       const scaleY = (ch - padding) / naturalHeight;
       const fitScale = Math.min(scaleX, scaleY, 1);
-      setScale(Math.max(Number(fitScale.toFixed(3)), 0.1));
+      if (fitScale > 0) setScale(fitScale);
       setTranslate({ x: 0, y: 0 });
     }
   };
@@ -222,12 +223,10 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   };
 
   // 缩放步进调节
-  const zoomIn = () => {
-    setScale((prev) => Math.min(Number((prev * 1.25).toFixed(3)), 20));
-  };
-
-  const zoomOut = () => {
-    setScale((prev) => Math.max(Number((prev / 1.25).toFixed(3)), 0.05));
+  const stepZoom = (factor: number, at = { x: 0, y: 0 }) => {
+    const next = scaleImageAt({ scale, ...translate }, Math.min(20, Math.max(Math.min(.05, scale), scale * factor)), at);
+    setScale(next.scale);
+    setTranslate({ x: next.x, y: next.y });
   };
 
   // 旋转
@@ -241,7 +240,9 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   // 拖拽平移事件处理
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0 && e.button !== 1) return; // 仅响应左键与中键拖拽
+    if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
+    containerRef.current?.focus({ preventScroll: true });
     setIsDragging(true);
     dragStartRef.current = {
       startX: e.clientX,
@@ -252,6 +253,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    pointer.current = { x: e.clientX, y: e.clientY };
     if (!isDragging) return;
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
@@ -319,6 +321,15 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       }}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onKeyDown={event => {
+        if (showSource || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+        if (!['+', '=', '-', '0'].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation();
+        if (event.key === '0') { fitToWindow(); return; }
+        const bounds = containerRef.current?.getBoundingClientRect(), point = pointer.current;
+        stepZoom(event.key === '-' ? 1 / 1.25 : 1.25, bounds && point
+          ? { x: point.x - bounds.left - bounds.width / 2, y: point.y - bounds.top - bounds.height / 2 } : undefined);
+      }}
     >
       {/* 顶部悬浮控制工具栏 */}
       <div
@@ -345,7 +356,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         <Tooltip content="缩小 (滚轮下滑)" side="bottom" sideOffset={6}>
           <button
             type="button"
-            onClick={zoomOut}
+            onClick={() => stepZoom(1 / 1.25)}
             style={btnStyle}
             aria-label="缩小"
           >
@@ -375,7 +386,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         <Tooltip content="放大 (滚轮上滑)" side="bottom" sideOffset={6}>
           <button
             type="button"
-            onClick={zoomIn}
+            onClick={() => stepZoom(1.25)}
             style={btnStyle}
             aria-label="放大"
           >
@@ -538,6 +549,9 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
       {/* 图片主视口渲染画布 */}
       <div
         ref={containerRef}
+        tabIndex={showSource ? -1 : 0}
+        aria-label={`图片预览：${name}`}
+        onMouseLeave={() => { pointer.current = null; }}
         style={{
           flex: 1,
           width: '100%',

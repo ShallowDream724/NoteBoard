@@ -7,11 +7,32 @@ import { captureBookmarkContexts, recoverBookmarks } from '@/features/bookmarks/
 import { resetBookmarkStorage } from '@/features/bookmarks/storage';
 import { navigateBookmark } from '@/features/bookmarks/navigation';
 import { closeHistory } from '@tiptap/pm/history';
+import { readingNavigationKey, returnToReadingPlace } from '@/features/outline/readingNavigation';
 
 const editors: Editor[] = [];
 const InlineMath = Node.create({ name:'mathInline', inline:true, group:'inline', atom:true, addAttributes:()=>({latex:{default:''}}), renderHTML:()=>['span',{'data-math-inline':''}] });
 function create(html: string) { const editor = new Editor({ extensions: [StarterKit, InlineMath, DocumentBookmarks], content: html }); editors.push(editor); return editor; }
 const records = (editor: Editor) => bookmarkKey.getState(editor.state)!;
+
+it('returns to the previous reading selection after an intervening edit', () => {
+  const editor = create('<p>original position; target</p>');
+  editor.commands.setTextSelection({ from: 20, to: 26 });
+  const mark = addBookmark(editor)!;
+  editor.commands.setTextSelection({ from: 3, to: 7 });
+  const scroller = document.createElement('div');
+  scroller.dataset.editorScroll = '';
+  document.body.append(scroller);
+  scroller.append(editor.view.dom);
+  scroller.scrollTo = vi.fn();
+  vi.spyOn(editor.view, 'coordsAtPos').mockReturnValue({ left: 0, right: 10, top: 200, bottom: 210 });
+  expect(navigateBookmark(editor, mark)).toBe(true);
+  expect(readingNavigationKey.getState(editor.state)?.bookmarkId).toBe(mark.id);
+  editor.view.dispatch(editor.state.tr.insertText('++', 1));
+  returnToReadingPlace(editor);
+  expect(editor.state.selection).toMatchObject({ from: 5, to: 9 });
+  expect(readingNavigationKey.getState(editor.state)?.trail).toHaveLength(0);
+  scroller.remove();
+});
 beforeEach(() => { localStorage.clear(); resetBookmarkStorage(); });
 afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); resetBookmarkStorage(); vi.restoreAllMocks(); });
 

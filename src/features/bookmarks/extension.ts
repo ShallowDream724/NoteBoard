@@ -9,6 +9,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { sourceBookmarkSnapshot } from './sourcePersistence';
 import { createBookmarkPresentation } from './presentation';
 import { readSourceDocument } from '../editor-md/sourceDocumentAdapter';
+import { readingNavigationPlugin } from '../outline/readingNavigation';
 
 export const bookmarkKey = new PluginKey<readonly DocumentBookmark[]>('noteboard-document-bookmarks');
 export const DocumentBookmarks = Extension.create<{ docKey: string }>({
@@ -68,6 +69,6 @@ export const DocumentBookmarks = Extension.create<{ docKey: string }>({
           destroy() { flush(); unregister(); },
         };
       },
-    }), createBookmarkPresentation(state => bookmarkKey.getState(state) ?? [])];
+    }), createBookmarkPresentation(state => bookmarkKey.getState(state) ?? []), readingNavigationPlugin()];
   },
 });

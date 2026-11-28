@@ -5,6 +5,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useExplorerStore } from './explorerStore';
 import { getPathChain, isSubPath, normalizePath, parentDirectory, sameKey } from './pathUtils';
 import { refreshMarkdownAssociations } from '../document-format/markdownAssociationIndex';
+import { rememberWorkspace } from '../session/workspaceHistory';
 
 // Directory entries and bounded NB headers share one navigation/refresh request.
 const reads = new Map<string, { force: boolean; work: Promise<FileTreeNode[]> }>();
@@ -80,11 +81,22 @@ export function isCurrentNavigation(request: ExplorerNavigation): boolean {
   return request.revision === revealRevision && request.rootRevision === useExplorerStore.getState().rootRevision;
 }
 
-export async function openExplorerDirectory(directory: string, request = beginExplorerNavigation()): Promise<void> {
+export async function openExplorerDirectory(directory: string, request = beginExplorerNavigation(), intent: 'workspace' | 'browse' = 'workspace'): Promise<void> {
   if (!directory.trim() || !isCurrentNavigation(request)) return;
+  const pinned = useExplorerStore.getState().workspaceRoot;
+  if (intent === 'browse' && pinned && isSubPath(pinned, directory)) {
+    await revealFile(directory, parentDirectory(directory), request, () => true, false);
+    if (!isCurrentNavigation(request) || sameKey(directory, pinned)) return;
+    const children = useExplorerStore.getState().getChildren(directory) ?? await readExplorerDirectory(directory);
+    if (isCurrentNavigation(request)) useExplorerStore.getState().expand(directory, children);
+    return;
+  }
   const children = await readExplorerDirectory(directory);
   if (!isCurrentNavigation(request)) return;
-  useExplorerStore.getState().setWorkspaceRoot(directory);
+  if (intent === 'workspace' || !pinned) {
+    if (pinned && !sameKey(pinned, directory) && useSettingsStore.getState().settings.file.restoreSession) rememberWorkspace(pinned);
+    useExplorerStore.getState().setWorkspaceRoot(directory);
+  }
   useExplorerStore.getState().setRoot(directory, children);
 }
 

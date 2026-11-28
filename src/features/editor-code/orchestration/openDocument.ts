@@ -203,7 +203,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
       if (options.explorer === 'preserve') return 'failed';
       // 拖入/打开的是文件夹：资源管理器定位到该目录（延后执行，不阻塞返回）
       useLayoutStore.getState().setExplorerVisible(true);
-      try { await openExplorerDirectory(prepared.path, navigation); }
+      try { await openExplorerDirectory(prepared.path, navigation, 'browse'); }
       catch (error) { showToast(`无法打开文件夹：${String(error)}`, 'error'); return 'failed'; }
       scheduleRecentRecord(prepared.path, true);
       return 'opened';

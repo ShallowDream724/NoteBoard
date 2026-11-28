@@ -404,8 +404,15 @@ export interface ExplorerContext {
   source: 'workspace' | 'tree' | 'parent' | 'locate';
 }
 
+type ReadingSelection = { anchor: number; head: number } | null;
+export type ReadingState =
+  | { kind: 'markdown'; mode: 'source' | 'visual'; selection: ReadingSelection; scrollTop: number; scrollLeft: number }
+  | { kind: 'code'; selection: ReadingSelection; scrollTop: number; foldedRanges: { from: number; to: number }[] }
+  | { kind: 'pdf'; page: number; zoom: number; scrollLeft: number; scrollTop: number };
+
 export interface SessionTabSnapshot {
   key: string;
+  readingState?: ReadingState;
   isPinned: boolean;
   viewMode: ViewMode | null;
   sourcePath: string | null;
