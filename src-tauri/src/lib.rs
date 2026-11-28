@@ -23,6 +23,9 @@ mod shortcut_probe;
 #[cfg(windows)]
 mod html_preview_shortcut;
 mod clipboard_image;
+mod clipboard_files;
+#[cfg(windows)]
+mod win_clipboard;
 mod shell_open;
 
 use state::AppState;
@@ -60,6 +63,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             shortcut_probe::probe_shortcuts,
             clipboard_image::copy_png_image,
+            clipboard_files::write_file_clipboard,
+            clipboard_files::read_file_clipboard,
+            clipboard_files::consume_cut_file_clipboard,
             export::create_pdf,
             export::pdf_payload,
             export::pdf_layout_started,
@@ -115,6 +121,10 @@ pub fn run() {
             fsio::commands::create_dir,
             fsio::commands::rename_path,
             fsio::copy_entry::copy_path_into_directory,
+            fsio::import_history::copy_path_into_directory_with_receipt,
+            fsio::import_history::undo_copied_path,
+            fsio::import_history::redo_copied_path,
+            fsio::import_history::release_copied_receipts,
             fsio::commands::move_to_trash,
             fsio::image_assets::recycle_document_image,
             fsio::image_assets::recycle_document_images,

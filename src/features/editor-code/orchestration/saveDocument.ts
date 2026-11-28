@@ -10,7 +10,8 @@ import { useWindowStore } from '../../../stores/windowStore';
 import { getBaseline } from '../../editor-md/serialize';
 import { kindFromPath, languageFromPath } from '../../../core/docKind';
 import { DEFAULT_NATIVE_EXTENSION, NATIVE_DOCUMENT_EXTENSIONS } from '../../../core/nativeDocument';
-import type { WriteError } from '../../../core/ipc/types';
+import type { Encoding, WriteError } from '../../../core/ipc/types';
+import { textWithEol } from '../../../core/documentText';
 import { DEFAULT_DRAWIO_XML } from './syncDocumentContent';
 import { onDocumentSaved } from '../../staging/stagingManager';
 import { showToast } from '../../../stores/toastStore';
@@ -52,18 +53,23 @@ function samePathIdentity(a: string, b: string): boolean {
   return normalizePath(a).toLowerCase() === normalizePath(b).toLowerCase();
 }
 
-const manualSaves = new Map<string, { generation: number; revision: number; content: string | null | undefined; saveAs: boolean; promise: Promise<boolean> }>();
+const manualSaves = new Map<string, { generation: number; revision: number; content: string | null | undefined; eol: string | undefined; encoding?: Encoding; saveAs: boolean; promise: Promise<boolean> }>();
 
-function requestSave(key: string, forceSaveAs: boolean, task: () => Promise<boolean>): Promise<boolean> {
+function requestSave(key: string, forceSaveAs: boolean, task: () => Promise<boolean>, encoding?: Encoding): Promise<boolean> {
   const doc = useDocumentStore.getState().getDocument(key);
   if (doc?.kind === 'pdf' && doc.content == null) return Promise.resolve(false);
   const generation = getSessionGeneration(key), revision = getDocumentRevision(key);
   const content = getEditorCapabilities(key) ? undefined : doc?.content;
+  const tab = useWindowStore.getState().getTab(key);
   const saveAsRequest = forceSaveAs || key.startsWith('untitled:') || doc?.externalStatus === 'deleted'
-    || Boolean(useWindowStore.getState().getTab(key)?.isDetached);
+    || tab?.path === null || Boolean(tab?.isDetached);
   const existing = manualSaves.get(key);
-  if (existing?.generation === generation && (existing.saveAs || (!saveAsRequest && existing.revision === revision && existing.content === content))) return existing.promise;
-  const request = { generation, revision, content, saveAs: saveAsRequest, promise: null as unknown as Promise<boolean> };
+  if (existing?.generation === generation) {
+    if (existing.saveAs) return !encoding || existing.encoding === encoding ? existing.promise : Promise.resolve(false);
+    if (existing.encoding === encoding && !saveAsRequest && existing.revision === revision
+      && existing.content === content && existing.eol === doc?.eol) return existing.promise;
+  }
+  const request = { generation, revision, content, eol: doc?.eol, encoding, saveAs: saveAsRequest, promise: null as unknown as Promise<boolean> };
   request.promise = trackDocumentSave(key, task).catch(error => {
     if (getSessionGeneration(key) === generation) showWriteError({ kind: 'io', message: error instanceof Error ? error.message : String(error) });
     return false;
@@ -72,11 +78,11 @@ function requestSave(key: string, forceSaveAs: boolean, task: () => Promise<bool
   return request.promise;
 }
 
-export function saveDocument(docKey: string): Promise<boolean> {
-  return requestSave(docKey, false, () => performSaveDocument(docKey));
+export function saveDocument(docKey: string, encoding?: Encoding): Promise<boolean> {
+  return requestSave(docKey, false, () => performSaveDocument(docKey, encoding), encoding);
 }
 
-async function performSaveDocument(docKey: string): Promise<boolean> {
+async function performSaveDocument(docKey: string, encoding?: Encoding): Promise<boolean> {
   const generation = getSessionGeneration(docKey);
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
@@ -129,21 +135,21 @@ async function performSaveDocument(docKey: string): Promise<boolean> {
   }
 
   // 运行期间原文件被删除后，Ctrl+S 也必须转为另存为，禁止悄悄在旧路径重建文件。
-  const detached = useWindowStore.getState().getTab(docKey)?.isDetached ?? false;
-  if (updatedDoc.externalStatus === 'deleted' || detached) {
-    return performSaveAs(updatedDoc.key, authoritativeContent);
+  const tab = useWindowStore.getState().getTab(docKey);
+  if (updatedDoc.externalStatus === 'deleted' || tab?.isDetached) {
+    return performSaveAs(updatedDoc.key, authoritativeContent, encoding);
   }
 
   // 没有路径 → 另存为
-  if (!updatedDoc.key || updatedDoc.key.startsWith('untitled:')) {
-    return performSaveAs(updatedDoc.key, authoritativeContent);
+  if (!updatedDoc.key || updatedDoc.key.startsWith('untitled:') || tab?.path === null) {
+    return performSaveAs(updatedDoc.key, authoritativeContent, encoding);
   }
 
   // 🔴 S09：每文档写队列内完成写盘（旧写入不得覆盖新内容）、基线更新为实际写入文本、
   //    脏态 flush-and-compare 精确重算（写盘期间新输入仍脏；改回基线清脏）、
   //    携带内容证明的暂存清理（只删被覆盖副本）
   try {
-    return await writeDocumentWithBarrier(docKey, authoritativeContent);
+    return await writeDocumentWithBarrier(docKey, authoritativeContent, { encoding, revision: captured?.revision });
   } catch (e) {
     console.error('保存失败:', e);
     if (getSessionGeneration(docKey) === generation) {
@@ -164,7 +170,7 @@ export function saveAs(originalKey: string, content: string): Promise<boolean> {
   return requestSave(originalKey, true, () => performSaveAs(originalKey, content));
 }
 
-async function performSaveAs(originalKey: string, _content: string): Promise<boolean> {
+async function performSaveAs(originalKey: string, _content: string, selectedEncoding?: Encoding): Promise<boolean> {
   // 🔴 R3-04：会话身份必须在任何 await 之前捕获（含 ensureWritableContent 的
   //    按需加载）——对话框/加载期间源关闭重开（会话换代）时中止旧另存为（C06）
   const originalGeneration = getSessionGeneration(originalKey);
@@ -299,13 +305,15 @@ async function performSaveAs(originalKey: string, _content: string): Promise<boo
     if (!originalKey.startsWith('untitled:') && samePathIdentity(selectedPath, originalKey)) {
       const current = useDocumentStore.getState().getDocument(originalKey);
       if (current && (current.externalStatus === 'deleted' || useWindowStore.getState().getTab(originalKey)?.isDetached)) {
-        return recreateDeletedDocument(originalKey, originalGeneration);
+        return recreateDeletedDocument(originalKey, originalGeneration, selectedEncoding);
       }
-      return performSaveDocument(originalKey);
+      if (useWindowStore.getState().getTab(originalKey)?.path === null) {
+        showToast('请选择新的文件位置', 'warning');
+        return false;
+      }
+      return performSaveDocument(originalKey, selectedEncoding);
     }
 
-    const encoding = doc?.encoding ?? 'utf8';
-    const eol = doc?.eol ?? 'lf';
     const kind = kindFromPath(selectedPath);
     if ((doc?.kind === 'noteboard') !== (kind === 'noteboard')) {
       showToast('请在“导出”中转换 NoteBoard 文档与 Markdown 格式', 'warning');
@@ -373,6 +381,8 @@ async function performSaveAs(originalKey: string, _content: string): Promise<boo
       //    必须随另存为写入，不得使用打开对话框前的旧正文
       const captured = await flushDocument(originalKey, 'save');
       const docNow = useDocumentStore.getState().getDocument(originalKey);
+      const encoding = docNow?.kind === 'noteboard' ? 'utf8' : selectedEncoding ?? docNow?.encoding ?? 'utf8';
+      const eol = docNow?.eol ?? 'lf';
       const snapshot = captured?.content ?? docNow?.content;
       if (snapshot == null) {
         showToast('无法获取文档正文，另存为已取消', 'warning');
@@ -466,12 +476,13 @@ async function performSaveAs(originalKey: string, _content: string): Promise<boo
           size: result.size,
           mtime: result.mtime,
           readonly: false,
-        });
+        }, { encodingOverride: nativeWritten ? null : selectedEncoding ?? docNow?.encodingOverride });
         // Baseline is the actual write; later input stays dirty in the new session.
-        useDocumentStore.getState().updateBaseline(selectedPath, saveContent, result.mtime, result.size);
+        const persistedContent = textWithEol(saveContent, eol);
+        useDocumentStore.getState().updateBaseline(selectedPath, saveContent, result.mtime, result.size, persistedContent);
         getBaseline(selectedPath).updateBaseline(saveContent);
         useWindowStore.getState().updateTabPath(originalKey, selectedPath, displayName);
-        useWindowStore.getState().setTabDirty(selectedPath, finalContent !== saveContent);
+        useWindowStore.getState().setTabDirty(selectedPath, useDocumentStore.getState().getDocument(selectedPath)?.isDirty ?? false);
       });
       const savedGeneration = getSessionGeneration(selectedPath);
 
@@ -485,7 +496,7 @@ async function performSaveAs(originalKey: string, _content: string): Promise<boo
         if (getSessionGeneration(selectedPath) !== savedGeneration) return true;
         commitNativeSaveMetadata(selectedPath, nativeWritten);
       }
-      await onDocumentSaved(selectedPath, saveContent);
+      await onDocumentSaved(selectedPath, saveContent, { encoding, eol });
       if (getSessionGeneration(selectedPath) === savedGeneration) clearSaveError(selectedPath);
       return true;
     } finally {
@@ -524,7 +535,7 @@ async function performSaveAs(originalKey: string, _content: string): Promise<boo
 
 /** Explicitly choosing a deleted document's own path recreates it once. Native
  * create-only publication refuses a foreign file appearing after the check. */
-async function recreateDeletedDocument(key: string, generation: number): Promise<boolean> {
+async function recreateDeletedDocument(key: string, generation: number, encoding?: Encoding): Promise<boolean> {
   const doc = useDocumentStore.getState().getDocument(key);
   if (!doc) return false;
   const registration = await ipc.registerDocument(getCurrentWindow().label, key, doc.kind);
@@ -545,7 +556,7 @@ async function recreateDeletedDocument(key: string, generation: number): Promise
   if (getSessionGeneration(key) !== generation) return false;
   const content = captured?.content ?? useDocumentStore.getState().getDocument(key)?.content;
   if (content == null) return false;
-  const saved = await writeDocumentWithBarrier(key, content, { createOnly: true });
+  const saved = await writeDocumentWithBarrier(key, content, { createOnly: true, encoding, revision: captured?.revision });
   if (saved && getSessionGeneration(key) === generation) {
     useDocumentStore.getState().setExternalStatus(key, 'clean');
     useWindowStore.getState().setTabExternalStatus(key, 'clean');

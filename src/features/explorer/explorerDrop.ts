@@ -1,21 +1,20 @@
-import { copyPathIntoDirectory } from '../../core/ipc/commands';
 import { registerNativeFileDropTarget, type FileDropPoint } from '../../core/editor/fileDropTargets';
 import { createDragEdgeScroller, type DragEdgeScroller } from '../../core/dom/dragEdgeScroll';
 import { useExplorerStore } from './explorerStore';
 import { isSubPath, normalizePath, parentDirectory, sameKey } from './pathUtils';
 import { refreshExplorerDirectory } from './explorerActions';
 import { createSpringFolders } from './springFolders';
-import { renameOpenPath } from './renameOpenPath';
+import { importExplorerEntries, moveExplorerEntries } from './explorerMoveHistory';
 import { showToast } from '../../stores/toastStore';
 
 export interface ExplorerDragSource { path: string; directory: boolean }
 export function explorerMoveDestination(source: ExplorerDragSource, directory: string): { path?: string; reason?: string } {
-  const from = normalizePath(source.path), folder = normalizePath(directory);
-  const name = from.split('\\').pop();
+  const from = normalizePath(source.path), folder = directory.replace(/[\\/]+$/, '');
+  const name = source.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
   if (!folder || !name || /^[a-z]:$/i.test(name)) return { reason:'不能移动磁盘根目录' };
   if (source.directory && isSubPath(from, folder)) return { reason:'不能移入自身或子文件夹' };
   if (sameKey(parentDirectory(from), folder)) return { reason:'已在这个文件夹中' };
-  return { path:folder.replace(/\\$/, '') + '\\' + name };
+  return { path: folder + '\\' + name };
 }
 
 /** Refresh failure cannot turn a completed filesystem operation into a failure. */
@@ -78,11 +77,9 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     busy = true; let completed = false;
     try {
       if (Array.isArray(source)) {
-        let copied = 0, firstCopy: string | undefined; const failures:string[]=[];
-        for (const path of source) {
-          try { const copy = await copyPathIntoDirectory(path,directory); firstCopy ??= copy; copied++; completed = true; }
-          catch(error) { failures.push(`${path.split(/[\\/]/).pop()}：${String(error)}`); }
-        }
+        const { copied, undoable, firstCopy, failures } = await importExplorerEntries(source, directory);
+        completed = copied > 0;
+        if (copied > undoable) failures.push(`${copied - undoable} 项无法安全撤销`);
         const refreshed = await refreshDropDirectories(directory);
         if (!refreshed) failures.push('目录列表暂未刷新，请手动刷新');
         if (refreshed && firstCopy) revealDrop(directory, firstCopy);
@@ -90,11 +87,13 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
       } else {
         const item=source as ExplorerDragSource, plan=explorerMoveDestination(item,directory);
         if (!plan.path) throw new Error(plan.reason);
-        await renameOpenPath(item.path,plan.path,item.directory);
+        const { undoable, failures } = await moveExplorerEntries([{ from: item.path, to: plan.path, directory: item.directory }]);
+        if (failures.length) throw new Error(failures[0]);
         completed = true;
         const refreshed = await refreshDropDirectories(parentDirectory(item.path), directory);
         if (refreshed) revealDrop(directory, plan.path);
-        showToast(`已移动到 ${directory}${refreshed ? '' : '；目录列表暂未刷新，请手动刷新'}`,refreshed?'success':'warning');
+        const notes = [!undoable && '此项目无法验证文件身份，不能撤销', !refreshed && '目录列表暂未刷新，请手动刷新'].filter(Boolean);
+        showToast([`已移动到 ${directory}`, ...notes].join('；'), notes.length ? 'warning' : 'success');
       }
     } catch(error) { showToast(error instanceof Error?error.message:String(error),'error'); }
     finally { settleExpansion(completed); busy=false; }
@@ -128,7 +127,10 @@ export function bindExplorerDrop(root: HTMLElement, workspace: string) {
     const target=started?show({x:event.clientX,y:event.clientY},'move',source):null;
     const settleExpansion = target ? spring.take(target.directory) : null;
     if(started){event.preventDefault();suppressClick=true;} finish();
-    if(target && settleExpansion)void perform(target.directory,source,settleExpansion);
+    if (target && settleExpansion) {
+      root.focus({ preventScroll: true });
+      void perform(target.directory,source,settleExpansion);
+    }
   };
   const start = (event:PointerEvent) => {
     if(event.button||session||busy||!validWorkspace()||!(event.target instanceof Element)||event.target.closest('input,button'))return;

@@ -181,51 +181,9 @@ mod tests {
 
 #[cfg(windows)]
 mod windows_clipboard {
+    use crate::win_clipboard::{Clipboard, OwnedGlobal};
     use windows::core::w;
-    use windows::Win32::Foundation::{GlobalFree, HANDLE, HGLOBAL, HWND};
-    use windows::Win32::System::DataExchange::{
-        CloseClipboard, EmptyClipboard, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
-    };
-    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-
-    struct OwnedGlobal(Option<HGLOBAL>);
-    impl OwnedGlobal {
-        fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
-            let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes.len()) }
-                .map_err(|error| error.to_string())?;
-            let pointer = unsafe { GlobalLock(handle) } as *mut u8;
-            if pointer.is_null() {
-                let _ = unsafe { GlobalFree(handle) };
-                return Err("无法锁定剪贴板内存".into());
-            }
-            unsafe {
-                std::ptr::copy_nonoverlapping(bytes.as_ptr(), pointer, bytes.len());
-            }
-            let _ = unsafe { GlobalUnlock(handle) };
-            Ok(Self(Some(handle)))
-        }
-        fn give_to_clipboard(&mut self, format: u32) -> Result<(), String> {
-            let handle = self.0.ok_or("剪贴板内存已转移")?;
-            unsafe { SetClipboardData(format, HANDLE(handle.0)) }
-                .map_err(|error| error.to_string())?;
-            self.0 = None; // Windows owns it only after SetClipboardData succeeds.
-            Ok(())
-        }
-    }
-    impl Drop for OwnedGlobal {
-        fn drop(&mut self) {
-            if let Some(handle) = self.0.take() {
-                let _ = unsafe { GlobalFree(handle) };
-            }
-        }
-    }
-
-    struct ClipboardGuard;
-    impl Drop for ClipboardGuard {
-        fn drop(&mut self) {
-            let _ = unsafe { CloseClipboard() };
-        }
-    }
+    use windows::Win32::System::DataExchange::{EmptyClipboard, RegisterClipboardFormatW};
 
     pub fn write_image(dib: &[u8], png: &[u8], owner: usize) -> Result<(), String> {
         let mut dib_memory = OwnedGlobal::from_bytes(dib)?;
@@ -234,9 +192,7 @@ mod windows_clipboard {
         if png_format == 0 {
             return Err("无法注册 PNG 剪贴板格式".into());
         }
-        unsafe { OpenClipboard(HWND(owner as *mut core::ffi::c_void)) }
-            .map_err(|error| error.to_string())?;
-        let _guard = ClipboardGuard;
+        let _guard = Clipboard::open(owner)?;
         unsafe { EmptyClipboard() }.map_err(|error| error.to_string())?;
         dib_memory.give_to_clipboard(17)?; // CF_DIBV5 keeps alpha.
                                            // DIBV5 already supplies an image; PNG adds lossless interchange for apps that support it.

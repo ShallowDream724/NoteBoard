@@ -3,7 +3,7 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as ipc from '../../core/ipc/commands';
-import type { ExplorerContext, SessionSnapshot, SessionTabSnapshot, SessionWindowSnapshot } from '../../core/ipc/types';
+import type { Encoding, ExplorerContext, SessionSnapshot, SessionTabSnapshot, SessionWindowSnapshot } from '../../core/ipc/types';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useWindowStore } from '../../stores/windowStore';
@@ -77,6 +77,7 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
     stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
     displayName: tab.displayName,
     explorerContext: tab.explorerContext,
+    encoding: restoredTextEncoding(tab),
   }));
   const layout = useLayoutStore.getState();
   const snapshot: SessionSnapshot = {
@@ -99,6 +100,13 @@ export async function saveCurrentWindowSnapshot(excludeKeys: string[] = []): Pro
   await ipc.saveSession(snapshot);
   rememberWorkspace(snapshot.windows[0].explorerWorkspaceRoot ?? null, excludeKeys);
   return true;
+}
+
+function restoredTextEncoding(tab: Tab): Encoding | undefined {
+  const doc = useDocumentStore.getState().getDocument(tab.key);
+  if (doc?.kind !== 'code' && doc?.kind !== 'markdown' && doc?.kind !== 'noteboard') return;
+  if (tab.path == null && doc.loadState === 'loaded') return doc.kind === 'noteboard' ? 'utf8' : doc.encoding;
+  return doc.encodingOverride ?? undefined;
 }
 
 /**
@@ -192,12 +200,12 @@ async function restoreWindowTabs(windowSnapshot: SessionWindowSnapshot, navigati
       language,
       // 🔴 R01：正文未知用 null——绝不能用空字符串代替（空串会进入写入链覆盖恢复副本）
       content: null,
-      encoding: 'utf8',
+      encoding: tab.encoding ?? 'utf8',
       eol: 'lf',
       size: 0,
       mtime: 0,
       readonly: false,
-    }, { placeholder: true });
+    }, { placeholder: true, encodingOverride: tab.encoding });
     if (isStagedRestore && staged) {
       useDocumentStore.getState().setDirty(candidate, true);
       // 暂存路径登记回内存记录（内容未知；关闭丢弃/保留流程照常工作）
@@ -267,6 +275,7 @@ async function restoreWindowTabs(windowSnapshot: SessionWindowSnapshot, navigati
           stagedPath: tab.lazyStagedPath ?? getStagedPath(tab.key),
           displayName: tab.displayName,
           explorerContext: tab.explorerContext,
+          encoding: restoredTextEncoding(tab),
         })),
         activeKey: '',
       }],
@@ -363,7 +372,9 @@ export async function loadRestoredTab(key: string): Promise<LazyLoadResult> {
   if (existing?.generation === generation) return existing.promise;
 
   const task = (async (): Promise<LazyLoadResult> => {
-    const result = await openDocument(tab.lazySource!, { isCurrent, activate: false, explorer: 'preserve' });
+    const encoding = useDocumentStore.getState().getDocument(key)?.encodingOverride;
+    const options = { isCurrent, activate: false, explorer: 'preserve' as const };
+    const result = await openDocument(tab.lazySource!, encoding ? { ...options, encoding } : options);
     if (!isCurrent()) return 'stale';
     if (result === 'failed') {
       showToast(`无法加载 ${tab.displayName}，请重试或检查文件`, 'error');

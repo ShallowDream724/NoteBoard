@@ -5,6 +5,8 @@
 
 import { useState, useCallback, useMemo, useSyncExternalStore, useRef, useEffect } from 'react';
 import { bindExplorerDrop } from './explorerDrop';
+import { explorerClipboardTarget, pasteExplorerFiles, setExplorerFileClipboard, watchExplorerCut } from './explorerClipboard';
+import { matchesShortcut } from '../../core/shortcutBindings';
 import { FilePlus, FolderPlus, LocateFixed, RotateCw, FolderOpen } from 'lucide-react';
 import { useExplorerStore, normalizePath } from './explorerStore';
 import { refreshExplorer, revealExplorerFile } from './explorerActions';
@@ -31,6 +33,7 @@ export function Explorer() {
   const [creatingName, setCreatingName] = useState('');
   const treeRef = useRef<HTMLDivElement>(null);
   useEffect(() => { if(root && treeRef.current) return bindExplorerDrop(treeRef.current,root); },[root]);
+  useEffect(() => { if (root) return watchExplorerCut(window); }, [root]);
 
   // 根据工作区与标签来源跟随，不被动离开工作区
   useReveal();
@@ -162,7 +165,39 @@ export function Explorer() {
   }
 
   return (
-    <div ref={treeRef} style={containerStyle} role="tree" className="nb-explorer-tree">
+    <div ref={treeRef} style={containerStyle} role="tree" tabIndex={0} className="nb-explorer-tree"
+      onKeyDown={event => {
+        if (event.defaultPrevented) return;
+        const target = explorerClipboardTarget(event.currentTarget, event.target, root);
+        if (target) {
+          const paste = matchesShortcut('explorer.pasteFiles', event.nativeEvent);
+          const cut = !!target.path && matchesShortcut('explorer.cutFiles', event.nativeEvent);
+          const copy = !!target.path && matchesShortcut('explorer.copyFiles', event.nativeEvent);
+          if (paste || cut || copy) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!event.repeat) {
+              if (paste) void pasteExplorerFiles(target.directory);
+              else if (target.path) void setExplorerFileClipboard(target.path, cut);
+            }
+            return;
+          }
+        }
+        // Global document shortcuts must not intercept the operating system's text
+        // undo/redo while typing a filename. Keep the native default on these inputs.
+        if (event.target instanceof HTMLInputElement &&
+            (matchesShortcut('edit.undo', event.nativeEvent) || matchesShortcut('edit.redo', event.nativeEvent))) {
+          event.stopPropagation();
+        }
+      }}
+      onPaste={event => {
+        if (event.defaultPrevented || !event.clipboardData.types.includes('Files')) return;
+        const target = explorerClipboardTarget(event.currentTarget, event.target, root);
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void pasteExplorerFiles(target.directory);
+      }}>
       {/* 标题行 */}
       <ExplorerHeader>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>

@@ -7,7 +7,9 @@ import { isSubPath, normalizePath, sameKey } from './pathUtils';
 import { useExplorerStore } from './explorerStore';
 
 /** Rename the filesystem entry and all captured local identities without saving. */
-export async function renameOpenPath(from: string, to: string, directory: boolean): Promise<void> {
+export function renameOpenPath(from: string, to: string, directory: boolean): Promise<void>;
+export function renameOpenPath(from: string, to: string, directory: boolean, move: { expectedIdentity?: string }): Promise<string | null>;
+export async function renameOpenPath(from: string, to: string, directory: boolean, move?: { expectedIdentity?: string }): Promise<string | null | void> {
   const source = normalizePath(from), destination = normalizePath(to);
   const matches = (key: string) => directory ? isSubPath(source, key) : sameKey(source, key);
   const allKeys = new Set([...useDocumentStore.getState().documents.keys(), ...useWindowStore.getState().tabs.map(tab => tab.key)]);
@@ -27,13 +29,18 @@ export async function renameOpenPath(from: string, to: string, directory: boolea
     if ([...currentKeys].some(key => matches(key) && !allKeys.has(key))) throw new Error('重命名期间有文档刚被打开，请稍后重试');
     // Native validates the complete registered source set under the same lock as
     // the rename. A concurrent open/foreign owner cancels before touching disk.
-    await ipc.renamePath(getCurrentWindow().label, source, destination, keys);
+    const windowLabel = getCurrentWindow().label;
+    const identity = move
+      ? await ipc.movePath(windowLabel, source, destination, keys, move.expectedIdentity)
+      : await ipc.renamePath(windowLabel, source, destination, keys);
     try {
       // Validate every pending body before committing the first local identity.
       // A failed serialization leaves all source sessions intact for retry.
       moves.forEach(move => materializeIdentityPending(move.from));
     } catch (error) {
-      await ipc.renamePath(getCurrentWindow().label, destination, source, moves.map(move => move.to));
+      const movedKeys = moves.map(move => move.to);
+      if (move) await ipc.movePath(windowLabel, destination, source, movedKeys, identity ?? undefined);
+      else await ipc.renamePath(windowLabel, destination, source, movedKeys);
       throw error;
     }
     // No await after the filesystem commit: consume pending while its original
@@ -52,6 +59,7 @@ export async function renameOpenPath(from: string, to: string, directory: boolea
         if (doc) useWindowStore.getState().setTabDirty(move.to, doc.isDirty);
       });
     }
+    return identity;
   } finally {
     leases.forEach(lease => lease.release());
   }

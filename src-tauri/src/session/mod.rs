@@ -59,6 +59,8 @@ pub struct SessionTab {
     // 原文件路径优先用于恢复；未命名文档为空。
     #[serde(default)]
     pub source_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<crate::dto::Encoding>,
     // 用户选择暂存关闭或异常保护时生成的普通文件路径，仅在原路径缺失时回退使用。
     #[serde(default)]
     pub staged_path: Option<String>,

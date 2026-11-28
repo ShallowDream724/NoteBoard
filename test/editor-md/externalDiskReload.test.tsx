@@ -12,11 +12,13 @@ import { TipTapEditor } from '@/features/editor-md/TipTapEditor';
 import { getMdSourceView, getMdTipTapEditor } from '@/features/editor-md/editorInstances';
 import { getBaseline } from '@/features/editor-md/serialize';
 import { reloadFromDisk } from '@/features/external/externalChangeActions';
+import { reopenFileWithEncoding } from '@/features/editor-code/orchestration/textFileFormat';
 import { getDocumentHistoryAvailability, undoDocumentHistory } from '@/features/history/documentHistory';
 
 vi.mock('@/core/ipc/commands', async original => ({
   ...await original<typeof import('@/core/ipc/commands')>(),
   readDocument: vi.fn(),
+  setDocumentDirty: async () => undefined,
 }));
 vi.mock('@/features/editor-md/bubbleMenu', () => ({ EditorBubbleMenu: () => null, TableToolbar: () => null }));
 vi.mock('@/features/editor-md/blockDragHandle', () => ({ BlockDragHandle: () => null }));
@@ -115,6 +117,29 @@ it.each([['markdown', 'source'], ['noteboard', 'source'], ['noteboard', 'visual'
     }
   },
 );
+
+it.each(['source', 'visual'] as const)('reopens mounted NB in %s mode with the selected decoder', async mode => {
+  const initial = payload('noteboard', 'Initial text', 'old.md');
+  const disk = { ...payload('noteboard', 'Recovered café', 'new.md'), encoding: 'windows-1252' as const };
+  const { key } = initial;
+  const unmount = await mount(initial, mode);
+  try {
+    vi.mocked(readDocument).mockResolvedValueOnce({ ...disk, content: 'Invalid NB header' });
+    await act(async () => { expect(await reopenFileWithEncoding(key, 'windows-1252')).toBe(false); });
+    expect(documentText(key, mode)).toBe('Initial text');
+    vi.mocked(readDocument).mockResolvedValueOnce(disk);
+    await act(async () => { expect(await reopenFileWithEncoding(key, 'windows-1252')).toBe(true); });
+    expect(readDocument).toHaveBeenLastCalledWith(key, expect.any(Number), 'windows-1252');
+    expect(documentText(key, mode)).toBe('Recovered café');
+    expect(useDocumentStore.getState().getDocument(key)).toMatchObject({
+      encoding: 'windows-1252', encodingOverride: 'windows-1252', isDirty: false,
+    });
+    const captured = await getEditorCapabilities(key)!.flush('save');
+    expect(readNativeMetadata(captured!.content!).markdown?.path).toBe('new.md');
+  } finally {
+    await unmount();
+  }
+});
 
 it('keeps new source input and the conflict when the disk read resolves later', async () => {
   const initial = payload('markdown', 'Initial text', 'old.md');

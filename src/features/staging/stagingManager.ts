@@ -3,7 +3,7 @@
 
 import * as ipc from '../../core/ipc/commands';
 import type { StagingDocument, StagingResult } from '../../core/ipc/types';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useDocumentStore, type Document } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { syncDocumentContent } from '../editor-code/orchestration/syncDocumentContent';
@@ -19,7 +19,11 @@ const STAGING_INTERVAL_MS = 5_000;
 
 // 每个文档在一次编辑会话内复用同一暂存文件，避免每次键入都生成历史副本。
 /** 暂存记录：key → 副本路径与暂存内容（undefined=内容未知，如恢复登记的副本；内容证明用于保存后只清理被覆盖的副本） */
-const stagedPaths = new Map<string, { path: string; content?: string; revision?: number; directory?: string }>();
+type StagedFormat = Pick<StagingDocument, 'encoding' | 'eol'>;
+function stagingEncoding(document: Document): StagedFormat['encoding'] {
+  return document.kind === 'noteboard' ? 'utf8' : document.encoding;
+}
+const stagedPaths = new Map<string, { path: string; content?: string; revision?: number; directory?: string; format?: StagedFormat }>();
 // 明确选择“暂存”的文档不再由标签移除后的清理流程删除。
 const retainedKeys = new Set<string>();
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,8 +85,9 @@ async function collectDocuments(keys?: string[], onlyChanged = false): Promise<S
     const directory = useSettingsStore.getState().settings.file.stagingDirectory;
     const record = stagedPaths.get(tab.key);
     const before = useDocumentStore.getState().getDocument(tab.key);
-    if (onlyChanged && record?.revision === revision && record.directory === directory
-      && record.content !== undefined && record.content === before?.content) continue;
+    if (onlyChanged && before && record?.revision === revision && record.directory === directory
+      && record.content !== undefined && record.content === before.content
+      && record.format?.encoding === stagingEncoding(before) && record.format?.eol === before.eol) continue;
 
     // Keep the capture's starting revision. Edits arriving during the await
     // must still be captured on the next pass, even if this write succeeds.
@@ -102,7 +107,7 @@ async function collectDocuments(keys?: string[], onlyChanged = false): Promise<S
       key: tab.key,
       displayName: tab.displayName || document.displayName,
       content: capturedContent ?? document.content!,
-      encoding: document.encoding,
+      encoding: stagingEncoding(document),
       eol: document.eol,
       targetPath: stagedPaths.get(tab.key)?.path ?? null,
     } });
@@ -162,7 +167,10 @@ async function writePendingDocuments(keys?: string[], retain = false, onlyChange
       if (getSessionGeneration(document.key) !== generation) continue;
       const previousPath = document.targetPath;
       // 记录暂存内容：保存后清理需要内容证明（只删被保存覆盖的副本）
-      stagedPaths.set(result.key, { path: result.targetPath, content: document.content, revision, directory });
+      stagedPaths.set(result.key, {
+        path: result.targetPath, content: document.content, revision, directory,
+        format: { encoding: document.encoding, eol: document.eol },
+      });
       results.push(result);
       // 修改设置位置后 Rust 会返回新路径，此时清理旧位置中仅用于异常恢复的副本。
       if (previousPath && previousPath !== result.targetPath) {
@@ -196,7 +204,8 @@ export function assertStagedDocumentsCurrent(keys: readonly string[]): void {
     if (!hasUnsavedContent(document, tab)) continue;
     const record = stagedPaths.get(key);
     if (tab?.lazySource && record) continue;
-    if (!record || record.revision !== getDocumentRevision(key) || record.content !== document?.content) {
+    if (!record || !document || record.revision !== getDocumentRevision(key) || record.content !== document.content
+      || record.format?.encoding !== stagingEncoding(document) || record.format?.eol !== document.eol) {
       throw new Error('暂存期间有新的修改，请再次暂存后关闭');
     }
   }
@@ -244,14 +253,15 @@ export function registerRestoredStagedPath(docKey: string, path: string): void {
  * （暂存内容与保存内容逐字一致）才删除；
  * 保存期间产生的新版本暂存（r11 > r10）保留，避免误删恢复副本。
  */
-export function onDocumentSaved(docKey: string, savedContent?: string): Promise<void> {
+export function onDocumentSaved(docKey: string, savedContent?: string, format?: StagedFormat): Promise<void> {
   const generation = getSessionGeneration(docKey);
   return enqueueStaging(async () => {
     if (savedContent === undefined || getSessionGeneration(docKey) !== generation) return;
     const record = stagedPaths.get(docKey);
     if (!record) return;
     // Empty content is a real version too, not proof that an older save covers it.
-    const covered = record.content !== undefined && record.content === savedContent;
+    const covered = record.content !== undefined && record.content === savedContent
+      && (!format || (record.format?.encoding === format.encoding && record.format?.eol === format.eol));
     retainedKeys.delete(docKey);
     if (!covered) return;
     await ipc.deleteStagedFile(record.path).then(() => {
@@ -263,11 +273,19 @@ export function onDocumentSaved(docKey: string, savedContent?: string): Promise<
 }
 
 /** 用户明确选择“不保存”时同步清理副本，保证该动作语义仍是彻底丢弃。 */
-export function discardStagedDocuments(keys: string[]): Promise<void> {
-  const generations = keys.map(key => getSessionGeneration(key));
+export function discardStagedDocuments(keys: string[], options?: { onlyCurrentEdit?: boolean }): Promise<void> {
+  const snapshots = keys.map(key => {
+    const doc = useDocumentStore.getState().getDocument(key);
+    return { generation: getSessionGeneration(key), revision: getDocumentRevision(key), content: doc?.content, eol: doc?.eol };
+  });
   return enqueueStaging(async () => {
     const tasks = keys.flatMap((key, index) => {
-      if (getSessionGeneration(key) !== generations[index]) return [];
+      const snapshot = snapshots[index];
+      if (getSessionGeneration(key) !== snapshot.generation) return [];
+      if (options?.onlyCurrentEdit) {
+        const doc = useDocumentStore.getState().getDocument(key);
+        if (getDocumentRevision(key) !== snapshot.revision || doc?.content !== snapshot.content || doc?.eol !== snapshot.eol) return [];
+      }
       retainedKeys.delete(key);
       const record = stagedPaths.get(key);
       return record ? [ipc.deleteStagedFile(record.path).then(() => {
@@ -311,6 +329,10 @@ function scheduleStaging(keys?: string[]): void {
     pendingStagingKeys.clear();
     requestAutomaticStaging(keysToStage.length ? keysToStage : undefined);
   }, STAGING_DEBOUNCE_MS);
+}
+
+export function scheduleStagingForFormatChange(key: string): void {
+  if (stopRevisionSubscription) scheduleStaging([key]);
 }
 
 /**

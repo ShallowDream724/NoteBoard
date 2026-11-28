@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import { createFileTypeIcon, NoteBoardFileIcon } from './FileIcon';
 import { openShowcase } from '../features/welcome/welcomeActions';
 import { useSettingsStore } from '../stores/settingsStore';
-import { AuthoringGuideDialog } from '../features/authoring-guide/AuthoringGuide';
 import { ResumeWorkspace } from '../features/welcome/ResumeWorkspace';
 import '../features/welcome/workspaceRecents.css';
 // 🔴 P0-1b：欢迎页空闲预取常用编辑器资源——用户看到"新建 Markdown"卡片即为预取
@@ -21,6 +20,9 @@ import {
   Star,
 } from 'lucide-react';
 import { ChevronRight } from 'lucide-react';
+
+const AuthoringGuideDialog = React.lazy(() => import('../features/authoring-guide/AuthoringGuide')
+  .then(module => ({ default: module.AuthoringGuideDialog })));
 
 const MarkdownIcon = createFileTypeIcon('note.md');
 const TextIcon = createFileTypeIcon('note.txt');
@@ -637,7 +639,9 @@ export function WelcomeScreen({
         ))}
       </div>
       {restoreSession && <ResumeWorkspace/>}
-      <AuthoringGuideDialog open={showAuthoringGuide} onOpenChange={setShowAuthoringGuide} />
+      {showAuthoringGuide && <React.Suspense fallback={null}>
+        <AuthoringGuideDialog open onOpenChange={setShowAuthoringGuide} />
+      </React.Suspense>}
     </div>
   );
 }

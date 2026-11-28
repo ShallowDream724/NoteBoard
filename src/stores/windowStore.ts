@@ -58,10 +58,14 @@ export interface Tab {
   externalStatus: 'clean' | 'modified' | 'deleted' | 'renamed' | null;
   /** 文件已断开（被删除） */
   isDetached: boolean;
+  /** Import undo is temporarily holding this file. Keep the tab without a missing-file modal. */
+  isImportParked?: boolean;
   /** 工具型视图标记（纯前端，不落盘、不进会话契约；textdiff=文本对比） */
   toolKind?: 'textdiff';
   /** Session-only receipt for a file produced by export; never persisted as document data. */
   exportNotice?: { warnings?: string };
+  /** Preparation could identify text but needs the user to choose its decoder. */
+  encodingRequired?: true;
   /** Only a root and its origin; Explorer owns the single directory cache. */
   explorerContext?: ExplorerContext;
   // ── S10 会话恢复轻量描述符 ──
@@ -81,6 +85,7 @@ interface WindowStore {
 
   // ── 操作 ──
   openTab: (tab: Tab) => void;
+  resolvePendingTab: (tab: Pick<Tab, 'key' | 'kind' | 'language' | 'encodingRequired'>) => void;
   closeTab: (key: string, reason?: 'closed' | 'transferred') => void;
   closeOtherTabs: (key: string) => void;
   closeTabsLeft: (key: string) => void;
@@ -93,7 +98,7 @@ interface WindowStore {
   setTabExplorerContext: (key: string, context: ExplorerContext) => void;
   renameExplorerContexts: (oldDir: string, newDir: string) => void;
   setTabExternalStatus: (key: string, status: Tab['externalStatus']) => void;
-  setTabDetached: (key: string, isDetached: boolean) => void;
+  setTabDetached: (key: string, isDetached: boolean, parkedImport?: boolean) => void;
   reorderTabs: (fromIndex: number, toIndex: number) => void;
   updateTabPath: (key: string, newPath: string, newDisplayName: string) => void;
   renameTabsDirectory: (oldDir: string, newDir: string) => void;
@@ -232,6 +237,16 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
         return { activeKey: tab.key, tabs: tab.exportNotice ? state.tabs.map(value => value.key === tab.key ? { ...value, exportNotice: tab.exportNotice } : value) : state.tabs };
       }
       return { tabs: [...state.tabs, tab], activeKey: tab.key };
+    });
+  },
+
+  resolvePendingTab: ({ key, kind, language, encodingRequired }) => {
+    set((state) => {
+      const tab = state.tabs.find(t => t.key === key);
+      if (!tab || (!tab.lazySource && !tab.encodingRequired)) return state;
+      if (tab.kind === kind && tab.language === language && tab.encodingRequired === encodingRequired) return state;
+      const resolved = { ...tab, kind, language, encodingRequired };
+      return { tabs: state.tabs.map(t => t === tab ? resolved : t) };
     });
   },
 
@@ -446,9 +461,11 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     }));
   },
 
-  setTabDetached: (key, isDetached) => {
+  setTabDetached: (key, isDetached, parkedImport) => {
     set((state) => ({
-      tabs: state.tabs.map((t) => (t.key === key ? { ...t, isDetached } : t)),
+      tabs: state.tabs.map(t => t.key === key
+        ? { ...t, isDetached, isImportParked: isDetached && (parkedImport || t.isImportParked) || undefined }
+        : t),
     }));
   },
 
@@ -475,7 +492,7 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
             explorerContext: t.explorerContext && (t.explorerContext.source === 'parent'
               || (t.explorerContext.source !== 'workspace' && !isSubPath(t.explorerContext.root, newPath)))
               ? { root: parentDirectory(newPath), source: 'parent' } : t.explorerContext,
-            viewMode: kind === t.kind ? t.viewMode : null, externalStatus: 'clean', isDetached: false }
+            viewMode: kind === t.kind ? t.viewMode : null, externalStatus: 'clean', isDetached: false, isImportParked: undefined }
           : t,
       ),
       activeKey: state.activeKey === key ? newPath : state.activeKey,

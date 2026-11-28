@@ -1,6 +1,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import * as ipc from '../../core/ipc/commands';
+import { expectedDiskFromPayload, readDiskText } from '../../core/files/readDiskText';
 import { encodeNativeDocument, readNativeMetadata, replaceNativeMetadata } from '../../core/nativeDocument';
 import { documentTextHash, saveNativeBundle } from '../../core/nativeDocumentIO';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -42,7 +43,7 @@ export async function convertMarkdownToNative(key: string, options: { removeMark
     const current = useDocumentStore.getState().getDocument(key);
     const source = captured?.content ?? current?.content;
     if (source == null || !current) throw new Error('无法读取最新正文，请稍后重试。');
-    const disk = hasFile ? await ipc.readDocument(key) : null;
+    const disk = hasFile ? await readDiskText(key, current.encodingOverride) : null;
     if (disk && disk.content == null) throw new Error('无法读取原 Markdown，转换未保存。');
     if (disk && (current.persistedContent == null || await documentTextHash(disk.content!) !== await documentTextHash(current.persistedContent))) throw new Error('原 Markdown 已在外部修改，请先处理外部更新。');
     const native = await prepareTextExport(source, 'noteboard', hasFile ? parentDirectory(key) : '');
@@ -51,8 +52,11 @@ export async function convertMarkdownToNative(key: string, options: { removeMark
     assertDocumentIdentity(lease);
     const expectedHash = disk ? await documentTextHash(disk.content!) : '';
     const result = await saveNativeBundle({ path: newKey, content, createOnly: true,
-      ...(disk && markdown != null ? { markdown: { path: key, content: markdown, expectedHash, encoding: disk.encoding, eol: disk.eol } } : {}),
-      ...(disk && options.removeMarkdown ? { removeMarkdown: { path: key, expectedHash } } : {}),
+      ...(disk && markdown != null ? { markdown: {
+        path: key, content: markdown, expectedHash, encoding: disk.encoding, eol: disk.eol,
+        expectedEncoding: disk.encoding, expectedDisk: expectedDiskFromPayload(disk),
+      } } : {}),
+      ...(disk && options.removeMarkdown ? { removeMarkdown: { path: key, expectedHash, expectedEncoding: disk.encoding } } : {}),
     });
     if (!result.ok || !result.native) throw new Error(result.error?.message ?? '未能保存 NoteBoard 文档。');
     assertDocumentIdentity(lease);

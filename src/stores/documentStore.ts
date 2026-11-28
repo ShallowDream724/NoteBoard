@@ -14,6 +14,7 @@ import { normalizePath } from '../features/explorer/pathUtils';
 import { isEditable, kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
 import { emit } from '../core/emitter';
 import { normalizeDocumentEol } from '../core/documentText';
+import type { IndentationSettings } from '../core/editor/indentationSettings';
 
 export interface Document {
   /** 规范化路径 key */
@@ -26,14 +27,20 @@ export interface Document {
   kind: DocumentPayload['kind'];
   /** 语言 */
   language: DocumentPayload['language'];
+  /** Per-file choices for the open editor session. Omitted values use editor defaults. */
+  indentation?: Partial<IndentationSettings>;
   /** 内容镜像（防抖后，不是权威副本） */
   content: string | null;
   /** A restored descriptor is not a delivered payload; images legitimately have no text. */
   loadState: 'placeholder' | 'loaded';
   /** 编码 */
   encoding: DocumentPayload['encoding'];
+  /** Decoder explicitly chosen for this file, if any. */
+  encodingOverride: DocumentPayload['encoding'] | null;
   /** 行尾符 */
   eol: DocumentPayload['eol'];
+  /** Last line-ending format read from or written to disk. */
+  persistedEol: DocumentPayload['eol'];
   /** 文件大小 */
   size: number;
   /** 修改时间（毫秒） */
@@ -63,19 +70,26 @@ interface DocumentStore {
 
   // ── 操作 ──
   /** 从 DocumentPayload 创建 Document */
-  upsertFromPayload: (payload: DocumentPayload, options?: { placeholder: boolean }) => Document;
+  upsertFromPayload: (payload: DocumentPayload, options?: { placeholder?: boolean; encodingOverride?: DocumentPayload['encoding'] | null }) => Document;
   /** 更新内容镜像（防抖后调用） */
   setContent: (key: string, content: string) => void;
   /** Session-only syntax choice; never changes content, file kind or dirty state. */
   setLanguage: (key: string, language: DocumentPayload['language']) => void;
+  setEol: (key: string, eol: DocumentPayload['eol']) => void;
+  setIndentation: (key: string, settings: Partial<IndentationSettings>) => void;
   /** 标记为脏/干净 */
   setDirty: (key: string, isDirty: boolean) => void;
   /** 设置基准内容并对齐脏态 */
   setBaselineContent: (key: string, baselineContent: string) => void;
   /** 使用实际写入磁盘的内容更新基线（保存后调用） */
-  updateBaseline: (key: string, savedContent: string, mtime: number, size: number, persistedContent?: string | null) => void;
+  updateBaseline: (key: string, savedContent: string, mtime: number, size: number, persistedContent?: string | null, format?: {
+    encoding?: DocumentPayload['encoding'];
+    eol: DocumentPayload['eol'];
+    encodingOverride?: DocumentPayload['encoding'] | null;
+  }) => void;
   /** Adopt an already applied text snapshot and its current disk metadata together. */
-  acceptDiskContent: (key: string, payload: DocumentPayload) => void;
+  acceptDiskContent: (key: string, payload: DocumentPayload, encodingOverride?: DocumentPayload['encoding'] | null) => void;
+  refreshDiskStat: (key: string, mtime: number, size: number) => void;
   /** 同步刷新所有文档的保存策略（设置改变时调用） */
   syncSavePolicies: () => void;
   /** 设置外部变更状态 */
@@ -95,6 +109,14 @@ interface DocumentStore {
 function normalizeEol(text: string | null | undefined): string {
   if (text == null) return '';
   return normalizeDocumentEol(text);
+}
+
+export function isDocumentContentDirty(
+  doc: Document | undefined,
+  content: string | null,
+  baseline = doc?.baselineContent,
+): boolean {
+  return (doc !== undefined && doc.eol !== doc.persistedEol) || normalizeEol(content) !== normalizeEol(baseline);
 }
 
 /**
@@ -129,15 +151,18 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       dirPath: payload.dirPath,
       kind: payload.kind,
       language: payload.language,
+      indentation: existing?.indentation,
       content: payload.content,
       loadState: options?.placeholder ? 'placeholder' : 'loaded',
       encoding: payload.encoding,
+      encodingOverride: options?.encodingOverride ?? null,
       eol: payload.eol,
+      persistedEol: payload.eol,
       size: payload.size,
       mtime: payload.mtime,
       readonly: payload.readonly,
       isDirty: existing?.isDirty ?? false,
-      savePolicy: existing?.savePolicy ?? resolveSavePolicy(payload.kind),
+      savePolicy: existing?.kind === payload.kind ? existing.savePolicy : resolveSavePolicy(payload.kind),
       baselineContent: existing?.baselineContent ?? payload.content,
       // A restored tab starts as a content:null descriptor. Its first disk load
       // establishes the persisted snapshot; later editor mirrors never replace it.
@@ -163,7 +188,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       if (doc.content === content) return state;
       const newMap = new Map(state.documents);
       // 判断脏态：规范化换行符后内容与基线不同 = 脏（杜绝 Windows CRLF 导致假脏态）
-      const isDirty = normalizeEol(content) !== normalizeEol(doc.baselineContent);
+      const isDirty = isDocumentContentDirty(doc, content);
       newMap.set(key, { ...doc, content, isDirty });
       return { documents: newMap };
     });
@@ -179,12 +204,37 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     });
   },
 
+  setEol: (key, eol) => {
+    set(state => {
+      const doc = state.documents.get(key);
+      if (!doc || doc.eol === eol) return state;
+      const updated = { ...doc, eol };
+      const documents = new Map(state.documents);
+      documents.set(key, { ...updated, isDirty: isDocumentContentDirty(updated, doc.content) });
+      return { documents };
+    });
+  },
+
+  setIndentation: (key, settings) => {
+    set(state => {
+      const doc = state.documents.get(key);
+      if (!doc || doc.kind !== 'code') return state;
+      const indentation = { ...doc.indentation, ...settings };
+      if (indentation.insertSpaces === doc.indentation?.insertSpaces && indentation.tabSize === doc.indentation?.tabSize) return state;
+      const documents = new Map(state.documents);
+      documents.set(key, { ...doc, indentation });
+      return { documents };
+    });
+  },
+
   setDirty: (key, isDirty) => {
     set((state) => {
       const doc = state.documents.get(key);
-      if (!doc || doc.isDirty === isDirty) return state;
+      if (!doc) return state;
+      const dirty = isDirty || doc.eol !== doc.persistedEol;
+      if (doc.isDirty === dirty) return state;
       const newMap = new Map(state.documents);
-      newMap.set(key, { ...doc, isDirty });
+      newMap.set(key, { ...doc, isDirty: dirty });
       return { documents: newMap };
     });
   },
@@ -194,21 +244,26 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const doc = state.documents.get(key);
       if (!doc) return {};
       const newMap = new Map(state.documents);
-      const isDirty = normalizeEol(doc.content) !== normalizeEol(baselineContent);
+      const isDirty = isDocumentContentDirty(doc, doc.content, baselineContent);
       newMap.set(key, { ...doc, baselineContent, isDirty });
       return { documents: newMap };
     });
   },
 
-  updateBaseline: (key, savedContent, mtime, size, persistedContent = savedContent) => {
+  updateBaseline: (key, savedContent, mtime, size, persistedContent = savedContent, format) => {
     set((state) => {
       const doc = state.documents.get(key);
       if (!doc) return {};
       const newMap = new Map(state.documents);
       // 保存期间用户可能继续编辑，因此必须用“实际写入内容”做基线，并重新比较当前内容
-      const isDirty = normalizeEol(doc.content) !== normalizeEol(savedContent);
+      const saved = { ...doc,
+        encoding: format?.encoding ?? doc.encoding,
+        encodingOverride: format?.encodingOverride === undefined ? doc.encodingOverride : format.encodingOverride,
+        persistedEol: format?.eol ?? doc.persistedEol,
+      };
+      const isDirty = isDocumentContentDirty(saved, doc.content, savedContent);
       newMap.set(key, {
-        ...doc,
+        ...saved,
         baselineContent: savedContent,
         persistedContent,
         mtime,
@@ -219,7 +274,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     });
   },
 
-  acceptDiskContent: (key, payload) => {
+  acceptDiskContent: (key, payload, encodingOverride) => {
     set((state) => {
       const doc = state.documents.get(key);
       if (!doc || payload.content == null) return state;
@@ -230,13 +285,27 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         baselineContent: payload.content,
         persistedContent: payload.content,
         encoding: payload.encoding,
+        encodingOverride: encodingOverride === undefined
+          ? (doc.encodingOverride === payload.encoding ? doc.encodingOverride : null)
+          : encodingOverride,
         eol: payload.eol,
+        persistedEol: payload.eol,
         mtime: payload.mtime,
         size: payload.size,
         readonly: payload.readonly,
         isDirty: false,
         externalStatus: 'clean',
       });
+      return { documents };
+    });
+  },
+
+  refreshDiskStat: (key, mtime, size) => {
+    set(state => {
+      const doc = state.documents.get(key);
+      if (!doc || (doc.mtime === mtime && doc.size === size)) return state;
+      const documents = new Map(state.documents);
+      documents.set(key, { ...doc, mtime, size });
       return { documents };
     });
   },

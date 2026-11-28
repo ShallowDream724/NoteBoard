@@ -83,7 +83,38 @@ pub enum ViewMode {
 pub enum Encoding {
     Utf8,
     Utf8Bom,
+    #[serde(rename = "utf16-le")]
+    Utf16Le,
+    #[serde(rename = "utf16-be")]
+    Utf16Be,
+    Gb18030,
     Gbk,
+    Big5,
+    ShiftJis,
+    EucJp,
+    EucKr,
+    #[serde(rename = "windows-1250")]
+    Windows1250,
+    #[serde(rename = "windows-1251")]
+    Windows1251,
+    #[serde(rename = "windows-1252")]
+    Windows1252,
+    #[serde(rename = "windows-1253")]
+    Windows1253,
+    #[serde(rename = "windows-1254")]
+    Windows1254,
+    #[serde(rename = "windows-1255")]
+    Windows1255,
+    #[serde(rename = "windows-1256")]
+    Windows1256,
+    #[serde(rename = "windows-1257")]
+    Windows1257,
+    #[serde(rename = "windows-1258")]
+    Windows1258,
+    #[serde(rename = "windows-874")]
+    Windows874,
+    Koi8R,
+    MacRoman,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -129,6 +160,15 @@ pub struct WriteResult {
     pub error: Option<WriteError>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExpectedDisk {
+    pub mtime: i64,
+    pub size: u64,
+    pub encoding: Encoding,
+    pub content: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum WriteError {
@@ -141,6 +181,8 @@ pub enum WriteError {
     Readonly { path: String },
     #[serde(rename_all = "camelCase")]
     PathNotFound { path: String },
+    Encoding { message: String },
+    Conflict { message: String },
     #[serde(rename_all = "camelCase")]
     Io { message: String },
 }
@@ -154,6 +196,7 @@ impl std::fmt::Display for WriteError {
             Self::Readonly { path } => write!(f, "文件是只读的: {}", path),
             Self::PathNotFound { path } => write!(f, "路径不存在: {}", path),
             Self::Io { message } => write!(f, "IO 错误: {}", message),
+            Self::Encoding { message } | Self::Conflict { message } => f.write_str(message),
         }
     }
 }
@@ -205,8 +248,12 @@ pub struct TransferredDocument {
     /// 编码与 EOL（缺省 utf8/lf）
     #[serde(default)]
     pub encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encoding_override: Option<Encoding>,
     #[serde(default)]
     pub eol: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persisted_eol: Option<Eol>,
     /// 只读标记（缺省 false）
     #[serde(default)]
     pub readonly: bool,
@@ -480,6 +527,10 @@ pub enum PreparedDocument {
         dir_path: String,
         language: String,
         size: u64,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        encoding_required: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encoding_message: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     AlreadyOpen {

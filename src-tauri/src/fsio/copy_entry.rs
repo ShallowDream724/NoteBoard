@@ -1,11 +1,17 @@
 //! Explorer imports copy through a private staging directory. Sources are never
 //! removed, existing destinations never replaced, and bytes stream from disk.
+use super::guarded_rename;
+use sha2::{Digest, Sha256};
 use std::{
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
 };
 
-fn ordinary(path: &Path) -> Result<fs::Metadata, String> {
+const MAX_DEPTH: usize = 128;
+const MAX_ENTRIES: usize = 100_000;
+
+pub(super) fn ordinary(path: &Path) -> Result<fs::Metadata, String> {
     let meta = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
     #[cfg(windows)]
     {
@@ -20,23 +26,121 @@ fn ordinary(path: &Path) -> Result<fs::Metadata, String> {
     Ok(meta)
 }
 
-fn copy_tree(source: &Path, target: &Path, depth: usize, count: &mut usize) -> Result<(), String> {
-    *count += 1;
-    if depth > 128 || *count > 100_000 {
-        return Err("文件夹层级或文件数量过多，请分批复制".into());
+#[derive(PartialEq, Eq)]
+pub(super) struct CopyProof {
+    pub root_identity: String,
+    digest: [u8; 32],
+}
+
+#[derive(Default)]
+struct Fingerprint {
+    digest: Sha256,
+    last_identity: String,
+}
+
+impl Fingerprint {
+    fn finish_node(&mut self, path: &Path, data: Option<[u8; 32]>) -> Option<()> {
+        let meta = ordinary(path).ok()?;
+        if meta.is_file() != data.is_some() {
+            return None;
+        }
+        let identity = guarded_rename::identity(path)?;
+        let name = path.file_name()?.as_encoded_bytes();
+        self.digest.update(if data.is_some() { b"F" } else { b"D" });
+        self.digest.update((name.len() as u64).to_le_bytes());
+        self.digest.update(name);
+        self.digest.update((identity.len() as u64).to_le_bytes());
+        self.digest.update(identity.as_bytes());
+        self.digest
+            .update([u8::from(meta.permissions().readonly())]);
+        if let Some(data) = data {
+            self.digest.update(meta.len().to_le_bytes());
+            let modified = meta
+                .modified()
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?;
+            self.digest.update(modified.as_nanos().to_le_bytes());
+            self.digest.update(data);
+        }
+        self.last_identity = identity;
+        Some(())
     }
+
+    fn finish(self) -> CopyProof {
+        CopyProof {
+            root_identity: self.last_identity,
+            digest: self.digest.finalize().into(),
+        }
+    }
+}
+
+fn finish_fingerprint(proof: &mut Option<Fingerprint>, path: &Path, data: Option<[u8; 32]>) {
+    if let Some(record) = proof.as_mut() {
+        if record.finish_node(path, data).is_none() {
+            *proof = None;
+        }
+    }
+}
+
+fn visit_node(depth: usize, count: &mut usize) -> Result<(), String> {
+    *count += 1;
+    if depth > MAX_DEPTH || *count > MAX_ENTRIES {
+        Err("文件夹层级或文件数量过多，请分批复制".into())
+    } else {
+        Ok(())
+    }
+}
+
+fn ordered_children(path: &Path, remaining: usize) -> Result<Vec<fs::DirEntry>, String> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(path).map_err(|error| error.to_string())? {
+        if entries.len() >= remaining {
+            return Err("文件夹层级或文件数量过多，请分批复制".into());
+        }
+        entries.push(entry.map_err(|error| error.to_string())?);
+    }
+    entries.sort_by_cached_key(fs::DirEntry::file_name);
+    Ok(entries)
+}
+
+struct HashReader<'a, R> {
+    reader: R,
+    digest: &'a mut Sha256,
+}
+
+impl<R: Read> Read for HashReader<'_, R> {
+    fn read(&mut self, data: &mut [u8]) -> io::Result<usize> {
+        let bytes_read = self.reader.read(data)?;
+        self.digest.update(&data[..bytes_read]);
+        Ok(bytes_read)
+    }
+}
+
+fn copy_tree(
+    source: &Path,
+    target: &Path,
+    depth: usize,
+    count: &mut usize,
+    proof: &mut Option<Fingerprint>,
+) -> Result<(), String> {
+    visit_node(depth, count)?;
     let meta = ordinary(source)?;
     if meta.is_dir() {
         fs::create_dir(target).map_err(|e| e.to_string())?;
-        for entry in fs::read_dir(source).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
+        if let Some(proof) = proof.as_mut() {
+            proof.digest.update(b"[");
+        }
+        for entry in ordered_children(source, MAX_ENTRIES - *count)? {
             copy_tree(
                 &entry.path(),
                 &target.join(entry.file_name()),
                 depth + 1,
                 count,
+                proof,
             )?;
         }
+        finish_fingerprint(proof, target, None);
     } else {
         let mut input = fs::File::open(source).map_err(|e| e.to_string())?;
         let mut output = fs::OpenOptions::new()
@@ -44,13 +148,37 @@ fn copy_tree(source: &Path, target: &Path, depth: usize, count: &mut usize) -> R
             .create_new(true)
             .open(target)
             .map_err(|e| e.to_string())?;
-        io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
+        let digest = if proof.is_some() {
+            let mut digest = Sha256::new();
+            io::copy(
+                &mut HashReader {
+                    reader: input,
+                    digest: &mut digest,
+                },
+                &mut output,
+            )
+            .map_err(|e| e.to_string())?;
+            Some(digest.finalize().into())
+        } else {
+            io::copy(&mut input, &mut output).map_err(|e| e.to_string())?;
+            None
+        };
         output.sync_all().map_err(|e| e.to_string())?;
+        drop(output);
+        finish_fingerprint(proof, target, digest);
     }
     Ok(())
 }
 
 pub fn copy_entry(source: &Path, directory: &Path) -> Result<PathBuf, String> {
+    copy_entry_with_proof(source, directory, false).map(|(path, _)| path)
+}
+
+pub(super) fn copy_entry_with_proof(
+    source: &Path,
+    directory: &Path,
+    tracked: bool,
+) -> Result<(PathBuf, Option<CopyProof>), String> {
     let source_kind = ordinary(source)?;
     let parent = dunce::canonicalize(directory).map_err(|e| format!("目标文件夹不可用: {e}"))?;
     if !parent.is_dir() {
@@ -70,14 +198,66 @@ pub fn copy_entry(source: &Path, directory: &Path) -> Result<PathBuf, String> {
         .tempdir_in(&parent)
         .map_err(|e| e.to_string())?;
     let staged = staging.path().join(name);
-    copy_tree(&source, &staged, 0, &mut 0)?;
+    let mut proof = tracked.then(Fingerprint::default);
+    copy_tree(&source, &staged, 0, &mut 0, &mut proof)?;
     // Windows rename refuses an existing destination, including a file created
     // concurrently after the initial collision check.
     if fs::symlink_metadata(&destination).is_ok() {
         return Err("目标文件夹已有同名项目，未覆盖任何文件".into());
     }
     fs::rename(&staged, &destination).map_err(|e| format!("复制失败: {e}"))?;
-    Ok(destination)
+    Ok((destination, proof.map(Fingerprint::finish)))
+}
+
+pub(super) fn fingerprint_tree(path: &Path) -> Result<CopyProof, String> {
+    let mut proof = Some(Fingerprint::default());
+    scan_tree(path, 0, &mut 0, &mut proof)?;
+    proof
+        .map(Fingerprint::finish)
+        .ok_or_else(|| "无法核对导入副本".into())
+}
+
+fn scan_tree(
+    path: &Path,
+    depth: usize,
+    count: &mut usize,
+    proof: &mut Option<Fingerprint>,
+) -> Result<(), String> {
+    visit_node(depth, count)?;
+    if proof.is_none() {
+        return Err("无法核对导入副本".into());
+    }
+    let meta = ordinary(path)?;
+    if meta.is_dir() {
+        proof.as_mut().unwrap().digest.update(b"[");
+        for entry in ordered_children(path, MAX_ENTRIES - *count)? {
+            scan_tree(&entry.path(), depth + 1, count, proof)?;
+        }
+        if ordinary(path)?.modified().ok() != meta.modified().ok() {
+            return Err("导入文件夹正在被修改".into());
+        }
+        finish_fingerprint(proof, path, None);
+    } else {
+        let input = fs::File::open(path).map_err(|error| error.to_string())?;
+        let mut digest = Sha256::new();
+        let count = io::copy(
+            &mut HashReader {
+                reader: (&input).take(meta.len().saturating_add(1)),
+                digest: &mut digest,
+            },
+            &mut io::sink(),
+        )
+        .map_err(|error| error.to_string())?;
+        let after = input.metadata().map_err(|error| error.to_string())?;
+        if count != meta.len()
+            || after.len() != count
+            || after.modified().ok() != meta.modified().ok()
+        {
+            return Err("导入副本正在被修改".into());
+        }
+        finish_fingerprint(proof, path, Some(digest.finalize().into()));
+    }
+    Ok(())
 }
 
 fn contains_directory(source: &Path, destination: &Path) -> bool {

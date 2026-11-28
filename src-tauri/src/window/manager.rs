@@ -225,6 +225,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             let app = window.app_handle().clone();
             let state = app.state::<Mutex<AppState>>();
             let reassign = unregister_window(&state, &label);
+            let _ = crate::fsio::import_history::release_window(&label);
             // 🔴 锁外唤醒转交目标：该窗口需要重新消费队列
             if let Some((target_label, queue_version)) = reassign {
                 crate::window::intent::notify_open_requests(&app, &target_label, queue_version);

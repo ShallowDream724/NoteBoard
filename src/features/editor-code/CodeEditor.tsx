@@ -1,4 +1,5 @@
 import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
+import { resolveIndentation } from '../../core/editor/indentationSettings';
 // NoteBoard CodeMirror 6 编辑器组件
 // 裸 CM6（new EditorView / EditorState.create），挂载到 DOM
 // 详见 docs/09-开发路线图.md 4.1
@@ -12,9 +13,11 @@ import { Annotation, EditorState, Prec, Transaction } from '@codemirror/state';
 import { undoDepth as cmUndoDepth } from '@codemirror/commands';
 import {
   createBaseExtensions,
+  createIndentationExtensions,
   editorHistory,
   editorLineNumberEffect,
   historyCompartment,
+  indentationCompartment,
   languageCompartment,
   typographyCompartment,
 } from './setup';
@@ -29,7 +32,7 @@ import {
   textAnalysisLifecycle,
 } from './jsonOps';
 import type { LanguageId } from '../../core/ipc/types';
-import { useDocumentStore } from '../../stores/documentStore';
+import { isDocumentContentDirty, useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { normalizeEol } from '../editor-md/serialize';
@@ -83,7 +86,8 @@ interface CodeEditorProps {
 
 function readFileEditorSettings(docKey: string, language: LanguageId) {
   const settings = useSettingsStore.getState().settings.editor;
-  return { ...settings, showLineNumbers: isCodeSourceFile(docKey, language) || settings.showLineNumbers };
+  const indentation = useDocumentStore.getState().getDocument(docKey)?.indentation;
+  return { ...settings, ...resolveIndentation(settings, indentation), showLineNumbers: isCodeSourceFile(docKey, language) || settings.showLineNumbers };
 }
 
 export function CodeEditor({ docKey }: CodeEditorProps) {
@@ -180,12 +184,13 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       // setContent already compares changed mirrors to the baseline. If Text
       // returned to the existing mirror, clear the conservative dirty flag here.
       const isDirty = previous?.content === content
-        ? normalizeEol(content) !== normalizeEol(latest.baselineContent)
+        ? isDocumentContentDirty(latest, content)
         : latest.isDirty;
       useDocumentStore.getState().setDirty(docKey, isDirty);
       setTabDirty(docKey, isDirty);
     };
     const snapshot = createCodeSnapshot({
+      docKey,
       isCurrent,
       commit: (content, revision, options) => {
         recordDocumentChange(docKey, content, options);
@@ -384,7 +389,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     );
     viewRef.current = view;
     snapshot.accept(view.state.doc, currentDoc.content?.replace(/\r\n?/g, '\n') ?? '');
-    const unregisterPendingInput = registerDocumentHistoryPendingInput(docKey, snapshot.hasPending);
+    const unregisterPendingInput = registerDocumentHistoryPendingInput(docKey, snapshot.hasPending, snapshot.getOrder);
     const unregisterMaterialize = registerHistoryMaterializeHook(key => {
       if (key === docKey) snapshot.flushPending();
     });
@@ -505,6 +510,14 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       if (viewRef.current === view) viewRef.current = null;
     };
   }, [docKey, fileMode, format.preview, hasPreview, setTabDirty]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view && doc?.indentation) {
+      const settings = readFileEditorSettings(docKey, doc.language);
+      view.dispatch({ effects: indentationCompartment.reconfigure(createIndentationExtensions(settings)) });
+    }
+  }, [docKey, doc?.indentation, doc?.language]);
 
   // Syntax choice reconfigures the mounted editor; history and cursor survive.
   useEffect(() => {

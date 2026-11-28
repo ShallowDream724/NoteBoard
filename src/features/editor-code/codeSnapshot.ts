@@ -1,5 +1,5 @@
 import type { Text } from '@codemirror/state';
-import type { DocumentHistorySelection, RecordDocumentChangeOptions } from '../history/documentHistory';
+import { captureDocumentHistoryInput, type DocumentHistoryInput, type DocumentHistorySelection, type RecordDocumentChangeOptions } from '../history/documentHistory';
 
 interface CodeSnapshotInput {
   text: Text;
@@ -10,6 +10,7 @@ interface CodeSnapshotInput {
 }
 
 interface CodeSnapshotOptions {
+  docKey: string;
   /** The owner must still hold both the document session and editor registration. */
   isCurrent: () => boolean;
   commit: (content: string, revision: number, options: RecordDocumentChangeOptions) => void;
@@ -19,7 +20,7 @@ interface CodeSnapshotOptions {
 /** Instance-local snapshots keep one immutable Text per unfinished history group.
  * Serialization and history diffing happen only at a group or read boundary. */
 export function createCodeSnapshot(options: CodeSnapshotOptions) {
-  let pending: CodeSnapshotInput | null = null;
+  let pending: (CodeSnapshotInput & { input: DocumentHistoryInput }) | null = null;
   let materialized: { text: Text; content: string } | null = null;
 
   const discard = () => {
@@ -44,6 +45,7 @@ export function createCodeSnapshot(options: CodeSnapshotOptions) {
       startsNewGroup: snapshot.startsNewGroup,
       beforeSelection: snapshot.beforeSelection,
       selection: snapshot.selection,
+      input: snapshot.input,
     });
     pending = null;
     materialized = { text: snapshot.text, content };
@@ -54,13 +56,15 @@ export function createCodeSnapshot(options: CodeSnapshotOptions) {
   return {
     stage(snapshot: CodeSnapshotInput): void {
       if (!options.isCurrent()) return;
-      if (pending && snapshot.startsNewGroup) flushPending();
+      const input = captureDocumentHistoryInput(options.docKey);
+      if (pending && (snapshot.startsNewGroup || input.splitGroup)) flushPending();
       const previous = pending;
       pending = {
         ...snapshot,
         // Later transactions in this group must not erase its start boundary.
         startsNewGroup: previous?.startsNewGroup ?? snapshot.startsNewGroup,
         beforeSelection: previous?.beforeSelection ?? snapshot.beforeSelection,
+        input: { ...input, splitGroup: previous?.input.splitGroup ?? input.splitGroup },
       };
       materialized = null;
       if (!previous) options.pendingChanged();
@@ -85,6 +89,7 @@ export function createCodeSnapshot(options: CodeSnapshotOptions) {
       options.pendingChanged();
     },
     hasPending: () => pending !== null && options.isCurrent(),
+    getOrder: () => options.isCurrent() ? pending?.input.order : undefined,
     discard,
   };
 }

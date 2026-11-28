@@ -34,6 +34,7 @@ function openText(kind: 'noteboard' | 'markdown' | 'code', content: string, view
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   useWindowStore.setState({ tabs: [], activeKey: null });
   useDocumentStore.setState({ documents: new Map() });
@@ -44,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 
 describe('document status information', () => {
@@ -56,10 +58,27 @@ describe('document status information', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
     expect(container.textContent).toContain('5 字符 · 1 字词');
     expect(container.textContent).not.toContain(' 行');
+    expect(container.querySelector('.nb-status-metadata')?.textContent).toContain('Status test');
+    const details = container.querySelector('.nb-status-details')!;
+    expect(details.querySelector('[aria-label="文件编码：UTF-8"]')).toBeTruthy();
+    expect(details.querySelector('[aria-label="行尾符：CRLF"]')).toBeTruthy();
+    expect(details.lastElementChild?.textContent).toContain('未保存');
     const toggle = container.querySelector<HTMLButtonElement>('button[aria-label="切换为源码模式"]');
     expect(toggle).not.toBeNull();
     act(() => toggle!.click());
     expect(emit).toHaveBeenCalledWith('toggle-md-view-mode', { key: 'untitled:status-test' });
+  });
+
+  it.each(['image', 'pdf', 'unsupported'] as const)('shows the path without a save or readonly label for %s previews', kind => {
+    const file = { image: 'sample.png', pdf: 'sample.pdf', unsupported: 'sample.zip' }[kind];
+    const key = 'C:\\fixtures\\' + file;
+    useDocumentStore.getState().upsertFromPayload({ key, displayName: file, dirPath: 'C:\\fixtures', kind,
+      language: 'plaintext', content: null, encoding: 'utf8', eol: 'lf', size: 127, mtime: 1, readonly: true });
+    useWindowStore.getState().openTab({ key, path: key, displayName: file, kind, language: 'plaintext', isDirty: false,
+      isPreview: true, viewMode: 'visual', externalStatus: null, isDetached: false });
+    act(() => root.render(<TooltipProvider><StatusBar /></TooltipProvider>));
+    expect(container.querySelector('.nb-status-metadata button')?.textContent).toContain(file);
+    expect(container.querySelector('footer')?.textContent).not.toMatch(/已保存|未保存|只读/);
   });
 
   it('counts the same native body in source and visual modes without counting file records', async () => {

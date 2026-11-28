@@ -8,6 +8,22 @@ import { invoke } from '@tauri-apps/api/core';
 export function copyPathIntoDirectory(source: string, directory: string): Promise<string> {
   return invoke('copy_path_into_directory', { source, directory });
 }
+
+export function copyPathIntoDirectoryWithReceipt(source: string, directory: string): Promise<{ path: string; receipt: string | null }> {
+  return invoke('copy_path_into_directory_with_receipt', { source, directory });
+}
+
+export function undoCopiedPath(path: string, receipt: string, expectedKeys: string[] = []): Promise<void> {
+  return invoke('undo_copied_path', { path, receipt, expectedKeys });
+}
+
+export function redoCopiedPath(path: string, receipt: string): Promise<void> {
+  return invoke('redo_copied_path', { path, receipt });
+}
+
+export function releaseCopiedReceipts(receipts: string[]): Promise<void> {
+  return invoke('release_copied_receipts', { receipts });
+}
 import type {
   DocumentPayload,
   FileTreeNode,
@@ -19,6 +35,7 @@ import type {
   Settings,
   SettingsPatch,
   WriteResult,
+  ExpectedDisk,
   WindowIntent,
   CreateWindowResponse,
   OpenRequestItemDto,
@@ -190,8 +207,12 @@ export function findDocumentOwner(key: string): Promise<string | null> {
 
 // ── 文件 I/O ──
 
-export function readDocument(path: string, maxReadBytes?: number): Promise<DocumentPayload> {
-  return invoke<DocumentPayload>('read_document', maxReadBytes === undefined ? { path } : { path, maxReadBytes });
+export function readDocument(path: string, maxReadBytes?: number, encoding?: Encoding): Promise<DocumentPayload> {
+  return invoke<DocumentPayload>('read_document', {
+    path,
+    ...(maxReadBytes === undefined ? {} : { maxReadBytes }),
+    ...(encoding === undefined ? {} : { encoding }),
+  });
 }
 
 export function probeDocument(path: string): Promise<ProbeResult> {
@@ -202,8 +223,11 @@ export function probeDocument(path: string): Promise<ProbeResult> {
  * S07 统一文件准备：读盘前归属查询（本窗口在途/已开、其他窗口已开直接返回）、
  * 在途去重、blocking worker 读取与判别。
  */
-export function prepareDocument(label: string, path: string, maxReadBytes?: number): Promise<PreparedDocument> {
-  return invoke<PreparedDocument>('prepare_document', { label, path, maxReadBytes });
+export function prepareDocument(label: string, path: string, maxReadBytes?: number, encoding?: Encoding): Promise<PreparedDocument> {
+  return invoke<PreparedDocument>('prepare_document', {
+    label, path, maxReadBytes,
+    ...(encoding === undefined ? {} : { encoding }),
+  });
 }
 
 export function writeDocument(
@@ -212,8 +236,13 @@ export function writeDocument(
   encoding: Encoding,
   eol: Eol,
   createOnly?: boolean,
+  expectedDisk?: ExpectedDisk,
 ): Promise<WriteResult> {
-  return invoke<WriteResult>('write_document', { path, content, encoding, eol, ...(createOnly ? { createOnly: true } : {}) });
+  return invoke<WriteResult>('write_document', {
+    path, content, encoding, eol,
+    ...(createOnly ? { createOnly: true } : {}),
+    ...(expectedDisk ? { expectedDisk } : {}),
+  });
 }
 
 /** Publish only a content-addressed recovery image; native code verifies bytes and never replaces another file. */
@@ -236,6 +265,24 @@ export function writeImageEdit(path: string, data: Uint8Array): Promise<WriteRes
 /** Copy PNG pixels to the Windows image clipboard without JSON encoding. */
 export function copyPngImage(data: Uint8Array): Promise<void> {
   return invoke<void>('copy_png_image', data);
+}
+
+export interface FileClipboard {
+  paths: string[];
+  cut: boolean;
+  sequence: number;
+}
+
+export function writeFileClipboard(paths: string[], cut: boolean): Promise<number> {
+  return invoke('write_file_clipboard', { paths, cut });
+}
+
+export function readFileClipboard(): Promise<FileClipboard | null> {
+  return invoke('read_file_clipboard');
+}
+
+export function consumeCutFileClipboard(sequence: number): Promise<void> {
+  return invoke('consume_cut_file_clipboard', { sequence });
 }
 
 // 保存二进制文件（如粘贴或插入的图片数据）
@@ -277,6 +324,10 @@ export function createDir(dir: string, name: string): Promise<void> {
 
 export function renamePath(label: string, from: string, to: string, expectedKeys: string[]): Promise<void> {
   return invoke<void>('rename_path', { label, from, to, expectedKeys });
+}
+
+export function movePath(label: string, from: string, to: string, expectedKeys: string[], expectedIdentity?: string): Promise<string | null> {
+  return invoke<string | null>('rename_path', { label, from, to, expectedKeys, moveGuard: { expectedIdentity } });
 }
 export interface BrowseLocation { name: string; path: string; kind: 'folder' | 'drive' }
 export function browseLocations(): Promise<BrowseLocation[]> { return invoke('browse_locations'); }

@@ -19,10 +19,12 @@ import {
   clearDocumentRevision,
   moveDocumentRevision,
 } from '../../core/editor/editorRegistry';
-import { useDocumentStore } from '../../stores/documentStore';
+import { isDocumentContentDirty, useDocumentStore, type Document } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import * as ipc from '../../core/ipc/commands';
-import { getBaseline, normalizeEol } from '../editor-md/serialize';
+import type { ExpectedDisk, WriteResult } from '../../core/ipc/types';
+import { textWithEol } from '../../core/documentText';
+import { getBaseline } from '../editor-md/serialize';
 import { onDocumentSaved, releaseStagedDocument } from '../staging/stagingManager';
 // 🔴 S14：写盘后登记自身写入（目录 watcher 忽略自身原子替换事件，防自触发循环）
 import { noteSelfWrite } from '../explorer/directoryWatcher';
@@ -117,6 +119,12 @@ function setMirroredRevision(docKey: string, revision: number): void {
 /** 读取保存进度版本（供诊断/测试） */
 export function getSavedRevision(docKey: string): number {
   return savedRevisions.get(docKey) ?? 0;
+}
+
+/** A disk reload replaces the session's write baseline, including queued snapshots. */
+export function noteDocumentPersistedRevision(docKey: string, revision: number): void {
+  savedRevisions.set(docKey, revision);
+  savedWriteGenerations.set(docKey, getSessionGeneration(docKey));
 }
 
 /** 文档身份迁移（另存为）/最终关闭时清理会话记录 */
@@ -322,7 +330,6 @@ export function releaseSessionAfterClosing(docKey: string): void {
 const writeQueues = new Map<string, Promise<unknown>>();
 interface AutoSaveSnapshot {
   generation: number; revision: number; content: string;
-  encoding: Parameters<typeof ipc.writeDocument>[2]; eol: Parameters<typeof ipc.writeDocument>[3];
 }
 interface AutoSaveBatch { latest: AutoSaveSnapshot | null; promise: Promise<void> }
 /** One replaceable pending auto slot between explicit write barriers. */
@@ -390,7 +397,9 @@ export function removeDocumentIfSessionMatches(docKey: string, generation: numbe
  * 覆盖 H 节时序：撤销/手动改回原文 → dirty 清除；写盘期间新输入 → dirty 保持。
  */
 async function refreshDirtyAfterWrite(docKey: string): Promise<boolean> {
+  const generation = getSessionGeneration(docKey);
   const captured = await flushDocument(docKey, 'save');
+  if (!isSessionCurrent(docKey, generation)) return false;
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
   if (!doc) return false;
@@ -402,8 +411,8 @@ async function refreshDirtyAfterWrite(docKey: string): Promise<boolean> {
     useWindowStore.getState().setTabDirty(docKey, true);
     return true;
   }
-  const baseline = doc.baselineContent ?? '';
-  const isDirty = normalizeEol(currentContent) !== normalizeEol(baseline);
+  const isDirty = (captured !== null && getDocumentRevision(docKey) > captured.revision)
+    || isDocumentContentDirty(doc, currentContent);
   store.setDirty(docKey, isDirty);
   useWindowStore.getState().setTabDirty(docKey, isDirty);
   try {
@@ -425,28 +434,22 @@ export function queuedAutoSave(docKey: string, content: string): Promise<void> {
   if (useWindowStore.getState().isTransferring(docKey) || isClosing(docKey)) return Promise.resolve();
   const store = useDocumentStore.getState();
   const targetDoc = store.getDocument(docKey);
-  if (!targetDoc) return Promise.resolve();
+  if (!targetDoc || !canAutoSave(targetDoc)) return Promise.resolve();
 
   // 🔴 N04：排队时捕获会话代际——关闭/重开后换代的旧任务在执行时作废
   const generation = getSessionGeneration(docKey);
 
-  // 只有 auto 策略才自动保存
-  if (targetDoc.savePolicy !== 'auto') return Promise.resolve();
-  // 外部变更/断开状态不自动保存
-  if (targetDoc.externalStatus === 'modified' || targetDoc.externalStatus === 'deleted') return Promise.resolve();
   // 与基线一致无需保存
   const baseline = getBaseline(docKey);
-  if (baseline.isClean(content) && !writeQueues.has(docKey)) {
+  if (targetDoc.eol === targetDoc.persistedEol && baseline.isClean(content) && !writeQueues.has(docKey)) {
     store.setDirty(docKey, false);
     useWindowStore.getState().setTabDirty(docKey, false);
     return Promise.resolve();
   }
 
-  const encoding = targetDoc.encoding;
-  const eol = targetDoc.eol;
   // 捕获本次写入对应的 revision（写盘期间的新编辑由后续任务/脏态重算处理）
   const revision = getDocumentRevision(docKey);
-  const snapshot = { generation, revision, content, encoding, eol };
+  const snapshot = { generation, revision, content };
   const pending = pendingAutoSaves.get(docKey);
   if (pending?.latest?.generation === generation) {
     if (pending.latest.revision <= revision) pending.latest = snapshot;
@@ -466,27 +469,40 @@ export function queuedAutoSave(docKey: string, content: string): Promise<void> {
   return batch.promise;
 }
 
+function canAutoSave(doc: Document): boolean {
+  const tab = useWindowStore.getState().getTab(doc.key);
+  return doc.savePolicy === 'auto' && !doc.readonly && !doc.key.startsWith('untitled:')
+    && tab?.path !== null && !tab?.isDetached
+    && doc.externalStatus !== 'modified' && doc.externalStatus !== 'deleted';
+}
+
 async function runAutoSaveBatch(docKey: string, batch: AutoSaveBatch): Promise<void> {
     if (pendingAutoSaves.get(docKey) === batch) pendingAutoSaves.delete(docKey);
     const snapshot = batch.latest;
     batch.latest = null;
     if (!snapshot) return;
-    const { generation, revision, content, encoding, eol } = snapshot;
+    const { generation, revision, content } = snapshot;
     // 🔴 R03：排队到执行之间重新验证生命周期——文档仍存在、策略仍 auto、
     //    外部状态未变（用户切手动策略/文件被外部修改后，旧排队任务不得落盘）
     // 🔴 N04：会话代际校验——同路径关闭重开后，旧会话排队任务不得覆盖新会话写盘
     if (!isSessionCurrent(docKey, generation)) return;
     if (savedWriteGenerations.get(docKey) === generation && revision < getSavedRevision(docKey)) return;
     const doc = useDocumentStore.getState().getDocument(docKey);
-    if (!doc) return;
-    if (doc.savePolicy !== 'auto') return;
-    if (doc.externalStatus === 'modified' || doc.externalStatus === 'deleted') return;
+    if (!doc || !canAutoSave(doc)) return;
+    if (doc.eol === doc.persistedEol && getBaseline(docKey).isClean(content)) return;
     if (doc.kind === 'markdown' || doc.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(docKey)) {
       const { restoreImageAssetsForContent } = await import('../editor-md/imageAssetLifecycle');
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return;
     }
-    const written = await writeSnapshot(docKey, content, encoding, eol);
+    const current = useDocumentStore.getState().getDocument(docKey);
+    if (!current || !canAutoSave(current)) return;
+    const { eol } = current;
+    const encoding = current.kind === 'noteboard' ? 'utf8' : current.encoding;
+    const formatChanged = eol !== current.persistedEol || encoding !== current.encoding;
+    const expectedDisk = formatChanged ? diskBaseline(current) : undefined;
+    if (formatChanged && !expectedDisk) return;
+    const written = await writeSnapshot(docKey, content, encoding, eol, undefined, undefined, expectedDisk);
     const result = written.result;
     // 写盘 I/O 返回后再次校验：等待磁盘期间会话换代则不推进基线/暂存清理
     if (!isSessionCurrent(docKey, generation)) return;
@@ -496,17 +512,17 @@ async function runAutoSaveBatch(docKey: string, batch: AutoSaveBatch): Promise<v
       if (!isSessionCurrent(docKey, generation)) return;
       const savedContent = written.content;
       // 🔴 基线只更新为实际写成功的文本
-      useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
+      commitWriteBaseline(current, savedContent, result.mtime, result.size, encoding, eol);
       getBaseline(docKey).updateBaseline(savedContent);
-      savedRevisions.set(docKey, revision);
-      savedWriteGenerations.set(docKey, generation);
+      noteDocumentPersistedRevision(docKey, revision);
       // 精确重算脏态（写盘期间的新输入仍为脏；改回基线则清脏）
       await refreshDirtyAfterWrite(docKey);
       // 携带内容证明的暂存清理：只删被覆盖的副本
-      await onDocumentSaved(docKey, savedContent);
+      await onDocumentSaved(docKey, savedContent, { encoding, eol });
       if (isSessionCurrent(docKey, generation)) clearSaveError(docKey);
       if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     } else {
+      if (result.error?.kind === 'conflict') markWriteConflict(docKey);
       if (isSessionCurrent(docKey, generation)) recordSaveError(docKey, result.error ? getWriteErrorMessage(result.error) : '文件未能写入，请重试保存');
     }
 }
@@ -520,7 +536,14 @@ async function runAutoSaveBatch(docKey: string, batch: AutoSaveBatch): Promise<v
 export async function writeDocumentWithBarrier(
   docKey: string,
   content: string,
-  options?: { expectedNativeHash?: string; createOnly?: boolean },
+  options?: {
+    expectedNativeHash?: string;
+    createOnly?: boolean;
+    encoding?: Document['encoding'];
+    revision?: number;
+    overwriteExternal?: boolean;
+    expectedDisk?: ExpectedDisk;
+  },
 ): Promise<boolean> {
   // 🔴 R3-05/C09：closing 状态的旧会话拒绝写盘（返回 false——调用方得到明确失败，
   //    不以异常炸保存链；排空中的在途任务仍正常完成）
@@ -528,15 +551,14 @@ export async function writeDocumentWithBarrier(
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
   if (!doc) return false;
-  const encoding = doc.encoding;
-  const eol = doc.eol;
-  const revision = getDocumentRevision(docKey);
+  const revision = options?.revision ?? getDocumentRevision(docKey);
   // 🔴 N04：排队时捕获会话代际（同路径重开后旧任务作废）
   const generation = getSessionGeneration(docKey);
 
   return trackDocumentSave(docKey, () => enqueueDocumentWrite(docKey, async () => {
     // 🔴 N04：会话代际校验（排队到执行之间可能已换代）
     if (!isSessionCurrent(docKey, generation)) return false;
+    if (savedWriteGenerations.get(docKey) === generation && revision < getSavedRevision(docKey)) return false;
     const current = useDocumentStore.getState().getDocument(docKey);
     if (!current) return false;
     if (current.kind === 'markdown' || current.kind === 'noteboard' || /\.(?:html?|mdx)$/i.test(docKey)) {
@@ -544,12 +566,23 @@ export async function writeDocumentWithBarrier(
       await restoreImageAssetsForContent(docKey, content);
       if (!isSessionCurrent(docKey, generation)) return false;
     }
-    const written = await writeSnapshot(docKey, content, encoding, eol, options?.expectedNativeHash, options?.createOnly);
+    const latest = store.getDocument(docKey);
+    if (!latest) return false;
+    const encoding = latest.kind === 'noteboard' ? 'utf8' : options?.encoding ?? latest.encoding;
+    const { eol } = latest;
+    let expectedDisk = options?.expectedDisk;
+    if ((options?.encoding || eol !== latest.persistedEol || encoding !== latest.encoding) && !options?.createOnly && !options?.overwriteExternal) {
+      if (latest.readonly || latest.externalStatus === 'modified' || latest.externalStatus === 'deleted') return false;
+      expectedDisk = diskBaseline(latest);
+      if (!expectedDisk) return false;
+    }
+    const written = await writeSnapshot(docKey, content, encoding, eol, options?.expectedNativeHash, options?.createOnly, expectedDisk);
     const result = written.result;
     // 🔴 N04：写盘 I/O 返回后再校验（等待磁盘期间换代则不推进基线）
     if (!isSessionCurrent(docKey, generation)) return false;
     noteSelfWrite(docKey);
     if (!result.ok) {
+      if (result.error?.kind === 'conflict') markWriteConflict(docKey);
       recordSaveError(docKey, result.error ? getWriteErrorMessage(result.error) : '文件未能写入，请重试保存');
       if (result.error) {
         const { showWriteError } = await import(
@@ -562,23 +595,46 @@ export async function writeDocumentWithBarrier(
     await written.commit();
     if (!isSessionCurrent(docKey, generation)) return false;
     const savedContent = written.content;
-    useDocumentStore.getState().updateBaseline(docKey, savedContent, result.mtime, result.size);
+    commitWriteBaseline(latest, savedContent, result.mtime, result.size, encoding, eol, options?.encoding);
     getBaseline(docKey).updateBaseline(savedContent);
-    savedRevisions.set(docKey, revision);
-    savedWriteGenerations.set(docKey, generation);
+    noteDocumentPersistedRevision(docKey, revision);
     await refreshDirtyAfterWrite(docKey);
-    await onDocumentSaved(docKey, savedContent);
+    await onDocumentSaved(docKey, savedContent, { encoding, eol });
     if (isSessionCurrent(docKey, generation)) clearSaveError(docKey);
     if (isSessionCurrent(docKey, generation)) emit('document-saved', { key: docKey, generation });
     return true;
   }));
 }
 
+function diskBaseline(doc: Document): ExpectedDisk | undefined {
+  if (doc.persistedContent == null) return;
+  return { mtime: doc.mtime, size: doc.size, encoding: doc.encoding, content: doc.persistedContent };
+}
+
+function markWriteConflict(key: string): void {
+  useDocumentStore.getState().setExternalStatus(key, 'modified');
+  useWindowStore.getState().setTabExternalStatus(key, 'modified');
+}
+
+function commitWriteBaseline(
+  doc: Document, content: string, mtime: number, size: number, encoding: Document['encoding'], eol: Document['eol'],
+  encodingOverride?: Document['encoding'],
+): void {
+  const persistedContent = textWithEol(content, eol);
+  useDocumentStore.getState().updateBaseline(doc.key, content, mtime, size, persistedContent, {
+    encoding, eol, encodingOverride: doc.kind === 'noteboard' ? null : encodingOverride,
+  });
+}
+
 /** Storage routing is shared by every auto/manual save. A native save commits
  * its linked Markdown before either baseline is advanced. */
-async function writeSnapshot(key: string, content: string, encoding: Parameters<typeof ipc.writeDocument>[2], eol: Parameters<typeof ipc.writeDocument>[3], expectedNativeHash?: string, createOnly?: boolean) {
+async function writeSnapshot(key: string, content: string, encoding: Document['encoding'], eol: Document['eol'], expectedNativeHash?: string, createOnly?: boolean, expectedDisk?: ExpectedDisk) {
   const doc = useDocumentStore.getState().getDocument(key);
-  const writeText = (text: string) => createOnly ? ipc.writeDocument(key, text, encoding, eol, true) : ipc.writeDocument(key, text, encoding, eol);
+  const writeText = (text: string) => expectedDisk
+    ? ipc.writeDocument(key, text, encoding, eol, undefined, expectedDisk)
+    : createOnly
+      ? ipc.writeDocument(key, text, encoding, eol, true)
+      : ipc.writeDocument(key, text, encoding, eol);
   if (doc?.kind !== 'noteboard') {
     if (doc?.kind !== 'markdown') return { content, result: await writeText(content), commit: async () => {} };
     const { prepareDocumentImageAssets } = await import('../editor-md/prepareImageAssets');
@@ -593,9 +649,17 @@ async function writeSnapshot(key: string, content: string, encoding: Parameters<
   }
   const { persistNativeDocument } = await import('../document-format/nativePersistence');
   const generation = getSessionGeneration(key);
-  const prepared = await persistNativeDocument(createOnly ? { ...doc, persistedContent: null } : doc, content, expectedNativeHash);
-  const result = { ok: prepared.result.ok, mtime: prepared.result.native?.mtime ?? 0, size: prepared.result.native?.size ?? 0,
-    ...(prepared.result.error ? { error: { kind: 'io' as const, message: prepared.result.error.message } } : {}) };
+  const prepared = await persistNativeDocument(createOnly ? { ...doc, persistedContent: null } : doc, content, {
+    eol, expectedDisk, expectedHash: expectedNativeHash,
+  });
+  const error = prepared.result.error;
+  const errorKind = error?.code === 'encoding' ? 'encoding' : error?.code === 'conflict' && error.path === key ? 'conflict' : 'io';
+  const result: WriteResult = {
+    ok: prepared.result.ok,
+    mtime: prepared.result.native?.mtime ?? 0,
+    size: prepared.result.native?.size ?? 0,
+    error: error ? { kind: errorKind, message: error.message } : null,
+  };
   return { content: prepared.content, result, commit: async () => {
     const { commitNativeSaveMetadata } = await import('../document-format/nativeSaveCommit');
     const linked = prepared.request.markdown?.path;

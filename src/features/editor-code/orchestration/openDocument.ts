@@ -5,7 +5,7 @@
 
 import * as ipc from '../../../core/ipc/commands';
 import { notifyOpenRequestsAvailable } from '../../../core/ipc/events';
-import type { ExplorerContext, OpenRequestSource } from '../../../core/ipc/types';
+import type { Encoding, ExplorerContext, OpenRequestSource } from '../../../core/ipc/types';
 import { useDocumentStore } from '../../../stores/documentStore';
 import { useWindowStore, type Tab } from '../../../stores/windowStore';
 import { activateWithExplorerPolicy, beginExplorerNavigation, captureExplorerContext, followExplorerFile, isCurrentNavigation, openExplorerDirectory, openExplorerFileParent, releaseExplorerNavigation, type ExplorerNavigation } from '../../explorer/explorerActions';
@@ -16,6 +16,7 @@ import { showToast } from '../../../stores/toastStore';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { confirmLargeFile, getLargeFileThresholdBytes } from '../../../core/files/largeFilePolicy';
 import { normalizePath } from '../../explorer/pathUtils';
+import { getSessionGeneration, isClosing } from '../../session/documentSession';
 
 // ── 打开文件 ──
 
@@ -64,6 +65,8 @@ function buildTab(key: string, displayName: string, kind: Tab['kind'], language:
 
 interface OpenDocumentOptions {
   exportNotice?: Tab['exportNotice'];
+  /** Strict decoder to use when restoring or opening a file with an explicit encoding. */
+  encoding?: Encoding | null;
   /** External opens defer following until paint; export activation preserves the complete Explorer view. */
   explorer?: 'parent' | 'preserve';
   /** The tree root captured at click time, including a deliberately located foreign folder. */
@@ -73,7 +76,7 @@ interface OpenDocumentOptions {
   /** Restore requests may expire while native preparation/registration is pending. */
   isCurrent?: () => boolean;
   /** Restoring an existing descriptor must not steal focus from a newer tab. */
-  activate?: boolean;
+  activate?: boolean | (() => boolean);
 }
 
 interface CapturedOpenOptions extends OpenDocumentOptions {
@@ -81,11 +84,16 @@ interface CapturedOpenOptions extends OpenDocumentOptions {
   navigation?: ExplorerNavigation;
 }
 
+function shouldActivate(options: OpenDocumentOptions): boolean {
+  return typeof options.activate === 'function' ? options.activate() : options.activate !== false;
+}
+
 /** Keep explicit and passive Explorer follow-up behavior aligned for every local activation. */
 function activateDocumentTab(key: string, options: CapturedOpenOptions, tab?: Tab): void {
-  if (options.activate === false) return;
-  const preserve = options.explorer === 'preserve' || (options.navigation && !isCurrentNavigation(options.navigation));
   const store = useWindowStore.getState();
+  if (tab) store.resolvePendingTab(tab);
+  if (!shouldActivate(options)) return;
+  const preserve = options.explorer === 'preserve' || (options.navigation && !isCurrentNavigation(options.navigation));
   // Publish metadata before the activation-scoped preserve subscription starts.
   const existing = store.getTab(key);
   if (existing && !existing.explorerContext) store.setTabExplorerContext(key, options.explorerContext);
@@ -94,6 +102,18 @@ function activateDocumentTab(key: string, options: CapturedOpenOptions, tab?: Ta
     if (tab) store.openTab({ ...tab, explorerContext: options.explorerContext });
     else store.activateTab(key);
     if (!preserve && options.explorer !== 'parent') useLayoutStore.getState().setExplorerVisible(true);
+  });
+}
+
+/** Finish opening the same tab without reviving it after a close or stealing focus. */
+export function openDocumentWithEncoding(key: string, encoding: Encoding): Promise<OpenDocumentResult> {
+  const store = useWindowStore.getState();
+  const generation = getSessionGeneration(key);
+  return openDocument(key, {
+    encoding,
+    explorer: 'preserve',
+    isCurrent: () => getSessionGeneration(key) === generation && !isClosing(key) && !!store.getTab(key)?.encodingRequired,
+    activate: () => useWindowStore.getState().activeKey === key,
   });
 }
 
@@ -153,17 +173,21 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
   // 1. 🔴 S07：统一文件准备（归属查询在读盘前；已打开/在途直接返回）
   let prepared: Awaited<ReturnType<typeof ipc.prepareDocument>>;
   try {
-    prepared = await ipc.prepareDocument(label, path, getLargeFileThresholdBytes());
+    const prepare = (limit: number) => options.encoding
+      ? ipc.prepareDocument(label, path, limit, options.encoding)
+      : ipc.prepareDocument(label, path, limit);
+    prepared = await prepare(getLargeFileThresholdBytes());
     if (options.isCurrent?.() === false) return 'cancelled';
     while (prepared.type === 'confirmation-required') {
       if (!await confirmLargeFile(prepared.displayName, prepared.size)) return 'cancelled';
       if (options.isCurrent?.() === false) return 'cancelled';
       // Approval applies to this observed size. A growing file must be checked
       // again; ownership is also rechecked before the native reader proceeds.
-      prepared = await ipc.prepareDocument(label, path, Math.max(getLargeFileThresholdBytes(), prepared.size));
+      prepared = await prepare(Math.max(getLargeFileThresholdBytes(), prepared.size));
       if (options.isCurrent?.() === false) return 'cancelled';
     }
   } catch (e) {
+    if (options.isCurrent?.() === false) return 'cancelled';
     console.error('文件准备失败:', e);
     showToast(`无法打开文件: ${fileName}`, 'error');
     return 'failed';
@@ -246,7 +270,13 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
     }
 
     case 'unsupported': {
-      if (!options.exportNotice) showToast(`文件格式不受支持: ${prepared.displayName}，无法直接编辑`, 'warning');
+      const pending = useWindowStore.getState().getTab(prepared.key)?.encodingRequired;
+      const encodingRequired = prepared.encodingRequired || (options.encoding ? pending : undefined);
+      if (encodingRequired && options.encoding) {
+        showToast(prepared.encodingMessage ?? '无法按所选编码打开文件，请尝试其他编码。', 'warning');
+      } else if (!encodingRequired && !options.exportNotice) {
+        showToast(`文件格式不受支持: ${prepared.displayName}，无法直接编辑`, 'warning');
+      }
       useDocumentStore.getState().upsertFromPayload({
         key: prepared.key,
         displayName: prepared.displayName,
@@ -260,7 +290,11 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
         mtime: 0,
         readonly: true,
       });
-      activateDocumentTab(prepared.key, options, { ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'), exportNotice: options.exportNotice });
+      activateDocumentTab(prepared.key, options, {
+        ...buildTab(prepared.key, prepared.displayName, 'unsupported', 'plaintext'),
+        exportNotice: options.exportNotice,
+        encodingRequired,
+      });
       if (prepared.dirPath && options.explorer !== 'preserve') scheduleExplorerFollowUp(prepared.key, prepared.dirPath, navigation);
       return 'opened';
     }
@@ -296,7 +330,11 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
       }
 
       // 建 Document 与 Tab 并激活。
-      useDocumentStore.getState().upsertFromPayload(payload);
+      if (prepared.type === 'text' && options.encoding) {
+        useDocumentStore.getState().upsertFromPayload(payload, { encodingOverride: options.encoding });
+      } else {
+        useDocumentStore.getState().upsertFromPayload(payload);
+      }
       activateDocumentTab(payload.key, options, buildTab(payload.key, payload.displayName, payload.kind, payload.language));
 
       // 目录展开与最近记录延后（不阻塞打开链路返回，不阻塞队列下一条）
@@ -311,7 +349,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
 
 /** Forward only remote ownership; the owner's already-open/self branch never re-enqueues. */
 async function focusDocumentOwner(ownerLabel: string, key: string, options: OpenDocumentOptions): Promise<OpenDocumentResult> {
-  if (options.activate === false || options.isCurrent?.() === false) return 'focused';
+  if (!shouldActivate(options) || options.isCurrent?.() === false) return 'focused';
   if (options.explorer === 'parent' && ownerLabel !== getCurrentWindow().label) {
     let queueVersion: number;
     try {

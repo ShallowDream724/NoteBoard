@@ -4,17 +4,11 @@ import { ArrowUp, HardDrive, Search } from 'lucide-react';
 import { browseLocations, pathExists, readDir, type BrowseLocation } from '../../core/ipc/commands';
 import type { FileTreeNode } from '../../core/ipc/types';
 import { getFileIcon } from '../../components/FileIcon';
+import { parentBrowsePath } from '../explorer/pathUtils';
 import { normalizeFileInput } from './fileInput';
 import './pathBrowser.css';
 
-export function parentBrowsePath(path: string) {
-  const value = path.replace(/[\\/]+$/, '');
-  if (/^[a-z]:$/i.test(value) || /^\\\\[^\\]+\\[^\\]+$/.test(value)) return null;
-  const at = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'));
-  if (at < 0) return null;
-  const parent = value.slice(0, at);
-  return /^[a-z]:$/i.test(parent) ? parent + '\\' : parent;
-}
+export { parentBrowsePath } from '../explorer/pathUtils';
 
 /** A single chooser owns both files and folders. Directory I/O is asynchronous;
  * only visible entries are mounted, independently of directory size. */

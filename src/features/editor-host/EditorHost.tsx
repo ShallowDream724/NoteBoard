@@ -23,8 +23,6 @@ import {
 
 interface EditorHostProps {
   tab: Tab;
-  /** 文档字节数（图片/不支持视图显示用） */
-  fileSize?: number;
   /** TipTap 编辑器就绪回调（仅 markdown 活动标签；import type 不产生运行时依赖） */
   onEditorReady?: (editor: Editor | null) => void;
   /** 不支持类型的轻量常驻视图（不懒加载，保持极小） */
@@ -227,7 +225,6 @@ const unsupportedSnapshot = {
 
 export function EditorHost({
   tab,
-  fileSize,
   onEditorReady,
   unsupportedView,
 }: EditorHostProps): ReactNode {
@@ -259,11 +256,11 @@ export function EditorHost({
     if (!LoadedEditor) return null;
     switch (kind) {
       case 'markdown': return <LoadedEditor docKey={tab.key} onEditorReady={onEditorReady} />;
-      case 'image': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} fileSize={fileSize ?? 0} />;
+      case 'image': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} />;
       case 'pdf': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} active={pdfActive} />;
       default: return <LoadedEditor docKey={tab.key} />;
     }
-  }, [resource.component, kind, tab.key, tab.path, tab.displayName, fileSize, onEditorReady, pdfActive]);
+  }, [resource.component, kind, tab.key, tab.path, tab.displayName, onEditorReady, pdfActive]);
 
   if (kind === 'unsupported') {
     return unsupportedView;

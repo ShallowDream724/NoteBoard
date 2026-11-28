@@ -3,6 +3,7 @@
 // 详见 docs/09-开发路线图.md 阶段4
 
 import { Compartment, EditorState, type Extension, RangeSetBuilder } from '@codemirror/state';
+import { normalizeTabSize } from '../../core/editor/indentationSettings';
 import {
   history,
   defaultKeymap,
@@ -106,7 +107,7 @@ export const indentGuidesExtension = ViewPlugin.fromClass(class {
 }, { decorations: value => value.decorations });
 
 export function createIndentationExtensions(options: BaseExtensionsOptions = {}): Extension[] {
-  const tabSize = Math.max(1, Math.min(8, Math.trunc(options.tabSize ?? 2) || 2));
+  const tabSize = normalizeTabSize(options.tabSize);
   return [EditorState.tabSize.of(tabSize), indentUnit.of(options.insertSpaces === false ? '\t' : ' '.repeat(tabSize)),
     ...(options.showIndentGuides ? [indentGuidesExtension] : [])];
 }

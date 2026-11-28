@@ -1,7 +1,8 @@
 // NoteBoard 文件读取 — 编码探测 + 行尾符探测
-// FR-210: UTF-8（含 BOM）/ GBK 自动识别
+// FR-210: UTF-8 / 带 BOM 的 UTF-16 / GBK 自动识别，其他编码可手动选择
 // FR-211: CRLF / LF 自动识别
 
+use super::text_codec;
 use crate::dto::{Encoding, Eol};
 use std::fs;
 use std::io::Read;
@@ -13,6 +14,7 @@ const TEXT_PREFIX_BYTES: usize = 8192;
 pub enum FileReadError {
     Io(String),
     UnsupportedText,
+    EncodingRequired(Option<Encoding>),
     SizeLimitExceeded { size: u64 },
     ChangedDuringRead,
 }
@@ -23,6 +25,10 @@ impl std::fmt::Display for FileReadError {
             Self::Io(message) => f.write_str(message),
             Self::UnsupportedText => {
                 f.write_str("文件包含二进制内容或不支持的文本编码，请使用默认应用打开")
+            }
+            Self::EncodingRequired(None) => f.write_str("无法自动识别文本编码，请选择编码后打开"),
+            Self::EncodingRequired(Some(encoding)) => {
+                write!(f, "无法以 {} 解码此文件，请选择其他编码", encoding.label())
             }
             Self::SizeLimitExceeded { size } => write!(f, "文件大小已超过读取限制: {size} 字节"),
             Self::ChangedDuringRead => f.write_str("文件在读取期间增长，请重试打开"),
@@ -42,7 +48,7 @@ pub struct FileReadResult {
 
 /// 读取文件并探测编码与行尾符
 pub fn read_file(path: &Path) -> Result<FileReadResult, String> {
-    read_file_with_limit(path, None).map_err(|error| error.to_string())
+    read_file_with_limit(path, None, None).map_err(|error| error.to_string())
 }
 
 /// Read at most the caller's limit, or the opened file's initial length. A file
@@ -50,6 +56,7 @@ pub fn read_file(path: &Path) -> Result<FileReadResult, String> {
 pub fn read_file_with_limit(
     path: &Path,
     max_read_bytes: Option<u64>,
+    encoding: Option<Encoding>,
 ) -> Result<FileReadResult, FileReadError> {
     let mut file =
         fs::File::open(path).map_err(|e| FileReadError::Io(format!("无法打开文件: {e}")))?;
@@ -62,14 +69,7 @@ pub fn read_file_with_limit(
         });
     }
     let read_limit = max_read_bytes.unwrap_or(metadata.len());
-    let mtime = metadata
-        .modified()
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as i64
-        })
-        .unwrap_or(0);
+    let mtime = metadata_mtime(&metadata);
     let readonly = metadata.permissions().readonly();
 
     let bytes = read_bytes_limited(&mut file, read_limit)?;
@@ -85,13 +85,15 @@ pub fn read_file_with_limit(
             None => FileReadError::ChangedDuringRead,
         });
     }
-    if !is_text_prefix(&bytes) {
-        return Err(FileReadError::UnsupportedText);
+    match classify_text_prefix(&bytes, encoding) {
+        TextPrefix::Text => {}
+        TextPrefix::BomlessUtf16 => return Err(FileReadError::EncodingRequired(None)),
+        TextPrefix::Binary => return Err(FileReadError::UnsupportedText),
     }
 
     // UTF-8 can retain the read allocation rather than copying the whole body.
     let size = bytes.len() as u64;
-    let (content, encoding) = decode_owned_bytes(bytes)?;
+    let (content, encoding) = decode_owned_bytes(bytes, encoding)?;
     if content.chars().any(is_nontext_control) {
         return Err(FileReadError::UnsupportedText);
     }
@@ -109,6 +111,17 @@ pub fn read_file_with_limit(
     })
 }
 
+pub(super) fn metadata_mtime(metadata: &fs::Metadata) -> i64 {
+    metadata
+        .modified()
+        .map(|time| {
+            time.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64
+        })
+        .unwrap_or(0)
+}
+
 fn read_bytes_limited(reader: &mut impl Read, limit: u64) -> Result<Vec<u8>, FileReadError> {
     // Keep initial allocation small even for a large or sparse file. Read one
     // extra byte so growing files cannot silently produce truncated content.
@@ -120,38 +133,31 @@ fn read_bytes_limited(reader: &mut impl Read, limit: u64) -> Result<Vec<u8>, Fil
     Ok(bytes)
 }
 
-fn decode_owned_bytes(mut bytes: Vec<u8>) -> Result<(String, Encoding), FileReadError> {
-    if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
-        // Removing the BOM shifts within the existing allocation. Keep strict
-        // validation: a damaged BOM file cannot fall back to a legacy decoder.
-        bytes.drain(..3);
-        return String::from_utf8(bytes)
-            .map(|content| (content, Encoding::Utf8Bom))
-            .map_err(|_| FileReadError::UnsupportedText);
-    }
-    match String::from_utf8(bytes) {
-        Ok(content) => Ok((content, Encoding::Utf8)),
-        // FromUtf8Error still owns the original buffer; the borrowed decoder
-        // retains the same strict, byte-preserving GBK handling.
-        Err(error) => decode_bytes(error.as_bytes()),
+fn decode_owned_bytes(
+    mut bytes: Vec<u8>,
+    requested: Option<Encoding>,
+) -> Result<(String, Encoding), FileReadError> {
+    let bom = text_codec::detect_bom(&bytes);
+    match requested.or(bom) {
+        Some(encoding @ (Encoding::Utf8 | Encoding::Utf8Bom)) => {
+            if bom == Some(Encoding::Utf8Bom) {
+                bytes.drain(..Encoding::Utf8Bom.bom().len());
+            }
+            String::from_utf8(bytes)
+                .map(|content| (content, encoding))
+                .map_err(|_| FileReadError::EncodingRequired(requested))
+        }
+        Some(encoding) => text_codec::decode(&bytes, encoding)
+            .map(|content| (content.into_owned(), encoding))
+            .ok_or(FileReadError::EncodingRequired(requested)),
+        None => match String::from_utf8(bytes) {
+            Ok(content) => Ok((content, Encoding::Utf8)),
+            Err(error) => decode_legacy_candidate(error.as_bytes()),
+        },
     }
 }
 
-/// 解码字节数组：自动探测 UTF-8 BOM / UTF-8 / GBK
-pub fn decode_bytes(bytes: &[u8]) -> Result<(String, Encoding), FileReadError> {
-    // 检查 BOM
-    if bytes.len() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF {
-        // UTF-8 BOM
-        let content =
-            std::str::from_utf8(&bytes[3..]).map_err(|_| FileReadError::UnsupportedText)?;
-        return Ok((content.to_string(), Encoding::Utf8Bom));
-    }
-
-    // 尝试 UTF-8
-    if let Ok(s) = std::str::from_utf8(bytes) {
-        return Ok((s.to_string(), Encoding::Utf8));
-    }
-
+fn decode_legacy_candidate(bytes: &[u8]) -> Result<(String, Encoding), FileReadError> {
     // 尝试 GBK（用 chardetng 探测）
     let mut detector = chardetng::EncodingDetector::new();
     detector.feed(bytes, true);
@@ -160,9 +166,7 @@ pub fn decode_bytes(bytes: &[u8]) -> Result<(String, Encoding), FileReadError> {
     // Only label bytes GBK when strict decoding and re-encoding preserve them.
     // The GBK decoder also accepts GB18030's four-byte sequences; those cannot
     // be saved by the existing GBK writer and must be handed to another app.
-    if let Some(content) =
-        encoding_rs::GBK.decode_without_bom_handling_and_without_replacement(bytes)
-    {
+    if let Some(content) = text_codec::decode(bytes, Encoding::Gbk) {
         // With at most two Han characters there is too little evidence for the
         // detector (e.g. GBK "你好" is guessed EUC-KR). Prefer the supported GBK
         // encoding only for that narrow, byte-preserving ambiguity.
@@ -182,7 +186,7 @@ pub fn decode_bytes(bytes: &[u8]) -> Result<(String, Encoding), FileReadError> {
             }
         }
     }
-    Err(FileReadError::UnsupportedText)
+    Err(FileReadError::EncodingRequired(None))
 }
 
 /// 探测行尾符
@@ -205,26 +209,64 @@ fn detect_eol(content: &str) -> Eol {
 }
 
 /// 检查文件是否是文本（非二进制）
-pub fn is_text_file(path: &Path) -> Result<bool, String> {
+pub fn is_text_file(path: &Path, encoding: Option<Encoding>) -> Result<bool, String> {
     let file = fs::File::open(path).map_err(|e| format!("无法打开文件: {}", e))?;
     let mut bytes = Vec::with_capacity(TEXT_PREFIX_BYTES);
     file.take(TEXT_PREFIX_BYTES as u64)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("读取文件失败: {}", e))?;
-    // Prefixes may end halfway through a UTF-8/GBK character, so decoding only
+    // Prefixes may end halfway through a character, so decoding only
     // happens after the complete bounded read.
-    Ok(is_text_prefix(&bytes))
+    Ok(classify_text_prefix(&bytes, encoding) != TextPrefix::Binary)
 }
 
 fn is_nontext_control(character: char) -> bool {
     character.is_control() && !matches!(character, '\t' | '\n' | '\r' | '\u{000c}')
 }
 
-fn is_text_prefix(bytes: &[u8]) -> bool {
-    !has_binary_signature(bytes)
-        && !bytes
+#[derive(PartialEq, Eq, Debug)]
+enum TextPrefix {
+    Text,
+    BomlessUtf16,
+    Binary,
+}
+
+fn classify_text_prefix(bytes: &[u8], encoding: Option<Encoding>) -> TextPrefix {
+    if has_binary_signature(bytes) {
+        return TextPrefix::Binary;
+    }
+    // UTF-16 naturally contains NUL and other control-valued bytes.
+    // Validate decoded characters after the bounded read instead.
+    let utf16 = matches!(
+        encoding.or_else(|| text_codec::detect_bom(bytes)),
+        Some(Encoding::Utf16Le | Encoding::Utf16Be)
+    );
+    if utf16
+        || !bytes
             .iter()
             .any(|byte| matches!(byte, 0x00..=0x08 | 0x0b | 0x0e..=0x1f | 0x7f))
+    {
+        TextPrefix::Text
+    } else if encoding.is_none()
+        && looks_like_bomless_utf16(&bytes[..bytes.len().min(TEXT_PREFIX_BYTES)])
+    {
+        TextPrefix::BomlessUtf16
+    } else {
+        TextPrefix::Binary
+    }
+}
+
+fn looks_like_bomless_utf16(prefix: &[u8]) -> bool {
+    let ascii_text = |byte: u8| matches!(byte, b'\t' | b'\n' | b'\r' | 0x20..=0x7e);
+    let mut little_endian = 0;
+    let mut big_endian = 0;
+    for pair in prefix.chunks_exact(2) {
+        little_endian += usize::from(pair[1] == 0 && ascii_text(pair[0]));
+        big_endian += usize::from(pair[0] == 0 && ascii_text(pair[1]));
+    }
+    // Predominantly alternating NUL and readable ASCII is enough to offer
+    // encoding selection. The selected decoder still validates the full file.
+    little_endian.max(big_endian) > prefix.len() / 4
 }
 
 fn has_binary_signature(bytes: &[u8]) -> bool {
@@ -255,9 +297,7 @@ fn has_binary_signature(bytes: &[u8]) -> bool {
         b"wOFF",
         b"wOF2",
         b"OTTO",
-        // UTF-16/32 cannot be represented by the current encoding DTO/writer.
-        b"\xff\xfe",
-        b"\xfe\xff",
+        b"\xff\xfe\0\0",
         b"\0\0\xfe\xff",
     ];
     SIGNATURES
@@ -288,6 +328,10 @@ fn has_binary_signature(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn decode_bytes(bytes: &[u8]) -> Result<(String, Encoding), FileReadError> {
+        decode_owned_bytes(bytes.to_vec(), None)
+    }
 
     #[test]
     fn test_decode_utf8_bom() {
@@ -320,7 +364,7 @@ mod tests {
             }
             let allocation = bytes.as_ptr();
             let capacity = bytes.capacity();
-            let (content, encoding) = decode_owned_bytes(bytes).unwrap();
+            let (content, encoding) = decode_owned_bytes(bytes, None).unwrap();
             assert_eq!(
                 encoding,
                 if bom {
@@ -340,19 +384,17 @@ mod tests {
     }
 
     #[test]
-    fn owned_decode_preserves_strict_legacy_and_damaged_bom_behavior() {
-        let (gbk, _, had_errors) = encoding_rs::GBK.encode("中文内容测试：保持原始编码。");
-        assert!(!had_errors);
-        assert_eq!(
-            decode_owned_bytes(gbk.to_vec()).unwrap(),
-            decode_bytes(&gbk).unwrap()
-        );
-        for bytes in [
-            b"\xef\xbb\xbfhello\xff".as_slice(),
-            b"caf\xe9".as_slice(),
-            &[0xff, 0xfe, 0x2d, 0x4e],
-        ] {
-            assert_eq!(decode_owned_bytes(bytes.to_vec()), decode_bytes(bytes));
+    fn utf16_boms_are_detected_and_bomless_utf16_can_be_read_explicitly() {
+        let cases = [
+            (Encoding::Utf16Le, [0xff, 0xfe, 0x2d, 0x4e]),
+            (Encoding::Utf16Be, [0xfe, 0xff, 0x4e, 0x2d]),
+        ];
+        for (encoding, bytes) in cases {
+            assert_eq!(decode_bytes(&bytes).unwrap(), ("中".to_owned(), encoding));
+            assert_eq!(
+                decode_owned_bytes(bytes[2..].to_vec(), Some(encoding)).unwrap(),
+                ("中".to_owned(), encoding)
+            );
         }
     }
 
@@ -376,9 +418,19 @@ mod tests {
             b"binary\x01content".as_slice(),
             b"BLENDER-v300".as_slice(),
         ] {
-            assert!(!is_text_prefix(bytes), "{bytes:?}");
+            assert_eq!(
+                classify_text_prefix(bytes, None),
+                TextPrefix::Binary,
+                "{bytes:?}"
+            );
         }
-        assert!(!is_text_prefix(&[0xff, 0xfe, 0x2d, 0x4e]));
+        for bytes in [b"%PDF-1.7".as_slice(), b"\xff\xfe\0\0a\0\0\0".as_slice()] {
+            assert_eq!(
+                classify_text_prefix(bytes, Some(Encoding::Utf16Le)),
+                TextPrefix::Binary,
+                "{bytes:?}"
+            );
+        }
     }
 
     #[test]
@@ -390,7 +442,11 @@ mod tests {
             &[0xd6, 0xd0, 0xce, 0xc4],
             &[0xe4, 0xb8],
         ] {
-            assert!(is_text_prefix(bytes), "{bytes:?}");
+            assert_eq!(
+                classify_text_prefix(bytes, None),
+                TextPrefix::Text,
+                "{bytes:?}"
+            );
         }
         for original in ["中文", "你好", "中文内容测试：正常保存并保持原始编码。\r\n"]
         {
@@ -407,7 +463,7 @@ mod tests {
         for bytes in [
             b"\xef\xbb\xbfhello\xff".as_slice(),
             b"caf\xe9".as_slice(),
-            &[0xff, 0xfe, 0x2d, 0x4e],
+            &[0xff, 0xfe, 0x2d],
             &[0x81],
         ] {
             assert!(decode_bytes(bytes).is_err(), "{bytes:?}");
@@ -415,6 +471,13 @@ mod tests {
         let (bytes, _, had_errors) = encoding_rs::GB18030.encode("中文🙂文本内容");
         assert!(!had_errors);
         assert!(decode_bytes(&bytes).is_err());
+        assert!(decode_owned_bytes(bytes.to_vec(), Some(Encoding::Gbk)).is_err());
+        assert_eq!(
+            decode_owned_bytes(bytes.into_owned(), Some(Encoding::Gb18030))
+                .unwrap()
+                .0,
+            "中文🙂文本内容"
+        );
         for (encoding, original) in [
             (encoding_rs::SHIFT_JIS, "こんにちは、世界"),
             (encoding_rs::WINDOWS_1251, "Привет мир"),
@@ -450,10 +513,18 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("renamed.txt");
         fs::write(&path, bytes).unwrap();
-        assert!(is_text_file(&path).unwrap());
+        assert!(is_text_file(&path, None).unwrap());
         assert!(matches!(
-            read_file_with_limit(&path, None),
+            read_file_with_limit(&path, None, None),
             Err(FileReadError::UnsupportedText)
         ));
+
+        fs::write(&path, b"\xff\xfeA\0\x01\0").unwrap();
+        for encoding in [None, Some(Encoding::Utf16Le)] {
+            assert!(matches!(
+                read_file_with_limit(&path, None, encoding),
+                Err(FileReadError::UnsupportedText)
+            ));
+        }
     }
 }

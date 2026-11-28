@@ -11,6 +11,7 @@
 //   - 公开 API（DocumentHistoryEntry.content 等）与 201 节点上限、分组语义完全不变。
 
 import { useState, useEffect } from 'react';
+import { getHistoryOrder, lastHistoryEdit, markHistoryEdit, nextHistoryOrder, subscribeWorkspaceHistoryEdit } from '../../core/historyOrder';
 
 /** 单条历史所在的编辑模式，用于尽可能恢复同内核的光标位置 */
 export type DocumentHistoryMode = 'visual' | 'source' | 'code' | 'board' | 'mindmap' | 'drawio' | 'bitable';
@@ -39,6 +40,13 @@ export interface RecordDocumentChangeOptions {
   selection?: DocumentHistorySelection;
   /** 内核确认本次事务开启了新的原生历史分组 */
   startsNewGroup: boolean;
+  /** Captured at the editor transaction, before deferred serialization. */
+  input?: DocumentHistoryInput;
+}
+
+export interface DocumentHistoryInput {
+  order: number;
+  splitGroup: boolean;
 }
 
 /** 撤销/重做应用快照时提供给当前编辑器的定位信息 */
@@ -77,12 +85,16 @@ interface HistoryNode {
   mode: DocumentHistoryMode;
   undoSelection?: DocumentHistorySelection;
   selection?: DocumentHistorySelection;
+  undoOrder?: number;
+  redoOrder?: number;
+  workspaceEditAtUndo?: number;
 }
 
 interface DocumentHistoryState {
   entries: HistoryNode[];
   index: number;
   lastEditMode: DocumentHistoryMode | null;
+  lastInputOrder?: number;
   /** 撤销、重做或模式切换后，下一次真实编辑必须开启新组 */
   forceNextGroup: boolean;
   /** 应用历史快照期间只更新界面和脏态，不允许反向记录成新步骤 */
@@ -206,11 +218,15 @@ const historyListeners = new Set<HistoryChangeListener>();
 // Editors may defer a current group without allocating a second timeline. These
 // owner-scoped predicates only expose availability; navigation still materializes
 // through the existing hooks before touching history nodes.
-const pendingInputs = new Map<string, Set<{ hasPending: () => boolean }>>();
+interface PendingHistoryOwner {
+  hasPending: () => boolean;
+  getOrder?: () => number | undefined;
+}
+const pendingInputs = new Map<string, Set<PendingHistoryOwner>>();
 
-export function registerDocumentHistoryPendingInput(docKey: string, hasPending: () => boolean): () => void {
-  const owners = pendingInputs.get(docKey) ?? new Set<{ hasPending: () => boolean }>();
-  const owner = { hasPending };
+export function registerDocumentHistoryPendingInput(docKey: string, hasPending: () => boolean, getOrder?: PendingHistoryOwner['getOrder']): () => void {
+  const owners = pendingInputs.get(docKey) ?? new Set<PendingHistoryOwner>();
+  const owner = { hasPending, getOrder };
   owners.add(owner);
   pendingInputs.set(docKey, owners);
   return () => {
@@ -218,6 +234,22 @@ export function registerDocumentHistoryPendingInput(docKey: string, hasPending: 
     if (pendingInputs.get(docKey) === owners && owners.size === 0) pendingInputs.delete(docKey);
     notifyHistoryChange(docKey);
   };
+}
+
+/** Reserve the order of real input without reading or serializing editor content. */
+export function captureDocumentHistoryInput(docKey: string): DocumentHistoryInput {
+  const state = histories.get(docKey);
+  const splitGroup = state?.lastInputOrder !== undefined && state.lastInputOrder !== getHistoryOrder();
+  const order = nextHistoryOrder();
+  markHistoryEdit('document', order);
+  if (state) {
+    state.lastInputOrder = order;
+    if (state.index < state.entries.length - 1) {
+      state.entries.splice(state.index + 1);
+      state.forceNextGroup = true;
+    }
+  }
+  return { order, splitGroup };
 }
 
 /** Notify once when the presence of an unfinished group changes, without reading text. */
@@ -269,11 +301,13 @@ export function useDocumentHistory(docKey: string): {
 
   useEffect(() => {
     setAvailability(getDocumentHistoryAvailability(docKey));
-    return subscribeDocumentHistory((changedKey, newAvail) => {
+    const stopDocument = subscribeDocumentHistory((changedKey, newAvail) => {
       if (changedKey === docKey) {
         setAvailability(newAvail);
       }
     });
+    const stopWorkspace = subscribeWorkspaceHistoryEdit(() => setAvailability(getDocumentHistoryAvailability(docKey)));
+    return () => { stopDocument(); stopWorkspace(); };
   }, [docKey]);
 
   return availability;
@@ -388,6 +422,8 @@ function materializePending(docKey: string): void {
   }
 }
 
+export { materializePending as flushPendingDocumentHistory };
+
 /** 获取当前统一历史节点的内容 */
 export function getCurrentDocumentHistoryContent(docKey: string): string | null {
   // 🔴 J2：读取当前内容前先物化暂存快照（未物化的组末端不可跳过）
@@ -407,9 +443,30 @@ export function getDocumentHistoryAvailability(docKey: string): {
   for (const owner of pendingInputs.get(docKey) ?? []) {
     if (owner.hasPending()) { hasPending = true; break; }
   }
+  return { canUndo: hasPending || state.index > 0, canRedo: !hasPending && getRedoOrder(state) !== undefined };
+}
+
+function getRedoOrder(state: DocumentHistoryState): number | undefined {
+  const next = state.entries[state.index + 1];
+  if (next?.redoOrder === undefined) return;
+  if (lastHistoryEdit('workspace') <= Math.max(next.redoOrder, next.workspaceEditAtUndo ?? 0)) return next.redoOrder;
+}
+
+/** Sort the next local history actions against workspace operations without forcing a flush. */
+export function getDocumentHistoryOrder(docKey: string): { undo?: number; redo?: number } {
+  const state = histories.get(docKey);
+  if (!state || state.isApplying) return {};
+  let hasPending = false;
+  let pendingOrder: number | undefined;
+  for (const owner of pendingInputs.get(docKey) ?? []) {
+    if (!owner.hasPending()) continue;
+    hasPending = true;
+    const order = owner.getOrder?.();
+    if (order !== undefined) pendingOrder = Math.max(pendingOrder ?? 0, order);
+  }
   return {
-    canUndo: hasPending || state.index > 0,
-    canRedo: !hasPending && state.index < state.entries.length - 1,
+    undo: pendingOrder ?? (state.index > 0 ? state.entries[state.index].undoOrder : undefined),
+    redo: hasPending ? undefined : getRedoOrder(state),
   };
 }
 
@@ -453,6 +510,9 @@ export function synchronizeCurrentDocumentHistoryContent(
         })();
   nextNode.undoSelection = state.entries[state.index].undoSelection;
   nextNode.selection = state.entries[state.index].selection;
+  nextNode.undoOrder = current.undoOrder;
+  nextNode.redoOrder = current.redoOrder;
+  nextNode.workspaceEditAtUndo = current.workspaceEditAtUndo;
   state.entries[state.index] = nextNode;
   state.lastMaterialized = { index: state.index, content };
   state.lastEditMode = mode;
@@ -478,8 +538,11 @@ export function recordDocumentChange(
 
   if (materializeNode(state, state.index) === content) {
     if (options.selection) state.entries[state.index].selection = options.selection;
+    if (options.input) notifyHistoryChange(docKey);
     return;
   }
+
+  const input = options.input ?? captureDocumentHistoryInput(docKey);
 
   // 在历史中间开始输入代表创建新分支，旧的重做方向必须丢弃
   const isBranching = state.index < state.entries.length - 1;
@@ -492,6 +555,7 @@ export function recordDocumentChange(
     isBranching ||
     state.forceNextGroup ||
     options.startsNewGroup ||
+    input.splitGroup ||
     state.lastEditMode !== options.mode;
 
   if (startsNewGroup || state.index === 0) {
@@ -535,6 +599,7 @@ export function recordDocumentChange(
     };
     state.checkpointDistance = 0;
   }
+  state.entries[state.index].undoOrder = input.order;
   if (state.entries.length > MAX_HISTORY_ENTRIES) {
     const overflow = state.entries.length - MAX_HISTORY_ENTRIES;
     // 🔴 J1：淘汰最老节点前先物化"将保留的最老节点"——
@@ -582,6 +647,7 @@ function moveHistory(docKey: string, offset: -1 | 1): boolean {
 
   const nextIndex = state.index + offset;
   if (nextIndex < 0 || nextIndex >= state.entries.length) return false;
+  if (offset === 1 && getRedoOrder(state) === undefined) return false;
 
   const previousIndex = state.index;
   const previousEntry = state.entries[previousIndex];
@@ -602,6 +668,14 @@ function moveHistory(docKey: string, offset: -1 | 1): boolean {
   state.isApplying = true;
   try {
     adapter.applyEntry(toPublicEntry(state, nextIndex), navigation);
+    const order = nextHistoryOrder();
+    if (isUndo) {
+      previousEntry.redoOrder = order;
+      previousEntry.workspaceEditAtUndo = lastHistoryEdit('workspace');
+    } else {
+      nextEntry.redoOrder = undefined;
+      nextEntry.undoOrder = order;
+    }
     state.forceNextGroup = true;
     state.lastEditMode = null;
     notifyHistoryChange(docKey);
@@ -674,9 +748,16 @@ export function serializeDocumentHistory(docKey: string): SerializableHistory | 
 export function restoreDocumentHistory(docKey: string, data: SerializableHistory): boolean {
   if (histories.has(docKey)) return false;
   if (!Array.isArray(data.entries) || data.entries.length === 0) return false;
+  const index = Math.max(0, Math.min(data.index, data.entries.length - 1));
+  const workspaceEdit = lastHistoryEdit('workspace');
   histories.set(docKey, {
-    entries: data.entries,
-    index: Math.max(0, Math.min(data.index, data.entries.length - 1)),
+    // A different window's clock does not place imported edits ahead of local actions.
+    entries: data.entries.map((entry, position) => ({
+      ...entry, undoOrder: position > 0 ? 0 : undefined,
+      redoOrder: position > index ? 0 : undefined,
+      workspaceEditAtUndo: position > index ? workspaceEdit : undefined,
+    })),
+    index,
     lastEditMode: data.lastEditMode ?? null,
     forceNextGroup: true,
     isApplying: false,

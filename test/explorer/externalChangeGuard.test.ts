@@ -134,7 +134,7 @@ describe('🔴 N09 外部正文修改核对链', () => {
     useDocumentStore.getState().setContent(KEY, '- unsaved item\n');
     const release = watchDirectory(DIR);
     await vi.advanceTimersByTimeAsync(10);
-    readDocumentMock.mockResolvedValue({ content: '* item\r\n' });
+    readDocumentMock.mockResolvedValue({ content: '* item\n' });
     watchHandler?.({ type: 'write', paths: [KEY] });
     await vi.advanceTimersByTimeAsync(700);
     expect(useDocumentStore.getState().getDocument(KEY)?.externalStatus).toBe('clean');
@@ -143,6 +143,18 @@ describe('🔴 N09 外部正文修改核对链', () => {
     await vi.advanceTimersByTimeAsync(700);
     expect(useDocumentStore.getState().getDocument(KEY)?.externalStatus).toBe('modified');
     release();
+  });
+
+  it('reports an external line-ending-only change for a text file', async () => {
+    seedOpenDocument('one\ntwo\n', 'one\ntwo\n');
+    const release = watchDirectory(DIR);
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      readDocumentMock.mockResolvedValue({ content: 'one\r\ntwo\r\n', encoding: 'utf8', eol: 'crlf' });
+      watchHandler?.({ type: 'write', paths: [KEY] });
+      await vi.advanceTimersByTimeAsync(700);
+      expect(useDocumentStore.getState().getDocument(KEY)?.externalStatus).toBe('modified');
+    } finally { release(); }
   });
 
   it('事件风暴去抖合并：多事件一次读取（不逐事件读盘）', async () => {

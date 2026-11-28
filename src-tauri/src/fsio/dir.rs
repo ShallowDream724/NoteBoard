@@ -22,6 +22,9 @@ pub fn read_directory(path: &Path, show_hidden: bool) -> Result<Vec<FileTreeNode
             }
 
             let file_path = e.path();
+            if super::import_history::is_live_stash(&file_path) {
+                return None;
+            }
             let path_str = file_path.to_string_lossy().to_string();
 
             // .git 目录过滤

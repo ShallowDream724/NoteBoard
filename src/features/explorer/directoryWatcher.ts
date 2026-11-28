@@ -9,6 +9,7 @@
 
 import { watchImmediate, type UnwatchFn, type WatchEvent } from '@tauri-apps/plugin-fs';
 import * as ipc from '../../core/ipc/commands';
+import { readDiskText } from '../../core/files/readDiskText';
 import { refreshExplorerDirectory } from './explorerActions';
 // 🔴 N09：外部正文核对链——watcher 事件给受影响的已打开文档安排有界核对，
 //    确认外部修改后更新冲突状态（阻止旧 autosave 覆盖外部修改）
@@ -121,19 +122,27 @@ function queueDocumentRecheck(docKey: string): void {
  * 完成时，不误标新会话/不与自身保存竞争（捕获读取时刻的代际与基线内容）。
  */
 async function recheckDocument(docKey: string): Promise<void> {
+  const isPathProtected = () => {
+    const windows = useWindowStore.getState();
+    return windows.isTransferring(docKey) || windows.getTab(docKey)?.isImportParked;
+  };
+  if (isPathProtected()) return;
   // 🔴 R3-10：捕获读取时刻的基线与会话代际——异步返回后校验（旧读取迟到不误标新会话）
   const docAtStart = useDocumentStore.getState().getDocument(docKey);
   if (!docAtStart) return;
-  const { persistedContent: baselineAtStart, mtime, externalStatus } = docAtStart;
+  const { persistedContent: baselineAtStart, encoding, encodingOverride, mtime, size, externalStatus } = docAtStart;
   if (baselineAtStart == null) return;
   const generationAtStart = getSessionGeneration(docKey);
   const read = Symbol();
   activeDocReads.set(docKey, read);
   function currentDocument() {
+    if (isPathProtected()) return;
     if (activeDocReads.get(docKey) !== read || getSessionGeneration(docKey) !== generationAtStart) return;
     const current = useDocumentStore.getState().getDocument(docKey);
     if (!current) return;
-    if (current.persistedContent !== baselineAtStart || current.mtime !== mtime || current.externalStatus !== externalStatus) {
+    if (current.persistedContent !== baselineAtStart || current.encoding !== encoding
+      || current.encodingOverride !== encodingOverride || current.mtime !== mtime || current.size !== size
+      || current.externalStatus !== externalStatus) {
       // A save or conflict decision completed during I/O. Only a fresh disk
       // read can say whether the file subsequently changed again.
       queueDocumentRecheck(docKey);
@@ -142,16 +151,24 @@ async function recheckDocument(docKey: string): Promise<void> {
     return current;
   }
   try {
-    const payload = await ipc.readDocument(docKey);
+    const payload = await readDiskText(docKey, encodingOverride);
     const docNow = currentDocument();
     if (!docNow || payload.content == null) return;
-    const nextStatus = normalizeDocumentEol(payload.content) === normalizeDocumentEol(baselineAtStart) ? 'clean' : 'modified';
+    const textFile = docNow.kind === 'code' || docNow.kind === 'markdown' || docNow.kind === 'noteboard';
+    const changed = textFile
+      ? payload.content !== baselineAtStart || (payload.encoding && payload.encoding !== encoding)
+        || (Number.isFinite(payload.size) && payload.size !== size)
+      : normalizeDocumentEol(payload.content) !== normalizeDocumentEol(baselineAtStart);
+    const nextStatus = changed ? 'modified' : 'clean';
+    if (nextStatus === 'clean' && Number.isFinite(payload.mtime) && Number.isFinite(payload.size)) {
+      useDocumentStore.getState().refreshDiskStat(docKey, payload.mtime, payload.size);
+    }
     if (docNow.externalStatus !== nextStatus) {
       useDocumentStore.getState().setExternalStatus(docKey, nextStatus);
       useWindowStore.getState().setTabExternalStatus(docKey, nextStatus);
     }
   } catch {
-    // 读取失败：区分删除与权限（仅确认删除才标记；权限问题保持现状）
+    // 区分删除与无法读取的外部改动。文本文件安全停写，等用户决定如何读取。
     try {
       const state = await ipc.pathExists(docKey);
       const docNow = currentDocument();
@@ -159,6 +176,9 @@ async function recheckDocument(docKey: string): Promise<void> {
       if (!state.exists && docNow.externalStatus !== 'deleted') {
         useDocumentStore.getState().setExternalStatus(docKey, 'deleted');
         useWindowStore.getState().setTabExternalStatus(docKey, 'deleted');
+      } else if (state.exists && (docNow.kind === 'code' || docNow.kind === 'markdown' || docNow.kind === 'noteboard') && docNow.externalStatus !== 'modified') {
+        useDocumentStore.getState().setExternalStatus(docKey, 'modified');
+        useWindowStore.getState().setTabExternalStatus(docKey, 'modified');
       }
     } catch {
       // 无法确认：保持现状

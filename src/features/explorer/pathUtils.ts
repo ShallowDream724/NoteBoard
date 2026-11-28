@@ -7,7 +7,9 @@
  */
 export function normalizePath(p: string | null | undefined): string {
   if (!p) return '';
-  let norm = p.trim().replace(/[/\\]+/g, '\\');
+  const path = p.trim();
+  let norm = path.replace(/[/\\]+/g, '\\');
+  if (/^[/\\]{2}/.test(path)) norm = '\\' + norm;
   // 盘符根目录特殊处理 (如 "C:" 或 "C:\") -> "C:\"
   if (/^[A-Za-z]:\\?$/.test(norm)) {
     return norm.substring(0, 2) + '\\';
@@ -95,6 +97,16 @@ export function parentDirectory(path: string): string {
   const slash = normalized.lastIndexOf('\\');
   if (slash < 0) return '';
   return normalizePath(normalized.slice(0, slash));
+}
+
+/** Keep a disk path's separators and stop at a drive, UNC share, or POSIX root. */
+export function parentBrowsePath(path: string): string | null {
+  const value = path.replace(/[\\/]+$/, '');
+  if (/^[a-z]:$/i.test(value) || /^\\\\[^\\]+\\[^\\]+$/.test(value)) return null;
+  const at = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'));
+  if (at < 0) return null;
+  const parent = value.slice(0, at);
+  return /^[a-z]:$/i.test(parent) ? parent + '\\' : parent || (value.startsWith('/') ? '/' : null);
 }
 
 export function remapDirectoryPath(path: string, oldDir: string, newDir: string): string {

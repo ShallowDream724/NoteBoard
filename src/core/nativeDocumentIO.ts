@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { Encoding, Eol } from './ipc/types';
+import type { Encoding, Eol, ExpectedDisk } from './ipc/types';
 import { normalizeDocumentEol } from './documentText';
 
 export interface NativeFileWrite { mtime: number; size: number }
@@ -7,15 +7,22 @@ export interface NativeSaveRequest {
   path: string;
   content: string;
   expectedHash?: string | null;
+  expectedEncoding?: Encoding;
+  expectedDisk?: ExpectedDisk;
   createOnly?: boolean;
-  markdown?: { path: string; content: string; expectedHash: string; encoding?: Encoding; eol?: Eol };
-  removeMarkdown?: { path: string; expectedHash: string };
+  encoding?: 'utf8';
+  eol?: Eol;
+  markdown?: {
+    path: string; content: string; expectedHash: string; encoding?: Encoding; eol?: Eol;
+    expectedEncoding?: Encoding; expectedDisk?: ExpectedDisk;
+  };
+  removeMarkdown?: { path: string; expectedHash: string; expectedEncoding?: Encoding };
 }
 export interface NativeSaveResult {
   ok: boolean;
   native?: NativeFileWrite;
   markdown?: NativeFileWrite;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; path?: string };
 }
 
 /** One persistence boundary for linked documents; callers own editor revisions. */

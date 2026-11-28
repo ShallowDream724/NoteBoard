@@ -10,6 +10,7 @@ import { getBaseline } from '../../src/features/editor-md/serialize';
 import { prepareTextExport } from '../../src/features/export/documentConversion';
 import { persistNativeDocument, prepareNativeSave } from '../../src/features/document-format/nativePersistence';
 import { commitNativeSaveMetadata } from '../../src/features/document-format/nativeSaveCommit';
+import { saveNativeAs } from '../../src/features/document-format/nativeSaveAs';
 import { writeDocumentWithBarrier } from '../../src/features/session/documentSession';
 import { EditorState, Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -19,7 +20,9 @@ import { stagePendingSourceSnapshot } from '../../src/features/editor-md/visualS
 vi.mock('../../src/core/nativeDocumentIO', async importOriginal => ({
   ...await importOriginal<typeof import('../../src/core/nativeDocumentIO')>(), saveNativeBundle: vi.fn(),
 }));
-vi.mock('../../src/core/ipc/commands', () => ({ readDocument: vi.fn(), writeDocument: vi.fn(), setDocumentDirty: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../src/core/ipc/commands', () => ({
+  readDocument: vi.fn(), writeDocument: vi.fn(), pathExists: vi.fn(), setDocumentDirty: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/features/export/documentConversion', () => ({ prepareTextExport: vi.fn() }));
 vi.mock('../../src/features/document-format/linkedMarkdownUpdates', () => ({ getAcceptedLinkedMarkdownHash: vi.fn(), checkLinkedMarkdownUpdates: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/features/editor-md/imageAssetLifecycle', () => ({ restoreImageAssetsForContent: vi.fn().mockResolvedValue(undefined) }));
@@ -74,6 +77,59 @@ describe('native linked-save boundary', () => {
     expect(useDocumentStore.getState().getDocument(NB)?.baselineContent).toBe(baseline);
     expect(useDocumentStore.getState().getDocument(MD)?.baselineContent).toBe(markdown);
     expect(saveNativeBundle).not.toHaveBeenCalled();
+  });
+
+  it('normalizes recovered NB to UTF-8 and saves CRLF without touching its unchanged linked Markdown', async () => {
+    const { doc, baseline } = await seed();
+    const documents = useDocumentStore.getState();
+    documents.acceptDiskContent(NB, { ...payload(NB, baseline), encoding: 'gbk' }, 'gbk');
+    documents.setContent(MD, 'Unsaved linked input');
+    documents.setEol(NB, 'crlf');
+    vi.mocked(saveNativeBundle).mockResolvedValue({ ok: true, native: { mtime: 2, size: baseline.length + 3 } });
+
+    expect(await writeDocumentWithBarrier(NB, baseline)).toBe(true);
+    const request = vi.mocked(saveNativeBundle).mock.calls[0][0];
+    expect(request).toMatchObject({
+      encoding: 'utf8', eol: 'crlf', expectedEncoding: 'gbk', expectedDisk: { content: baseline, encoding: 'gbk', mtime: doc.mtime },
+    });
+    expect(request.markdown).toBeUndefined();
+    expect(prepareTextExport).not.toHaveBeenCalled();
+    expect(documents.getDocument(NB)).toMatchObject({
+      encoding: 'utf8', encodingOverride: null, persistedEol: 'crlf', isDirty: false,
+      persistedContent: baseline.replace(/\n/g, '\r\n'),
+    });
+    expect(documents.getDocument(MD)).toMatchObject({ content: 'Unsaved linked input', isDirty: true });
+  });
+
+  it('keeps linked Markdown in its own encoding and EOL when writing NB content changes', async () => {
+    const { doc, source, markdown } = await seed();
+    const linkedDisk = { ...payload(MD, markdown.replace(/\n/g, '\r\n'), 'markdown'), encoding: 'windows-1252' as const, eol: 'crlf' as const };
+    const documents = useDocumentStore.getState();
+    documents.acceptDiskContent(MD, { ...linkedDisk, content: markdown, eol: 'lf' }, 'windows-1252');
+    vi.mocked(ipc.readDocument).mockResolvedValue(linkedDisk);
+    const prepared = await prepareNativeSave(doc, source);
+    expect(ipc.readDocument).toHaveBeenCalledWith(MD, undefined, 'windows-1252');
+    expect(prepared.request).toMatchObject({
+      encoding: 'utf8', eol: 'lf',
+      markdown: { encoding: 'windows-1252', eol: 'crlf', expectedDisk: expect.objectContaining({ content: linkedDisk.content }) },
+    });
+    commitNativeSaveMetadata(NB, { ...prepared, result: { ok: true, markdown: { mtime: 2, size: 12 } } });
+    expect(documents.getDocument(MD)).toMatchObject({
+      encoding: 'windows-1252', encodingOverride: 'windows-1252', eol: 'crlf', persistedEol: 'crlf',
+      persistedContent: 'Saved body\r\n', isDirty: false,
+    });
+  });
+
+  it('writes recovered Native Save As as UTF-8 with the selected line endings', async () => {
+    const initial = native('旧文件', {});
+    const doc = useDocumentStore.getState().upsertFromPayload({ ...payload(NB, initial), encoding: 'gbk', eol: 'crlf' }, { encodingOverride: 'gbk' });
+    const target = 'C:\\notes\\copy.nb';
+    vi.mocked(ipc.pathExists).mockResolvedValue({ exists: false, isDir: false });
+    vi.mocked(prepareTextExport).mockResolvedValue(initial);
+    vi.mocked(saveNativeBundle).mockResolvedValue({ ok: true, native: { mtime: 2, size: 200 } });
+    await expect(saveNativeAs(doc, target, initial)).resolves.toMatchObject({
+      request: { path: target, encoding: 'utf8', eol: 'crlf', createOnly: true },
+    });
   });
 
   it.each(['dirty linked editor', 'external hash conflict'])('refuses %s before projecting or writing', async kind => {

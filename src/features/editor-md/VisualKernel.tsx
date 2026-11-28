@@ -37,7 +37,7 @@ import { useWindowStore } from '../../stores/windowStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { bumpDocumentRevision, getDocumentRevision } from '../../core/editor/editorRegistry';
 import { autoSaveDocument } from './markdownAutoSave';
-import { registerHistoryMaterializeHook } from '../history/documentHistory';
+import { captureDocumentHistoryInput, registerHistoryMaterializeHook } from '../history/documentHistory';
 import { saveViewState } from '../session/editorSuspension';
 import { findScrollContainer } from '../../core/dom/scrollContainer';
 import { setMathPreviewSessionActive } from './mathPreviewSession';
@@ -137,9 +137,11 @@ export function VisualKernel({
 
       // 🔴 J2：输入热路径零全文工作——只捕获不可变 ProseMirror 文档根引用（O(1)）
       const nativeUndoDepth = prosemirrorUndoDepth(editor.state);
-      const startsNewGroup = historyGrouping.startsNewGroup(transaction,
+      const input = captureDocumentHistoryInput(docKey);
+      const nativeStartsNewGroup = historyGrouping.startsNewGroup(transaction,
         Boolean(transaction.getMeta(BLOCK_MOVE_META)) || nativeUndoDepth > visualUndoDepthRef.current,
         isSlashCommandAction(editor));
+      const startsNewGroup = nativeStartsNewGroup || input.splitGroup;
 
       // 新历史组开始：立即物化上一组末端（组内合并结束，跨组节点全部保留——
       // 不因延迟序列化把多组丢成一组）
@@ -166,6 +168,7 @@ export function VisualKernel({
         // same edit. Persist the applied state, not the pre-normalization root.
         doc: editor.state.doc,
         revision: getDocumentRevision(docKey),
+        input,
         manager: getMarkdownManager(editor),
         schema: editor.schema,
         // 输入节奏来自原生历史，结构动作由共同策略隔离；与防抖物化无关。

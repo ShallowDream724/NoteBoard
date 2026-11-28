@@ -1,4 +1,5 @@
 import { NATIVE_DOCUMENT_HEADER, readNativeMetadata, replaceNativeMetadata } from '../../core/nativeDocument';
+import { textWithEol } from '../../core/documentText';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getMdSourceView, getMdTipTapEditor } from '../editor-md/editorInstances';
@@ -58,7 +59,13 @@ export function commitNativeSaveMetadata(key: string, prepared: PreparedNativeSa
         useDocumentStore.getState().setContent(markdown.path, markdown.content);
         synchronizeCurrentDocumentHistoryContent(markdown.path, markdown.content, mode);
       }
-      useDocumentStore.getState().updateBaseline(markdown.path, markdown.content, prepared.result.markdown.mtime, prepared.result.markdown.size);
+      const encoding = markdown.encoding ?? linked.encoding;
+      const eol = markdown.eol ?? linked.persistedEol;
+      useDocumentStore.getState().updateBaseline(
+        markdown.path, markdown.content, prepared.result.markdown.mtime, prepared.result.markdown.size, textWithEol(markdown.content, eol),
+        { encoding, eol, encodingOverride: linked.encodingOverride === encoding ? linked.encodingOverride : null },
+      );
+      if (linked.eol === linked.persistedEol) useDocumentStore.getState().setEol(markdown.path, eol);
       getBaseline(markdown.path).updateBaseline(markdown.content);
       useWindowStore.getState().setTabDirty(markdown.path, useDocumentStore.getState().getDocument(markdown.path)?.isDirty ?? false);
     }

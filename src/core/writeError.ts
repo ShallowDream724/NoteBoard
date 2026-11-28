@@ -8,6 +8,8 @@ export function getWriteErrorMessage(error: WriteError): string {
     case 'file-locked': return `文件被其他程序锁定：${error.path}`;
     case 'readonly': return `文件是只读的：${error.path}`;
     case 'path-not-found': return `路径不存在：${error.path}`;
+    case 'encoding':
+    case 'conflict': return error.message;
     case 'io': return `写入出错：${error.message}`;
   }
 }

@@ -23,12 +23,14 @@ import type { Node as ProsemirrorNode } from '@tiptap/pm/model';
 import {
   serializeMarkdownFromDoc,
   serializeMarkdown,
-  normalizeEol,
   getBaseline,
   type MarkdownManagerLike,
 } from './serialize';
-import { recordDocumentChange, type DocumentHistorySelection } from '../history/documentHistory';
-import { useDocumentStore } from '../../stores/documentStore';
+import {
+  captureDocumentHistoryInput, notifyDocumentHistoryPendingInput, recordDocumentChange,
+  type DocumentHistoryInput, type DocumentHistorySelection,
+} from '../history/documentHistory';
+import { isDocumentContentDirty, useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getMdTipTapEditor } from './editorInstances';
 import { materializeSourceStyles, type SourceStyles } from '../document-style/sourceStyleTracking';
@@ -49,6 +51,7 @@ interface PendingVisualSnapshot {
   doc: ProsemirrorNode;
   /** 捕获时（组末事务）的内容版本 */
   revision: number;
+  input: DocumentHistoryInput;
   /** 与编辑器共享的 MarkdownManager（兼容配置；序列化纯适配器使用） */
   manager: MarkdownManagerLike | null;
   /** 与编辑器共享的 schema（nodeFromJSON 语义校验用） */
@@ -87,6 +90,7 @@ export function stagePendingVisualSnapshot(
     metadata?: NativeMetadata;
     doc: ProsemirrorNode;
     revision: number;
+    input?: DocumentHistoryInput;
     manager: MarkdownManagerLike | null;
     schema: PendingVisualSnapshot['schema'];
     isNewGroup: boolean;
@@ -94,6 +98,8 @@ export function stagePendingVisualSnapshot(
     selection?: DocumentHistorySelection;
   },
 ): void {
+  const input = snapshot.input ?? captureDocumentHistoryInput(docKey);
+  if (input.splitGroup) flushPendingVisualSnapshot(docKey);
   const previous = pendingByDoc.get(docKey);
   pendingByDoc.set(docKey, {
     ...snapshot,
@@ -101,9 +107,11 @@ export function stagePendingVisualSnapshot(
     groupId: previous ? previous.groupId : ++nextGroupId,
     isNewGroup: previous ? previous.isNewGroup : snapshot.isNewGroup,
     groupStartBefore: previous?.groupStartBefore ?? snapshot.groupStartBefore,
+    input: { ...input, splitGroup: previous?.input.splitGroup ?? input.splitGroup },
     // 🔴 R3-03：会话代际取当前值（首次暂存捕获；同会话内不变）
     sessionGeneration: previous ? previous.sessionGeneration : getSessionGeneration(docKey),
   });
+  if (!previous) notifyDocumentHistoryPendingInput(docKey);
 }
 
 /**
@@ -144,22 +152,22 @@ export function flushPendingVisualSnapshot(docKey: string): string | null {
     startsNewGroup: pending.isNewGroup,
     beforeSelection: pending.groupStartBefore,
     selection: pending.selection,
+    input: pending.input,
   });
 
   // store 镜像 + 精确脏态（flush-and-compare；改回原文最终清脏）
-  const baseline =
-    getBaseline(docKey).getBaseline()
-    ?? useDocumentStore.getState().getDocument(docKey)?.baselineContent
-    ?? '';
-  const isDirty = normalizeEol(content) !== normalizeEol(baseline);
-  useDocumentStore.getState().setContent(docKey, content);
+  const store = useDocumentStore.getState();
+  const doc = store.getDocument(docKey);
+  const isDirty = isDocumentContentDirty(doc, content, getBaseline(docKey).getBaseline() ?? doc?.baselineContent);
+  store.setContent(docKey, content);
+  store.setDirty(docKey, isDirty);
   useWindowStore.getState().setTabDirty(docKey, isDirty);
   return content;
 }
 
 /** 丢弃暂存（文档关闭/身份迁移——不再需要物化） */
 export function discardPendingVisualSnapshot(docKey: string): void {
-  pendingByDoc.delete(docKey);
+  if (pendingByDoc.delete(docKey)) notifyDocumentHistoryPendingInput(docKey);
 }
 
 // ── 🔴 J2 source 模式（CodeMirror）快照 ──
@@ -178,6 +186,7 @@ interface PendingSourceSnapshot {
   materialize?: (text: CodeMirrorText) => string;
   styles?: SourceStyles;
   revision: number;
+  input: DocumentHistoryInput;
   /** 🔴 R3-01：本组相对已提交历史是否新组（同组后续事务不覆盖） */
   isNewGroup: boolean;
   groupStartBefore?: DocumentHistorySelection;
@@ -198,6 +207,16 @@ export function hasPendingSnapshot(docKey: string): boolean {
   return pendingByDoc.has(docKey) || pendingSourceByDoc.has(docKey);
 }
 
+export function getPendingMarkdownHistoryOrder(docKey: string): number | undefined {
+  const generation = getSessionGeneration(docKey);
+  const source = pendingSourceByDoc.get(docKey);
+  const visual = pendingByDoc.get(docKey);
+  const sourceOrder = source?.sessionGeneration === generation ? source.input.order : undefined;
+  const visualOrder = visual?.sessionGeneration === generation ? visual.input.order : undefined;
+  if (sourceOrder === undefined) return visualOrder;
+  return Math.max(sourceOrder, visualOrder ?? 0);
+}
+
 /** 🔴 J2 source 热路径：暂存不可变 Text 引用（O(1)；组身份/新组/组起点保持首事务值） */
 export function stagePendingSourceSnapshot(
   docKey: string,
@@ -206,19 +225,24 @@ export function stagePendingSourceSnapshot(
     materialize?: (text: CodeMirrorText) => string;
     styles?: SourceStyles;
     revision: number;
+    input?: DocumentHistoryInput;
     isNewGroup: boolean;
     groupStartBefore?: DocumentHistorySelection;
     selection?: DocumentHistorySelection;
   },
 ): void {
+  const input = snapshot.input ?? captureDocumentHistoryInput(docKey);
+  if (input.splitGroup) flushPendingSourceSnapshot(docKey);
   const previous = pendingSourceByDoc.get(docKey);
   pendingSourceByDoc.set(docKey, {
     ...snapshot,
     groupId: previous ? previous.groupId : ++nextGroupId,
     isNewGroup: previous ? previous.isNewGroup : snapshot.isNewGroup,
     groupStartBefore: previous?.groupStartBefore ?? snapshot.groupStartBefore,
+    input: { ...input, splitGroup: previous?.input.splitGroup ?? input.splitGroup },
     sessionGeneration: previous ? previous.sessionGeneration : getSessionGeneration(docKey),
   });
+  if (!previous) notifyDocumentHistoryPendingInput(docKey);
 }
 
 /**
@@ -243,21 +267,21 @@ export function flushPendingSourceSnapshot(docKey: string): string | null {
     startsNewGroup: pending.isNewGroup,
     beforeSelection: pending.groupStartBefore,
     selection: pending.selection,
+    input: pending.input,
   });
 
-  const baseline =
-    getBaseline(docKey).getBaseline()
-    ?? useDocumentStore.getState().getDocument(docKey)?.baselineContent
-    ?? '';
-  const isDirty = normalizeEol(content) !== normalizeEol(baseline);
-  useDocumentStore.getState().setContent(docKey, content);
+  const store = useDocumentStore.getState();
+  const doc = store.getDocument(docKey);
+  const isDirty = isDocumentContentDirty(doc, content, getBaseline(docKey).getBaseline() ?? doc?.baselineContent);
+  store.setContent(docKey, content);
+  store.setDirty(docKey, isDirty);
   useWindowStore.getState().setTabDirty(docKey, isDirty);
   return content;
 }
 
 /** 丢弃 source 暂存（文档关闭/身份迁移） */
 export function discardPendingSourceSnapshot(docKey: string): void {
-  pendingSourceByDoc.delete(docKey);
+  if (pendingSourceByDoc.delete(docKey)) notifyDocumentHistoryPendingInput(docKey);
 }
 
 registerPendingSnapshotMaterializers({ source: flushPendingSourceSnapshot, visual: flushPendingVisualSnapshot });

@@ -30,13 +30,14 @@ import {
 import { useDocumentStore } from '../../stores/documentStore';
 import { handleTransformCase } from '../toolbar/textOps';
 import type { LanguageId } from '../../core/ipc/types';
-import { getDocumentRevision } from '../../core/editor/editorRegistry';
+import { getDocumentRevision, getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { getSessionGeneration, submitCapturedContent } from '../session/documentSession';
 import { createCodeNavigation } from './codeNavigation';
 import { supportsCodeSymbols } from './codeSymbols';
 import { codeCursorTracker } from './codeCursorTracker';
 import { sourceReadingPlugin } from './sourceReading';
-import { textToolbarKind } from '../../core/fileFormats';
+import { getFileFormat, textToolbarKind } from '../../core/fileFormats';
+import { createIndentationOps } from './indentationOps';
 
 /**
  * 构造 code 编辑器的能力对象。
@@ -56,7 +57,8 @@ export function createCodeEditorCapabilities(
   //    同路径会话已换代（关闭重开）则提交被丢弃
   const sessionGeneration = getSessionGeneration(docKey);
   const getLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
-  const format = textToolbarKind(docKey.startsWith('untitled:') ? useDocumentStore.getState().getDocument(docKey)?.displayName ?? docKey : docKey);
+  const filePath = docKey.startsWith('untitled:') ? useDocumentStore.getState().getDocument(docKey)?.displayName ?? docKey : docKey;
+  const format = textToolbarKind(filePath);
   const operationLanguage = () => format === 'json' || format === 'xml' ? format : getLanguage();
   const codeNavigation = createCodeNavigation(view, getLanguage);
   const reading = view.plugin(sourceReadingPlugin);
@@ -79,6 +81,12 @@ export function createCodeEditorCapabilities(
     transformCase: (mode) => handleTransformCase(view, mode),
     formatXml: (scope) => handleFormatXml(view, { scope, lang: operationLanguage() }),
     validateSyntax: (scope) => validateTextLanguage(view, operationLanguage(), { scope }),
+    indentation: getFileFormat(filePath).preview === 'delimited' ? undefined : createIndentationOps(
+      view,
+      getLanguage,
+      () => getEditorCapabilities(docKey)?.instanceId === instanceId && getSessionGeneration(docKey) === sessionGeneration,
+      () => useDocumentStore.getState().getDocument(docKey)?.readonly !== false,
+    ),
   };
 
   return {

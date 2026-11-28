@@ -15,7 +15,7 @@ import {
   onFocusTab,
   onDragDrop,
 } from '../../core/ipc/events';
-import type { OpenRequestDto, TransferredDocument, WindowBootDto } from '../../core/ipc/types';
+import { ALL_ENCODINGS, ALL_EOLS, type Encoding, type Eol, type OpenRequestDto, type TransferredDocument, type WindowBootDto } from '../../core/ipc/types';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { useWindowStore, type Tab } from '../../stores/windowStore';
 import { useDocumentStore } from '../../stores/documentStore';
@@ -138,6 +138,8 @@ async function adoptTransferredDocument(transferId: string): Promise<void> {
   // 迁移载荷的 language 为 string（由源窗口的 LanguageId 序列化而来），此处收窄回 LanguageId
   const language = (doc.language ?? languageFromPath(doc.key)) as ReturnType<typeof languageFromPath>;
   const content = doc.content ?? '';
+  const encoding = doc.encoding && ALL_ENCODINGS.includes(doc.encoding as Encoding) ? doc.encoding as Encoding : 'utf8';
+  const eol = doc.eol && ALL_EOLS.includes(doc.eol as Eol) ? doc.eol as Eol : 'lf';
 
   const docStore = useDocumentStore.getState();
   docStore.upsertFromPayload({
@@ -147,15 +149,15 @@ async function adoptTransferredDocument(transferId: string): Promise<void> {
     kind,
     language,
     content,
-    encoding: (doc.encoding ?? 'utf8') as 'utf8',
-    eol: (doc.eol ?? 'lf') as 'lf',
+    encoding,
+    eol,
     size: doc.size ?? content.length,
     mtime: doc.mtime ?? 0,
     readonly: doc.readonly ?? false,
-  });
+  }, { encodingOverride: doc.encodingOverride });
   // 脏文档必须携带基线：迁移载荷的 content 是最新内容而非基线，需显式恢复
   if (doc.baseline != null) {
-    docStore.updateBaseline(doc.key, doc.baseline, doc.mtime ?? 0, doc.size ?? 0, doc.persistedContent);
+    docStore.updateBaseline(doc.key, doc.baseline, doc.mtime ?? 0, doc.size ?? 0, doc.persistedContent, { eol: doc.persistedEol ?? eol });
   }
 
   // 🔴 R06：恢复可序列化统一历史（目标无历史时导入；检查点+补丁链整体迁移）
@@ -547,7 +549,9 @@ export async function moveToNewWindow(docKey: string): Promise<boolean> {
     kind: doc.kind,
     language: doc.language,
     encoding: doc.encoding,
+    encodingOverride: doc.encodingOverride,
     eol: doc.eol,
+    persistedEol: doc.persistedEol,
     readonly: doc.readonly,
     mtime: doc.mtime,
     size: doc.size,

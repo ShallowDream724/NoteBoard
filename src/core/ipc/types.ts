@@ -9,7 +9,7 @@ export type DocumentKind = 'markdown' | 'noteboard' | 'code' | 'board' | 'image'
 export type LanguageId = CodeLanguage['value'] | 'html' | 'mermaid' | 'plantuml' | 'infographic';
 export type SavePolicy = 'auto' | 'manual';
 export type ViewMode = 'visual' | 'source';
-export type Encoding = 'utf8' | 'utf8-bom' | 'gbk';
+export type Encoding = typeof TEXT_ENCODINGS[number]['id'];
 export type Eol = 'crlf' | 'lf';
 export type ThemeId = 'chen-guang' | 'hu-po' | 'mo-ye';
 export type ThemeMode = ThemeId | 'system';
@@ -19,7 +19,31 @@ export type ContentWidth = 'narrow' | 'standard' | 'wide' | 'full' | (string & {
 // ── 枚举清单（与 Rust build.rs 生成的 contract-enums.json 一致）──
 
 export const ALL_DOCUMENT_KINDS: DocumentKind[] = ['markdown', 'noteboard', 'code', 'board', 'image', 'pdf', 'mindmap', 'drawio', 'bitable', 'unsupported'];
-export const ALL_ENCODINGS: Encoding[] = ['utf8', 'utf8-bom', 'gbk'];
+export const TEXT_ENCODINGS = [
+  { id: 'utf8', label: 'UTF-8', shortLabel: 'UTF-8' },
+  { id: 'utf8-bom', label: 'UTF-8 BOM', shortLabel: 'UTF-8 BOM' },
+  { id: 'utf16-le', label: 'UTF-16 LE', shortLabel: 'UTF-16 LE' },
+  { id: 'utf16-be', label: 'UTF-16 BE', shortLabel: 'UTF-16 BE' },
+  { id: 'gb18030', label: '简体中文 (GB18030)', shortLabel: 'GB18030' },
+  { id: 'gbk', label: '简体中文 (GBK)', shortLabel: 'GBK' },
+  { id: 'big5', label: '繁体中文 (Big5)', shortLabel: 'Big5' },
+  { id: 'shift-jis', label: '日文 (Shift JIS)', shortLabel: 'Shift JIS' },
+  { id: 'euc-jp', label: '日文 (EUC-JP)', shortLabel: 'EUC-JP' },
+  { id: 'euc-kr', label: '韩文 (EUC-KR)', shortLabel: 'EUC-KR' },
+  { id: 'windows-1252', label: '西欧 (Windows 1252)', shortLabel: 'Windows 1252' },
+  { id: 'mac-roman', label: '西欧 (Mac Roman)', shortLabel: 'Mac Roman' },
+  { id: 'windows-1250', label: '中欧 (Windows 1250)', shortLabel: 'Windows 1250' },
+  { id: 'windows-1251', label: '西里尔文 (Windows 1251)', shortLabel: 'Windows 1251' },
+  { id: 'koi8-r', label: '西里尔文 (KOI8-R)', shortLabel: 'KOI8-R' },
+  { id: 'windows-1253', label: '希腊文 (Windows 1253)', shortLabel: 'Windows 1253' },
+  { id: 'windows-1254', label: '土耳其文 (Windows 1254)', shortLabel: 'Windows 1254' },
+  { id: 'windows-1255', label: '希伯来文 (Windows 1255)', shortLabel: 'Windows 1255' },
+  { id: 'windows-1256', label: '阿拉伯文 (Windows 1256)', shortLabel: 'Windows 1256' },
+  { id: 'windows-1257', label: '波罗的海语言 (Windows 1257)', shortLabel: 'Windows 1257' },
+  { id: 'windows-1258', label: '越南文 (Windows 1258)', shortLabel: 'Windows 1258' },
+  { id: 'windows-874', label: '泰文 (Windows 874)', shortLabel: 'Windows 874' },
+] as const;
+export const ALL_ENCODINGS: Encoding[] = TEXT_ENCODINGS.map(({ id }) => id);
 export const ALL_EOLS: Eol[] = ['crlf', 'lf'];
 export const ALL_LANGUAGE_IDS: LanguageId[] = [...CODE_LANGUAGES.map(language => language.value), 'html', 'mermaid', 'plantuml', 'infographic'];
 export const ALL_THEME_IDS: ThemeId[] = ['chen-guang', 'hu-po', 'mo-ye'];
@@ -47,12 +71,20 @@ export interface WriteResult {
   error: WriteError | null;
 }
 
+export interface ExpectedDisk {
+  mtime: number;
+  size: number;
+  encoding: Encoding;
+  content: string;
+}
+
 export type WriteError =
   | { kind: 'permission-denied'; path: string }
   | { kind: 'disk-full' }
   | { kind: 'file-locked'; path: string }
   | { kind: 'readonly'; path: string }
   | { kind: 'path-not-found'; path: string }
+  | { kind: 'encoding' | 'conflict'; message: string }
   | { kind: 'io'; message: string };
 
 // ── 文件树节点 ──
@@ -90,7 +122,9 @@ export interface TransferredDocument {
   kind?: DocumentKind | null;
   language?: string | null;
   encoding?: string | null;
+  encodingOverride?: Encoding | null;
   eol?: string | null;
+  persistedEol?: Eol | null;
   readonly?: boolean;
   mtime?: number;
   size?: number;
@@ -178,6 +212,8 @@ export type PreparedDocument =
       dirPath: string;
       language: string;
       size: number;
+      encodingRequired?: boolean;
+      encodingMessage?: string;
     }
   | { type: 'already-open'; key: string; ownerLabel: string; ownerIsSelf: boolean }
   | { type: 'failed'; message: string; missing: boolean };
@@ -425,6 +461,7 @@ export interface SessionTabSnapshot {
   isPinned: boolean;
   viewMode: ViewMode | null;
   sourcePath: string | null;
+  encoding?: Encoding | null;
   stagedPath: string | null;
   displayName: string;
   explorerContext?: ExplorerContext | null;

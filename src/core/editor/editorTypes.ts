@@ -4,6 +4,8 @@
 //    禁止 import React、TipTap、CodeMirror、任何 Editor 组件及其 CSS；
 //    也不得出现 EditorView/Editor 等内核类型的逃逸（含 any 透传）。
 
+import type { IndentationSettings } from './indentationSettings';
+
 /** flush 的调用场景；编辑器侧按场景区分必须精确等待的工作（如 Drawio 需真实回包） */
 export type FlushReason = 'save' | 'stage' | 'switch-mode' | 'evict' | 'transfer' | 'close' | 'export';
 
@@ -79,6 +81,10 @@ export interface CodeOpsCapabilities {
   transformCase(mode: 'upper' | 'lower' | 'title'): void;
   formatXml(scope?: 'all' | 'selection'): void;
   validateSyntax?(scope?: 'all' | 'selection'): void;
+  readonly indentation?: {
+    convert(insertSpaces: boolean): Promise<'changed' | 'unchanged' | 'unavailable' | 'syntax-unavailable'>;
+    detect(): Promise<Partial<IndentationSettings> | null | 'unavailable' | 'syntax-unavailable'>;
+  };
 }
 
 export interface CodeCursorPosition {

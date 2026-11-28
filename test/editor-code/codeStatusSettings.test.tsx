@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CodeStatusSettings } from '../../src/components/statusbar/CodeStatusSettings';
+import { TEXT_LANGUAGE_CHOICES } from '../../src/core/textLanguageTools';
 import { patchSettings } from '../../src/core/ipc/commands';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useSettingsStore } from '../../src/stores/settingsStore';
@@ -33,52 +34,98 @@ function StatusForOpenDocument() {
 
 async function openLanguagePicker(language: string) {
   const trigger = host.querySelector<HTMLButtonElement>(`button[aria-label="语法高亮语言：${language}"]`)!;
-  await act(async () => trigger.click());
-  return document.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  await act(async () => press(trigger, 'Enter'));
+  return document.querySelector<HTMLElement>('[role="menu"][aria-label="语法高亮语言"]')!;
 }
 
-it('chooses syntax by extension with the keyboard and restores filename detection', async () => {
+const press = (element: HTMLElement, key: string) => element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+const languageRows = (menu: HTMLElement) => Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitemradio"]'));
+
+it('shows the exact language menu rows and chooses a language by keyboard prefix', async () => {
   useDocumentStore.getState().upsertFromPayload({ key: docKey, displayName: 'source.py', dirPath: 'C:\\test', kind: 'code', language: 'python', content: 'print(1)', encoding: 'utf8', eol: 'lf', size: 8, mtime: 0, readonly: false });
   await act(async () => root.render(<StatusForOpenDocument />));
 
-  const search = await openLanguagePicker('Python');
-  expect(document.activeElement).toBe(search);
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, '.tsx');
-    search.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  expect(document.querySelector('[role="listbox"]')?.textContent).toMatch(/^TypeScript/);
-  await act(async () => search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-  expect(useDocumentStore.getState().getDocument(docKey)).toMatchObject({ language: 'typescript', content: 'print(1)', isDirty: false });
-  expect(document.querySelector('input[role="combobox"]')).toBeNull();
+  const menu = await openLanguagePicker('Python');
+  const auto = menu.querySelector<HTMLElement>('[role="menuitem"]')!;
+  expect(auto.textContent).toBe('按文件名识别');
+  expect(auto.querySelector('svg, [data-file-icon]')).toBeNull();
+  expect(auto.nextElementSibling?.getAttribute('role')).toBe('separator');
+  expect(menu.querySelector('input, small')).toBeNull();
 
-  await openLanguagePicker('TypeScript');
-  const plainText = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="option"]')).find(option => option.textContent?.startsWith('纯文本'))!;
-  await act(async () => plainText.click());
+  const rows = languageRows(menu);
+  expect(rows.map(item => item.textContent)).toEqual([
+    'Plain Text',
+    ...TEXT_LANGUAGE_CHOICES.filter(choice => choice.value !== 'plaintext').map(choice => choice.label).sort((a, b) => a.localeCompare(b, 'en')),
+  ]);
+  const python = menu.querySelector('[aria-checked="true"]')!;
+  expect(python.textContent).toBe('Python');
+  expect(python.querySelector('[data-file-icon="lang-python"]')).toBeTruthy();
+  expect(python.querySelector('.nb-status-menu-check svg')).toBeTruthy();
+
+  await act(async () => {
+    press(auto, 't');
+    press(auto, 'y');
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  expect(document.activeElement?.textContent).toBe('TypeScript');
+  await act(async () => press(document.activeElement as HTMLElement, 'Enter'));
+  expect(useDocumentStore.getState().getDocument(docKey)).toMatchObject({ language: 'typescript', content: 'print(1)', isDirty: false });
+  expect(document.body.contains(menu)).toBe(false);
+
+  const typeScriptMenu = await openLanguagePicker('TypeScript');
+  expect(languageRows(typeScriptMenu).slice(0, 2).map(item => item.textContent)).toEqual(['Plain Text', 'TypeScript']);
+  expect(typeScriptMenu.querySelector('[role="group"] [role="separator"]')).toBeTruthy();
+  expect(languageRows(typeScriptMenu).filter(item => item.textContent === 'TypeScript')).toHaveLength(1);
+  await act(async () => {
+    press(document.activeElement as HTMLElement, 'ArrowDown');
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  expect(document.activeElement?.textContent).toBe('Plain Text');
+  await act(async () => press(document.activeElement as HTMLElement, 'Enter'));
   expect(useDocumentStore.getState().getDocument(docKey)?.language).toBe('plaintext');
 
-  await openLanguagePicker('纯文本');
-  await act(async () => document.querySelector<HTMLButtonElement>('[role="option"]')!.click());
+  const plainTextMenu = await openLanguagePicker('纯文本');
+  await act(async () => plainTextMenu.querySelector<HTMLElement>('[role="menuitem"]')!.click());
   expect(useDocumentStore.getState().getDocument(docKey)?.language).toBe('python');
 });
 
-it('persists indentation from the HTML-source status alongside the language chooser', async () => {
-  const startingSettings = useSettingsStore.getState().settings;
-  vi.mocked(patchSettings).mockImplementation(async () => ({ ...useSettingsStore.getState().settings, revision: useSettingsStore.getState().settings.revision + 1 }));
-  try {
-    await act(async () => root.render(<CodeStatusSettings docKey="test.html" language="html" />));
-    const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="缩进：空格 2"]')!;
-    expect(host.querySelector('button[aria-label="语法高亮语言：HTML"]')).toBeTruthy();
-    expect(trigger.textContent).toBe('空格 2');
-    await act(async () => trigger.click());
+it('starts with Plain Text when there is no filename to detect', async () => {
+  await act(async () => root.render(<CodeStatusSettings docKey="untitled:test" language="plaintext" />));
+  const menu = await openLanguagePicker('纯文本');
+  expect(menu.querySelector('[role="menuitem"]')).toBeNull();
+  expect(languageRows(menu)[0].textContent).toBe('Plain Text');
+});
 
-    const [method, width] = document.querySelectorAll<HTMLSelectElement>('[aria-label="缩进设置"] select');
-    await act(async () => { method.value = 'tabs'; method.dispatchEvent(new Event('change', { bubbles: true })); });
-    await act(async () => { width.value = '4'; width.dispatchEvent(new Event('change', { bubbles: true })); });
-    expect(patchSettings).toHaveBeenCalledWith({ editor: { insertSpaces: false } });
-    expect(patchSettings).toHaveBeenCalledWith({ editor: { tabSize: 4 } });
-    expect(trigger.textContent).toBe('Tab 4');
-  } finally {
-    await act(async () => useSettingsStore.getState()._applyRemoteUpdate({ ...startingSettings, revision: useSettingsStore.getState().settings.revision + 1 }));
-  }
+it('uses a keyboard-accessible indentation menu and changes only the open file settings', async () => {
+  const key = 'test.html';
+  const content = '  <p>HTML</p>';
+  useDocumentStore.getState().upsertFromPayload({ key, displayName: key, dirPath: '', kind: 'code',
+    language: 'html', content, encoding: 'utf8', eol: 'lf', size: content.length, mtime: 0, readonly: false });
+  const startingSettings = useSettingsStore.getState().settings.editor;
+  await act(async () => root.render(<CodeStatusSettings docKey={key} language="html" />));
+  const trigger = host.querySelector<HTMLButtonElement>('button[aria-label="缩进：空格 2"]')!;
+  const item = (role: string, label: string) => Array.from(document.querySelectorAll<HTMLElement>(`[role="${role}"]`))
+    .find(element => element.textContent === label)!;
+  expect(host.querySelector('button[aria-label="语法高亮语言：HTML"]')).toBeTruthy();
+  await act(async () => press(trigger, 'Enter'));
+  expect(item('menuitemradio', '使用空格缩进').getAttribute('aria-checked')).toBe('true');
+  const indent = document.querySelector('[role="menu"][aria-label="缩进设置"]')!;
+  expect([...indent.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]')].map(element => (
+    element.getAttribute('role') === 'separator' ? 'separator' : element.textContent
+  ))).toEqual([
+    '使用空格缩进', '使用制表符缩进', 'separator', '缩进大小', 'separator',
+    '将缩进转换为空格', '将缩进转换为制表符', 'separator', '从内容中检测缩进方式',
+  ]);
+  await act(async () => item('menuitemradio', '使用制表符缩进').click());
+  expect(trigger.textContent).toBe('Tab 2');
+
+  await act(async () => press(trigger, 'Enter'));
+  expect(item('menuitemradio', '使用制表符缩进').getAttribute('aria-checked')).toBe('true');
+  await act(async () => press(item('menuitem', '缩进大小'), 'ArrowRight'));
+  expect(item('menuitemradio', '2').getAttribute('aria-checked')).toBe('true');
+  await act(async () => item('menuitemradio', '4').click());
+  expect(trigger.textContent).toBe('Tab 4');
+  expect(useDocumentStore.getState().getDocument(key)).toMatchObject({ indentation: { insertSpaces: false, tabSize: 4 }, content, isDirty: false });
+  expect(useSettingsStore.getState().settings.editor).toBe(startingSettings);
+  expect(patchSettings).not.toHaveBeenCalled();
 });

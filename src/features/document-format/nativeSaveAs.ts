@@ -1,4 +1,5 @@
 import * as ipc from '../../core/ipc/commands';
+import { expectedDiskFromPayload } from '../../core/files/readDiskText';
 import { replaceNativeMetadata } from '../../core/nativeDocument';
 import { documentTextHash, saveNativeBundle } from '../../core/nativeDocumentIO';
 import type { Document } from '../../stores/documentStore';
@@ -17,7 +18,11 @@ export async function saveNativeAs(doc: Document, target: string, source: string
   const exists = await ipc.pathExists(target);
   const baseline = exists.exists ? await ipc.readDocument(target) : null;
   if (baseline && baseline.content == null) throw new Error('无法读取目标文件，未执行另存为。');
-  prepared.request = { ...prepared.request, path: target, content: prepared.content, createOnly: !exists.exists, expectedHash: baseline ? await documentTextHash(baseline.content!) : undefined };
+  prepared.request = {
+    ...prepared.request, path: target, content: prepared.content, createOnly: !exists.exists,
+    expectedHash: baseline ? await documentTextHash(baseline.content!) : undefined,
+    expectedDisk: baseline ? expectedDiskFromPayload(baseline) : undefined, expectedEncoding: baseline?.encoding,
+  };
   const result = await saveNativeBundle(prepared.request);
   return { ...prepared, result };
 }

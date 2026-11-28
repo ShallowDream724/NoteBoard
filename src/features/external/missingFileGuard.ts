@@ -11,13 +11,13 @@ const lastCheckedAt = new Map<string, number>();
 const CHECK_THROTTLE_MS = 800;
 
 /** 将已在当前窗口打开、随后被删除的文件标记为断开状态。 */
-export function markOpenDocumentDeleted(docKey: string): void {
+export function markOpenDocumentDeleted(docKey: string, parkedImport?: boolean): void {
   const tabStore = useWindowStore.getState();
   const documentStore = useDocumentStore.getState();
   // Windows 路径大小写不敏感，左侧文件树与文档注册表的规范化形式可能略有差异。
   const actualKey = tabStore.tabs.find((tab) => tab.key.toLocaleLowerCase() === docKey.toLocaleLowerCase())?.key;
   if (!actualKey || !documentStore.getDocument(actualKey)) return;
-  tabStore.setTabDetached(actualKey, true);
+  tabStore.setTabDetached(actualKey, true, parkedImport);
   tabStore.setTabExternalStatus(actualKey, 'deleted');
   documentStore.setExternalStatus(actualKey, 'deleted');
 }
@@ -29,6 +29,7 @@ export function markOpenDocumentDeleted(docKey: string): void {
 export async function checkOpenDocumentStillExists(docKey: string, force = false): Promise<boolean> {
   const tab = useWindowStore.getState().getTab(docKey);
   if (!tab?.path || tab.key.startsWith('untitled:')) return true;
+  if (tab.isImportParked || useWindowStore.getState().isTransferring(docKey)) return !tab.isDetached;
   const now = Date.now();
   if (!force && now - (lastCheckedAt.get(docKey) ?? 0) < CHECK_THROTTLE_MS) {
     return !tab.isDetached;
@@ -39,6 +40,9 @@ export async function checkOpenDocumentStillExists(docKey: string, force = false
   lastCheckedAt.set(docKey, now);
   try {
     const state = await ipc.pathExists(tab.path);
+    const tabs = useWindowStore.getState();
+    const currentTab = tabs.getTab(docKey);
+    if (currentTab?.isImportParked || tabs.isTransferring(docKey)) return !currentTab?.isDetached;
     if (!state.exists || state.isDir) {
       markOpenDocumentDeleted(docKey);
       return false;

@@ -1,6 +1,6 @@
 import { normalizeDocumentEol } from '../../core/documentText';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
-import { readDocument } from '../../core/ipc/commands';
+import { readDiskText } from '../../core/files/readDiskText';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getSessionGeneration, isClosing } from '../session/documentSession';
@@ -45,8 +45,7 @@ export async function readExternalChangeComparison(
     return doc;
   }
 
-  currentDocument();
-  const disk = await readDocument(docKey, MAX_DISK_BYTES);
+  const disk = await readDiskText(docKey, currentDocument().encodingOverride, MAX_DISK_BYTES);
   const doc = currentDocument();
   if (disk.kind !== doc.kind || disk.content == null) throw new Error('无法读取磁盘文件的文本。');
   const diskText = comparisonText(disk.content);

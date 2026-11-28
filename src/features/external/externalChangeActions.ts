@@ -1,6 +1,7 @@
 // 外部修改冲突处理：重载读取磁盘，覆盖保存当前编辑内容。
 
-import * as ipc from '../../core/ipc/commands';
+import { expectedDiskFromPayload, readDiskText } from '../../core/files/readDiskText';
+import type { ExpectedDisk } from '../../core/ipc/types';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getDocumentRevision, getEditorCapabilities } from '../../core/editor/editorRegistry';
@@ -14,6 +15,7 @@ import { applyDocumentFromDisk } from './diskDocumentSnapshot';
 export async function reloadFromDisk(docKey: string): Promise<boolean> {
   const generation = getSessionGeneration(docKey);
   const revision = getDocumentRevision(docKey);
+  const eol = useDocumentStore.getState().getDocument(docKey)?.eol;
   const isCurrentConflict = () => getSessionGeneration(docKey) === generation
     && useDocumentStore.getState().getDocument(docKey)?.externalStatus === 'modified'
     && !isClosing(docKey) && !useWindowStore.getState().isTransferring(docKey);
@@ -21,9 +23,9 @@ export async function reloadFromDisk(docKey: string): Promise<boolean> {
   try {
     return await enqueueDocumentWrite(docKey, async () => {
       if (!isCurrentConflict()) return false;
-      const payload = await ipc.readDocument(docKey);
+      const payload = await readDiskText(docKey, useDocumentStore.getState().getDocument(docKey)?.encodingOverride);
       if (!isCurrentConflict()) return false;
-      if (getDocumentRevision(docKey) !== revision) {
+      if (getDocumentRevision(docKey) !== revision || useDocumentStore.getState().getDocument(docKey)?.eol !== eol) {
         showToast('读取期间有新的编辑，请再次选择重新加载。', 'warning');
         return false;
       }
@@ -32,7 +34,7 @@ export async function reloadFromDisk(docKey: string): Promise<boolean> {
         return false;
       }
       if (!applyDocumentFromDisk(docKey, payload)) throw new Error('无法应用磁盘内容。');
-      void discardStagedDocuments([docKey]).catch(error => console.warn('清理暂存失败:', error));
+      void discardStagedDocuments([docKey], { onlyCurrentEdit: true }).catch(error => console.warn('清理暂存失败:', error));
       showToast('已从磁盘重新加载', 'success');
       return true;
     });
@@ -67,15 +69,17 @@ export async function overwriteFromEditor(docKey: string): Promise<boolean> {
     }
 
     let expectedNativeHash: string | undefined;
+    let expectedDisk: ExpectedDisk | undefined;
     if (doc.kind === 'noteboard') {
       // 以用户确认覆盖时的磁盘版本为条件，保留原生保存对后续修改的保护。
-      const disk = await ipc.readDocument(docKey);
+      const disk = await readDiskText(docKey, doc.encodingOverride);
       if (disk.content == null) throw new Error('无法读取目标文档。');
+      expectedDisk = expectedDiskFromPayload(disk);
       const { documentTextHash } = await import('../../core/nativeDocumentIO');
       expectedNativeHash = await documentTextHash(disk.content);
     }
     if (!isCurrentConflict()) return false;
-    const ok = await writeDocumentWithBarrier(docKey, content, { expectedNativeHash });
+    const ok = await writeDocumentWithBarrier(docKey, content, { expectedNativeHash, expectedDisk, overwriteExternal: true, revision: captured?.revision });
     if (getSessionGeneration(docKey) !== generation) return false;
     if (!ok) {
       if (isCurrentConflict()) showToast('覆盖磁盘失败，冲突状态保留，可重试', 'error');

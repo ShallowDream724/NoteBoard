@@ -5,6 +5,7 @@ import type { DocumentPayload } from '../../core/ipc/types';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { getBaseline } from '../editor-md/serialize';
+import { noteDocumentPersistedRevision } from '../session/documentSession';
 import {
   initializeDocumentHistory,
   resetDocumentHistoryFromDisk,
@@ -12,7 +13,7 @@ import {
 } from '../history/documentHistory';
 
 /** The caller verifies the snapshot still belongs to this document session. */
-export function applyDocumentFromDisk(docKey: string, payload: DocumentPayload): boolean {
+export function applyDocumentFromDisk(docKey: string, payload: DocumentPayload, encodingOverride?: DocumentPayload['encoding']): boolean {
   const store = useDocumentStore.getState();
   const doc = store.getDocument(docKey);
   if (doc?.loadState !== 'loaded' || payload.content == null || payload.kind !== doc.kind) return false;
@@ -31,10 +32,10 @@ export function applyDocumentFromDisk(docKey: string, payload: DocumentPayload):
   }
 
   getBaseline(docKey).updateBaseline(payload.content);
-  store.acceptDiskContent(docKey, payload);
+  store.acceptDiskContent(docKey, payload, encodingOverride);
   tabs.setTabDirty(docKey, false);
   tabs.setTabExternalStatus(docKey, 'clean');
-  bumpDocumentRevision(docKey);
+  noteDocumentPersistedRevision(docKey, bumpDocumentRevision(docKey));
   emit('document-loaded', { key: docKey });
   return true;
 }

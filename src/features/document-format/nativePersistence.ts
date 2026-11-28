@@ -1,4 +1,5 @@
-import * as ipc from '../../core/ipc/commands';
+import { expectedDiskFromPayload, readDiskText } from '../../core/files/readDiskText';
+import { normalizeDocumentEol } from '../../core/documentText';
 import { readNativeMetadata, replaceNativeMetadata, type NativeMetadata } from '../../core/nativeDocument';
 import { documentTextHash, saveNativeBundle, type NativeSaveRequest, type NativeSaveResult } from '../../core/nativeDocumentIO';
 import type { Document } from '../../stores/documentStore';
@@ -15,18 +16,31 @@ export interface PreparedNativeSave {
   imageAssets?: { captured: string; prepared: PreparedImageSources };
 }
 
+type NativeSaveDocument = Pick<Document, 'key' | 'baselineContent' | 'persistedContent' | 'encoding' | 'eol'>;
+type NativeWriteFormat = Pick<NativeSaveRequest, 'eol' | 'expectedDisk' | 'expectedHash'>;
+
 /** A projection is produced only at an I/O boundary, never on an editor transaction. */
-export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineContent' | 'persistedContent'>, source: string, imageTarget = doc.key): Promise<PreparedNativeSave> {
+export async function prepareNativeSave(
+  doc: NativeSaveDocument, source: string, imageTarget = doc.key, format: NativeWriteFormat = {},
+): Promise<PreparedNativeSave> {
   const captured = source;
-  const assets = await prepareDocumentImageAssets(source, 'noteboard', imageTarget, imageTarget !== doc.key);
-  source = assets.content;
+  const formatOnly = imageTarget === doc.key && format.expectedDisk && !format.expectedHash && doc.persistedContent != null
+    && normalizeDocumentEol(source) === normalizeDocumentEol(doc.persistedContent);
+  const assets = formatOnly ? null : await prepareDocumentImageAssets(source, 'noteboard', imageTarget, imageTarget !== doc.key);
+  source = assets?.content ?? source;
   let metadata = readNativeMetadata(source);
-  const link = markdownLinkPath(doc.key, metadata);
   const request: NativeSaveRequest = {
     path: doc.key, content: source,
-    expectedHash: doc.persistedContent == null ? undefined : await documentTextHash(doc.persistedContent),
+    encoding: 'utf8',
+    eol: format.eol ?? doc.eol,
+    expectedHash: format.expectedHash ?? (doc.persistedContent == null ? undefined : await documentTextHash(doc.persistedContent)),
+    expectedDisk: format.expectedDisk,
+    expectedEncoding: format.expectedDisk?.encoding ?? (doc.persistedContent == null ? undefined : doc.encoding),
     createOnly: doc.persistedContent == null,
   };
+  // A byte-format conversion of an otherwise unchanged NB has no Markdown projection to save.
+  if (formatOnly) return { request, content: source, metadata };
+  const link = markdownLinkPath(doc.key, metadata);
   if (link && metadata.markdown) {
     if (useDocumentStore.getState().getDocument(link)) {
       const { flushDocument } = await import('../session/documentSession');
@@ -34,7 +48,7 @@ export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineCon
     }
     const linkedOpen = useDocumentStore.getState().getDocument(link);
     if (linkedOpen?.isDirty) throw new Error('关联 Markdown 有未保存的修改，请先保存或关闭它。');
-    const disk = await ipc.readDocument(link);
+    const disk = await readDiskText(link, linkedOpen?.encodingOverride);
     if (disk.content == null) throw new Error('无法读取关联 Markdown，未执行保存。');
     const baselineMetadata = doc.baselineContent == null ? metadata : readNativeMetadata(doc.baselineContent);
     const previous = markdownLinkPath(doc.key, baselineMetadata) === link ? baselineMetadata.markdown : metadata.markdown;
@@ -47,15 +61,17 @@ export async function prepareNativeSave(doc: Pick<Document, 'key' | 'baselineCon
     const directory = parentDirectory(doc.key) === parentDirectory(link) ? '' : parentDirectory(doc.key);
     const markdown = await prepareTextExport(source, 'md', directory, undefined, 'noteboard');
     metadata = { ...metadata, markdown: { ...metadata.markdown, baselineHash: await documentTextHash(markdown), projectionVersion: MARKDOWN_PROJECTION_VERSION } };
-    request.markdown = { path: link, content: markdown, expectedHash, encoding: disk.encoding, eol: disk.eol };
+    request.markdown = {
+      path: link, content: markdown, expectedHash, encoding: disk.encoding, eol: disk.eol,
+      expectedDisk: expectedDiskFromPayload(disk), expectedEncoding: disk.encoding,
+    };
     request.content = replaceNativeMetadata(source, metadata);
   }
-  return { request, content: request.content, metadata, ...(assets.references.length ? { imageAssets: { captured, prepared: assets } } : {}) };
+  return { request, content: request.content, metadata, ...(assets?.references.length ? { imageAssets: { captured, prepared: assets } } : {}) };
 }
 
-export async function persistNativeDocument(doc: Pick<Document, 'key' | 'baselineContent' | 'persistedContent'>, source: string, expectedNativeHash?: string): Promise<PreparedNativeSave & { result: NativeSaveResult }> {
-  const prepared = await prepareNativeSave(doc, source);
-  if (expectedNativeHash) prepared.request.expectedHash = expectedNativeHash;
+export async function persistNativeDocument(doc: NativeSaveDocument, source: string, format?: NativeWriteFormat): Promise<PreparedNativeSave & { result: NativeSaveResult }> {
+  const prepared = await prepareNativeSave(doc, source, doc.key, format);
   const result = await saveNativeBundle(prepared.request);
   return { ...prepared, result };
 }

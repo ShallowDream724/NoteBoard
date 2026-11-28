@@ -9,12 +9,10 @@
 .nb-status-metadata {
   display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; overflow: hidden;
 }
-.nb-status-metadata > * { flex-shrink: 0; }
-.nb-status-metadata > .nb-status-path {
-  min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis;
-  text-align: left; direction: rtl; padding-inline: 9px;
+.nb-status-details {
+  display: flex; align-items: center; justify-content: flex-end; min-width: 0; height: 100%;
 }
-.nb-status-path bdi { direction: ltr; }
+.nb-status-metadata > * { flex-shrink: 0; }
 .nb-status-field {
   display: inline-flex; flex: none; align-items: center; gap: 4px;
   padding: 0 9px; height: 100%; position: relative;

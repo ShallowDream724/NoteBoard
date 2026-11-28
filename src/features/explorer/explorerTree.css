@@ -41,3 +41,4 @@
 .nb-explorer-drop-feedback[hidden] { display:none; }
 .nb-explorer-drop-feedback[data-allowed="false"] { color:var(--editor-text-muted); }
 .nb-explorer-tree[data-dragging] { cursor:grabbing; }
+.nb-explorer-tree [data-explorer-cut] { opacity: .55; }

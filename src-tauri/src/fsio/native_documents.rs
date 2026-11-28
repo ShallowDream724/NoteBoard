@@ -1,6 +1,7 @@
 //! Recoverable native/Markdown saves. The journal contains metadata only; large
 //! data is streamed into same-volume staging files and application recovery files.
-use crate::dto::{Encoding, Eol};
+use super::{guarded_rename, text_codec, write};
+use crate::dto::{Encoding, Eol, ExpectedDisk};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -23,6 +24,10 @@ pub struct NativeBundleRequest {
     pub path: String,
     pub content: String,
     pub expected_hash: Option<String>,
+    pub expected_encoding: Option<Encoding>,
+    pub expected_disk: Option<ExpectedDisk>,
+    pub encoding: Option<Encoding>,
+    pub eol: Option<Eol>,
     #[serde(default)]
     pub create_only: bool,
     pub markdown: Option<MarkdownWrite>,
@@ -35,6 +40,8 @@ pub struct MarkdownWrite {
     pub path: String,
     pub content: String,
     pub expected_hash: Option<String>,
+    pub expected_encoding: Option<Encoding>,
+    pub expected_disk: Option<ExpectedDisk>,
     pub encoding: Option<Encoding>,
     pub eol: Option<Eol>,
 }
@@ -44,6 +51,7 @@ pub struct MarkdownWrite {
 pub struct MarkdownRemoval {
     pub path: String,
     pub expected_hash: Option<String>,
+    pub expected_encoding: Option<Encoding>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,6 +73,8 @@ pub struct SavedFile {
 pub struct NativeSaveError {
     pub code: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,14 +94,18 @@ impl NativeSaveError {
         Self {
             code: code.into(),
             message: message.into(),
+            path: None,
         }
     }
 
     fn conflict(path: &Path) -> Self {
-        Self::new(
+        let path = dunce::simplified(path).to_string_lossy();
+        let mut conflict = Self::new(
             "conflict",
-            format!("文件已被外部修改，请重新读取后再保存：{}", path.display()),
-        )
+            format!("文件已被外部修改，请重新读取后再保存：{path}"),
+        );
+        conflict.path = Some(path.into_owned());
+        conflict
     }
 }
 
@@ -139,9 +153,14 @@ pub async fn recover_native_commits() -> Result<Vec<RecoveryDiagnostic>, String>
     tauri::async_runtime::spawn_blocking(move || {
         ensure_recovered_before_read()?;
         let _guard = COMMITS.lock().map_err(|_| "恢复状态不可用".to_string())?;
-        let mut diagnostics = std::mem::take(&mut *STARTUP_DIAGNOSTICS.lock().map_err(|_| "恢复状态不可用".to_string())?);
+        let mut diagnostics = std::mem::take(
+            &mut *STARTUP_DIAGNOSTICS
+                .lock()
+                .map_err(|_| "恢复状态不可用".to_string())?,
+        );
         diagnostics.extend(recover_at(&recovery_root()).map_err(|error| error.message)?);
-        diagnostics.dedup_by(|left, right| left.path == right.path && left.message == right.message);
+        diagnostics
+            .dedup_by(|left, right| left.path == right.path && left.message == right.message);
         Ok(diagnostics)
     })
     .await
@@ -151,12 +170,16 @@ pub async fn recover_native_commits() -> Result<Vec<RecoveryDiagnostic>, String>
 /// Executed once on an I/O worker before any document is read. Subsequent reads
 /// only access the OnceLock; completed source-removal archives are never scanned.
 pub fn ensure_recovered_before_read() -> Result<(), String> {
-    INITIAL_RECOVERY.get_or_init(|| {
-        let _guard = COMMITS.lock().map_err(|_| "恢复状态不可用".to_string())?;
-        let diagnostics = recover_at(&recovery_root()).map_err(|error| error.message)?;
-        *STARTUP_DIAGNOSTICS.lock().map_err(|_| "恢复状态不可用".to_string())? = diagnostics;
-        Ok(())
-    }).clone()
+    INITIAL_RECOVERY
+        .get_or_init(|| {
+            let _guard = COMMITS.lock().map_err(|_| "恢复状态不可用".to_string())?;
+            let diagnostics = recover_at(&recovery_root()).map_err(|error| error.message)?;
+            *STARTUP_DIAGNOSTICS
+                .lock()
+                .map_err(|_| "恢复状态不可用".to_string())? = diagnostics;
+            Ok(())
+        })
+        .clone()
 }
 
 #[tauri::command]
@@ -197,7 +220,9 @@ fn read_header(path: &Path) -> io::Result<String> {
         let end = meta_start + b"@meta ".len() + start;
         let mut prefix = bytes[..end].to_vec();
         prefix.extend_from_slice(b"}\n");
-        if serde_json::from_slice::<serde_json::Value>(&prefix[meta_start + b"@meta ".len()..]).is_ok() {
+        if serde_json::from_slice::<serde_json::Value>(&prefix[meta_start + b"@meta ".len()..])
+            .is_ok()
+        {
             return Ok(String::from_utf8(prefix).unwrap_or_default());
         }
     }
@@ -262,6 +287,8 @@ struct Change<'a> {
     target: PathBuf,
     content: Option<&'a str>,
     expected: Option<&'a str>,
+    expected_encoding: Option<Encoding>,
+    expected_disk: Option<&'a ExpectedDisk>,
     create_only: bool,
     encoding: Encoding,
     eol: Eol,
@@ -284,6 +311,9 @@ fn save_bundle_inner(
     request: &NativeBundleRequest,
     fault: Fault,
 ) -> Result<(SavedFile, Option<SavedFile>), NativeSaveError> {
+    if request.encoding.is_some_and(|encoding| encoding != Encoding::Utf8) {
+        return Err(NativeSaveError::new("encoding", "NB 文档使用 UTF-8 编码保存。"));
+    }
     if request.markdown.is_some() && request.remove_markdown.is_some() {
         return Err(NativeSaveError::new(
             "invalid-request",
@@ -294,15 +324,19 @@ fn save_bundle_inner(
         target: checked_target(&request.path)?,
         content: Some(&request.content),
         expected: request.expected_hash.as_deref(),
+        expected_encoding: request.expected_encoding,
+        expected_disk: request.expected_disk.as_ref(),
         create_only: request.create_only,
         encoding: Encoding::Utf8,
-        eol: Eol::Lf,
+        eol: request.eol.unwrap_or(Eol::Lf),
     }];
     if let Some(markdown) = &request.markdown {
         changes.push(Change {
             target: checked_target(&markdown.path)?,
             content: Some(&markdown.content),
             expected: markdown.expected_hash.as_deref(),
+            expected_encoding: markdown.expected_encoding.or(markdown.encoding),
+            expected_disk: markdown.expected_disk.as_ref(),
             create_only: false,
             encoding: markdown.encoding.unwrap_or(Encoding::Utf8),
             eol: markdown.eol.unwrap_or(Eol::Lf),
@@ -313,6 +347,8 @@ fn save_bundle_inner(
             target: checked_target(&markdown.path)?,
             content: None,
             expected: markdown.expected_hash.as_deref(),
+            expected_encoding: markdown.expected_encoding,
+            expected_disk: None,
             create_only: false,
             encoding: Encoding::Utf8,
             eol: Eol::Lf,
@@ -432,8 +468,8 @@ fn prepare_entry(
     change: &Change<'_>,
 ) -> Result<Entry, NativeSaveError> {
     let before = stamp_optional(&change.target)?;
-    match (&before, change.expected) {
-        (Some(_), _) if change.create_only => {
+    match (&before, change.expected, change.expected_disk) {
+        (Some(_), _, _) if change.create_only => {
             return Err(NativeSaveError::new(
                 "already-exists",
                 format!(
@@ -442,7 +478,11 @@ fn prepare_entry(
                 ),
             ))
         }
-        (Some(_), None) => {
+        (Some(_), _, Some(expected_disk)) => {
+            write::check_expected_disk(&change.target, expected_disk)
+                .map_err(|_| NativeSaveError::conflict(&change.target))?;
+        }
+        (Some(_), None, None) => {
             return Err(NativeSaveError::new(
                 "conflict",
                 format!(
@@ -451,12 +491,22 @@ fn prepare_entry(
                 ),
             ))
         }
-        (None, Some(_)) => return Err(NativeSaveError::conflict(&change.target)),
-        (None, None) if change.content.is_none() => {
+        (None, Some(_), _) | (None, _, Some(_)) => {
             return Err(NativeSaveError::conflict(&change.target))
         }
-        (Some(_), Some(expected)) => {
-            if normalized_text_hash(&change.target)? != expected.to_ascii_lowercase() {
+        (None, None, None) if change.content.is_none() => {
+            return Err(NativeSaveError::conflict(&change.target))
+        }
+        (Some(_), Some(expected), None) => {
+            let disk_hash = normalized_text_hash(&change.target, change.expected_encoding)
+                .map_err(|error| {
+                    if error.kind() == io::ErrorKind::InvalidData {
+                        NativeSaveError::conflict(&change.target)
+                    } else {
+                        error.into()
+                    }
+                })?;
+            if disk_hash != expected.to_ascii_lowercase() {
                 return Err(NativeSaveError::conflict(&change.target));
             }
         }
@@ -571,9 +621,7 @@ fn persist_staged(staged: &Path, target: &Path, create_only: bool) -> Result<(),
             )
         })?;
     } else {
-        temporary
-            .persist(target)
-            .map_err(|error| NativeSaveError::from(error.error))?;
+        guarded_rename::persist_document(temporary, target)?;
     }
     Ok(())
 }
@@ -831,9 +879,7 @@ fn write_content(
     encoding: Encoding,
     eol: Eol,
 ) -> Result<(), NativeSaveError> {
-    if encoding == Encoding::Utf8Bom {
-        output.write_all(&[0xef, 0xbb, 0xbf])?;
-    }
+    output.write_all(encoding.bom())?;
     let mut buffer = String::with_capacity(16 * 1024);
     let mut chars = content.chars().peekable();
     while let Some(character) = chars.next() {
@@ -861,38 +907,29 @@ fn write_encoded(
     content: &str,
     encoding: Encoding,
 ) -> Result<(), NativeSaveError> {
-    if encoding == Encoding::Gbk {
-        let (bytes, _, errors) = encoding_rs::GBK.encode(content);
-        if errors {
-            return Err(NativeSaveError::new(
-                "encoding",
-                "内容包含 GBK 无法表示的字符，请先将 Markdown 编码改为 UTF-8",
-            ));
-        }
-        output.write_all(&bytes)?;
-    } else {
-        output.write_all(content.as_bytes())?;
-    }
+    let bytes = text_codec::encode_body(content, encoding).ok_or_else(|| {
+        NativeSaveError::new(
+            "encoding",
+            format!(
+                "{} 无法无损保存部分 Markdown 字符，请选择其他编码。",
+                encoding.label()
+            ),
+        )
+    })?;
+    output.write_all(&bytes)?;
     Ok(())
 }
 
-/// Matches read::decode_bytes followed by CRLF/CR normalization, without holding
-/// another full decoded file or raw byte buffer in memory.
-fn normalized_text_hash(path: &Path) -> io::Result<String> {
+/// Identify an unlabelled file without holding a full raw/decoded copy in memory.
+fn guess_hash_encoding(path: &Path) -> io::Result<&'static encoding_rs::Encoding> {
     let mut detector = chardetng::EncodingDetector::new();
     let mut utf8 = encoding_rs::UTF_8.new_decoder_without_bom_handling();
     let mut utf8_errors = false;
-    let mut first = true;
-    let mut bom = false;
     let mut input = [0u8; 32 * 1024];
     let mut output = [0u8; 64 * 1024];
     let mut file = File::open(path)?;
     loop {
         let count = file.read(&mut input)?;
-        if first {
-            bom = count >= 3 && input[..3] == [0xef, 0xbb, 0xbf];
-            first = false;
-        }
         detector.feed(&input[..count], count == 0);
         let mut offset = 0;
         loop {
@@ -908,7 +945,7 @@ fn normalized_text_hash(path: &Path) -> io::Result<String> {
             break;
         }
     }
-    let encoding = if bom || !utf8_errors {
+    Ok(if !utf8_errors {
         encoding_rs::UTF_8
     } else {
         let guessed = detector.guess(None, true);
@@ -917,20 +954,34 @@ fn normalized_text_hash(path: &Path) -> io::Result<String> {
         } else {
             guessed
         }
+    })
+}
+
+/// Hash decoded text with CRLF/CR normalization, streaming even when the file is large.
+fn normalized_text_hash(path: &Path, requested: Option<Encoding>) -> io::Result<String> {
+    let mut reader = BufReader::new(File::open(path)?);
+    let bom = text_codec::detect_bom(reader.fill_buf()?);
+    let encoding = match requested.or(bom) {
+        Some(encoding) => encoding.codec(),
+        None => guess_hash_encoding(path)?,
     };
-    let mut decoder = encoding.new_decoder_without_bom_handling();
-    let mut reader = File::open(path)?;
-    if bom {
-        reader.read_exact(&mut [0u8; 3])?;
+    if let Some(bom) = bom.filter(|bom| bom.codec() == encoding) {
+        reader.consume(bom.bom().len());
     }
+    let mut decoder = encoding.new_decoder_without_bom_handling();
+    let mut input = [0u8; 32 * 1024];
+    let mut output = [0u8; 64 * 1024];
     let mut hash = Sha256::new();
     let mut after_cr = false;
     loop {
         let count = reader.read(&mut input)?;
         let mut offset = 0;
         loop {
-            let (result, read, written, _) =
-                decoder.decode_to_utf8(&input[offset..count], &mut output, count == 0);
+            let (result, read, written) = decoder.decode_to_utf8_without_replacement(
+                &input[offset..count],
+                &mut output,
+                count == 0,
+            );
             offset += read;
             let bytes = &output[..written];
             let mut start = 0;
@@ -945,8 +996,15 @@ fn normalized_text_hash(path: &Path) -> io::Result<String> {
                 after_cr = byte == b'\r';
             }
             hash.update(&bytes[start..]);
-            if result == encoding_rs::CoderResult::InputEmpty {
-                break;
+            match result {
+                encoding_rs::DecoderResult::InputEmpty => break,
+                encoding_rs::DecoderResult::OutputFull => {}
+                encoding_rs::DecoderResult::Malformed(..) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "无法解码磁盘版本",
+                    ));
+                }
             }
         }
         if count == 0 {
@@ -969,11 +1027,17 @@ mod tests {
             path: native.to_string_lossy().into_owned(),
             content: "new native\r\n".into(),
             expected_hash: Some(hash("old native\n")),
+            expected_encoding: None,
+            expected_disk: None,
+            encoding: None,
+            eol: None,
             create_only: false,
             markdown: Some(MarkdownWrite {
                 path: markdown.to_string_lossy().into_owned(),
                 content: "new markdown\n".into(),
                 expected_hash: Some(hash("old markdown\n")),
+                expected_encoding: None,
+                expected_disk: None,
                 encoding: Some(Encoding::Utf8Bom),
                 eol: Some(Eol::Crlf),
             }),
@@ -1003,6 +1067,84 @@ mod tests {
         );
         assert!(result.native.is_some() && result.markdown.is_some());
         assert_eq!(fs::read_dir(recovery).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn linked_markdown_uses_its_encoding_for_baseline_checks_and_writes() {
+        let (_directory, native, markdown, recovery) = fixture();
+        fs::write(&markdown, b"caf\xe9\r\n").unwrap();
+        let mut save = request(&native, &markdown);
+        let projection = save.markdown.as_mut().unwrap();
+        projection.encoding = Some(Encoding::Windows1252);
+        projection.expected_hash = Some(hash("café\n"));
+        projection.content = "crème\n".into();
+        let result = save_bundle_at(&recovery, save, Fault::None);
+        assert!(result.ok, "{:?}", result.error);
+        assert_eq!(fs::read(&markdown).unwrap(), b"cr\xe8me\r\n");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_bundle_commit_preserves_the_original_document_move_guard() {
+        let (_directory, native, markdown, recovery) = fixture();
+        let moved = native.with_file_name("moved.nb");
+        let original = guarded_rename::rename_document(&native, &moved, None)
+            .unwrap()
+            .unwrap();
+        let result = save_bundle_at(&recovery, request(&moved, &markdown), Fault::None);
+        assert!(result.ok, "{:?}", result.error);
+        assert_ne!(guarded_rename::identity(&moved).as_deref(), Some(original.as_str()));
+        guarded_rename::rename_document(&moved, &native, Some(&original)).unwrap();
+        assert_eq!(fs::read_to_string(&native).unwrap(), "new native\n");
+    }
+
+    #[test]
+    fn native_crlf_write_recovers_legacy_input_and_preserves_json_records() {
+        let (_directory, native, markdown, recovery) = fixture();
+        let metadata = r#"@meta {"unknown":{"value":"café"}}"#;
+        let block = r#"@block {"type":"paragraph","content":[{"type":"text","text":"café\nnew line"}]}"#;
+        let before = format!("#!noteboard 1\n{metadata}\n{block}\n");
+        let legacy = text_codec::encode_body(&before, Encoding::Windows1252).unwrap();
+        fs::write(&native, legacy).unwrap();
+
+        let mut save = request(&native, &markdown);
+        save.content = before.clone();
+        save.expected_hash = Some(hash(&before));
+        save.expected_encoding = Some(Encoding::Windows1252);
+        save.encoding = Some(Encoding::Utf8);
+        save.eol = Some(Eol::Crlf);
+        let result = save_bundle_at(&recovery, save, Fault::None);
+        assert!(result.ok, "{:?}", result.error);
+        assert_eq!(fs::read_to_string(&native).unwrap(), before.replace('\n', "\r\n"));
+        assert!(read_header(&native).unwrap().contains(metadata));
+        assert_eq!(fs::read(&markdown).unwrap(), b"\xef\xbb\xbfnew markdown\r\n");
+    }
+
+    #[test]
+    fn native_format_save_rejects_an_unexpected_disk_snapshot_and_non_utf8_output() {
+        let (_directory, native, markdown, recovery) = fixture();
+        let mut save = request(&native, &markdown);
+        save.encoding = Some(Encoding::Utf16Le);
+        let result = save_bundle_at(&recovery, save, Fault::None);
+        assert_eq!(result.error.unwrap().code, "encoding");
+        assert_eq!(fs::read(&native).unwrap(), b"old native\n");
+        assert_eq!(fs::read(&markdown).unwrap(), b"old markdown\r\n");
+
+        let disk = super::super::read::read_file(&native).unwrap();
+        let mut save = request(&native, &markdown);
+        save.eol = Some(Eol::Crlf);
+        save.expected_disk = Some(ExpectedDisk {
+            mtime: disk.mtime,
+            size: disk.size,
+            encoding: disk.encoding,
+            content: "old native\r".into(),
+        });
+        let result = save_bundle_at(&recovery, save, Fault::None);
+        let error = result.error.unwrap();
+        assert_eq!(error.code, "conflict");
+        assert_eq!(path_key(Path::new(error.path.as_deref().unwrap())), path_key(&native));
+        assert_eq!(fs::read(&native).unwrap(), b"old native\n");
+        assert_eq!(fs::read(&markdown).unwrap(), b"old markdown\r\n");
     }
 
     #[test]
@@ -1105,6 +1247,7 @@ mod tests {
             save.remove_markdown = Some(MarkdownRemoval {
                 path: markdown.to_string_lossy().into_owned(),
                 expected_hash: Some(hash("old markdown\n")),
+                expected_encoding: None,
             });
             save
         };
@@ -1131,7 +1274,13 @@ mod tests {
     fn hash_matches_reader_for_encodings_and_chunk_boundary_line_endings() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("document.md");
-        for encoding in [Encoding::Utf8, Encoding::Utf8Bom, Encoding::Gbk] {
+        for encoding in [
+            Encoding::Utf8,
+            Encoding::Utf8Bom,
+            Encoding::Gbk,
+            Encoding::Utf16Le,
+            Encoding::Utf16Be,
+        ] {
             let mut file = File::create(&path).unwrap();
             let content = format!("{}\r\n中文\r尾部\n", "x".repeat(32767));
             write_content(&mut file, &content, encoding, Eol::Crlf).unwrap();
@@ -1141,7 +1290,7 @@ mod tests {
                 .content
                 .replace("\r\n", "\n")
                 .replace('\r', "\n");
-            assert_eq!(normalized_text_hash(&path).unwrap(), hash(&decoded));
+            assert_eq!(normalized_text_hash(&path, None).unwrap(), hash(&decoded));
         }
     }
 

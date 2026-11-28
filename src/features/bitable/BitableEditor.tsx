@@ -43,11 +43,16 @@ import { useWindowStore } from '../../stores/windowStore';
 import { showToast } from '../../stores/toastStore';
 import { exportBlobWithDialog } from '../export/chartExport';
 import {
+  captureDocumentHistoryInput,
   initializeDocumentHistory,
+  notifyDocumentHistoryPendingInput,
   registerDocumentHistoryAdapter,
+  registerDocumentHistoryPendingInput,
+  registerHistoryMaterializeHook,
   recordDocumentChange,
   undoDocumentHistory,
   redoDocumentHistory,
+  type DocumentHistoryInput,
 } from '../history/documentHistory';
 // 🔴 S12：回收接入——能力注册表（flush/canSuspend/视图捕获）与挂载恢复
 import {
@@ -153,25 +158,28 @@ export function BitableEditor({ docKey }: BitableEditorProps) {
   }, [docKey]);
 
   // 待写入历史的快照：同一次交互内的多次提交合并为一条撤销记录
-  const pendingHistoryRef = useRef<{ timer: number | null; content: string | null }>({
+  const pendingHistoryRef = useRef<{ timer: number | null; edit: { content: string; input: DocumentHistoryInput } | null }>({
     timer: null,
-    content: null,
+    edit: null,
   });
 
-  // 组件卸载前冲刷未落库的历史记录
-  useEffect(() => {
+  const flushHistory = useCallback(() => {
     const pending = pendingHistoryRef.current;
-    return () => {
-      if (pending.timer !== null) {
-        window.clearTimeout(pending.timer);
-        pending.timer = null;
-      }
-      if (pending.content !== null) {
-        recordDocumentChange(docKey, pending.content, { mode: 'bitable', startsNewGroup: true });
-        pending.content = null;
-      }
-    };
+    if (pending.timer !== null) window.clearTimeout(pending.timer);
+    pending.timer = null;
+    const edit = pending.edit;
+    pending.edit = null;
+    if (!edit) return;
+    recordDocumentChange(docKey, edit.content, { mode: 'bitable', startsNewGroup: true, input: edit.input });
+    notifyDocumentHistoryPendingInput(docKey);
   }, [docKey]);
+
+  useEffect(() => {
+    const getOrder = () => pendingHistoryRef.current.edit?.input.order;
+    const releasePending = registerDocumentHistoryPendingInput(docKey, () => getOrder() !== undefined, getOrder);
+    const releaseHook = registerHistoryMaterializeHook(key => { if (key === docKey) flushHistory(); });
+    return () => { flushHistory(); releaseHook(); releasePending(); };
+  }, [docKey, flushHistory]);
 
   // 3. 提交数据变更并记录到文档历史
   // 支持函数式更新：无论同批次内调用多少次，每次都能基于最新文档继续叠加
@@ -187,25 +195,24 @@ export function BitableEditor({ docKey }: BitableEditorProps) {
       bumpDocumentRevision(docKey);
 
       const serialized = serializeBitableDocument(nextDoc);
+      const lastContent = useDocumentStore.getState().getDocument(docKey)?.content;
+      const input = serialized !== lastContent ? captureDocumentHistoryInput(docKey) : undefined;
+      if (input?.splitGroup) flushHistory();
       setContent(docKey, serialized);
       setDirty(docKey, true);
       setTabDirty(docKey, true);
 
       // 延迟到本轮事件结束再记录历史：把一次交互产生的多步提交合并为单条撤销记录
+      if (!input) return;
       const pending = pendingHistoryRef.current;
-      pending.content = serialized;
+      const hadPending = pending.edit !== null;
+      pending.edit = { content: serialized, input };
+      if (!hadPending) notifyDocumentHistoryPendingInput(docKey);
       if (pending.timer === null) {
-        pending.timer = window.setTimeout(() => {
-          pending.timer = null;
-          const content = pending.content;
-          pending.content = null;
-          if (content !== null) {
-            recordDocumentChange(docKey, content, { mode: 'bitable', startsNewGroup: true });
-          }
-        }, 0);
+        pending.timer = window.setTimeout(flushHistory, 0);
       }
     },
-    [docKey, setContent, setDirty, setTabDirty],
+    [docKey, flushHistory, setContent, setDirty, setTabDirty],
   );
 
   // ── 🔴 S12：回收接入——能力注册表 + 挂载恢复 ──

@@ -40,6 +40,7 @@ vi.mock('@codemirror/view', async importOriginal => {
       for (const listener of this.state.facet(actual.EditorView.updateListener)) listener(update);
     }
     focus() {}
+    plugin() { return null; }
     requestMeasure() {}
     destroy() {}
   }
@@ -52,7 +53,7 @@ vi.mock('@/features/editor-code/textAnalysisLifecycle', () => ({
 vi.mock('@/features/editor-code/languages', () => ({ loadLanguageExtension: async () => [] }));
 vi.mock('@/features/editor-code/lint', () => ({ getLinterForLanguage: () => null }));
 vi.mock('@/features/staging/stagingManager', () => ({
-  discardStagedDocuments: vi.fn().mockResolvedValue(undefined), releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn(),
+  discardStagedDocuments: vi.fn(async () => undefined), releaseStagedDocument: vi.fn(), onDocumentSaved: vi.fn(),
 }));
 vi.mock('@/features/explorer/directoryWatcher', () => ({ noteSelfWrite: vi.fn() }));
 vi.mock('@/core/ipc/commands', () => ({
@@ -106,6 +107,30 @@ afterEach(async () => {
 });
 
 describe('code immutable input snapshots', () => {
+  it('applies indentation conversion as one undo step after pending typing and retains file settings after remount', async () => {
+    const key = 'C:/test/indentation.txt';
+    seed(key, 'first\n\tsecond');
+    const { view, close } = await mount(key);
+    await act(async () => useDocumentStore.getState().setIndentation(key, { tabSize: 4 }));
+    expect(view.state.tabSize).toBe(4);
+    await type(view, ' line');
+
+    const ops = getEditorCapabilities(key)?.codeOps?.indentation;
+    await act(async () => { expect(await ops?.convert(true)).toBe('changed'); });
+    expect(view.state.doc.toString()).toBe('first\n    second line');
+    await act(async () => { expect(undoDocumentHistory(key)).toBe(true); });
+    expect(view.state.doc.toString()).toBe('first\n\tsecond line');
+    await act(async () => { expect(undoDocumentHistory(key)).toBe(true); });
+    expect(view.state.doc.toString()).toBe('first\n\tsecond');
+    await act(async () => { expect(redoDocumentHistory(key)).toBe(true); });
+    await act(async () => { expect(redoDocumentHistory(key)).toBe(true); });
+    expect(view.state.doc.toString()).toBe('first\n    second line');
+
+    await close();
+    const reopened = await mount(key);
+    expect(reopened.view.state.tabSize).toBe(4);
+  });
+
   it('compares with pending edits intact and applies the disk text only on reload', async () => {
     const key = 'C:/test/conflict.txt';
     const documents = useDocumentStore.getState();

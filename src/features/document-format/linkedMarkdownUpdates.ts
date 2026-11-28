@@ -1,4 +1,4 @@
-import * as ipc from '../../core/ipc/commands';
+import { readDiskText } from '../../core/files/readDiskText';
 import { readNativeMetadata, replaceNativeMetadata } from '../../core/nativeDocument';
 import { on, off } from '../../core/emitter';
 import { documentTextHash } from '../../core/nativeDocumentIO';
@@ -137,7 +137,7 @@ async function check(key: string, signal: AbortSignal): Promise<void> {
     if (!signal.aborted && stillCurrent(key, generation, baselineSource, link.path)) publish(key, { nativeKey: key, markdownPath: link.path, reason, message, externalHash, blockPath });
   };
   try {
-    const disk = await ipc.readDocument(link.path);
+    const disk = await readDiskText(link.path, useDocumentStore.getState().getDocument(link.path)?.encodingOverride);
     if (disk.content == null) throw new Error('关联 Markdown 没有可读取的正文。');
     externalHash = await documentTextHash(disk.content);
     signal.throwIfAborted();
@@ -210,7 +210,7 @@ export async function acceptLinkedMarkdownOverwrite(nativeKey: string): Promise<
     return false;
   }
   try {
-    const disk = await ipc.readDocument(link.path);
+    const disk = await readDiskText(link.path, useDocumentStore.getState().getDocument(link.path)?.encodingOverride);
     if (disk.content == null) throw new Error('无法读取关联 Markdown。');
     const hash = await documentTextHash(disk.content);
     if (!stillCurrent(nativeKey, generation, doc.baselineContent, link.path)) return false;

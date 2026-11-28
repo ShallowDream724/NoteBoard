@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { FileTreeNode } from '@/core/ipc/types';
 import { Explorer } from '@/features/explorer/Explorer';
 import { useExplorerStore } from '@/features/explorer/explorerStore';
+import { latestExplorerUndoOrder } from '@/features/explorer/explorerMoveHistory';
 import { invalidateMarkdownAssociations, recordNativeAssociation } from '@/features/document-format/markdownAssociationIndex';
 import { refreshExplorer } from '@/features/explorer/explorerActions';
 import { TooltipProvider } from '@/components/Tooltip';
@@ -29,7 +30,7 @@ beforeEach(async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   for (const name of scrollMethods) Object.defineProperty(Element.prototype, name, { configurable: true, value: vi.fn() });
   invalidateMarkdownAssociations(); useExplorerStore.getState().clear();
-  io.open.mockReset().mockResolvedValue(undefined); io.rename.mockReset().mockResolvedValue(undefined);
+  io.open.mockReset().mockResolvedValue(undefined); io.rename.mockReset().mockResolvedValue('entry-identity');
   io.readDir.mockReset().mockResolvedValue([nb, md, alternate]); io.headers.mockReset().mockResolvedValue([{ path: nb.path, header: source }]);
   recordNativeAssociation(nb.path, source); useExplorerStore.getState().setRoot(directory, [nb, md, alternate]);
   const host = document.createElement('div'); document.body.append(host); root = createRoot(host);
@@ -112,7 +113,8 @@ it('renames a nested Markdown at its actual filesystem parent, retaining the nor
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await act(async () => key(input, 'Enter'));
-  expect(io.rename).toHaveBeenCalledWith(md.path, renamed.path, false);
+  expect(io.rename).toHaveBeenCalledWith(md.path, renamed.path, false, {});
+  expect(latestExplorerUndoOrder()).toBeDefined();
   expect(rows().map(element => element.dataset.explorerRow)).toContain(renamed.path);
 });
 

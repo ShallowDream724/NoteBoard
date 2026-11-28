@@ -1,0 +1,7 @@
+.nb-image-status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 100%;
+  white-space: nowrap;
+}

@@ -59,6 +59,7 @@ fn collect_workspace_files(
             let name = entry.file_name();
             if name.eq_ignore_ascii_case(".git")
                 || (!show_hidden && name.to_string_lossy().starts_with('.'))
+                || super::import_history::is_live_stash(&entry.path())
             {
                 continue;
             }

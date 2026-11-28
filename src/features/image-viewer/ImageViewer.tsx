@@ -2,7 +2,7 @@
 // 支持常见及特殊图片格式：PNG, JPG, JPEG, SVG, BMP, GIF, WEBP, ICO 等
 // 功能：平移拖拽、无级缩放（自适应/1:1/自定义）、旋转/翻转、棋盘网格背景切换、元数据展示及快捷操作
 
-import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 // 🔴 S11：回收视图状态存取与能力注册
 import { takeViewState } from '../session/editorSuspension';
 import { registerEditorCapabilities } from '../../core/editor/editorRegistry';
@@ -30,12 +30,12 @@ import { extFromPath } from '../../core/docKind';
 import { showToast } from '../../stores/toastStore';
 import { Tooltip } from '../../components/Tooltip';
 import { scaleImageAt, useImageWheelGesture } from './imageWheelGesture';
-import { formatFileSize } from '../../core/formatFileSize';
 import { on, off } from '../../core/emitter';
 import { sameKey } from '../explorer/pathUtils';
 import { applyImageTransform, imageTransformCss, type ImageTransform } from '../image/sharedTransform';
 import { copyImageSource } from '../image/imageClipboard';
 import { getFileFormat } from '../../core/fileFormats';
+import { ImageStatus, type ImageSize } from './ImageStatusSlot';
 import type { SvgSourceViewerHandle } from './SvgSourceViewer';
 
 const SvgSourceViewer = lazy(() => import('./SvgSourceViewer').then(module => ({ default: module.SvgSourceViewer })));
@@ -44,28 +44,13 @@ interface ImageViewerProps {
   docKey: string;
   filePath: string;
   fileName?: string;
-  fileSize?: number;
 }
 
 type BgMode = 'grid' | 'dark' | 'light' | 'black';
 
-/** 计算最大公约数以得出宽高比 */
-function getAspectRatio(w: number, h: number): string {
-  if (!w || !h) return '';
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const r = gcd(w, h);
-  const rw = w / r;
-  const rh = h / r;
-  // 如果比例数字过大，显示近似浮点
-  if (rw > 30 || rh > 30) {
-    return (w / h).toFixed(2) + ':1';
-  }
-  return `${rw}:${rh}`;
-}
-
-export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewerProps) {
+export function ImageViewer({ docKey, filePath, fileName }: ImageViewerProps) {
   const name = fileName || filePath.split(/[\\/]/).pop() || filePath;
-  const ext = extFromPath(filePath).toUpperCase() || 'IMAGE';
+  const format = extFromPath(filePath).toUpperCase() || '图片';
   const isSvg = getFileFormat(filePath).preview === 'svg';
   const [sourceFilePath, setSourceFilePath] = useState<string | null>(null);
   const showSource = isSvg && sourceFilePath === filePath;
@@ -75,27 +60,27 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   useEffect(() => { editorOpenEpoch.current++; return () => { editorOpenEpoch.current++; }; }, [docKey, filePath]);
 
   // 将本地路径转换为 asset: / webview 协议 URL
-  const [imgSrc, setImgSrc] = useState<string>('');
-  useEffect(() => {
+  const fileSrc = useMemo(() => {
     try {
-      const url = convertFileSrc(filePath);
-      setImgSrc(url);
+      return convertFileSrc(filePath);
     } catch {
-      // 降级为原生路径
-      setImgSrc(filePath);
+      return filePath;
     }
   }, [filePath]);
+  const [restoredSource, setRestoredSource] = useState<{ filePath: string; revision: number }>();
+  const imgSrc = restoredSource?.filePath === filePath ? `${fileSrc}?edited=${restoredSource.revision}` : fileSrc;
   useEffect(() => {
     const restored = ({ path }: { path: string }) => {
-      if (sameKey(path, filePath)) { setLoadError(false); setImgSrc(`${convertFileSrc(filePath)}?edited=${Date.now()}`); }
+      if (sameKey(path, filePath)) setRestoredSource({ filePath, revision: Date.now() });
     };
     on('image-file-restored', restored);
     return () => off('image-file-restored', restored);
   }, [filePath]);
 
-  // 图像元数据
-  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadResult, setLoadResult] = useState<{ src: string; size: ImageSize | null }>();
+  const currentLoad = loadResult?.src === imgSrc ? loadResult : undefined;
+  const naturalSize = currentLoad?.size ?? null;
+  const loadError = currentLoad?.size === null;
   const [copied, setCopied] = useState(false);
   const copyInFlightRef = useRef(false);
 
@@ -201,8 +186,7 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
   // 当图片首次加载完成时
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const { naturalWidth, naturalHeight } = e.currentTarget;
-    setNaturalSize({ width: naturalWidth, height: naturalHeight });
-    setLoadError(false);
+    setLoadResult({ src: imgSrc, size: { width: naturalWidth, height: naturalHeight } });
 
     // 初始自适应窗口
     if (containerRef.current && !restoredViewRef.current) {
@@ -604,12 +588,13 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
         ) : (
           /* 禁用 Referer 携带，防止外部或远程图片被防盗链拦截 */
           <img
+            key={imgSrc}
             data-image-preview-transform=""
             src={imgSrc || undefined}
             alt={name}
             referrerPolicy="no-referrer"
             onLoad={handleImageLoad}
-            onError={() => setLoadError(true)}
+            onError={() => setLoadResult({ src: imgSrc, size: null })}
             draggable={false}
             style={{
               transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale}) ${imageTransformCss(transform)}`,
@@ -620,80 +605,20 @@ export function ImageViewer({ docKey, filePath, fileName, fileSize }: ImageViewe
               boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
               borderRadius: 2,
               pointerEvents: 'none', // 确保鼠标事件穿透由容器捕获处理
-              // 动图、ico 与位图渲染优化
-              imageRendering: ext === 'ICO' ? 'auto' : 'auto',
             }}
           />
         )}
       </div>
 
       {showSource && (
-        <div style={{ position: 'absolute', inset: '0 0 28px', paddingTop: 56, background: 'var(--editor-bg)', zIndex: 15 }}>
+        <div style={{ position: 'absolute', inset: 0, paddingTop: 56, background: 'var(--editor-bg)', zIndex: 15 }}>
           <Suspense fallback={<div role="status" style={{ padding: 20, color: 'var(--editor-text-muted)' }}>正在加载 SVG 源码…</div>}>
             <SvgSourceViewer filePath={filePath} viewerRef={sourceViewerRef} />
           </Suspense>
         </div>
       )}
 
-      {/* 底部优雅信息条 */}
-      <div
-        style={{
-          height: 28,
-          background: 'var(--statusbar-bg, var(--editor-surface))',
-          borderTop: '1px solid var(--editor-border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 12px',
-          fontSize: 11,
-          color: 'var(--editor-text-secondary)',
-          zIndex: 10,
-          fontFamily: 'var(--mono-font-family, monospace)',
-        }}
-      >
-        {/* 左侧：格式标签与文件名 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            style={{
-              padding: '1px 6px',
-              borderRadius: 4,
-              background: 'var(--editor-accent, #3b82f6)',
-              color: '#ffffff',
-              fontWeight: 600,
-              fontSize: 10,
-              letterSpacing: '0.5px',
-            }}
-          >
-            {ext}
-          </span>
-          <Tooltip content={name} side="top" sideOffset={4}>
-            <span
-              style={{
-                maxWidth: 240,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {name}
-            </span>
-          </Tooltip>
-        </div>
-
-        {/* 右侧：分辨率、宽高比、大小与缩放率 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          {naturalSize && (
-            <>
-              <span>
-                {naturalSize.width} × {naturalSize.height} px
-              </span>
-              <span>{getAspectRatio(naturalSize.width, naturalSize.height)}</span>
-            </>
-          )}
-          {fileSize !== undefined && fileSize > 0 && <span>{formatFileSize(fileSize)}</span>}
-          <span>{Math.round(scale * 100)}%</span>
-        </div>
-      </div>
+      <ImageStatus documentKey={docKey} size={naturalSize} scale={scale} format={format} />
     </div>
   );
 }

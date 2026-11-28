@@ -17,7 +17,7 @@ export function MissingFileDialog() {
   const document = useDocumentStore((state) => (activeKey ? state.documents.get(activeKey) : undefined));
   const [saving, setSaving] = useState(false);
 
-  if (!activeKey || !activeTab?.isDetached || !document) return null;
+  if (!activeKey || !activeTab?.isDetached || activeTab.isImportParked || !document) return null;
   const canSaveAs = isEditable(document.kind);
 
   /** 从编辑器抓取最新内存内容后另存，成功时 saveAs 会迁移标签与文档 key。 */

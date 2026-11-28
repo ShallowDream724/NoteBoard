@@ -142,6 +142,7 @@
       "markdown",
       "source",
       "code",
+      "explorer",
       "diagram",
       "mindmap"
     ],
@@ -157,6 +158,7 @@
       "markdown",
       "source",
       "code",
+      "explorer",
       "diagram",
       "mindmap"
     ],
@@ -459,6 +461,27 @@
     "defaults": [
       "F2"
     ]
+  },
+  {
+    "id": "explorer.copyFiles",
+    "label": "复制文件或文件夹",
+    "group": "资源管理器",
+    "contexts": ["explorer"],
+    "defaults": ["Ctrl+C"]
+  },
+  {
+    "id": "explorer.cutFiles",
+    "label": "剪切文件或文件夹",
+    "group": "资源管理器",
+    "contexts": ["explorer"],
+    "defaults": ["Ctrl+X"]
+  },
+  {
+    "id": "explorer.pasteFiles",
+    "label": "粘贴文件或文件夹",
+    "group": "资源管理器",
+    "contexts": ["explorer"],
+    "defaults": ["Ctrl+V"]
   },
   {
     "id": "code.syntaxLeft",

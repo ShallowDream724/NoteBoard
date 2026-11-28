@@ -396,7 +396,7 @@ pub fn focus_window(app: tauri::AppHandle, label: String) -> Result<(), String> 
 /// 3. 所有窗口平等独立：若还有其他存活窗口，仅关闭本窗口；若为最后一个窗口，关闭后退出应用
 /// 🔴 若存在待分配打开请求（orphan），最后窗口退出前先建新窗口承接，避免 app.exit(0) 丢请求
 #[tauri::command]
-pub fn close_window(
+pub async fn close_window(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
     label: String,
@@ -455,6 +455,11 @@ pub fn close_window(
     }
 
     // 4. 正常退出：关闭并优雅退出应用
+    // The last window exits the process directly. Dispatch file recycling on
+    // the blocking pool and let it complete before that final exit.
+    if let Some(cleanup) = crate::fsio::import_history::release_window(&label) {
+        let _ = cleanup.await;
+    }
     if let Some(win) = app.get_webview_window(&label) {
         let _ = win.hide();
         let _ = win.close();
@@ -508,7 +513,9 @@ mod tests {
                     kind: Some(DocumentKind::Markdown),
                     language: None,
                     encoding: None,
+                    encoding_override: None,
                     eol: None,
+                    persisted_eol: None,
                     readonly: false,
                     mtime: 0,
                     size: 0,
@@ -700,7 +707,9 @@ mod tests {
                     kind: Some(DocumentKind::Markdown),
                     language: None,
                     encoding: None,
+                    encoding_override: None,
                     eol: None,
+                    persisted_eol: None,
                     readonly: false,
                     mtime: 0,
                     size: 0,

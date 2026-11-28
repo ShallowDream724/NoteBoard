@@ -60,8 +60,10 @@ import {
   getCurrentDocumentHistoryContent,
   initializeDocumentHistory,
   markDocumentHistoryModeBoundary,
+  captureDocumentHistoryInput,
   redoDocumentHistory,
   registerDocumentHistoryAdapter,
+  registerDocumentHistoryPendingInput,
   registerHistoryMaterializeHook,
   undoDocumentHistory,
 } from '../history/documentHistory';
@@ -74,6 +76,7 @@ import {
   flushPendingVisualSnapshot,
   discardPendingVisualSnapshot,
   flushPendingSourceSnapshot,
+  getPendingMarkdownHistoryOrder,
   hasPendingSourceSnapshot,
   stagePendingSourceSnapshot,
   discardPendingSourceSnapshot,
@@ -255,8 +258,11 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
   // 🔴 J2：注册 source 快照的历史导航/读取前物化钩子（visual 钩子由 VisualKernel 注册；
   //    undo/redo/getCurrent/模式同步/迁移导出先物化两种暂存——各自无暂存时 no-op）
   useEffect(() => {
-    return registerHistoryMaterializeHook(flushPendingSourceSnapshot);
-  }, []);
+    const pendingOrder = () => getPendingMarkdownHistoryOrder(docKey);
+    const releasePending = registerDocumentHistoryPendingInput(docKey, () => pendingOrder() !== undefined, pendingOrder);
+    const releaseHook = registerHistoryMaterializeHook(key => { if (key === docKey) flushPendingSourceSnapshot(key); });
+    return () => { releasePending(); releaseHook(); };
+  }, [docKey]);
 
   // 模式变化仅刷新引用，不重新注册卸载清理，避免切换模式时误销毁源码历史栈
   useEffect(() => {
@@ -416,7 +422,8 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
       // 🔴 J2：source 热路径只暂存不可变 Text 引用（O(1)）——
       //    每键 toString() 全文工作被消除；序列化按历史组延迟执行
-      const startsNewGroup = codeMirrorUndoDepth(update.state) > codeMirrorUndoDepth(update.startState);
+      const input = captureDocumentHistoryInput(docKey);
+      const startsNewGroup = input.splitGroup || codeMirrorUndoDepth(update.state) > codeMirrorUndoDepth(update.startState);
       if (startsNewGroup && hasPendingSourceSnapshot(docKey)) {
         // 新组开始：物化上一组末端（跨组保留，不因延迟把多组丢成一组）
         flushPendingSourceSnapshot(docKey);
@@ -427,6 +434,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         materialize: sourceDocumentAdapter(update.view)?.materialize,
         styles: readSourceStyles(update.state),
         revision: getDocumentRevision(docKey),
+        input,
         isNewGroup: startsNewGroup,
         groupStartBefore: startsNewGroup || !previousPendingExisted
           ? {

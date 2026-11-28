@@ -3,17 +3,19 @@ import { bindExplorerDrop, explorerMoveDestination } from '@/features/explorer/e
 import { useExplorerStore } from '@/features/explorer/explorerStore';
 import { routeNativeFileDrop } from '@/core/editor/fileDropTargets';
 import { renameOpenPath } from '@/features/explorer/renameOpenPath';
-import { copyPathIntoDirectory } from '@/core/ipc/commands';
+import { copyPathIntoDirectoryWithReceipt } from '@/core/ipc/commands';
 import { refreshExplorerDirectory } from '@/features/explorer/explorerActions';
 import { useToastStore } from '@/stores/toastStore';
-vi.mock('@/features/explorer/renameOpenPath',()=>({renameOpenPath:vi.fn(async()=>{})}));
+import { hasExplorerMoveUndo, undoExplorerMove } from '@/features/explorer/explorerMoveHistory';
+vi.mock('@/features/explorer/renameOpenPath',()=>({renameOpenPath:vi.fn(async()=> 'entry-identity')}));
 vi.mock('@/features/explorer/explorerActions',()=>({readExplorerDirectory:vi.fn(async()=>[]),refreshExplorerDirectory:vi.fn(async()=>{})}));
-vi.mock('@/core/ipc/commands',()=>({copyPathIntoDirectory:vi.fn(async()=> 'C:\\work\\folder\\a.md')}));
+vi.mock('@/core/ipc/commands',()=>({copyPathIntoDirectoryWithReceipt:vi.fn(async()=> ({ path: 'C:\\work\\folder\\a.md', receipt: 'import-id' }))}));
 const stops:(()=>void)[]=[];
 afterEach(()=>{stops.splice(0).forEach(stop=>stop());document.body.replaceChildren();vi.useRealTimers();vi.restoreAllMocks();vi.clearAllMocks();});
 function create(){
   useExplorerStore.getState().clear(); useExplorerStore.getState().setRoot('C:\\work', []);
-  const root=document.createElement('div');root.innerHTML='<div data-explorer-row="C:\\work\\a.md">A</div><div data-explorer-row="C:\\work\\folder" data-explorer-directory="true">Folder</div>';
+  const root=document.createElement('div');root.tabIndex=-1;
+  root.innerHTML='<div data-explorer-row="C:\\work\\a.md">A</div><div data-explorer-row="C:\\work\\folder" data-explorer-directory="true">Folder<div data-explorer-row="C:\\work\\folder\\b.md">B</div></div>';
   document.body.append(root);const [file,folder]=[...root.children] as HTMLElement[];let hit:Element=root;
   Object.defineProperty(document,'elementFromPoint',{configurable:true,value:vi.fn(()=>hit)});
   const stop=bindExplorerDrop(root,'C:\\work');stops.push(stop);
@@ -32,8 +34,24 @@ describe('workspace drop targeting',()=>{
     setHit(folder);pointer(file,'pointerdown',10);pointer(window,'pointermove',50);await new Promise(requestAnimationFrame);
     expect(folder.dataset.dropTarget).toBe('move');expect(document.querySelector('.nb-explorer-drop-feedback')?.textContent).toContain('C:\\work\\folder');
     pointer(window,'pointerup',50);await new Promise(resolve=>setTimeout(resolve,0));
-    expect(renameOpenPath).toHaveBeenCalledExactlyOnceWith('C:\\work\\a.md','C:\\work\\folder\\a.md',false);expect(folder.hasAttribute('data-drop-target')).toBe(false);
+    expect(renameOpenPath).toHaveBeenCalledExactlyOnceWith('C:\\work\\a.md','C:\\work\\folder\\a.md',false,{});expect(folder.hasAttribute('data-drop-target')).toBe(false);
     file.click();expect(click).toHaveBeenCalledOnce();
+  });
+  it('focuses the tree and waits for the in-flight move when undo follows a drop on a file row',async()=>{
+    const {root,file,folder,pointer,setHit}=create();
+    let finishMove!: (identity:string)=>void;
+    vi.mocked(renameOpenPath).mockImplementationOnce(()=>new Promise(resolve=>{finishMove=resolve;}));
+    setHit(folder.querySelector('[data-explorer-row]')!);
+    pointer(file,'pointerdown',1);pointer(window,'pointermove',50);pointer(window,'pointerup',50);
+    expect(document.activeElement).toBe(root);
+    expect(hasExplorerMoveUndo()).toBe(true);
+    const undone = undoExplorerMove();
+    await Promise.resolve();
+    expect(renameOpenPath).toHaveBeenCalledOnce();
+    finishMove('original-file');
+    expect(await undone).toBe(true);
+    expect(renameOpenPath).toHaveBeenLastCalledWith('C:\\work\\folder\\a.md','C:\\work\\a.md',false,{expectedIdentity:'original-file'});
+    expect(useExplorerStore.getState().root).toBe('C:\\work');
   });
   it('cancels an active drag without moving files or leaving page styles behind',async()=>{
     const {file,folder,pointer,setHit}=create();setHit(folder);pointer(file,'pointerdown',1);pointer(window,'pointermove',50);await new Promise(requestAnimationFrame);
@@ -53,7 +71,7 @@ describe('workspace drop targeting',()=>{
     expect(routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}})).toBe(true);
     expect(folder.dataset.dropTarget).toBe('copy');
     expect(routeNativeFileDrop({type:'drop',paths:['D:\\a.md'],position:{x:40,y:40}})).toBe(true);
-    await new Promise(resolve=>setTimeout(resolve,0));expect(copyPathIntoDirectory).toHaveBeenCalledExactlyOnceWith('D:\\a.md','C:\\work\\folder');expect(renameOpenPath).not.toHaveBeenCalled();
+    await new Promise(resolve=>setTimeout(resolve,0));expect(copyPathIntoDirectoryWithReceipt).toHaveBeenCalledExactlyOnceWith('D:\\a.md','C:\\work\\folder');expect(renameOpenPath).not.toHaveBeenCalled();
     setHit(document.body);expect(routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}})).toBe(false);
   });
   it('drops onto an existing file into its parent without changing the workspace root',async()=>{
@@ -62,19 +80,20 @@ describe('workspace drop targeting',()=>{
     expect(root.dataset.dropTarget).toBe('copy');
     routeNativeFileDrop({type:'drop',paths:['C:\\outside\\b.md'],position:{x:40,y:40}});
     await new Promise(resolve=>setTimeout(resolve,0));
-    expect(copyPathIntoDirectory).toHaveBeenCalledExactlyOnceWith('C:\\outside\\b.md','C:\\work');
+    expect(copyPathIntoDirectoryWithReceipt).toHaveBeenCalledExactlyOnceWith('C:\\outside\\b.md','C:\\work');
     expect(useExplorerStore.getState().root).toBe('C:\\work');
   });
   it('keeps the destination spring-open across native router cleanup, then restores it on failure',async()=>{
     vi.useFakeTimers();
     const {folder,setHit}=create();setHit(folder);
     let reject!: (reason: Error) => void;
-    vi.mocked(copyPathIntoDirectory).mockImplementationOnce(()=>new Promise((_,fail)=>{reject=fail;}));
+    vi.mocked(copyPathIntoDirectoryWithReceipt).mockImplementationOnce(()=>new Promise((_,fail)=>{reject=fail;}));
     routeNativeFileDrop({type:'enter',paths:['D:\\a.md'],position:{x:40,y:40}});
     await vi.advanceTimersByTimeAsync(650);
     expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
     routeNativeFileDrop({type:'drop',paths:['D:\\a.md'],position:{x:40,y:40}});
     expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(true);
+    await Promise.resolve();
     reject(new Error('copy denied')); await vi.advanceTimersByTimeAsync(0);
     expect(useExplorerStore.getState().isExpanded('C:\\work\\folder')).toBe(false);
     expect(useExplorerStore.getState().root).toBe('C:\\work');

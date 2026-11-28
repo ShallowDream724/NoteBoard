@@ -2,7 +2,7 @@
 // 所有文件 I/O 命令的 Tauri command 封装
 
 use crate::dto::{
-    DocumentPayload, FileTreeNode, PathExistsResult, ProbeResult, WriteResult,
+    DocumentPayload, Encoding, ExpectedDisk, FileTreeNode, PathExistsResult, ProbeResult, WriteResult,
 };
 use crate::path as nbpath;
 use std::path::{Path, PathBuf};
@@ -15,11 +15,23 @@ use super::write;
 
 /// 读取文档
 #[tauri::command]
-pub async fn read_document(path: String, max_read_bytes: Option<u64>) -> Result<DocumentPayload, String> {
-    tauri::async_runtime::spawn_blocking(move || read_document_on_worker(path, max_read_bytes)).await.map_err(|error| error.to_string())?
+pub async fn read_document(
+    path: String,
+    max_read_bytes: Option<u64>,
+    encoding: Option<Encoding>,
+) -> Result<DocumentPayload, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        read_document_on_worker(path, max_read_bytes, encoding)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
-fn read_document_on_worker(path: String, max_read_bytes: Option<u64>) -> Result<DocumentPayload, String> {
+fn read_document_on_worker(
+    path: String,
+    max_read_bytes: Option<u64>,
+    encoding: Option<Encoding>,
+) -> Result<DocumentPayload, String> {
     super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(&path);
 
@@ -27,7 +39,7 @@ fn read_document_on_worker(path: String, max_read_bytes: Option<u64>) -> Result<
         return Err(format!("文件不存在: {}", path));
     }
 
-    let result = read::read_file_with_limit(p, max_read_bytes).map_err(|e| e.to_string())?;
+    let result = read::read_file_with_limit(p, max_read_bytes, encoding).map_err(|e| e.to_string())?;
 
     let (kind, language) = crate::dto::kind_from_path(&path);
     let key = nbpath::normalize_key(&path);
@@ -72,7 +84,7 @@ pub fn probe_document(path: String) -> Result<ProbeResult, String> {
     let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
     let (kind, _lang) = crate::dto::kind_from_path(&path);
     let is_text = !matches!(kind, crate::dto::DocumentKind::Unsupported | crate::dto::DocumentKind::Pdf)
-        && read::is_text_file(p).unwrap_or(false);
+        && read::is_text_file(p, None).unwrap_or(false);
 
     Ok(ProbeResult {
         size: metadata.len(),
@@ -88,14 +100,22 @@ pub fn probe_document(path: String) -> Result<ProbeResult, String> {
 pub async fn write_document(
     path: String,
     content: String,
-    encoding: crate::dto::Encoding,
+    encoding: Encoding,
     eol: crate::dto::Eol,
     create_only: Option<bool>,
+    expected_disk: Option<ExpectedDisk>,
 ) -> Result<WriteResult, String> {
     // Encoding, fsync and replacement may take seconds on slow/network disks.
     // Move owned buffers to the blocking pool without stalling the webview loop.
     tauri::async_runtime::spawn_blocking(move || {
-        write_document_on_worker(path, content, encoding, eol, create_only.unwrap_or(false))
+        write_document_on_worker(
+            path,
+            content,
+            encoding,
+            eol,
+            create_only.unwrap_or(false),
+            expected_disk.as_ref(),
+        )
     })
     .await
     .map_err(|error| error.to_string())
@@ -104,17 +124,15 @@ pub async fn write_document(
 fn write_document_on_worker(
     path: String,
     content: String,
-    encoding: crate::dto::Encoding,
+    encoding: Encoding,
     eol: crate::dto::Eol,
     create_only: bool,
+    expected_disk: Option<&ExpectedDisk>,
 ) -> WriteResult {
     let p = Path::new(&path);
 
-    let result = if create_only {
-        write::write_with_encoding_create_only(p, &content, encoding, eol)
-    } else {
-        write::write_with_encoding(p, &content, encoding, eol)
-    };
+    let result =
+        write::write_with_encoding_mode(p, &content, encoding, eol, create_only, expected_disk);
     match result {
         Ok((size, mtime)) => WriteResult {
             ok: true,
@@ -255,9 +273,17 @@ pub fn rename_path(
     from: String,
     to: String,
     expected_keys: Vec<String>,
-) -> Result<(), String> {
+    move_guard: Option<super::guarded_rename::MoveGuard>,
+) -> Result<Option<String>, String> {
     let mut state = state.lock().map_err(|_| "文档归属状态不可用".to_string())?;
-    rename_registered_path(&mut state, &label, &from, &to, &expected_keys)
+    rename_registered_path(
+        &mut state,
+        &label,
+        &from,
+        &to,
+        &expected_keys,
+        move_guard.as_ref(),
+    )
 }
 
 /// The filesystem rename and native identity commit share the registry lock.
@@ -269,7 +295,8 @@ fn rename_registered_path(
     from: &str,
     to: &str,
     expected_keys: &[String],
-) -> Result<(), String> {
+    move_guard: Option<&super::guarded_rename::MoveGuard>,
+) -> Result<Option<String>, String> {
     let from_key = nbpath::normalize_key(from);
     // Preserve the requested filename's spelling for case-only renames.
     let to_key = to.replace('/', "\\");
@@ -312,15 +339,20 @@ fn rename_registered_path(
     }) {
         return Err("目录或文件正在跨窗口迁移，请稍后重试".into());
     }
-    if from_lower != to_lower && Path::new(to).exists() {
-        return Err("目标路径已存在，未执行重命名".into());
-    }
-    std::fs::rename(from, to).map_err(|error| format!("重命名失败: {}", error))?;
+    let identity = if let Some(guard) = move_guard {
+        super::guarded_rename::rename_document(Path::new(from), Path::new(to), guard.expected_identity.as_deref())?
+    } else {
+        if from_lower != to_lower && Path::new(to).exists() {
+            return Err("目标路径已存在，未执行重命名".into());
+        }
+        std::fs::rename(from, to).map_err(|error| format!("重命名失败: {}", error))?;
+        None
+    };
     for (old, record) in moved {
         state.documents.remove(&old);
         state.documents.insert(record.lower_key.clone(), record);
     }
-    Ok(())
+    Ok(identity)
 }
 
 /// 移到回收站
@@ -382,7 +414,7 @@ mod rename_tests {
         let mut state = AppState::default();
         DocumentRegistry::register(&mut state.documents, "window", &key, DocumentKind::Markdown);
         DocumentRegistry::set_dirty(&mut state.documents, &key, true);
-        rename_registered_path(&mut state, "window", &from, &to, &[key.clone()]).unwrap();
+        rename_registered_path(&mut state, "window", &from, &to, &[key.clone()], None).unwrap();
         assert!(!source.exists());
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "disk baseline");
         assert!(!state.documents.contains_key(&key.to_lowercase()));
@@ -403,9 +435,9 @@ mod rename_tests {
         let key = nbpath::normalize_key(&child.to_string_lossy());
         let mut state = AppState::default();
         DocumentRegistry::register(&mut state.documents, "other", &key, DocumentKind::Markdown);
-        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[key.clone()]).is_err());
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[key.clone()], None).is_err());
         state.documents.get_mut(&key.to_lowercase()).unwrap().owner_window = "window".into();
-        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[]).is_err());
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[], None).is_err());
         assert!(child.exists());
         assert!(!target.exists());
     }
@@ -418,7 +450,7 @@ mod rename_tests {
         std::fs::write(&source, "source").unwrap();
         std::fs::write(&target, "target").unwrap();
         let mut state = AppState::default();
-        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[]).is_err());
+        assert!(rename_registered_path(&mut state, "window", &source.to_string_lossy(), &target.to_string_lossy(), &[], None).is_err());
         assert_eq!(std::fs::read_to_string(source).unwrap(), "source");
         assert_eq!(std::fs::read_to_string(target).unwrap(), "target");
     }

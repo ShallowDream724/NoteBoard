@@ -1,4 +1,5 @@
 import type { SessionTabSnapshot, SessionWindowSnapshot } from '../../core/ipc/types';
+import { useDocumentStore } from '../../stores/documentStore';
 import { useLayoutStore } from '../../stores/layoutStore';
 import { useWindowStore } from '../../stores/windowStore';
 import { isSubPath, normalizePath, sameKey } from '../explorer/pathUtils';
@@ -46,9 +47,11 @@ export function rememberWorkspace(root: string | null, excluded: readonly string
   const { activeKey, tabs } = useWindowStore.getState();
   const layout = useLayoutStore.getState();
   const files = tabs.filter(tab => !tab.toolKind && tab.path && isSubPath(root, tab.path) && !excluded.includes(tab.key));
+  const documents = useDocumentStore.getState();
   const descriptors = files.map((tab): SessionTabSnapshot => ({
     key: tab.key, sourcePath: tab.path, viewMode: tab.viewMode, readingState: captureReadingState(tab.key),
     displayName: tab.displayName, isPinned: false, stagedPath: null, explorerContext: { root, source: 'workspace' },
+    encoding: documents.getDocument(tab.key)?.encodingOverride ?? undefined,
   }));
   try {
     if (!descriptors.length) localStorage.removeItem(storageKey(root));

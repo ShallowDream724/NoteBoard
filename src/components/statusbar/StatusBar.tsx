@@ -7,12 +7,15 @@ import { fileExtension, getFileFormat, isCodeSourceFile } from '../../core/fileF
 import { getCodeLanguage } from '../../core/codeLanguages';
 import { resolveEditorKind } from '../../features/editor-host/editorLoaders';
 import { PdfStatusSlot } from '../../features/pdf-viewer/PdfStatusSlot';
+import { ImageStatusSlot } from '../../features/image-viewer/ImageStatusSlot';
 import { SourceReadingStatus } from '../../features/editor-code/SourceReadingStatus';
 import { useDocumentStatistics } from '../../features/document-statistics/useDocumentStatistics';
 import { DOCUMENT_STATISTICS_DESCRIPTION } from '../../features/document-statistics/documentStatistics';
 import { Tooltip } from '../Tooltip';
 import { documentSaveStatus } from '../documentSaveStatus';
 import { CodeStatusSettings } from './CodeStatusSettings';
+import { TextFormatStatus } from './TextFormatStatus';
+import { StatusPathBreadcrumbs } from './StatusPathBreadcrumbs';
 import './statusbar.css';
 
 export function StatusBar({ referencePdfKey }: { referencePdfKey?: string }) {
@@ -37,34 +40,32 @@ export function StatusBar({ referencePdfKey }: { referencePdfKey?: string }) {
   const mode = source ? '源码' : '可视化';
   const action = `切换为${source ? '可视化' : '源码'}模式`;
   const save = documentSaveStatus(doc, tab.isDetached, activity);
-  const encoding = doc.content != null && <>
-    <span className="nb-status-field nb-status-encoding">{doc.encoding === 'utf8' ? 'UTF-8' : doc.encoding === 'utf8-bom' ? 'UTF-8 BOM' : 'GBK'}</span>
-    <span className="nb-status-field nb-status-encoding">{doc.eol === 'crlf' ? 'CRLF' : 'LF'}</span>
-  </>;
   return <footer className="nb-statusbar" aria-label="文档状态">
     <div className="nb-status-metadata">
+      <StatusPathBreadcrumbs path={tab.isDetached ? null : tab.path} displayName={tab.displayName} />
+    </div>
+    <div className="nb-status-details">
+      {reference}
+      {doc.kind === 'image' && <ImageStatusSlot documentKey={tab.key}/>}
+      {doc.kind === 'pdf' && <PdfStatusSlot pane="primary" documentKey={tab.key}/>}
       {modeSwitch ? <Tooltip content={action} shortcut="Ctrl+/" side="top">
         <button type="button" className="nb-status-mode nb-status-field" aria-label={action}
           onClick={() => emit('toggle-md-view-mode', { key: tab.key })}>
           {source ? <Code size={13}/> : <Eye size={13}/>}<span>{format} ({mode})</span>
         </button>
-      </Tooltip> : !codeSettings && <span className="nb-status-field">{format}</span>}
-      {doc.kind === 'pdf' && <PdfStatusSlot pane="primary" documentKey={tab.key}/>}
-      {codeFile && tab.path && <span className="nb-status-path" title={tab.path}><bdi>{tab.path}</bdi></span>}
+      </Tooltip> : !codeSettings && doc.kind !== 'image' && <span className="nb-status-field">{format}</span>}
       {stats && <Tooltip content={DOCUMENT_STATISTICS_DESCRIPTION} side="top">
         <span className="nb-status-field nb-status-count" aria-label="正文统计">
           {stats.characters.toLocaleString()} 字符 · {stats.words.toLocaleString()} 字词
         </span>
       </Tooltip>}
-      {!codeFile && encoding}
+      <TextFormatStatus doc={doc} detached={!!tab.isDetached} />
+      {codeSettings && codeFile && (!preview || source) && <SourceReadingStatus docKey={tab.key}/>}
+      {codeSettings && <CodeStatusSettings key={tab.key} docKey={tab.key} language={doc.language} preview={!!preview && !source}/>}
+      {save.visible && doc.readonly && <span className="nb-status-field nb-status-readonly">只读</span>}
+      {save.visible && (save.state !== 'saved' || !doc.readonly && !codeFile) && <Tooltip content={save.description} side="top">
+        <span className="nb-status-field" role="status" style={{ color: save.color }}>{save.label}</span>
+      </Tooltip>}
     </div>
-    {codeFile && encoding}
-    {codeSettings && codeFile && (!preview || source) && <SourceReadingStatus docKey={tab.key}/>}
-    {codeSettings && <CodeStatusSettings key={tab.key} docKey={tab.key} language={doc.language} preview={!!preview && !source}/>}
-    {(!codeFile || save.state !== 'saved') && <Tooltip content={save.description} side="top">
-      <span className="nb-status-field" role="status" style={{ color: save.color }}>{save.label}</span>
-    </Tooltip>}
-    {doc.readonly && <span className="nb-status-field nb-status-readonly">只读</span>}
-    {reference}
   </footer>;
 }

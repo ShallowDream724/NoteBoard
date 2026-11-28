@@ -1,4 +1,5 @@
-import { matchesShortcut } from '../../core/shortcutBindings';
+import { commandBindings, matchesShortcut, shortcutLabel } from '../../core/shortcutBindings';
+import { useShortcutBindings } from '../../core/useShortcutBindings';
 import { useMenuBounds } from '../../components/useMenuBounds';
 // NoteBoard 资源管理器：树节点
 // 24px 行高、depth*12+8 缩进、缩进导线、图标、悬停、当前 tab 高亮、行内重命名与右键菜单
@@ -9,6 +10,8 @@ import {
   FileText,
   ExternalLink,
   Copy,
+  Scissors,
+  ClipboardPaste,
   Trash2,
   Edit2,
   FilePlus,
@@ -23,11 +26,12 @@ import { refreshExplorerDirectory } from './explorerActions';
 import { openDocument } from '../editor-code/orchestration/openDocument';
 import { markOpenDocumentDeleted } from '../external/missingFileGuard';
 import { getFileIcon } from '../../components/FileIcon';
-import { renameOpenPath } from './renameOpenPath';
+import { moveExplorerEntries } from './explorerMoveHistory';
 import { showToast } from '../../stores/toastStore';
 import * as ipc from '../../core/ipc/commands';
 import { groupMarkdownAssociations } from '../document-format/markdownAssociationIndex';
-import { normalizePath, sameKey } from './pathUtils';
+import { normalizePath, parentBrowsePath, sameKey } from './pathUtils';
+import { forgetExplorerCut, pasteExplorerFiles, setExplorerFileClipboard, useExplorerPendingCut } from './explorerClipboard';
 import './explorerTree.css';
 
 const DISCLOSURE_SIZE = 12;
@@ -51,6 +55,7 @@ export const TreeNode = memo(function TreeNode({
 }: TreeNodeProps) {
   const { toggle } = useTreeData();
   const nodeKey = normalizePath(node.path).toLowerCase();
+  const isCut = useExplorerPendingCut(node.path);
 
   // 精确响应式订阅：当前节点的展开状态、子节点缓存、高亮状态以及定位滚动触发计数
   const isNodeExpanded = useExplorerStore((s) => s.expanded.has(nodeKey));
@@ -274,15 +279,17 @@ export const TreeNode = memo(function TreeNode({
 
     try {
       renameInFlight.current = true;
-      await renameOpenPath(node.path, newPath, node.isDir);
+      const { moved, undoable, failures } = await moveExplorerEntries([{ from: node.path, to: newPath, directory: node.isDir }], 'rename');
+      if (!moved) throw new Error(failures[0] ?? '重命名失败');
       if (isRevealed) setRevealed(newPath, false);
 
       // 刷新父目录以更新左侧文件树
-      if (parentDir) {
-        await refreshExplorerDirectory(parentDir);
-      } else if (root) {
-        await refreshExplorerDirectory(root);
+      const notes = undoable ? [] : ['此项目无法验证文件身份，不能撤销'];
+      const directory = parentDir || root;
+      if (directory) {
+        await refreshExplorerDirectory(directory).catch(() => notes.push('目录列表暂未刷新，请手动刷新'));
       }
+      if (notes.length) showToast([`已重命名为 ${trimmed}`, ...notes].join('；'), 'warning');
     } catch (error: unknown) {
       // 将 Rust 与 JavaScript 的不同异常形态统一转换为用户可读消息。
       console.error('重命名失败:', error);
@@ -333,6 +340,8 @@ export const TreeNode = memo(function TreeNode({
           tabIndex={0}
           data-explorer-row={node.path}
           data-explorer-directory={node.isDir || undefined}
+          data-explorer-cut={isCut || undefined}
+          aria-description={isCut ? '等待粘贴' : undefined}
           onMouseEnter={handleHover}
           onMouseLeave={handleLeave}
           onClick={handleClick}
@@ -449,6 +458,7 @@ export const TreeNode = memo(function TreeNode({
             setMenuPos(null);
             void ipc.openWithDefaultApp(node.path).catch(error => showToast(`打开失败：${error}`, 'error'));
           }}/>}
+          <FileClipboardMenuItems node={node} close={() => setMenuPos(null)} />
           {/* 目录特有菜单项：在此新建文件与新建文件夹 */}
           {node.isDir && (
             <>
@@ -507,7 +517,10 @@ export const TreeNode = memo(function TreeNode({
             label="复制完整路径"
             onClick={() => {
               setMenuPos(null);
-              navigator.clipboard.writeText(node.path);
+              void navigator.clipboard.writeText(node.path).then(
+                () => forgetExplorerCut(),
+                error => showToast(`无法复制路径：${String(error)}`, 'error'),
+              );
             }}
           />
 
@@ -597,6 +610,23 @@ export const TreeNode = memo(function TreeNode({
 });
 
 // ── 右键菜单项组件（具备 Hover/Active 反馈与快捷键标签） ──
+
+function FileClipboardMenuItems({ node, close }: { node: FileTreeNode; close: () => void }) {
+  useShortcutBindings();
+  const binding = (id: string) => commandBindings(id).length ? shortcutLabel(id) : undefined;
+  const destination = node.isDir ? node.path : parentBrowsePath(node.path);
+  return <>
+    <ContextMenuItem icon={Copy} label="复制" shortcut={binding('explorer.copyFiles')} onClick={() => {
+      close(); void setExplorerFileClipboard(node.path, false);
+    }} />
+    <ContextMenuItem icon={Scissors} label="剪切" shortcut={binding('explorer.cutFiles')} onClick={() => {
+      close(); void setExplorerFileClipboard(node.path, true);
+    }} />
+    {destination && <ContextMenuItem icon={ClipboardPaste} label="粘贴" shortcut={binding('explorer.pasteFiles')} onClick={() => {
+      close(); void pasteExplorerFiles(destination, true);
+    }} />}
+  </>;
+}
 
 function ContextMenuItem({
   icon: Icon,

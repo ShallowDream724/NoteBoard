@@ -425,6 +425,8 @@ function describeWriteError(error: WriteError): string {
       return `文件是只读的：${error.path}`;
     case 'path-not-found':
       return `路径不存在：${error.path}`;
+    case 'encoding':
+    case 'conflict':
     case 'io':
       return error.message;
   }

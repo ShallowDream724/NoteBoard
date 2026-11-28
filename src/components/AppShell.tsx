@@ -12,8 +12,8 @@ import './appShell.css';
 import { List } from 'lucide-react';
 import { Tooltip } from './Tooltip';
 import { StatusBar } from './statusbar/StatusBar';
+import { bindWorkspaceHistoryShortcuts } from '../features/history/workspaceHistoryShortcuts';
 import { WelcomeScreen } from './WelcomeScreen';
-import { UnsupportedView } from './UnsupportedView';
 import { ToastContainer } from './Toast';
 import { FileDropOverlay } from './FileDropOverlay';
 import { useWindowStore, type Tab } from '../stores/windowStore';
@@ -79,6 +79,7 @@ import { ReferencePane } from '../features/reference-pane/ReferencePane';
 import { supportsReference } from '../features/reference-pane/referenceDocument';
 
 // ── AppShell ──
+const UnsupportedView = lazy(() => import('./UnsupportedView').then(module => ({ default: module.UnsupportedView })));
 const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
 const InteractivePracticePanel = lazy(() => import('../features/learning/InteractivePracticePanel'));
 const QuickAccessDialog = lazy(() => import('../features/quick-access/QuickAccessDialog'));
@@ -107,6 +108,7 @@ function DocumentWorkspace({ children, referenceTab, onCloseReference }: {
 }
 
 export function AppShell(_props: { children?: React.ReactNode }) {
+  useEffect(bindWorkspaceHistoryShortcuts, []);
   useEffect(() => {
     let disposed = false;
     let stop: (() => void) | undefined;
@@ -669,11 +671,12 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                           }}
                         >
                           {tab.kind === 'unsupported' ? (
-                            <UnsupportedView
+                            <Suspense fallback={null}><UnsupportedView
                               filePath={tab.path ?? tab.key}
                               fileName={tab.displayName}
                               exportNotice={tab.exportNotice}
-                            />
+                              encodingRequired={tab.encodingRequired}
+                            /></Suspense>
                           ) : tab.lazySource ? (
                             // 🔴 S10：恢复标签正文加载中（点击标签触发；不挂载空编辑器）
                             <div

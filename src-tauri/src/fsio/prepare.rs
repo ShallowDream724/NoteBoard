@@ -10,7 +10,7 @@
 // 🔴 约束：全局 Mutex 只保护短状态操作，不跨 await 或读盘持有；
 //    readDir/probe/exists 的工作不在 registry 锁内执行。
 
-use crate::dto::{DocumentKind, DocumentPayload, PreparedDocument};
+use crate::dto::{DocumentKind, DocumentPayload, Encoding, PreparedDocument};
 use crate::path as nbpath;
 use crate::state::AppState;
 use std::path::Path;
@@ -26,6 +26,7 @@ pub async fn prepare_document(
     label: String,
     path: String,
     max_read_bytes: Option<u64>,
+    encoding: Option<Encoding>,
 ) -> Result<PreparedDocument, String> {
     // 1. 工作线程规范化 key（canonicalize 访问文件系统）
     let raw_path = path.clone();
@@ -92,7 +93,7 @@ pub async fn prepare_document(
     let io_path = path.clone();
     let io_key = key.clone();
     let prepared = tauri::async_runtime::spawn_blocking(move || {
-        prepare_on_worker(&io_path, &io_key, max_read_bytes)
+        prepare_on_worker(&io_path, &io_key, max_read_bytes, encoding)
     })
     .await
     .map_err(|e| format!("prepare_error:{e}"));
@@ -108,8 +109,14 @@ pub async fn prepare_document(
             Ok(Ok(PreparedDocument::Text { .. }))
                 | Ok(Ok(PreparedDocument::Image { .. }))
                 | Ok(Ok(PreparedDocument::Pdf { .. }))
-                | Ok(Ok(PreparedDocument::Unsupported { .. }))
-        );
+        ) || (encoding.is_none()
+            && matches!(
+                prepared,
+                Ok(Ok(PreparedDocument::Unsupported {
+                    encoding_required: false,
+                    ..
+                }))
+            ));
         if keep_reservation {
             if let Some(p) = s.pending_prepares.get_mut(&lower_key) {
                 if p.owner == label {
@@ -139,6 +146,7 @@ fn prepare_on_worker(
     path: &str,
     key: &str,
     max_read_bytes: Option<u64>,
+    encoding: Option<Encoding>,
 ) -> Result<PreparedDocument, String> {
     super::native_documents::ensure_recovered_before_read()?;
     let p = Path::new(path);
@@ -191,6 +199,8 @@ fn prepare_on_worker(
             dir_path,
             language: "plaintext".to_string(),
             size,
+            encoding_required: false,
+            encoding_message: None,
         }),
         DocumentKind::Image => Ok(PreparedDocument::Image {
             key: key.to_string(),
@@ -218,7 +228,7 @@ fn prepare_on_worker(
         // 专有二进制（XMind/Excalidraw 场景文件等）走原 kind 映射：
         // board/drawio/bitable/mindmap 本身是文本或专有格式的按现有规则回退 unsupported
         _ => {
-            let is_text = match read::is_text_file(p) {
+            let is_text = match read::is_text_file(p, encoding) {
                 Ok(is_text) => is_text,
                 Err(message) => {
                     return Ok(PreparedDocument::Failed {
@@ -234,6 +244,8 @@ fn prepare_on_worker(
                     dir_path,
                     language: "plaintext".to_string(),
                     size,
+                    encoding_required: false,
+                    encoding_message: None,
                 });
             }
             // Prefix sniffing is bounded even for large files. Confirm only
@@ -246,7 +258,7 @@ fn prepare_on_worker(
                 });
             }
             // 文本：读入并解码（编码检测/只读判定在 read_file 内完成）
-            match read::read_file_with_limit(p, max_read_bytes) {
+            match read::read_file_with_limit(p, max_read_bytes, encoding) {
                 Ok(result) => Ok(PreparedDocument::Text {
                     payload: DocumentPayload {
                         key: key.to_string(),
@@ -262,13 +274,23 @@ fn prepare_on_worker(
                         readonly: result.readonly,
                     },
                 }),
-                Err(read::FileReadError::UnsupportedText) => Ok(PreparedDocument::Unsupported {
-                    key: key.to_string(),
-                    display_name,
-                    dir_path,
-                    language: "plaintext".to_string(),
-                    size,
-                }),
+                Err(
+                    error @ (read::FileReadError::UnsupportedText
+                    | read::FileReadError::EncodingRequired(_)),
+                ) => {
+                    let encoding_required =
+                        matches!(error, read::FileReadError::EncodingRequired(_));
+                    Ok(PreparedDocument::Unsupported {
+                        key: key.to_string(),
+                        display_name,
+                        dir_path,
+                        language: "plaintext".to_string(),
+                        size,
+                        encoding_required,
+                        encoding_message: (encoding_required && encoding.is_some())
+                            .then(|| error.to_string()),
+                    })
+                }
                 Err(read::FileReadError::SizeLimitExceeded { size }) => {
                     Ok(PreparedDocument::ConfirmationRequired {
                         key: key.to_string(),
@@ -297,7 +319,7 @@ mod classification_tests {
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
             assert!(matches!(
-                prepare_on_worker(path, path, None).unwrap(),
+                prepare_on_worker(path, path, None, None).unwrap(),
                 PreparedDocument::Unsupported { .. }
             ));
         }
@@ -309,7 +331,7 @@ mod classification_tests {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
-            match prepare_on_worker(path, path, None).unwrap() {
+            match prepare_on_worker(path, path, None, None).unwrap() {
                 PreparedDocument::Text { payload } => assert_eq!(payload.kind, expected),
                 other => panic!("unexpected classification: {other:?}"),
             }
@@ -323,7 +345,8 @@ mod classification_tests {
         let bytes = b"%PDF-1.7\nremaining data";
         std::fs::write(&path, bytes).unwrap();
         let path = path.to_str().unwrap();
-        let PreparedDocument::Pdf { payload } = prepare_on_worker(path, path, None).unwrap() else {
+        let PreparedDocument::Pdf { payload } = prepare_on_worker(path, path, None, None).unwrap()
+        else {
             panic!("PDF should open as a readonly resource");
         };
         assert_eq!(payload.kind, DocumentKind::Pdf);
@@ -341,10 +364,10 @@ mod classification_tests {
             let path = path.to_str().unwrap();
             let size = std::fs::metadata(path).unwrap().len();
             assert!(
-                matches!(prepare_on_worker(path, path, Some(size - 1)).unwrap(), PreparedDocument::ConfirmationRequired { size: actual, .. } if actual == size)
+                matches!(prepare_on_worker(path, path, Some(size - 1), None).unwrap(), PreparedDocument::ConfirmationRequired { size: actual, .. } if actual == size)
             );
             assert!(!matches!(
-                prepare_on_worker(path, path, Some(size)).unwrap(),
+                prepare_on_worker(path, path, Some(size), None).unwrap(),
                 PreparedDocument::ConfirmationRequired { .. }
             ));
         }
@@ -363,7 +386,7 @@ mod classification_tests {
             let path = path.to_str().unwrap();
             assert!(
                 matches!(
-                    prepare_on_worker(path, path, Some(1)).unwrap(),
+                    prepare_on_worker(path, path, Some(1), None).unwrap(),
                     PreparedDocument::Unsupported { .. }
                 ),
                 "{name}"
@@ -378,7 +401,6 @@ mod classification_tests {
         later_binary.push(0x01);
         for (name, content) in [
             ("later-binary.txt", later_binary.as_slice()),
-            ("utf16.txt", &[0xff, 0xfe, 0x2d, 0x4e]),
             ("other-encoding.txt", b"caf\xe9"),
         ] {
             let path = directory.path().join(name);
@@ -386,12 +408,64 @@ mod classification_tests {
             let path = path.to_str().unwrap();
             assert!(
                 matches!(
-                    prepare_on_worker(path, path, None).unwrap(),
+                    prepare_on_worker(path, path, None, None).unwrap(),
                     PreparedDocument::Unsupported { .. }
                 ),
                 "{name}"
             );
         }
+    }
+
+    #[test]
+    fn selected_encoding_retries_text_without_bypassing_size_or_binary_checks() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.txt");
+        std::fs::write(&path, b"caf\xe9").unwrap();
+        let path = path.to_str().unwrap();
+        assert!(matches!(
+            prepare_on_worker(path, path, None, None).unwrap(),
+            PreparedDocument::Unsupported {
+                encoding_required: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            prepare_on_worker(path, path, None, Some(Encoding::Utf8)).unwrap(),
+            PreparedDocument::Unsupported {
+                encoding_required: true,
+                encoding_message: Some(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            prepare_on_worker(path, path, Some(3), Some(Encoding::Windows1252)).unwrap(),
+            PreparedDocument::ConfirmationRequired { size: 4, .. }
+        ));
+        assert!(matches!(
+            prepare_on_worker(path, path, Some(4), Some(Encoding::Windows1252)).unwrap(),
+            PreparedDocument::Text { payload }
+                if payload.encoding == Encoding::Windows1252 && payload.content.as_deref() == Some("café")
+        ));
+        std::fs::write(path, b"h\0e\0l\0l\0o\0").unwrap();
+        assert!(matches!(
+            prepare_on_worker(path, path, None, None).unwrap(),
+            PreparedDocument::Unsupported {
+                encoding_required: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            prepare_on_worker(path, path, None, Some(Encoding::Utf16Le)).unwrap(),
+            PreparedDocument::Text { payload } if payload.content.as_deref() == Some("hello")
+        ));
+        std::fs::write(path, b"%PDF-1.7").unwrap();
+        assert!(matches!(
+            prepare_on_worker(path, path, None, Some(Encoding::Utf16Le)).unwrap(),
+            PreparedDocument::Unsupported {
+                encoding_required: false,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -402,7 +476,7 @@ mod classification_tests {
             let path = directory.path().join(name);
             std::fs::write(&path, content).unwrap();
             let path = path.to_str().unwrap();
-            match prepare_on_worker(path, path, None).unwrap() {
+            match prepare_on_worker(path, path, None, None).unwrap() {
                 PreparedDocument::Text { payload } => {
                     assert_eq!(payload.kind, DocumentKind::Code);
                     assert_eq!(payload.content.as_deref(), Some(content));
