@@ -31,6 +31,7 @@ export function SearchReplaceBar() {
     matchIndex,
     matchCount,
     focusTarget,
+    focusRequest,
     closeSearch,
     setSearchText,
     setReplaceText,
@@ -113,7 +114,7 @@ export function SearchReplaceBar() {
       }
     }, 20);
     return () => clearTimeout(timer);
-  }, [isOpen, focusTarget]);
+  }, [isOpen, focusTarget, focusRequest]);
 
   // 处理关闭与焦点回归
   const handleClose = useCallback(() => {
@@ -220,8 +221,11 @@ export function SearchReplaceBar() {
   return (
     <div
       role="search"
+      data-document-search
       onKeyDown={event => {
-        if (matchesShortcut('search.replaceAll', event.nativeEvent)) { event.preventDefault(); event.stopPropagation(); void handleReplaceAll(); }
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); handleClose(); }
+        else if (matchesShortcut('search.replaceAll', event.nativeEvent)) { event.preventDefault(); event.stopPropagation(); void handleReplaceAll(); }
         else if (isRetiredShortcut(event.nativeEvent, 'search')) { event.preventDefault(); event.stopPropagation(); }
       }}
       aria-label="查找与替换"
@@ -279,6 +283,7 @@ export function SearchReplaceBar() {
             placeholder="搜索..."
             onChange={(e) => setSearchText(e.target.value)}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 if (e.shiftKey) {
@@ -484,6 +489,7 @@ export function SearchReplaceBar() {
             value={replaceText}
             onChange={(e) => setReplaceText(e.target.value)}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing || e.keyCode === 229) return;
               if (e.key === 'Enter' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 handleReplace();

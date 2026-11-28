@@ -44,6 +44,12 @@ const formats: Action[] = [
   { label: 'YAML 配置文件 (.yaml)', icon: YamlIcon, run: actions.newYaml },
   { label: 'XML 标记文档 (.xml)', icon: XmlIcon, run: actions.newXml },
 ];
+
+export function primaryNewDocumentActions(pureMarkdown: boolean) {
+  return pureMarkdown ? primary.filter(item => item.run !== actions.newNativeDocument) : primary;
+}
+
+export const additionalNewDocumentActions = formats;
 const openActions: Action[] = [
   { label: '打开文件 (Ctrl+O)', icon: FileText, run: actions.openFileDialog },
   { label: '打开文件夹 (Ctrl+Shift+O)', icon: FolderOpen, run: actions.openFolderDialog },
@@ -82,7 +88,7 @@ export function NewDocumentMenu() {
       </Tooltip>
       <Menu.Portal><Menu.Content className="titlebar-document-menu" align="start" sideOffset={5} collisionPadding={8}
         onCloseAutoFocus={event => { if (documentOwnsFocus.current) event.preventDefault(); documentOwnsFocus.current = false; }}>
-        <Items items={pureMarkdown ? primary.filter(item => item.run !== actions.newNativeDocument) : primary}
+        <Items items={primaryNewDocumentActions(pureMarkdown)}
           onAction={run => { documentOwnsFocus.current = run === actions.newNativeDocument || run === actions.newMarkdown; }} />
         <Menu.Separator className="titlebar-menu-separator" />
         <Menu.Sub>

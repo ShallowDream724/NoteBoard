@@ -40,7 +40,9 @@ export async function installBrowserNativeShell(page, { theme = 'chen-guang', ui
           if (!images.has(path)) images.set(path, URL.createObjectURL(new Blob([bytes], { type: 'image/png' })));
           return name;
         }
-        if (['list_open_requests', 'list_recent', 'list_drafts', 'get_dismissed_update_notices', 'probe_shortcuts', 'recover_native_commits'].includes(command)) return [];
+        if (command === 'list_recent') return { schemaVersion: 1, files: [], dirs: [] };
+        if (command === 'list_workspace_files') return { paths: [], limited: false };
+        if (['list_open_requests', 'list_drafts', 'get_dismissed_update_notices', 'probe_shortcuts', 'recover_native_commits'].includes(command)) return [];
         if (command === 'stash_documents') {
           window.__qaStagedDocuments = args.documents;
           return args.documents.map(doc => ({ key: doc.key, targetPath: `C:/qa/${doc.displayName}` }));

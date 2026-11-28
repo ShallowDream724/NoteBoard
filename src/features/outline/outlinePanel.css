@@ -63,15 +63,11 @@
 .nb-bookmark-menu > button[aria-checked="true"] { background:var(--editor-selection-background); }
 .nb-bookmark-menu > [role="separator"] { height:1px; margin:4px 3px; background:var(--editor-border); }
 .nb-bookmark-message { margin:0 4px 8px; color:var(--editor-text-secondary); font-size:11px; line-height:1.5; }
-.nb-outline-toggle { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; }
-.nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }
-.nb-outline-toggle:active { background:var(--editor-selection-background); }
 .nb-outline-list { min-height:0; overflow:auto; padding:2px 0; scrollbar-width:thin; scrollbar-color:transparent transparent; }
 .nb-outline-list:is(:hover, :focus-within) { scrollbar-color:var(--scrollbar-thumb) transparent; }
 .nb-outline-list::-webkit-scrollbar-button { display:none!important; width:0!important; height:0!important; border:0!important; }
 .nb-outline-list::-webkit-scrollbar-thumb { background:transparent; }
 .nb-outline-list:is(:hover, :focus-within)::-webkit-scrollbar-thumb { background:var(--scrollbar-thumb,#aab1bb); }
-.nb-outline-open { position:absolute; right:var(--document-outline-inset,28px); top:56px; z-index:15; }
 .nb-outline-item { display:flex; align-items:center; min-height:26px; padding-right:0; cursor:pointer; color:var(--editor-text); user-select:none; white-space:nowrap; }
 .nb-outline-label { min-width:0; flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; padding:2px 4px; border-radius:4px; transition:background-color 120ms ease,color 120ms ease; }
 .nb-navigation-resize { position:absolute; inset:0 auto 0 -4px; width:9px; cursor:col-resize; touch-action:none; z-index:2; outline:none; }

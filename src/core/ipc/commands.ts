@@ -253,6 +253,11 @@ export function readDir(path: string, showHidden: boolean): Promise<FileTreeNode
   return invoke<FileTreeNode[]>('read_dir', { path, showHidden });
 }
 
+export interface WorkspaceFiles { paths: string[]; limited: boolean }
+export function listWorkspaceFiles(root: string, showHidden: boolean): Promise<WorkspaceFiles> {
+  return invoke('list_workspace_files', { root, showHidden });
+}
+
 /** Grant the non-recursive scope before subscribing to an opened directory. */
 export function prepareDirectoryWatch(path: string): Promise<void> {
   return invoke<void>('prepare_directory_watch', { path });
@@ -397,8 +402,9 @@ export function clearSession(): Promise<void> {
   return invoke<void>('clear_session');
 }
 
-export function listRecent(): Promise<unknown[]> {
-  return invoke<unknown[]>('list_recent');
+interface RecentEntry { path: string; isDir: boolean; openedAt: number }
+export function listRecent(): Promise<{ files: RecentEntry[]; dirs: RecentEntry[] }> {
+  return invoke('list_recent');
 }
 
 export function pushRecent(path: string, isDir: boolean): Promise<void> {

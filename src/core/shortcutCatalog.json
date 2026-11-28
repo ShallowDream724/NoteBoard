@@ -1,4 +1,6 @@
 [
+  { "id": "workspace.quickOpen", "label": "快速打开文件", "group": "文件与窗口", "contexts": ["app"], "defaults": ["Ctrl+Alt+P"] },
+  { "id": "workspace.commandPalette", "label": "打开命令面板", "group": "文件与窗口", "contexts": ["app"], "defaults": ["Ctrl+Shift+P"] },
   { "id": "search.replaceAll", "label": "替换全部匹配", "group": "查找与编辑", "contexts": ["search"], "defaults": ["Ctrl+Alt+Enter", "Ctrl+Enter", "Alt+Enter"] },
   {
     "id": "file.open",

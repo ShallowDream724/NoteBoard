@@ -4,7 +4,7 @@
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useRef } from 'react';
-import { Settings as SettingsIcon, FileOutput, Home } from 'lucide-react';
+import { Settings as SettingsIcon, FileOutput, Home, Search } from 'lucide-react';
 import { TabBar } from './TabBar';
 import { WindowControls } from './WindowControls';
 import { NewDocumentMenu } from './NewDocumentMenu';
@@ -20,11 +20,12 @@ import { UpdateNotice } from '../UpdateNotice';
 import './titlebar.css';
 
 interface TitleBarProps {
+  onQuickOpen: () => void;
   referenceKey: string | null;
   onOpenReference: (key: string) => void;
 }
 
-export function TitleBar({ referenceKey, onOpenReference }: TitleBarProps) {
+export function TitleBar({ referenceKey, onOpenReference, onQuickOpen }: TitleBarProps) {
   const settingsButton = useRef<HTMLButtonElement>(null);
   const toggleSettingsModal = useLayoutStore((s) => s.toggleSettingsModal);
   const explorerVisible = useLayoutStore((s) => s.explorerVisible);
@@ -92,6 +93,10 @@ export function TitleBar({ referenceKey, onOpenReference }: TitleBarProps) {
 
       {/* 文档导出 */}
       <div className="titlebar-utility-actions">
+      <Tooltip content="快速打开文件或运行命令" shortcut="Ctrl+Alt+P" side="bottom">
+        <button type="button" className="titlebar-action" aria-label="快速打开文件或运行命令" aria-haspopup="dialog"
+          onClick={onQuickOpen}><Search size={16} /></button>
+      </Tooltip>
       {canExportDocument && <Tooltip content="导出" shortcut="Ctrl+E" side="bottom">
         <button type="button" className="titlebar-action" aria-label="导出"
           onClick={() => useExportStore.getState().open()}><FileOutput size={16}/></button>

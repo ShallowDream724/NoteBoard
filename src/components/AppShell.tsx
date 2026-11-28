@@ -29,12 +29,14 @@ import { EditorHost } from '../features/editor-host/EditorHost';
 import { loadRestoredTab } from '../features/session/closedWindowSession';
 // 用户已确认：已打开内核保留至关闭，切换不进入回收调度。
 import { EditorActivityContext } from '../core/editor/EditorActivityContext';
-import { OutlinePanel } from '../features/outline/OutlinePanel';
+import '../features/outline/outlineToggle.css';
 import { UnsavedGuardDialog } from '../features/editor-code/UnsavedGuardDialog';
 import { Explorer } from '../features/explorer/Explorer';
 import { SearchReplaceBar } from '../features/search/SearchReplaceBar';
 import { EditorToolbar } from '../features/toolbar/EditorToolbar';
-import { useSearchStore } from '../stores/searchStore';
+import { captureDocumentSearchSelection, openDocumentSearch } from '../features/search/openDocumentSearch';
+import { QUICK_ACCESS_COMMANDS, type QuickAccessMode, type QuickAccessRequest } from '../features/quick-access/quickAccessItems';
+import { emit } from '../core/emitter';
 // 🔴 S03：快捷键与工具栏统一走 core 能力注册表，不再从编辑器组件导入实例 getter
 import { getEditorCapabilities } from '../core/editor/editorRegistry';
 import { registerShortcut } from '../core/shortcuts';
@@ -79,6 +81,8 @@ import { supportsReference } from '../features/reference-pane/referenceDocument'
 // ── AppShell ──
 const LinkedMarkdownBanner = lazy(() => import('../features/document-format/LinkedMarkdownBanner').then(module => ({ default: module.LinkedMarkdownBanner })));
 const InteractivePracticePanel = lazy(() => import('../features/learning/InteractivePracticePanel'));
+const QuickAccessDialog = lazy(() => import('../features/quick-access/QuickAccessDialog'));
+const OutlinePanel = lazy(() => import('../features/outline/OutlinePanel').then(module => ({ default: module.OutlinePanel })));
 
 function DocumentWorkspace({ children, referenceTab, onCloseReference }: {
   children: React.ReactNode;
@@ -113,6 +117,21 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   }, []);
   const tabs = useWindowStore((s) => s.tabs);
   const activeKey = useWindowStore((s) => s.activeKey);
+  const [quickAccess, setQuickAccess] = useState<QuickAccessRequest | null>(null);
+  const launchQuickAccess = useCallback((mode: QuickAccessMode) => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (previousFocus?.closest('[role="dialog"]')) return;
+    emit('close-titlebar-menus', undefined);
+    setQuickAccess({ mode, previousFocus, searchSelection: captureDocumentSearchSelection() });
+  }, []);
+
+  useEffect(() => {
+    const unregisterFiles = registerShortcut({ id: QUICK_ACCESS_COMMANDS.files, key: 'Ctrl+Alt+P',
+      action: () => launchQuickAccess('files'), scope: 'global', stopPropagation: true, description: '快速打开文件' });
+    const unregisterCommands = registerShortcut({ id: QUICK_ACCESS_COMMANDS.commands, key: 'Ctrl+Shift+P',
+      action: () => launchQuickAccess('commands'), scope: 'global', stopPropagation: true, description: '打开命令面板' });
+    return () => { unregisterFiles(); unregisterCommands(); };
+  }, [launchQuickAccess]);
   const [referenceKey, setReferenceKey] = useState<string | null>(null);
   const referenceTab = tabs.find(tab => tab.key === referenceKey && supportsReference(tab));
   const openReference = useCallback((key: string) => {
@@ -369,15 +388,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     // Ctrl+F 查找
     const unregCtrlF = registerShortcut({
       key: 'Ctrl+F',
-      action: () => {
-        const currentTab = useWindowStore.getState().activeTab();
-        if (!currentTab) return;
-        // 选中文本经能力注册表按当前模式获取（code / markdown visual / markdown source）
-        const capabilities = getEditorCapabilities(currentTab.key);
-        const selected = capabilities?.getSelectedText() ?? '';
-        const searchStore = useSearchStore.getState();
-        searchStore.openSearch(selected.trim() ? selected : undefined, 'search');
-      },
+      action: () => openDocumentSearch('search'),
       scope: 'global',
       description: '查找文本',
     });
@@ -385,14 +396,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
     // Ctrl+H 替换
     const unregCtrlH = registerShortcut({
       key: 'Ctrl+H',
-      action: () => {
-        const currentTab = useWindowStore.getState().activeTab();
-        if (!currentTab) return;
-        const capabilities = getEditorCapabilities(currentTab.key);
-        const selected = capabilities?.getSelectedText() ?? '';
-        const searchStore = useSearchStore.getState();
-        searchStore.openSearch(selected.trim() ? selected : undefined, 'replace');
-      },
+      action: () => openDocumentSearch('replace'),
       scope: 'global',
       description: '替换文本',
     });
@@ -500,7 +504,8 @@ export function AppShell(_props: { children?: React.ReactNode }) {
   return (
     <div className="nb-app-shell" data-presentation={isBoardPresentationMode || undefined}>
       {/* 标题栏 */}
-      {!isBoardPresentationMode && <TitleBar key="app-titlebar" referenceKey={referenceTab?.key ?? null} onOpenReference={openReference} />}
+      {!isBoardPresentationMode && <TitleBar key="app-titlebar" referenceKey={referenceTab?.key ?? null} onOpenReference={openReference}
+        onQuickOpen={() => launchQuickAccess('files')} />}
 
       {/* 主区域 */}
       <div
@@ -704,7 +709,7 @@ export function AppShell(_props: { children?: React.ReactNode }) {
                     })}</div>
                     {/* Temporarily clear the target area; keep the saved outline preference. */}
                     {!isBoardPresentationMode && practiceSessionKey !== activeKey && showOutline && (outlineVisible ? (
-                      <OutlinePanel editor={activeEditor} />
+                      <Suspense fallback={null}><OutlinePanel editor={activeEditor} /></Suspense>
                     ) : (
                       <Tooltip content="展开导航面板" shortcut="Ctrl+Alt+B" side="left">
                         <button type="button" className="nb-outline-toggle nb-outline-open" aria-label="展开导航面板" aria-expanded="false"
@@ -741,6 +746,11 @@ export function AppShell(_props: { children?: React.ReactNode }) {
 
       {/* 仅处理应用运行期间原文件被删除的活动标签；重启恢复缺失文件会直接跳过。 */}
       <MissingFileDialog />
+
+      {quickAccess && <Suspense fallback={null}>
+        <QuickAccessDialog request={quickAccess} visualEditor={showOutline && activeKey ? markdownEditorsRef.current.get(activeKey) ?? null : null}
+          onClose={() => setQuickAccess(null)} />
+      </Suspense>}
 
       {/* 全局 Toast 提示 */}
       <ToastContainer />

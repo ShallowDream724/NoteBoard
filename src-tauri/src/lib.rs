@@ -100,6 +100,7 @@ pub fn run() {
             fsio::recovery_images::store_image_asset,
             fsio::image_edit::write_image_edit,
             fsio::commands::read_dir,
+            fsio::workspace_files::list_workspace_files,
             fsio::commands::prepare_directory_watch,
             fsio::browse::browse_locations,
             fsio::commands::create_file,

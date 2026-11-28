@@ -22,6 +22,7 @@ export interface SearchState {
   matchCount: number;
   /** 打开时应聚焦的输入框 */
   focusTarget: 'search' | 'replace' | null;
+  focusRequest: number;
 
   // ── 操作 Actions ──
   openSearch: (initialText?: string, focusTarget?: 'search' | 'replace') => void;
@@ -32,7 +33,6 @@ export interface SearchState {
   setWholeWord: (val: boolean) => void;
   setIsRegex: (val: boolean) => void;
   setMatchStats: (current: number, total: number) => void;
-  setFocusTarget: (target: 'search' | 'replace' | null) => void;
 }
 
 export const useSearchStore = create<SearchState>((set) => ({
@@ -45,6 +45,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   matchIndex: 0,
   matchCount: 0,
   focusTarget: 'search',
+  focusRequest: 0,
 
   // 打开搜索栏，可传入初始搜索词与聚焦目标
   openSearch: (initialText, focusTarget = 'search') => {
@@ -52,6 +53,7 @@ export const useSearchStore = create<SearchState>((set) => ({
       isOpen: true,
       searchText: initialText !== undefined ? initialText : state.searchText,
       focusTarget,
+      focusRequest: state.focusRequest + 1,
     }));
   },
 
@@ -81,6 +83,4 @@ export const useSearchStore = create<SearchState>((set) => ({
   // 更新当前匹配数统计
   setMatchStats: (current, total) => set({ matchIndex: current, matchCount: total }),
 
-  // 设置焦点目标
-  setFocusTarget: (target) => set({ focusTarget: target }),
 }));

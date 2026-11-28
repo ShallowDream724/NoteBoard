@@ -1,0 +1,4 @@
+.nb-outline-toggle { display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--editor-text-secondary); cursor:pointer; flex-shrink:0; }
+.nb-outline-toggle:hover,.nb-outline-toggle:focus-visible { background:var(--toolbar-hover); color:var(--editor-accent); }
+.nb-outline-toggle:active { background:var(--editor-selection-background); }
+.nb-outline-open { position:absolute; right:var(--document-outline-inset,28px); top:56px; z-index:15; }
