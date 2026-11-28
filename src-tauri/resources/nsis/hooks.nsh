@@ -15,6 +15,10 @@
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe" "SupportedTypes" ".md;.markdown;.txt;.json;.yaml;.yml;.sql;.js;.ts;.py;.rs;.go;.java;.c;.cpp;.cs;.sh;.css;.xml;.html;.excalidraw"
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\SupportedTypes" ".nb" ""
   WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\SupportedTypes" ".nbdoc" ""
+  WriteRegStr HKCU "Software\Classes\Applications\NoteBoard.exe\SupportedTypes" ".pdf" ""
+  WriteRegStr HKCU "Software\Classes\NoteBoard.PDF" "" "PDF 文档"
+  WriteRegStr HKCU "Software\Classes\NoteBoard.PDF\shell\open\command" "" '"$INSTDIR\NoteBoard.exe" "%1"'
+  WriteRegStr HKCU "Software\Classes\.pdf\OpenWithProgids" "NoteBoard.PDF" ""
 
   ; .nb is shared with Wolfram. Preserve the merged system/user default;
   ; Windows UserChoice is deliberately never modified.
@@ -61,6 +65,8 @@
   ${EndIf}
   DeleteRegValue HKCU "Software\Classes\.nb\OpenWithProgids" "NoteBoard.Document"
   DeleteRegValue HKCU "Software\Classes\.nbdoc\OpenWithProgids" "NoteBoard.Document"
+  DeleteRegValue HKCU "Software\Classes\.pdf\OpenWithProgids" "NoteBoard.PDF"
+  DeleteRegKey HKCU "Software\Classes\NoteBoard.PDF"
   DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.nb\shell\NoteBoard.Open"
   DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.nbdoc\shell\NoteBoard.Open"
 
