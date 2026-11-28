@@ -35,6 +35,7 @@ import { getSessionGeneration, submitCapturedContent } from '../session/document
 import { createCodeNavigation } from './codeNavigation';
 import { supportsCodeSymbols } from './codeSymbols';
 import { codeCursorTracker } from './codeCursorTracker';
+import { sourceReadingPlugin } from './sourceReading';
 
 /**
  * 构造 code 编辑器的能力对象。
@@ -55,6 +56,7 @@ export function createCodeEditorCapabilities(
   const sessionGeneration = getSessionGeneration(docKey);
   const getLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
   const codeNavigation = createCodeNavigation(view, getLanguage);
+  const reading = view.plugin(sourceReadingPlugin);
   // 搜索能力：包装统一搜索控制器（CodeMirror 分支），行为与改造前完全一致
   const search: SearchCapabilities = {
     search: (options: TextSearchOptions) => executeSearch({ type: 'codemirror', view }, options),
@@ -130,6 +132,11 @@ export function createCodeEditorCapabilities(
     get codeNavigation() { return supportsCodeSymbols(getLanguage()) ? codeNavigation : undefined; },
     codeView: {
       cursor: view.plugin(codeCursorTracker) ?? undefined,
+      reading: reading ? {
+        getSnapshot: reading.getSnapshot,
+        subscribe: reading.subscribe,
+        toggle: () => reading.toggle(getLanguage()),
+      } : undefined,
       goToLine: () => { gotoLine(view); },
       toggleFold: () => { toggleFold(view); view.focus(); },
       unfoldAll: () => { unfoldAll(view); view.focus(); },

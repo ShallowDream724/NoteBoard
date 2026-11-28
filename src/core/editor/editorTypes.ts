@@ -91,9 +91,16 @@ export interface CodeCursorSource {
   subscribe(listener: () => void): () => void;
 }
 
+export interface SourceReadingControl {
+  getSnapshot(): 'hidden' | 'available' | 'reading';
+  subscribe(listener: () => void): () => void;
+  toggle(): void;
+}
+
 /** Lightweight viewing commands, implemented by the mounted code editor. */
 export interface CodeViewCapabilities {
   readonly cursor?: CodeCursorSource;
+  readonly reading?: SourceReadingControl;
   goToLine(): void;
   toggleFold(): void;
   unfoldAll(): void;

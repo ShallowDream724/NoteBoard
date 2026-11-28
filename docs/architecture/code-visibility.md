@@ -1,5 +1,13 @@
 # Code visibility and rendering
 
+## Standalone source files
+
+When a CodeMirror source file contains a logical line of at least 400 characters, its status bar offers 长行阅读. JavaScript and TypeScript use the current syntax tree to add visual breaks and indentation at statement and container boundaries. Strings, templates, regular expressions and JSX text stay intact. Other languages and inputs that exceed the parse or decoration budget use a 100-character reading measure with hanging indentation and soft wrapping.
+
+The layout belongs to the mounted file and clears on the next source edit or when the reader exits it. Source offsets, selections, copied text and persisted content remain authoritative. Long-line detection uses CodeMirror's immutable text cursor in deferred batches, checks changed lines when possible, and cancels when the editor is released. Structured reading uses at most 192 Ki UTF-16 code units of input and fewer than 2,500 display breaks, with no startup parser dependency.
+
+## Rich-document code blocks
+
 Code blocks activate from their actual intersection with the editor scroll area and the browser viewport. Editor focus and selection are not activation signals. `codeVisibility.ts` owns one geometry service per mounted editor. Mount, scroll, editor/block resize, and ancestor visibility changes request a single animation-frame measurement. The service reads geometry before consumers write decorations. Hidden parked tabs deactivate even when their code descendants explicitly set `visibility: visible`; restoring an unchanged-size tab requests a fresh measurement through its ancestor attribute observer.
 
 This deliberately does not use the shared rich-content `nearViewport` intersection-observer history. An initial zero-height observation may be discarded there, and a tab moving back at the same dimensions does not provide a reliable independent recovery event. Code measures the current layout on its own scroll events even when IntersectionObserver emits nothing.
