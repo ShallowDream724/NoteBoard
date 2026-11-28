@@ -3,7 +3,7 @@ import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // 裸 CM6（new EditorView / EditorState.create），挂载到 DOM
 // 详见 docs/09-开发路线图.md 4.1
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   EditorView,
   keymap,
@@ -43,12 +43,14 @@ import { perfMarkEditorInstanceReady } from '../../core/perf/editorReadyMark';
 import { takeViewState } from '../session/editorSuspension';
 import { foldEffect } from '@codemirror/language';
 import { createCodeEditorCapabilities } from './editorCapabilities';
+import { codeJumpHistory } from './codeNavigation';
 import { createCodeSnapshot } from './codeSnapshot';
 import { FileTextPreview } from './FileTextPreview';
 import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
 import { getFileFormat } from '../../core/fileFormats';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
-import { switchFilePreviewMode, useFilePreviewMode } from './filePreviewMode';
+import { registerShortcut } from '../../core/shortcuts';
+import { switchFilePreviewMode, toggleFilePreviewMode, useFilePreviewMode } from './filePreviewMode';
 import {
   initializeDocumentHistory,
   getCurrentDocumentHistoryContent,
@@ -81,12 +83,30 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const format = getFileFormat(docKey);
   const hasPreview = format.preview === 'html' || format.preview === 'delimited';
   const fileMode = useFilePreviewMode(docKey);
+  const previousFileMode = useRef(fileMode);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
   const typography = useSettingsStore((s) => s.settings.typography);
 
   const showFileMode = (mode: 'preview' | 'source') => {
     switchFilePreviewMode(docKey, mode);
   };
+  const showSource = useCallback(() => {
+    if (useWindowStore.getState().activeKey === docKey) switchFilePreviewMode(docKey, 'source');
+  }, [docKey]);
+
+  useEffect(() => {
+    if (format.preview !== 'html') return;
+    return registerShortcut({
+      id: 'markdown.mode',
+      key: 'Ctrl+/',
+      scope: 'global',
+      description: '切换 HTML 预览与源码',
+      stopPropagation: true,
+      allowRepeat: false,
+      when: () => useWindowStore.getState().activeKey === docKey,
+      action: () => toggleFilePreviewMode(docKey),
+    });
+  }, [docKey, format.preview]);
 
   // 监听排版字体与字号变化并热重配 CM6，并刷新字符度量
   useEffect(() => {
@@ -127,6 +147,8 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   ]);
 
   useEffect(() => {
+    const fromPreview = previousFileMode.current === 'preview';
+    previousFileMode.current = fileMode;
     if (hasPreview && fileMode === 'preview') return;
     // A replacement instance must start from the previous owner's confirmed
     // group, before taking ownership of the capability registration.
@@ -328,6 +350,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       doc: currentDoc.content ?? '',
       extensions: [
         customCodeMirrorShortcuts('code'),
+        codeJumpHistory,
         unifiedHistoryKeymap,
         ...createBaseExtensions(initialEditorSettings),
         textAnalysisLifecycle,
@@ -388,6 +411,9 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       if (restoredState.scrollTop > 0 && view.scrollDOM) {
         view.scrollDOM.scrollTop = restoredState.scrollTop;
       }
+    }
+    if (format.preview === 'html' && fromPreview && useWindowStore.getState().activeKey === docKey) {
+      view.focus();
     }
 
     // 将统一历史节点应用到当前代码编辑器；程序化替换明确不进入原生历史
@@ -469,7 +495,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       disposeCapabilities();
       if (viewRef.current === view) viewRef.current = null;
     };
-  }, [docKey, fileMode, hasPreview, setTabDirty]);
+  }, [docKey, fileMode, format.preview, hasPreview, setTabDirty]);
 
   // Syntax choice reconfigures the mounted editor; history and cursor survive.
   useEffect(() => {
@@ -497,7 +523,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       </button>)}
     </div>}
     {hasPreview && fileMode === 'preview' && <FileTextPreview format={format} text={doc.content ?? ''} title={doc.displayName} directory={doc.dirPath}
-      savedPath={!docKey.startsWith('untitled:') && doc.externalStatus !== 'deleted' ? docKey : undefined} onShowSource={() => showFileMode('source')} />}
+      savedPath={!docKey.startsWith('untitled:') && doc.externalStatus !== 'deleted' ? docKey : undefined} onShowSource={showSource} />}
     {(!hasPreview || fileMode === 'source') && <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) viewRef.current?.focus(); }}>
       <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />

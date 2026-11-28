@@ -32,6 +32,8 @@ import { handleTransformCase } from '../toolbar/textOps';
 import type { LanguageId } from '../../core/ipc/types';
 import { getDocumentRevision } from '../../core/editor/editorRegistry';
 import { getSessionGeneration, submitCapturedContent } from '../session/documentSession';
+import { createCodeNavigation } from './codeNavigation';
+import { supportsCodeSymbols } from './codeSymbols';
 
 /**
  * 构造 code 编辑器的能力对象。
@@ -50,6 +52,8 @@ export function createCodeEditorCapabilities(
   // 🔴 N04：捕获能力创建（编辑器挂载）时的会话代际——flush 迟到返回时
   //    同路径会话已换代（关闭重开）则提交被丢弃
   const sessionGeneration = getSessionGeneration(docKey);
+  const getLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
+  const codeNavigation = createCodeNavigation(view, getLanguage);
   // 搜索能力：包装统一搜索控制器（CodeMirror 分支），行为与改造前完全一致
   const search: SearchCapabilities = {
     search: (options: TextSearchOptions) => executeSearch({ type: 'codemirror', view }, options),
@@ -63,12 +67,12 @@ export function createCodeEditorCapabilities(
 
   // 代码操作能力：JSON/XML/大小写转换，内部持有内核视图
   const codeOps: CodeOpsCapabilities = {
-    expandJson: (options) => handleExpandJson(view, { ...options, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
-    minifyJson: (scope) => handleMinifyJson(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
-    validateJson: (scope) => handleValidateJson(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
+    expandJson: (options) => handleExpandJson(view, { ...options, lang: getLanguage() }),
+    minifyJson: (scope) => handleMinifyJson(view, { scope, lang: getLanguage() }),
+    validateJson: (scope) => handleValidateJson(view, { scope, lang: getLanguage() }),
     transformCase: (mode) => handleTransformCase(view, mode),
     formatXml: (scope) => handleFormatXml(view, { scope, lang: useDocumentStore.getState().getDocument(docKey)?.language ?? lang }),
-    validateSyntax: (scope) => validateTextLanguage(view, useDocumentStore.getState().getDocument(docKey)?.language ?? lang, { scope }),
+    validateSyntax: (scope) => validateTextLanguage(view, getLanguage(), { scope }),
   };
 
   return {
@@ -122,6 +126,7 @@ export function createCodeEditorCapabilities(
     },
     search,
     codeOps,
+    get codeNavigation() { return supportsCodeSymbols(getLanguage()) ? codeNavigation : undefined; },
     codeView: {
       goToLine: () => { gotoLine(view); },
       toggleFold: () => { toggleFold(view); view.focus(); },

@@ -30,7 +30,7 @@ export interface QuickCommand extends SearchableItem {
 }
 
 export interface QuickNavigation extends SearchableItem {
-  type: 'heading' | 'bookmark';
+  type: 'heading' | 'bookmark' | 'symbol' | 'return';
   run: () => unknown;
 }
 

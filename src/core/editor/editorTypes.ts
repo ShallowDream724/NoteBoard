@@ -88,6 +88,25 @@ export interface CodeViewCapabilities {
   unfoldAll(): void;
 }
 
+export interface CodeSymbol {
+  kind: 'function' | 'class' | 'type' | 'section' | 'key' | 'id';
+  label: string;
+  position: number;
+  line: number;
+}
+
+export interface CodeSymbolIndex {
+  symbols: readonly CodeSymbol[];
+  limited: boolean;
+  jump(symbol: CodeSymbol): boolean;
+}
+
+export interface CodeNavigationCapabilities {
+  readSymbols(): Promise<CodeSymbolIndex>;
+  canReturn(): boolean;
+  returnToPrevious(): boolean;
+}
+
 /**
  * 编辑器实例能力：每个挂载中的编辑器注册一份，实例卸载后随之失效。
  * 注册表按键（docKey）查询；实例以 instanceId 代际区分，
@@ -129,6 +148,7 @@ export interface EditorCapabilities {
   /** 代码操作能力组（code 编辑器与 Markdown 源码模式提供） */
   readonly codeOps?: CodeOpsCapabilities;
   readonly codeView?: CodeViewCapabilities;
+  readonly codeNavigation?: CodeNavigationCapabilities;
 }
 
 /**

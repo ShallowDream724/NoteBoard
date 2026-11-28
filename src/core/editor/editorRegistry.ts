@@ -22,12 +22,18 @@ const registry = new Map<string, RegisteredCapabilities>();
 /** docKey → 内容版本计数（重挂载不重置，文档关闭才清理） */
 const revisions = new Map<string, number>();
 const revisionListeners = new Set<(docKey: string) => void>();
+const capabilityListeners = new Set<(docKey: string) => void>();
 
 /** Cheap content notification, independent of mirrored store updates. Listeners
  * enqueue work only; serialization belongs behind a flush boundary. */
 export function subscribeDocumentRevisions(listener: (docKey: string) => void): () => void {
   revisionListeners.add(listener);
   return () => { revisionListeners.delete(listener); };
+}
+
+export function subscribeEditorCapabilities(listener: (docKey: string) => void): () => void {
+  capabilityListeners.add(listener);
+  return () => { capabilityListeners.delete(listener); };
 }
 
 /**
@@ -37,11 +43,13 @@ export function subscribeDocumentRevisions(listener: (docKey: string) => void): 
 export function registerEditorCapabilities(capabilities: EditorCapabilities): () => void {
   const { docKey, instanceId } = capabilities;
   registry.set(docKey, { instanceId, capabilities });
+  capabilityListeners.forEach(listener => listener(docKey));
   return () => {
     // 🔴 代际保护：仅当注册表中仍是本实例时才移除
     const current = registry.get(docKey);
     if (current?.instanceId === instanceId) {
       registry.delete(docKey);
+      capabilityListeners.forEach(listener => listener(docKey));
     }
   };
 }
@@ -83,4 +91,5 @@ export function resetEditorRegistryForTest(): void {
   registry.clear();
   revisions.clear();
   revisionListeners.clear();
+  capabilityListeners.clear();
 }

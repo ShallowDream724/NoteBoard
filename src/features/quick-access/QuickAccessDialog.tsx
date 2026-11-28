@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Editor } from '@tiptap/core';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Bookmark, Hash, Search, Terminal } from 'lucide-react';
+import { ArrowLeft, Bookmark, Braces, Hash, Search, Terminal } from 'lucide-react';
 import { FileIcon } from '../../components/FileIcon';
 import { listRecent, listWorkspaceFiles } from '../../core/ipc/commands';
 import { matchesShortcut } from '../../core/shortcutBindings';
@@ -16,6 +16,7 @@ import { quickAccessCommands } from './quickAccessCommands';
 import { filePathItem, matchQuickAccessItems, mergeQuickFiles, QUICK_ACCESS_COMMANDS } from './quickAccessItems';
 import type { QuickAccessMode, QuickAccessRequest, QuickCommand, QuickFile, QuickNavigation } from './quickAccessItems';
 import { useQuickNavigation } from './useQuickNavigation';
+import { useCodeQuickNavigation } from './useCodeQuickNavigation';
 import './quickAccess.css';
 
 const RESULT_LIMIT = 50;
@@ -44,7 +45,8 @@ export default function QuickAccessDialog({ request, visualEditor, onClose }: {
   const showHidden = useSettingsStore(state => state.settings.file.showHiddenFiles);
   const pureMarkdown = useSettingsStore(state => state.settings.editor.pureMarkdown ?? false);
   useShortcutBindings();
-  const navigationAvailable = !!visualEditor && !visualEditor.isDestroyed;
+  const codeNavigation = useCodeQuickNavigation(activeKey, mode === 'navigation');
+  const navigationAvailable = codeNavigation.available || (!!visualEditor && !visualEditor.isDestroyed);
   const isCurrent = useCallback((editor: Editor) => {
     const tab = useWindowStore.getState().activeTab();
     return !editor.isDestroyed && !!tab && tab.key === activeKey && tab.viewMode !== 'source';
@@ -82,7 +84,8 @@ export default function QuickAccessDialog({ request, visualEditor, onClose }: {
   const hasQuery = query.trim() !== '';
   const files = useMemo(() => mergeQuickFiles(openTabs, Array.isArray(recent) ? recent : [], hasQuery ? indexedWorkspace?.files ?? [] : []),
     [openTabs, recent, hasQuery, indexedWorkspace]);
-  const source = mode === 'files' ? files : mode === 'commands' ? quickAccessCommands(pureMarkdown, request.searchSelection) : navigation;
+  const source = mode === 'files' ? files : mode === 'commands' ? quickAccessCommands(pureMarkdown, request.searchSelection)
+    : codeNavigation.available ? codeNavigation.items : navigation;
   const matches = matchQuickAccessItems<Result>(source, query);
   const results = matches.slice(0, RESULT_LIMIT);
   const activeIndex = Math.max(0, results.findIndex(item => item.id === selectedId));
@@ -144,17 +147,18 @@ export default function QuickAccessDialog({ request, visualEditor, onClose }: {
   const fileMode = mode === 'files';
   const commandMode = mode === 'commands';
   const title = fileMode ? '快速打开文件' : commandMode ? '命令面板' : '文档导航';
-  const inputLabel = fileMode ? '查找文件' : commandMode ? '查找命令' : '查找标题或书签';
-  const placeholder = fileMode ? '输入文件名或路径' : commandMode ? '输入命令名称' : '输入标题或书签名称';
+  const inputLabel = fileMode ? '查找文件' : commandMode ? '查找命令' : codeNavigation.available ? '查找代码符号' : '查找标题或书签';
+  const placeholder = fileMode ? '输入文件名或路径' : commandMode ? '输入命令名称'
+    : codeNavigation.available ? '输入函数、类或其他符号名称' : '输入标题或书签名称';
   const Icon = fileMode ? Search : commandMode ? Terminal : Hash;
   const searching = fileMode && (recent === null || (!!root && hasQuery && !indexedWorkspace));
   const scope = root ? `工作区 · ${root}` : '已打开与最近打开的文件';
-  const status = searching ? '正在查找文件…'
+  const status = codeNavigation.status ?? (searching ? '正在查找文件…'
     : fileMode && hasQuery && indexedWorkspace?.error ? '无法读取工作区文件'
     : fileMode && hasQuery && indexedWorkspace?.limited ? '已达到工作区查找上限，部分文件未列出'
     : matches.length > RESULT_LIMIT ? `显示前 ${RESULT_LIMIT} 项，继续输入以缩小范围`
     : fileMode && recent === 'error' ? '无法读取最近打开的文件'
-    : '';
+    : '');
 
   return <Dialog.Root open onOpenChange={open => { if (!open) close(); }}>
     <Dialog.Portal>
@@ -198,7 +202,8 @@ export default function QuickAccessDialog({ request, visualEditor, onClose }: {
             title={item.type === 'file' ? item.detail : undefined}
             onMouseDown={event => event.preventDefault()} onClick={() => run(item)}>
             {item.type === 'file' ? <FileIcon fileName={item.label} size={16} /> : item.type === 'command' ? <Terminal size={15} aria-hidden />
-              : item.type === 'heading' ? <Hash size={15} aria-hidden /> : <Bookmark size={15} aria-hidden />}
+              : item.type === 'heading' ? <Hash size={15} aria-hidden /> : item.type === 'symbol' ? <Braces size={15} aria-hidden />
+              : item.type === 'return' ? <ArrowLeft size={15} aria-hidden /> : <Bookmark size={15} aria-hidden />}
             <span className="nb-quick-access-text">
               <span>{item.label}</span>
               {item.detail && <small>{item.detail}</small>}
@@ -206,8 +211,9 @@ export default function QuickAccessDialog({ request, visualEditor, onClose }: {
             {item.type === 'file' ? <small>{item.source}</small> : item.type === 'command' && item.shortcut && <kbd>{item.shortcut}</kbd>}
           </div>)}
         </div>
-        {!results.length && !searching && <div className="nb-quick-access-empty">
-          {hasQuery ? '未找到匹配项' : fileMode ? '输入文件名或路径以查找' : '当前文档暂无可跳转的标题或书签'}
+        {!results.length && !searching && !codeNavigation.searching && <div className="nb-quick-access-empty">
+          {hasQuery ? '未找到匹配项' : fileMode ? '输入文件名或路径以查找'
+            : codeNavigation.available ? '当前文档暂无可跳转的代码符号' : '当前文档暂无可跳转的标题或书签'}
         </div>}
         <div className="nb-quick-access-footer">
           <span role="status" data-message={status ? '' : undefined} title={fileMode && !status ? scope : undefined}>{status || (fileMode ? scope : '')}</span>
