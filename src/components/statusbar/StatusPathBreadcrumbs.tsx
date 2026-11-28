@@ -54,13 +54,12 @@ export function StatusPathBreadcrumbs({ path = '', displayName }: { path?: strin
     const viewport = strip.current, natural = measure.current;
     if (!viewport || !natural) return;
     const sync = () => {
-      const available = viewport.clientWidth;
-      const width = natural.offsetWidth;
-      const fileWidth = (natural.lastElementChild as HTMLElement | null)?.offsetWidth ?? 0;
+      const available = viewport.getBoundingClientRect().width;
+      const width = natural.getBoundingClientRect().width;
+      const fileWidth = natural.lastElementChild?.getBoundingClientRect().width ?? 0;
       const extra = segments.length > 2 ? 2 * separatorWidth + 25 : separatorWidth;
-      viewport.style.flexBasis = `${width + 8}px`;
-      if (segments.length < 2 || !available || available >= width + 8) setLayout('full');
-      else if (available < fileWidth + extra + 24) setLayout('file');
+      if (!available || available >= width + 8) setLayout('full');
+      else if (segments.length === 1 || available < fileWidth + extra + 24) setLayout('file');
       else setLayout('compact');
     };
     sync();
@@ -84,14 +83,15 @@ export function StatusPathBreadcrumbs({ path = '', displayName }: { path?: strin
     </div>
     {visible.map((segment, index) => <Fragment key={`${revision}:${path}:${segment?.path ?? ''}`}>
       {index > 0 && <ChevronRight className="nb-status-crumb-separator" size={separatorWidth} aria-hidden="true" />}
-      {segment ? <BreadcrumbTrigger segment={segment} currentPath={file.path} explorerRoot={root ?? undefined} />
+      {segment ? <BreadcrumbTrigger segment={segment} filenameOnly={layout === 'file'} currentPath={file.path} explorerRoot={root ?? undefined} />
         : <span className="nb-status-crumb-ellipsis" aria-hidden="true">…</span>}
     </Fragment>)}
   </nav>;
 }
 
-function BreadcrumbTrigger({ segment, currentPath, explorerRoot }: {
+function BreadcrumbTrigger({ segment, filenameOnly, currentPath, explorerRoot }: {
   segment: PathCrumb;
+  filenameOnly: boolean;
   currentPath: string;
   explorerRoot?: string;
 }) {
@@ -101,18 +101,26 @@ function BreadcrumbTrigger({ segment, currentPath, explorerRoot }: {
     if (restoreFocus) trigger.current?.focus({ preventScroll: true });
     setOpen(false);
   };
-  if (!segment.directory) return <span className="nb-status-crumb" title={segment.path} aria-current="page"><bdi>{segment.label}</bdi></span>;
+  const text = segment.file && segment.directory && filenameOnly ? pathLabel(segment.path) : segment.label;
+  const basename = pathLabel(text);
+  const dot = basename.lastIndexOf('.');
+  const suffix = segment.file && dot >= 0 && dot < basename.length - 1 ? basename.slice(dot) : '';
+  const name = suffix ? <bdi className="nb-status-filename">
+    <span className="nb-status-filename-stem">{text.slice(0, -suffix.length)}</span>
+    <span className="nb-status-filename-extension">{suffix}</span>
+  </bdi> : <bdi>{text}</bdi>;
+  if (!segment.directory) return <span className="nb-status-crumb" title={segment.path || text} aria-current="page">{name}</span>;
   const label = `${pathLabel(segment.directory)} 文件和文件夹`;
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger ref={trigger} type="button" aria-haspopup="menu" aria-current={segment.file ? 'page' : undefined}
+    <Popover.Trigger ref={trigger} type="button" aria-haspopup="menu" aria-current={segment.file ? 'page' : undefined} aria-label={text}
       className="nb-status-crumb" title={segment.path} onKeyDown={event => {
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
           setOpen(true);
         }
       }}>
-      <bdi>{segment.label}</bdi>
+      {name}
     </Popover.Trigger>
     {open && <Popover.Portal>
       <Suspense fallback={<Popover.Content role="menu" tabIndex={-1} aria-label={label} aria-busy="true"
