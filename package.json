@@ -101,6 +101,7 @@
     "marked": "17.0.6",
     "mermaid": "^11.12.2",
     "mitt": "^3.0.1",
+    "parse5": "8.0.1",
     "pdfjs-dist": "6.3.289",
     "plantuml-encoder": "^1.4.0",
     "react": "^19.1.0",

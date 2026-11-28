@@ -505,7 +505,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
         {mode === 'preview' ? format.preview === 'delimited' ? '表格' : '预览' : '源码'}
       </button>)}
     </div>}
-    {hasPreview && fileMode === 'preview' && <FileTextPreview format={format} text={doc.content ?? ''} title={doc.displayName} onShowSource={() => showFileMode('source')} />}
+    {hasPreview && fileMode === 'preview' && <FileTextPreview format={format} text={doc.content ?? ''} title={doc.displayName} directory={doc.dirPath} onShowSource={() => showFileMode('source')} />}
     {(!hasPreview || fileMode === 'source') && <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}
       onClick={e => { if (e.target === e.currentTarget) viewRef.current?.focus(); }}>
       <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />
