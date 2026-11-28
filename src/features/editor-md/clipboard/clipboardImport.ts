@@ -22,6 +22,7 @@ import { imageSelectionSlice, normalizeImageSlot } from '../imageCaptions';
 import { imageRemovalTransaction } from '../imageRemoval';
 import { editorDocumentFormat } from '../editorDocumentCodec';
 import { checkClipboardStructure } from './limits';
+import { findScrollContainer } from '../../../core/dom/scrollContainer';
 
 export { DOCUMENT_SLICE_MIME, TABLE_SELECTION_MIME } from './constants';
 export { documentSliceClipboardData } from './structured';
@@ -68,17 +69,20 @@ function supportedNode(schema: Schema, value: JSONContent, children: PMNode[]): 
 }
 /** Bottom-up materialization yields by elapsed time, including inside a single large table. */
 export async function materializeClipboard(content: JSONContent[], schema: Schema, signal?: AbortSignal): Promise<PMNode[]> {
-  const output: PMNode[] = [], stack = content.slice().reverse().map(value => ({ value, parent: output, depth: 0, ready: false, children: [] as PMNode[] }));
+  const output: PMNode[] = [];
+  const stack: { content: JSONContent[]; index: number; nodes: PMNode[]; value?: JSONContent }[] = [{ content, index: 0, nodes: output }];
   let count = 0, deadline = performance.now() + 8;
   while (stack.length) {
     if (signal?.aborted) throw new DOMException('已取消', 'AbortError');
-    const frame = stack.pop()!;
-    if (!frame.ready) {
-      checkClipboardStructure(++count, frame.depth);
-      frame.ready = true; stack.push(frame);
-      const children = frame.value.content ?? [];
-      for (let index = children.length - 1; index >= 0; index--) stack.push({ value: children[index], parent: frame.children, depth: frame.depth + 1, ready: false, children: [] });
-    } else frame.parent.push(supportedNode(schema, frame.value, frame.children));
+    const frame = stack[stack.length - 1], value = frame.content[frame.index++];
+    if (value) {
+      checkClipboardStructure(++count, stack.length - 1);
+      if (value.content?.length) stack.push({ content: value.content, index: 0, nodes: [], value });
+      else frame.nodes.push(supportedNode(schema, value, []));
+    } else {
+      stack.pop();
+      if (frame.value) stack[stack.length - 1].nodes.push(supportedNode(schema, frame.value, frame.nodes));
+    }
     if (performance.now() >= deadline) { await taskYield(); deadline = performance.now() + 8; }
   }
   return output;
@@ -91,7 +95,15 @@ function synchronousNodes(content: JSONContent[], schema: Schema): PMNode[] {
   };
   return content.map(value => make(value, 0));
 }
-export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection, imagePosition?: number): boolean {
+interface PasteReadingViewport { unchanged(): boolean }
+
+function capturePasteReadingViewport(view: EditorView): PasteReadingViewport {
+  const scroller = findScrollContainer(view.dom);
+  const { scrollTop, scrollLeft } = scroller;
+  return { unchanged: () => scroller.scrollTop === scrollTop && scroller.scrollLeft === scrollLeft };
+}
+
+export function insertImportedSlice(view: EditorView, imported: ImportedSlice, selection: Selection, imagePosition?: number, readingViewport?: PasteReadingViewport): boolean {
   const images = imageOnlySlice(imported.slice);
   if (images) {
     const { tr } = imageInsertionTransaction(view.state, images, selection, imagePosition);
@@ -101,6 +113,18 @@ export function insertImportedSlice(view: EditorView, imported: ImportedSlice, s
   const tr = view.state.tr.setSelection(selection).replaceSelection(imported.slice);
   ensureContainerTail(tr, selection.from);
   mergeImportedAnnotationBodies(tr, imported.bodies);
+  if (readingViewport) {
+    const current = view.state.selection;
+    if (current.eq(selection)) {
+      const start = tr.mapping.map(selection.from, -1);
+      tr.setSelection(TextSelection.near(tr.doc.resolve(start)));
+      if (view.hasFocus() && readingViewport.unchanged()) tr.scrollIntoView();
+    } else {
+      tr.setSelection(current.map(tr.doc, tr.mapping));
+    }
+    dispatchDiscreteEdit(view, tr.setMeta(pendingKey, null));
+    return true;
+  }
   dispatchDiscreteEdit(view, tr.scrollIntoView()); view.focus(); return true;
 }
 function imported(nodes: PMNode[], diagnostics: string[], openStart?: number, openEnd?: number, tableScope?: ClipboardImportResult['tableScope']): ImportedSlice {
@@ -215,7 +239,11 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
       return Boolean(editor && !editor.isDestroyed && getMdTipTapEditor(docKey) === editor && view.editable && !view.dom.closest('[inert]')
         && state.activeKey === docKey && !state.isWindowClosing && !state.isTransferring(docKey) && !state.pendingCloseKeys.includes(docKey));
     };
-    const removePending = () => { if (attachedView && !attachedView.isDestroyed) attachedView.dispatch(attachedView.state.tr.setMeta(pendingKey, null).setMeta('addToHistory', false)); };
+    const removePending = () => {
+      if (attachedView && !attachedView.isDestroyed && pendingKey.getState(attachedView.state) !== DecorationSet.empty) {
+        attachedView.dispatch(attachedView.state.tr.setMeta(pendingKey, null).setMeta('addToHistory', false));
+      }
+    };
     const cancel = () => { if (pending) { pending.dispose(); pending = null; removePending(); } };
     async function process(view: EditorView, raw: string, kind: Exclude<ClipboardChoice, 'images'>, lease: InsertionLease<ImportedSlice>, started: number, responseMs: number, textOptions: ExternalTextOptions & { plainText?: string }) {
       try {
@@ -239,9 +267,9 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           for (const target of targets) target.map(tr);
           const target = tr.getMeta(pendingKey);
           if (target === null) return DecorationSet.empty;
-          if (typeof target === 'number') return DecorationSet.create(tr.doc, [Decoration.widget(target, () => {
-            const badge = document.createElement('span'); badge.textContent = '正在粘贴… 按 Esc 取消'; badge.contentEditable = 'false'; badge.setAttribute('role', 'status');
-            badge.style.cssText = 'display:inline-block;padding:4px 10px;margin:2px;border-radius:6px;color:var(--text-secondary);background:var(--bg-secondary);font-size:12px;'; return badge;
+          if (typeof target === 'number') return DecorationSet.create(tr.doc, [Decoration.widget(target, view => {
+            const badge = view.dom.ownerDocument.createElement('span'); badge.textContent = '正在粘贴… 按 Esc 取消'; badge.contentEditable = 'false'; badge.setAttribute('role', 'status');
+            badge.style.cssText = 'position:absolute;transform:translateY(-100%);pointer-events:none;padding:4px 10px;border-radius:6px;color:var(--text-secondary);background:var(--bg-secondary);font-size:12px;'; return badge;
           }, { side: -1 })]);
           return value.map(tr.mapping, tr.doc);
         },
@@ -253,7 +281,13 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
           if (!insertTableSlice(view, slice)) insertImportedSlice(view, { slice, bodies: [], diagnostics: [] }, view.state.selection);
           return true;
         } : undefined,
-        handleKeyDown: (_view, event) => { if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'v') plainUntil = Date.now() + 1000; if (event.key === 'Escape' && (pending || targets.size)) { cancel(); for (const target of targets) target.cancel(); return true; } return false; },
+        handleKeyDown: (_view, event) => {
+          const key = event.key.toLowerCase(), mod = event.ctrlKey || event.metaKey;
+          if (mod && event.shiftKey && key === 'v') plainUntil = Date.now() + 1000;
+          if (pending && mod && !event.shiftKey && !event.altKey && key === 'z') { cancel(); return true; }
+          if (key === 'escape' && (pending || targets.size)) { cancel(); for (const target of targets) target.cancel(); return true; }
+          return false;
+        },
         handleDOMEvents: {
           copy: (view, event) => writeDocumentClipboard(view, event, false),
           cut: (view, event) => writeDocumentClipboard(view, event, true),
@@ -269,31 +303,34 @@ export function createClipboardImportPlugin(adapter: ClipboardImportAdapter): Pl
             const hoveredSlot = editor && mainEditorCurrent(view) ? pastePointer?.slot() : undefined;
             let choice = hoveredSlot && files.length && !types.includes(DOCUMENT_SLICE_MIME) && !types.includes(TABLE_SELECTION_MIME) ? 'images' : chooseClipboardFormat(types, requestedPlain || (codeContext && !hoveredSlot));
             if (choice === 'html' && files.length && needsClipboardImageFallback(data.getData('text/html'))) choice = 'images';
-            if (choice === 'table' && !stripAnnotations && data.getData(TABLE_SELECTION_MIME).length <= CLIPBOARD_LIMITS.synchronous) return false;
-            if (choice === 'images') { if (!files.length) return false; event.preventDefault(); void imageFiles(view, files, hoveredSlot?.position); return true; }
+            if (choice === 'table' && !stripAnnotations && data.getData(TABLE_SELECTION_MIME).length <= CLIPBOARD_LIMITS.synchronous) { cancel(); return false; }
+            if (choice === 'images') { if (!files.length) return false; cancel(); event.preventDefault(); void imageFiles(view, files, hoveredSlot?.position); return true; }
             const markdownType = MARKDOWN_MIMES.find(type => types.includes(type));
             const raw = data.getData(choice === 'table' ? TABLE_SELECTION_MIME : choice === 'document' ? DOCUMENT_SLICE_MIME : choice === 'html' ? 'text/html' : choice === 'markdown' ? markdownType! : 'text/plain');
             if (!raw) return false;
+            cancel();
             try {
               if (raw.length > CLIPBOARD_LIMITS.characters) throw new ClipboardImportError('剪贴板内容过大，请分段粘贴（每次最多 1600 万字符）');
               const textOptions = { inferTable: !plain, tableContext: isInTable(view.state), inferMarkdown: !plain, stripAnnotations, preservePresentation: !editor || editorDocumentFormat(editor) === 'noteboard', plainText: types.includes('text/plain') ? data.getData('text/plain') : undefined };
               const textResult = choice === 'text' && !plain && raw.length <= CLIPBOARD_LIMITS.synchronous ? normalizeExternalText(raw, textOptions) : undefined;
               // Ordinary prose retains ProseMirror's native selection/mark behavior.
               if (textResult && !stripAnnotations && textResult.content.every(node => node.type === 'paragraph' && (node.content ?? []).every(child => child.type === 'text' && !child.marks?.length))) return false;
-              event.preventDefault(); cancel(); lastTiming = null;
+              event.preventDefault(); lastTiming = null;
               if (choice === 'text' && plain && raw.length <= CLIPBOARD_LIMITS.synchronous) { insertClipboardPlainText(view, raw); return true; }
               if (raw.length > CLIPBOARD_LIMITS.synchronous) {
+                const externalBody = !plain && (choice === 'html' || choice === 'markdown' || choice === 'text');
+                const readingViewport = externalBody ? capturePasteReadingViewport(view) : undefined;
                 const lease = capture<ImportedSlice>(view, (value, selection, imagePosition) => {
                   if (imageOnlySlice(value.slice) && imageSlotPosition(view.state, imagePosition ?? selection.from) !== undefined) return insertImportedSlice(view, value, selection, imagePosition);
                   if (choice === 'html' || choice === 'markdown' || choice === 'table' || (choice === 'text' && !plain)) {
-                    view.dispatch(view.state.tr.setSelection(selection).setMeta('addToHistory', false));
-                    if (insertTableSlice(view, value.slice, value.tableScope, value.bodies)) return true;
+                    if (insertTableSlice(view, value.slice, value.tableScope, value.bodies, selection)) return true;
                   }
                   if (codeContext) {
                     view.dispatch(view.state.tr.setSelection(selection).setMeta('addToHistory', false));
                     return insertClipboardPlainText(view, textOptions.plainText ?? raw);
                   }
-                  return insertImportedSlice(view, value, selection);
+                  const reading = !textOptions.tableContext && (value.slice.content.childCount > 1 || value.slice.size > CLIPBOARD_LIMITS.synchronous);
+                  return insertImportedSlice(view, value, selection, undefined, reading ? readingViewport : undefined);
                 }, hoveredSlot?.position);
                 if (!lease) return true; pending = lease;
                 view.dispatch(view.state.tr.setMeta(pendingKey, view.state.selection.from).setMeta('addToHistory', false));

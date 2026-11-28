@@ -9,7 +9,7 @@ const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODUL
 const cdp = process.env.NOTEBOARD_TEST_CDP;
 const out = `.tmp/web-paste-controls/${cdp ? 'native' : 'browser'}`;
 await fs.mkdir(out, { recursive: true });
-const server = cdp ? null : await preview({ configFile: false, build: { outDir: 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+const server = cdp ? null : await preview({ configFile: false, build: { outDir: process.env.NOTEBOARD_TEST_DIST || 'dist' }, preview: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
 const browser = cdp ? await chromium.connectOverCDP(cdp) : await chromium.launch({ channel: 'msedge', headless: true });
 const context = cdp ? browser.contexts()[0] : await browser.newContext({ viewport: { width: 1440, height: 950 } });
 const page = cdp ? context.pages().find(page => !page.url().startsWith('devtools:')) : await context.newPage();
@@ -72,10 +72,64 @@ async function wholePageRound(format) {
   for (const type of ['heading', 'table', 'bulletList', 'codeBlock']) assert.equal(counts[type], turns, `${format}: full page ${type}`);
   assert.equal(counts.mathInline, 15); assert.equal(result.marks.filter(mark => mark.type === 'bold').length, turns * 12);
   assert(!result.text.includes('选区外')); assert(!result.text.includes('不能带入'));
+  const atStart = await prose.evaluate(element => {
+    const owner = element.closest('[data-editor-scroll]').getBoundingClientRect();
+    const title = element.querySelector('h2').getBoundingClientRect();
+    return title.top >= owner.top && title.bottom <= owner.bottom;
+  });
+  assert(atStart, 'The first turn is visible immediately after paste');
   assert.equal(await conversion().count(), 0); assert.equal(await page.evaluate(() => window.__qaClipboardWorkers.active), 0);
   await prose.evaluate(element => { element.editor.state.doc.check(); element.editor.commands.undo(); }); await frame(); assert.equal((await snapshot()).text, '');
   await prose.evaluate(element => element.editor.commands.redo()); await frame(); assert.deepEqual((await snapshot()).json, result.json);
-  report.cases.push({ name: 'whole-web-page-3000-lines', format, characters: html.length, counts, responseMs, completionMs, undoRedo: true, workersReleased: true });
+  report.cases.push({ name: 'whole-web-page-3000-lines', format, characters: html.length, counts, responseMs, completionMs, atStart, undoRedo: true, workersReleased: true });
+}
+async function longMarkdownRound() {
+  const raw = Array.from({ length: 300 }, (_, index) => [
+    `## Markdown section ${index}`, '', `Paragraph ${index} with **emphasis**.`, '',
+    '- First item', '- Second item', '', '```text', `code ${index}`, '```', '',
+  ].join('\n')).join('\n');
+  assert(raw.length > 24_000);
+  await load(); await paste({ 'text/markdown': raw });
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.nb-prose.ProseMirror[contenteditable="true"]')).at(-1)?.editor.state.doc.textContent.includes('code 299'));
+  const first = await prose.evaluate(element => {
+    const owner = element.closest('[data-editor-scroll]').getBoundingClientRect();
+    const heading = element.querySelector('h2').getBoundingClientRect();
+    return { visible: heading.top >= owner.top && heading.bottom <= owner.bottom, caret: element.editor.state.selection.from };
+  });
+  assert.deepEqual(first, { visible: true, caret: 1 });
+  const content = (await snapshot()).json;
+  assert.equal(content.content.filter(node => node.type === 'heading').length, 300);
+  assert.equal(content.content.filter(node => node.type === 'codeBlock').length, 300);
+  await prose.evaluate(element => element.editor.commands.undo()); assert.equal((await snapshot()).text, '');
+  await prose.evaluate(element => element.editor.commands.redo()); assert.deepEqual((await snapshot()).json, content);
+
+  await load(Array.from({ length: 120 }, (_, index) => `Original paragraph ${index}\n`).join('\n'));
+  const before = await prose.evaluate((element, raw) => {
+    const { editor } = element;
+    const owner = element.closest('[data-editor-scroll]');
+    editor.commands.setTextSelection(1);
+    const height = owner.scrollHeight;
+    const clipboardData = new DataTransfer(); clipboardData.setData('text/markdown', raw);
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+    const pending = element.querySelector('[role="status"]')?.textContent.includes('正在粘贴');
+    const pendingHeight = owner.scrollHeight;
+    owner.scrollTop = 450;
+    editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+    const ownerTop = owner.getBoundingClientRect().top;
+    const anchor = [...element.querySelectorAll('p')].find(paragraph => paragraph.getBoundingClientRect().top >= ownerTop + 30);
+    return { height, pendingHeight, pending, scroll: owner.scrollTop, anchor: anchor.textContent, top: anchor.getBoundingClientRect().top };
+  }, raw);
+  assert(before.pending); assert.equal(before.pendingHeight, before.height);
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.nb-prose.ProseMirror[contenteditable="true"]')).at(-1)?.editor.state.doc.textContent.includes('code 299'));
+  await frame();
+  const after = await prose.evaluate((element, anchor) => ({
+    caret: element.editor.state.selection.$from.parent.textContent,
+    scroll: element.closest('[data-editor-scroll]').scrollTop,
+    top: [...element.querySelectorAll('p')].find(paragraph => paragraph.textContent === anchor).getBoundingClientRect().top,
+  }), before.anchor);
+  assert.equal(after.caret, 'Original paragraph 119');
+  assert(Math.abs(after.top - before.top) <= 1, JSON.stringify({ before, after }));
+  report.cases.push({ name: 'long-markdown-reading', characters: raw.length, headings: 300, firstScreen: first, before, after });
 }
 try {
   if (!cdp) {
@@ -142,21 +196,22 @@ try {
   report.cases.push({ name: 'large-html-worker', characters: large.length, rows: 600, rounds: 4, responses, before, after, workers: await page.evaluate(() => window.__qaClipboardWorkers) });
   await structuredRound('markdown', 1); await structuredRound('markdown', 80);
   await wholePageRound('markdown');
+  await longMarkdownRound();
   await load('保留的正文');
   const rich = { version: 1, openStart: 0, openEnd: 0, content: [{ type: 'paragraph', content: [{ type: 'text', text: '新增的蓝色链接', marks: [{ type: 'textColor', attrs: { color: '#1234ab' } }, { type: 'link', attrs: { href: 'https://example.com/replay' } }] }] }] };
   const data = { 'application/x-noteboard-document-slice': JSON.stringify(rich), 'text/plain': '新增的蓝色链接' };
-  await paste(data); await conversion().waitFor(); await conversion().getByRole('button', { name: '取消', exact: true }).click(); await frame();
-  assert.equal((await snapshot()).text, '保留的正文');
-  await paste(data); await conversion().waitFor(); await conversion().getByRole('button', { name: '转换并继续', exact: true }).click();
-  await page.waitForFunction(() => Array.from(document.querySelectorAll('.nb-prose.ProseMirror[contenteditable="true"]')).at(-1)?.editor.state.doc.textContent.includes('新增的蓝色链接'), null, { timeout: 20000 });
+  await paste(data); assert.equal(await conversion().count(), 0);
   result = await snapshot(); assert(result.text.includes('保留的正文')); assert(result.marks.some(mark => mark.type === 'textColor' && mark.attrs.color === '#1234ab'));
   assert(result.marks.some(mark => mark.type === 'link' && mark.attrs.href === 'https://example.com/replay'));
-  await page.screenshot({ path: `${out}/conversion-replays-paste.png` });
   await prose.evaluate(element => element.editor.commands.undo()); await frame(); assert.equal((await snapshot()).text, '保留的正文');
   await prose.evaluate(element => element.editor.commands.redo()); await frame(); assert.equal((await snapshot()).text, result.text);
+  report.cases.push({ name: 'structured-mime-in-markdown', declarativePresentationRetained: true, conversionPrompt: false, undoRedo: true });
+  await page.getByRole('button', { name: '新建或打开', exact: true }).click();
+  await page.getByRole('menuitem', { name: /新建 NoteBoard 文档/ }).click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.nb-prose.ProseMirror[contenteditable="true"]')).at(-1)?.editor.state.doc.textContent === '');
   await load(); await paste({ 'text/html': translatedHtml, 'text/plain': plainText }); result = await snapshot();
   assert(result.marks.some(mark => mark.type === 'textColor')); assert.equal(result.text, plainText);
-  report.cases.push({ name: 'explicit-NB-paste', cancelPreservesContent: true, confirmedPasteRetained: true, undoRedo: true, nativeAppearanceRetained: true });
+  report.cases.push({ name: 'translated-web-html-in-noteboard', nativeAppearanceRetained: true });
   await structuredRound('noteboard', 1); await structuredRound('noteboard', 80);
   await wholePageRound('noteboard');
   assert.equal(report.errors.length, 0); report.passed = true;

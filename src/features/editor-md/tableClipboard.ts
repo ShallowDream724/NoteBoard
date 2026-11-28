@@ -381,14 +381,14 @@ export function handleTablePaste(view: EditorView, event: ClipboardEvent, slice:
 }
 
 /** Already-normalized slices (including embedded editors) need no second JSON/HTML parse. */
-export function insertTableSlice(view: EditorView, slice: Slice, scope?: ClipboardScope, bodies: ProseMirrorNode[] = []): boolean {
+export function insertTableSlice(view: EditorView, slice: Slice, scope?: ClipboardScope, bodies: ProseMirrorNode[] = [], selection = view.state.selection): boolean {
   const pmCells = __pastedCells(slice);
   if (!pmCells) return false;
-  if (pmCells && !isInTable(view.state)) {
+  if (!selection.eq(view.state.selection)) view.dispatch(view.state.tr.setSelection(selection).setMeta('addToHistory', false));
+  if (!isInTable(view.state)) {
     dispatchDiscreteEdit(view, mergeImportedAnnotationBodies(view.state.tr.replaceSelectionWith(cellsTable(view.state.schema, pmCells, slice)), bodies));
     return true;
   }
-  if (!isInTable(view.state)) return false;
   if (scope === 'row' || scope === 'column') {
     const rect = selectedRect(view.state), pos = rect.tableStart - 1;
     const next = insertTablePart(rect.table, cellsTable(view.state.schema, pmCells, slice), scope, scope === 'row' ? rect.top : rect.left);

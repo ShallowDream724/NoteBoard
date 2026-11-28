@@ -55,6 +55,31 @@ describe('asynchronous rich paste ownership', () => {
     await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
     expect(editor.state.doc.textContent).toBe('abcd');
   });
+  it('undo cancels a pending paste before touching earlier edits', async () => {
+    editor.commands.insertContent('X');
+    const worker = pasteLarge();
+    const handled = editor.view.someProp('handleKeyDown', handler => handler(editor.view, new KeyboardEvent('keydown', { key: 'z', ctrlKey: true })));
+    expect(handled).toBe(true);
+    await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
+    expect(editor.state.doc.textContent).toBe('abXcd');
+    expect(editor.view.dom.textContent).not.toContain('正在粘贴');
+    editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
+  });
+  it('closing the target cancels a pending paste without publishing content', async () => {
+    const worker = pasteLarge();
+    useWindowStore.setState({ pendingCloseKeys: [key] });
+    await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
+    expect(editor.state.doc.textContent).toBe('abcd');
+    expect(editor.view.dom.textContent).not.toContain('正在粘贴');
+    useWindowStore.setState({ pendingCloseKeys: [] });
+  });
+  it('a subsequent native text paste replaces the pending operation', async () => {
+    const worker = pasteLarge();
+    importClipboardSnapshot(editor.view, { formats: { 'text/plain': 'short' } });
+    await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalledOnce());
+    expect(editor.state.doc.textContent).toBe('abshortcd');
+    expect(editor.view.dom.textContent).not.toContain('正在粘贴');
+  });
   it('menu snapshot reads rich HTML without decoding the redundant PNG', async () => {
     const getType = vi.fn(async (type: string) => ({ text: async () => type === 'text/html' ? '<p>rich</p>' : 'rich' }));
     setClipboard({ read: async () => [{ types: ['text/html', 'image/png', 'text/plain'], getType }] });
@@ -102,6 +127,19 @@ describe('asynchronous rich paste ownership', () => {
     worker.onmessage?.({ data: { ok: true, result: normalizeExternalText(raw, { inferMarkdown: true, inferTable: true }) } } as MessageEvent);
     await vi.waitFor(() => expect(editor.state.doc.firstChild?.type.name).toBe('heading'));
     expect(editor.state.doc.firstChild?.textContent).toBe('heading');
+    expect(editor.state.selection.from).toBe(1);
+    const pasted = editor.getJSON();
+    editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
+    editor.commands.redo(); expect(editor.getJSON()).toEqual(pasted);
+  });
+  it('retains the newer caret when long content commits at the original bookmark', async () => {
+    const raw = '<p>start</p>' + '<p>body end</p>'.repeat(3000);
+    const workerResult = normalizeExternalHtml(new DOMParser().parseFromString(raw, 'text/html'), raw, undefined);
+    importClipboardSnapshot(editor.view, { formats: { 'text/html': raw } });
+    editor.commands.setTextSelection(1);
+    WorkerMock.instances.at(-1)!.onmessage?.({ data: { ok: true, result: workerResult } } as MessageEvent);
+    await vi.waitFor(() => expect(editor.state.doc.lastChild?.textContent).toBe('body endcd'));
+    expect(editor.state.selection.from).toBe(1);
     editor.commands.undo(); expect(editor.state.doc.textContent).toBe('abcd');
   });
   it('passes MD presentation policy to the Worker for large translated web HTML', async () => {
