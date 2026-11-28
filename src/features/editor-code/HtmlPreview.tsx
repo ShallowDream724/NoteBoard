@@ -68,20 +68,20 @@ export function HtmlPreview({ html, title, directory, savedPath, onShowSource }:
       .replace('</head>', '<style>.export-page-actions{display:none!important}</style></head>')
       .replace('</body>', `<script src="${runtime.href}"></script></body>`);
   }, [source, interactive]);
-  if (!preview) return <PreviewMessage message="无法准备 HTML 预览。" error savedPath={savedPath} onShowSource={onShowSource} />;
-  const message = preview.hasCanvas
+  if (!preview) return <PreviewMessage message="无法准备 HTML 预览。" error savedPath={savedPath} />;
+  const message = preview.scriptNotice === 'canvas'
     ? '应用内预览不会运行此页面的 JavaScript，画布内容可能为空。'
     : '应用内预览不会运行此页面的 JavaScript，脚本生成的内容和交互可能不可用。';
   return <>
-    {preview.hasScripts && <PreviewMessage message={message} savedPath={savedPath} onShowSource={onShowSource} />}
+    {preview.scriptNotice && <PreviewMessage message={message} savedPath={savedPath} />}
     {srcDoc === null ? <div role="status" style={{ padding: 24 }}>正在打开预览…</div> :
       <iframe ref={frameRef} title={`${title} HTML 预览`} sandbox={interactive ? 'allow-scripts' : ''} referrerPolicy="no-referrer"
         srcDoc={srcDoc} style={{ width: '100%', flex: 1, minHeight: 0, border: 0, background: '#fff' }} />}
   </>;
 }
 
-function PreviewMessage({ message, error, savedPath, onShowSource }: {
-  message: string; error?: boolean; savedPath?: string; onShowSource: () => void;
+function PreviewMessage({ message, error, savedPath }: {
+  message: string; error?: boolean; savedPath?: string;
 }) {
   const [opening, setOpening] = useState(false);
   const openSaved = async () => {
@@ -97,8 +97,6 @@ function PreviewMessage({ message, error, savedPath, onShowSource }: {
   };
   return <div className="nb-html-preview-message">
     <p role={error ? 'alert' : 'status'}>{message}</p>
-    {savedPath
-      ? <button type="button" disabled={opening} title="用系统默认应用打开已保存的 HTML" onClick={openSaved}>在浏览器中打开</button>
-      : <button type="button" onClick={onShowSource}>查看源码</button>}
+    {savedPath && <button type="button" disabled={opening} title="用系统默认应用打开已保存的 HTML" onClick={openSaved}>在浏览器中打开</button>}
   </div>;
 }

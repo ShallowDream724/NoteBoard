@@ -52,7 +52,9 @@ import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
 import { getFileFormat, isCodeSourceFile } from '../../core/fileFormats';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { registerShortcut } from '../../core/shortcuts';
-import { switchFilePreviewMode, toggleFilePreviewMode, useFilePreviewMode } from './filePreviewMode';
+import { useResolvedShortcutLabel } from '../../core/useShortcutBindings';
+import { DocumentModeToggle } from '../../components/DocumentModeToggle';
+import { switchFilePreviewMode, toggleFilePreviewMode, useFilePreviewMode, type FilePreviewMode } from './filePreviewMode';
 import {
   initializeDocumentHistory,
   getCurrentDocumentHistoryContent,
@@ -94,9 +96,6 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
   const typography = useSettingsStore((s) => s.settings.typography);
 
-  const showFileMode = (mode: 'preview' | 'source') => {
-    switchFilePreviewMode(docKey, mode);
-  };
   const showSource = useCallback(() => {
     if (useWindowStore.getState().activeKey === docKey) switchFilePreviewMode(docKey, 'source');
   }, [docKey]);
@@ -522,15 +521,8 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
 
   if (!doc) return null;
 
-  return <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--editor-bg)' }}>
+  return <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--editor-bg)' }}>
     <ExternalChangeBanner docKey={docKey} />
-    {format.preview === 'delimited' && <div role="group" aria-label={`${format.id.toUpperCase()} 视图`} style={{ display: 'flex', gap: 2, flex: 'none', padding: '7px 12px', borderBottom: '1px solid var(--editor-border, #e2e8f0)' }}>
-      {(['preview', 'source'] as const).map(mode => <button key={mode} type="button" aria-pressed={fileMode === mode}
-        onClick={() => showFileMode(mode)}
-        style={{ border: 0, borderRadius: 6, padding: '5px 13px', font: '12px var(--ui-font-family, sans-serif)', cursor: 'pointer', background: fileMode === mode ? 'var(--toolbar-hover, #e8edf5)' : 'transparent', color: 'var(--editor-text, #334155)' }}>
-        {mode === 'preview' ? '表格' : '源码'}
-      </button>)}
-    </div>}
     {hasPreview && fileMode === 'preview' && <FileTextPreview format={format} text={doc.content ?? ''} title={doc.displayName} directory={doc.dirPath}
       savedPath={!docKey.startsWith('untitled:') && doc.externalStatus !== 'deleted' ? docKey : undefined} onShowSource={showSource} />}
     {(!hasPreview || fileMode === 'source') && <div style={{ width: '100%', flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}
@@ -538,4 +530,19 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
       <div ref={containerRef} style={{ width: '100%', maxWidth: 'var(--mono-max-width, 100%)', height: '100%' }} />
     </div>}
   </div>;
+}
+    {hasPreview && <CodeFileModeToggle key={docKey} docKey={docKey} formatId={format.id} mode={fileMode} isHtml={format.preview === 'html'} />}
+
+function CodeFileModeToggle({ docKey, formatId, mode, isHtml }: { docKey: string; formatId: string; mode: FilePreviewMode; isHtml: boolean }) {
+  const active = useWindowStore(state => state.activeKey === docKey);
+  const transferring = useWindowStore(state => state.isTransferring(docKey));
+  const shortcut = useResolvedShortcutLabel(isHtml ? 'Ctrl+/' : undefined);
+  if (!active) return null;
+  return <DocumentModeToggle label={`${formatId.toUpperCase()} 视图`} viewMode={mode === 'preview' ? 'visual' : 'source'}
+    onToggle={next => switchFilePreviewMode(docKey, next === 'visual' ? 'preview' : 'source')}
+    options={{
+      visual: { label: isHtml ? '预览' : '表格', accessibleName: isHtml ? '预览 HTML' : '表格', shortcut },
+      source: { label: '源码', accessibleName: isHtml ? '查看 HTML 源码' : '源码', shortcut },
+    }}
+    revealOnChange frameEdge={isHtml && mode === 'preview'} disabled={transferring} />;
 }

@@ -6,8 +6,6 @@ import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { standaloneHtml } from '../../src/features/export/standaloneHtml';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore } from '../../src/stores/windowStore';
-import { TooltipProvider } from '../../src/components/Tooltip';
-import { HtmlViewToggle } from '../../src/components/titlebar/HtmlViewToggle';
 
 const formula = String.raw`\begin{aligned}\mathcal{L}(\theta)&=\sum_{i=1}^{n}x_i^2\\
 f(x)&=\begin{cases}x^2,&x>0\\0,&x\le0\end{cases}\end{aligned}`;
@@ -23,5 +21,5 @@ const key = 'C:\\notes\\html-export-qa.html';
 useDocumentStore.getState().upsertFromPayload({ key, displayName: 'html-export-qa.html', dirPath: 'C:\\notes', kind: 'code', language: 'html', content: preview, encoding: 'utf8', eol: 'lf', size: preview.length, mtime: 1, readonly: false });
 useWindowStore.getState().openTab({ key, path: key, displayName: 'html-export-qa.html', kind: 'code', language: 'html',
   isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
-createRoot(document.querySelector('#app')!).render(<TooltipProvider><HtmlViewToggle docKey={key}/><CodeEditor docKey={key}/></TooltipProvider>);
+createRoot(document.querySelector('#app')!).render(<CodeEditor docKey={key}/>);
 (window as typeof window & { htmlExportReady?: boolean }).htmlExportReady = true;

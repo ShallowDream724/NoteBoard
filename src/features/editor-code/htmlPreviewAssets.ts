@@ -8,7 +8,7 @@ type PlanUrl = (reference: string, allowFont?: boolean) => Render | undefined;
 
 interface AssetFile { path: string; mime: string }
 interface HtmlPreviewAssetPlan { source: string; edits: Edit[]; files: Map<string, AssetFile> }
-interface HtmlPreviewPlan { assets?: HtmlPreviewAssetPlan; hasScripts: boolean; hasCanvas: boolean }
+interface HtmlPreviewPlan { assets?: HtmlPreviewAssetPlan; scriptNotice?: 'canvas' | 'empty-body' }
 
 const htmlNamespace = 'http://www.w3.org/1999/xhtml';
 const svgNamespace = 'http://www.w3.org/2000/svg';
@@ -25,6 +25,30 @@ function isJavaScript(element: Element): boolean {
   const language = element.attrs.find(attr => attr.name === 'language')?.value.toLowerCase();
   const scriptType = type ?? (language ? `text/${language}` : '');
   return scriptType === '' || scriptType === 'module' || javascriptTypes.has(scriptType.trim());
+}
+
+const nonContentTags = new Set(['script', 'style', 'template', 'noscript']);
+const mediaTags = new Set(['img', 'audio', 'video', 'source', 'iframe', 'embed', 'object']);
+const mediaSourceAttributes = new Set(['src', 'srcset', 'poster', 'srcdoc', 'data']);
+
+/** Estimate whether the body has anything to read without executing scripts. */
+function hasStaticBodyContent(body?: Element): boolean {
+  if (!body) return false;
+  const pending: DefaultTreeAdapterTypes.Node[] = [body];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if ('value' in node && /\S/.test(node.value)) return true;
+    if ('tagName' in node) {
+      const { tagName, attrs } = node;
+      if (nonContentTags.has(tagName) || attrs.some(attr => attr.name === 'hidden')) continue;
+      if (mediaTags.has(tagName) && attrs.some(attr => mediaSourceAttributes.has(attr.name) && attr.value.trim())) return true;
+      if (tagName === 'svg' && node.childNodes.some(child => 'tagName' in child && child.tagName !== 'defs')) return true;
+    }
+    if ('childNodes' in node) {
+      for (let i = node.childNodes.length - 1; i >= 0; i--) pending.push(node.childNodes[i]);
+    }
+  }
+  return false;
 }
 
 const imageTypes: Readonly<Record<string, string>> = {
@@ -186,21 +210,29 @@ export function planHtmlPreview(html: string, directory: string, fileName: strin
   const parsed = parse(html, { scriptingEnabled, sourceCodeLocationInfo: true });
   const pending: DefaultTreeAdapterTypes.Node[] = [parsed];
   const elements: Element[] = [];
-  const preview = { hasScripts: false, hasCanvas: false };
+  let hasScripts = false;
+  let hasCanvas = false;
+  let body: Element | undefined;
   let baseHref: string | undefined;
   while (pending.length) {
     const node = pending.pop()!;
     if ('tagName' in node) {
-      if (!scriptingEnabled && !preview.hasScripts && node.tagName === 'script' && isJavaScript(node)) preview.hasScripts = true;
-      if (node.tagName === 'canvas' && node.namespaceURI === htmlNamespace) preview.hasCanvas = true;
-      if (node.tagName === 'base' && node.namespaceURI === htmlNamespace) {
-        baseHref ??= node.attrs.find(attr => attr.name === 'href')?.value;
+      if (!scriptingEnabled && !hasScripts && node.tagName === 'script' && isJavaScript(node)) hasScripts = true;
+      if (node.namespaceURI === htmlNamespace) {
+        if (node.tagName === 'canvas' && !node.attrs.some(attr => attr.name === 'hidden')) hasCanvas = true;
+        if (node.tagName === 'body') body = node;
+        if (node.tagName === 'base') baseHref ??= node.attrs.find(attr => attr.name === 'href')?.value;
       }
       if (node.sourceCodeLocation) elements.push(node);
     }
     if ('childNodes' in node) {
       for (let i = node.childNodes.length - 1; i >= 0; i--) pending.push(node.childNodes[i]);
     }
+  }
+  const preview: HtmlPreviewPlan = {};
+  if (hasScripts) {
+    if (hasCanvas) preview.scriptNotice = 'canvas';
+    else if (!hasStaticBodyContent(body)) preview.scriptNotice = 'empty-body';
   }
   if (!documentBase) return preview;
   let base = documentBase;

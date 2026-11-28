@@ -41,7 +41,19 @@ try {
   assert.equal(await page.locator('.cm-editor').count(), 0, 'preview retains a hidden CodeMirror');
   await frame.getByRole('button', { name: '下一张' }).click();
   assert.equal(await frame.locator('.export-image-slot[data-current]').locator('img').getAttribute('alt'), '乙');
-  await page.getByRole('button', { name: '查看 HTML 源码' }).click();
+  const capsule = page.getByRole('group', { name: 'HTML 视图' });
+  await page.waitForFunction(() => {
+    const toggle = document.querySelector('.nb-document-mode-toggle');
+    return toggle && getComputedStyle(toggle).pointerEvents === 'none';
+  });
+  const hiddenCapsulePassesClicks = await capsule.evaluate(toggle => {
+    const { x, y, width, height } = toggle.getBoundingClientRect();
+    return document.elementFromPoint(x + width / 2, y + height / 2) === document.querySelector('iframe');
+  });
+  assert(hiddenCapsulePassesClicks, 'hidden capsule must let iframe content receive clicks');
+  await page.locator('.nb-document-mode-frame-edge').hover();
+  await capsule.getByRole('button', { name: '查看 HTML 源码' }).click();
+  assert.equal(await capsule.getByRole('button', { name: '查看 HTML 源码' }).getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('.cm-editor').count(), 1);
   assert.equal(await page.locator('iframe').count(), 0);
   await page.evaluate(() => window.gc?.());
@@ -60,7 +72,9 @@ try {
   assert.equal(coexistence.editors, 1);
   assert.equal(coexistence.frames, 1);
   await page.evaluate(() => document.querySelector('#coexistence-baseline')?.remove());
-  await page.getByRole('button', { name: '预览 HTML' }).click();
+  const previewButton = capsule.getByRole('button', { name: '预览 HTML' });
+  await previewButton.focus();
+  await previewButton.press('Enter');
   await frame.locator('.export-carousel-controls').waitFor();
   await page.evaluate(() => window.gc?.());
   const previewState = await page.evaluate(() => ({ heap: performance.memory?.usedJSHeapSize, editors: document.querySelectorAll('.cm-editor').length }));

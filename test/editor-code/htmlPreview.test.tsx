@@ -7,8 +7,6 @@ import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { standaloneHtml } from '../../src/features/export/standaloneHtml';
 import { useDocumentStore } from '../../src/stores/documentStore';
 import { useWindowStore } from '../../src/stores/windowStore';
-import { HtmlViewToggle } from '../../src/features/toolbar/HtmlViewToggle';
-import { TooltipProvider } from '../../src/components/Tooltip';
 import { undoDocumentHistory } from '../../src/features/history/documentHistory';
 import * as commands from '../../src/core/ipc/commands';
 import * as events from '../../src/core/ipc/events';
@@ -36,6 +34,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   setShortcutOverrides({});
 });
@@ -81,7 +80,7 @@ it('uses the configured binding only when the active HTML preview frame has focu
 });
 
 it('opens an isolated reading preview and refreshes it from unsaved source edits', async () => {
-  await act(async () => root.render(<TooltipProvider><HtmlViewToggle docKey={path} /><CodeEditor docKey={path} /></TooltipProvider>));
+  await act(async () => root.render(<CodeEditor docKey={path} />));
   await act(() => vi.dynamicImportSettled());
   const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
   expect(frame.getAttribute('sandbox')).toBe('');
@@ -101,6 +100,24 @@ it('opens an isolated reading preview and refreshes it from unsaved source edits
   expect(restored?.state.selection.main.anchor).toBe(4);
   await act(async () => { undoDocumentHistory(path); });
   expect(restored?.state.doc.toString()).toBe('<h1>原文</h1>');
+});
+
+it('reveals the bottom-left mode switch for three seconds after opening, switching, or reactivating the tab', async () => {
+  vi.useFakeTimers();
+  await act(async () => root.render(<CodeEditor docKey={path} />));
+  const capsule = () => host.querySelector('.nb-document-mode-toggle');
+  expect(capsule()?.getAttribute('data-revealed')).toBe('true');
+  await act(async () => { vi.advanceTimersByTime(2999); });
+  expect(capsule()?.getAttribute('data-revealed')).toBe('true');
+  await act(async () => { vi.advanceTimersByTime(1); });
+  expect(capsule()?.hasAttribute('data-revealed')).toBe(false);
+  await act(async () => capsule()?.querySelector<HTMLButtonElement>('[aria-label="查看 HTML 源码"]')?.click());
+  expect(capsule()?.getAttribute('data-revealed')).toBe('true');
+  await act(async () => useWindowStore.setState({ activeKey: null }));
+  expect(capsule()).toBeNull();
+  await act(async () => useWindowStore.setState({ activeKey: path }));
+  expect(capsule()?.getAttribute('data-revealed')).toBe('true');
+  expect(capsule()?.querySelector('[aria-pressed="true"]')?.textContent).toBe('源码');
 });
 
 it('runs only the reviewed export enhancement inside an isolated preview', async () => {
@@ -134,14 +151,13 @@ it('explains blank canvases and opens the saved file only on request', async () 
   expect(open).toHaveBeenCalledExactlyOnceWith(path);
 
   await act(async () => useDocumentStore.getState().setExternalStatus(path, 'deleted'));
-  const source = host.querySelector<HTMLButtonElement>('.nb-html-preview-message button')!;
-  expect(source.textContent).toBe('查看源码');
-  await act(async () => source.click());
+  expect(host.querySelector('.nb-html-preview-message button')).toBeNull();
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="查看 HTML 源码"]')!.click());
   expect(useWindowStore.getState().getTab(path)?.viewMode).toBe('source');
   expect(EditorView.findFromDOM(host.querySelector('.cm-editor')!)?.state.doc.toString()).toBe(html);
 });
 
-it('retains static markup alongside modules and ignores data and template scripts', async () => {
+it('keeps readable articles with modules and inert scripts free of the script notice', async () => {
   const staticHtml = '<h1>标题</h1><script type="application/ld+json">{}</script><template><script>render()</script></template>';
   useDocumentStore.getState().setContent(path, staticHtml);
   await act(async () => root.render(<CodeEditor docKey={path} />));
@@ -150,6 +166,15 @@ it('retains static markup alongside modules and ignores data and template script
 
   const html = staticHtml + '<script type="module" src="./app.js"></script>';
   await act(async () => useDocumentStore.getState().setContent(path, html));
+  expect(host.querySelector('.nb-html-preview-message')).toBeNull();
+  expect(host.querySelector<HTMLIFrameElement>('iframe')?.srcdoc).toBe(html);
+});
+
+it('explains a script-driven preview with an empty mount element', async () => {
+  const html = '<head><title>应用</title><script type="module" src="./app.js"></script></head><body><div id="app"></div></body>';
+  useDocumentStore.getState().setContent(path, html);
+  await act(async () => root.render(<CodeEditor docKey={path} />));
+  await act(() => vi.dynamicImportSettled());
   expect(host.querySelector('[role=status]')?.textContent).toContain('脚本生成的内容');
   expect(host.querySelector<HTMLIFrameElement>('iframe')?.srcdoc).toBe(html);
 });
