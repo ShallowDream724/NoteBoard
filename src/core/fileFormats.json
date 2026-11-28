@@ -218,11 +218,16 @@
     ]
   },
   {
+    "id": "pdf",
+    "kind": "pdf",
+    "language": "plaintext",
+    "extensions": ["pdf"]
+  },
+  {
     "id": "unsupported-plaintext",
     "kind": "unsupported",
     "language": "plaintext",
     "extensions": [
-      "pdf",
       "doc",
       "docx",
       "docm",

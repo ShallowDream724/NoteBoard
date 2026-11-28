@@ -71,7 +71,8 @@ pub fn probe_document(path: String) -> Result<ProbeResult, String> {
 
     let metadata = std::fs::metadata(p).map_err(|e| e.to_string())?;
     let (kind, _lang) = crate::dto::kind_from_path(&path);
-    let is_text = kind != crate::dto::DocumentKind::Unsupported && read::is_text_file(p).unwrap_or(false);
+    let is_text = !matches!(kind, crate::dto::DocumentKind::Unsupported | crate::dto::DocumentKind::Pdf)
+        && read::is_text_file(p).unwrap_or(false);
 
     Ok(ProbeResult {
         size: metadata.len(),

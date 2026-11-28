@@ -4,7 +4,7 @@
 
 import { CODE_LANGUAGES, type CodeLanguage } from '../codeLanguages';
 
-export type DocumentKind = 'markdown' | 'noteboard' | 'code' | 'board' | 'image' | 'mindmap' | 'drawio' | 'bitable' | 'unsupported';
+export type DocumentKind = 'markdown' | 'noteboard' | 'code' | 'board' | 'image' | 'pdf' | 'mindmap' | 'drawio' | 'bitable' | 'unsupported';
 // infographic：NoteBoard 自研信息图声明式源码（YAML/JSON），与 md 内嵌 ```infographic 块同源
 export type LanguageId = CodeLanguage['value'] | 'html' | 'mermaid' | 'plantuml' | 'infographic';
 export type SavePolicy = 'auto' | 'manual';
@@ -18,7 +18,7 @@ export type ContentWidth = 'narrow' | 'standard' | 'wide' | 'full' | (string & {
 
 // ── 枚举清单（与 Rust build.rs 生成的 contract-enums.json 一致）──
 
-export const ALL_DOCUMENT_KINDS: DocumentKind[] = ['markdown', 'noteboard', 'code', 'board', 'image', 'mindmap', 'drawio', 'bitable', 'unsupported'];
+export const ALL_DOCUMENT_KINDS: DocumentKind[] = ['markdown', 'noteboard', 'code', 'board', 'image', 'pdf', 'mindmap', 'drawio', 'bitable', 'unsupported'];
 export const ALL_ENCODINGS: Encoding[] = ['utf8', 'utf8-bom', 'gbk'];
 export const ALL_EOLS: Eol[] = ['crlf', 'lf'];
 export const ALL_LANGUAGE_IDS: LanguageId[] = [...CODE_LANGUAGES.map(language => language.value), 'html', 'mermaid', 'plantuml', 'infographic'];
@@ -170,7 +170,7 @@ export type PreparedDocument =
       size: number;
       mtime: number;
     }
-  | { type: 'text'; payload: DocumentPayload }
+  | { type: 'text' | 'pdf'; payload: DocumentPayload }
   | {
       type: 'unsupported';
       key: string;

@@ -34,6 +34,10 @@ export const loaderFactories: Record<EditorLoaderKind, () => Promise<{ default: 
     import('../image-viewer/ImageViewer').then(
       (m) => ({ default: m.ImageViewer as unknown as LazyEditorComponent }),
     ),
+  pdf: () =>
+    import('../pdf-viewer/PdfViewer').then(
+      (m) => ({ default: m.PdfViewer as unknown as LazyEditorComponent }),
+    ),
   diagram: () =>
     import('../diagram-preview/DiagramSplitEditor').then(
       (m) => ({ default: m.DiagramSplitEditor as unknown as LazyEditorComponent }),

@@ -63,6 +63,7 @@ describe('docKind 扩展名映射', () => {
     expect(savePolicyOf('bitable')).toBe('auto');
     expect(savePolicyOf('code')).toBe('manual');
     expect(savePolicyOf('image')).toBe('manual');
+    expect(savePolicyOf('pdf')).toBe('manual');
     expect(savePolicyOf('unsupported')).toBe('manual');
   });
 
@@ -100,6 +101,7 @@ describe('docKind 扩展名映射', () => {
     expect(kindFromPath('modern.webp')).toBe<DocumentKind>('image');
     expect(kindFromPath('app.ico')).toBe<DocumentKind>('image');
     expect(kindFromPath('vector.svg')).toBe<DocumentKind>('image');
+    expect(kindFromPath('paper.PDF')).toBe<DocumentKind>('pdf');
     expect(kindFromPath('unknown.xyz')).toBe<DocumentKind>('code');
   });
 
@@ -129,6 +131,7 @@ describe('docKind 扩展名映射', () => {
     expect(isEditable('drawio')).toBe(true);
     expect(isEditable('bitable')).toBe(true);
     expect(isEditable('image')).toBe(false);
+    expect(isEditable('pdf')).toBe(false);
     expect(isEditable('unsupported')).toBe(false);
   });
 

@@ -30,6 +30,7 @@ export type EditorLoaderKind =
   | 'drawio'
   | 'bitable'
   | 'image'
+  | 'pdf'
   | 'diagram'
   | 'infographic'
   | 'textdiff';
@@ -58,6 +59,8 @@ export function resolveEditorKind(tab: Pick<Tab, 'kind' | 'language' | 'toolKind
       return 'bitable';
     case 'image':
       return 'image';
+    case 'pdf':
+      return 'pdf';
     default:
       return 'unsupported';
   }

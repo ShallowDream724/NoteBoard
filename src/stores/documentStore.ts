@@ -11,7 +11,7 @@ import {
   clearDocumentHistory,
 } from '../features/history/documentHistory';
 import { normalizePath } from '../features/explorer/pathUtils';
-import { kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
+import { isEditable, kindFromPath, languageFromPath, extFromPath } from '../core/docKind';
 import { emit } from '../core/emitter';
 import { normalizeDocumentEol } from '../core/documentText';
 
@@ -287,7 +287,9 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
         || languageFromPath(oldKey) !== languageFromPath(newKey) || kindFromPath(oldKey) !== kindFromPath(newKey);
       const candidateKind = changedFormat ? kindFromPath(newKey) : doc.kind;
       // A filename change cannot manufacture editable text for a binary handoff.
-      const kind = doc.kind === 'unsupported' && doc.content === null && candidateKind === 'code' ? 'unsupported' : candidateKind;
+      const undecodedBinary = doc.content === null
+        && (doc.kind === 'unsupported' && candidateKind === 'code' || doc.kind === 'pdf' && isEditable(candidateKind));
+      const kind = undecodedBinary ? 'unsupported' : candidateKind;
       newMap.set(newKey, {
         ...doc,
         kind,

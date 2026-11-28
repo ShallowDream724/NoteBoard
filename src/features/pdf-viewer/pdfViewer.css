@@ -1,0 +1,187 @@
+.nb-pdf-reader {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--editor-surface);
+  color: var(--editor-text);
+  font-family: var(--ui-font-family, sans-serif);
+  font-size: 13px;
+}
+
+.nb-pdf-toolbar,
+.nb-pdf-toolbar form,
+.nb-pdf-zoom,
+.nb-pdf-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nb-pdf-toolbar {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--editor-border);
+  background: var(--editor-bg);
+}
+
+.nb-pdf-toolbar button,
+.nb-pdf-toolbar input {
+  box-sizing: border-box;
+  min-height: 28px;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+}
+
+.nb-pdf-toolbar button {
+  display: inline-grid;
+  min-width: 28px;
+  place-items: center;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nb-pdf-toolbar button:hover:not(:disabled) {
+  background: var(--editor-surface);
+}
+
+.nb-pdf-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nb-pdf-toolbar input {
+  width: 5ch;
+  padding: 0 3px;
+  border: 1px solid var(--editor-border);
+  background: var(--editor-bg);
+  text-align: center;
+}
+
+.nb-pdf-toolbar span {
+  color: var(--editor-text-muted);
+}
+
+.nb-pdf-zoom {
+  margin-inline-start: 8px;
+}
+
+.nb-pdf-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.nb-pdf-stage {
+  display: flex;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  justify-content: center;
+  padding: 16px;
+}
+
+.nb-pdf-sheet {
+  position: relative;
+  flex: none;
+  background: white;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 16%);
+}
+
+.nb-pdf-sheet canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* PDF.js writes percentage positions and its font geometry variables to each run. */
+.nb-pdf-text-layer {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  transform-origin: 0 0;
+}
+
+.nb-pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  user-select: text;
+  transform-origin: 0 0;
+}
+
+.nb-pdf-text-layer span:not(.markedContent) {
+  font-size: calc(var(--text-scale-factor) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1)) scale(calc(1 / var(--min-font-size)));
+}
+
+.nb-pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.nb-pdf-text-layer ::selection {
+  background: rgb(45 111 220 / 37%);
+  color: transparent;
+}
+
+.nb-pdf-text-layer[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+
+.nb-pdf-text-layer[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+
+.nb-pdf-text-layer[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+
+.nb-pdf-status {
+  display: grid;
+  min-height: 120px;
+  height: 100%;
+  box-sizing: border-box;
+  place-content: center;
+  justify-items: center;
+  padding: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.nb-pdf-stage > .nb-pdf-status {
+  max-width: 240px;
+}
+
+.nb-pdf-status-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.nb-pdf-page-error {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: #202020;
+  background: white;
+}

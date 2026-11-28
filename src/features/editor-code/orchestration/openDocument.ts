@@ -271,6 +271,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
       return 'failed';
     }
 
+    case 'pdf':
     case 'text': {
       const payload = prepared.payload;
       // 注册文档（跨窗口并发竞争由 register 的 already-open 兜底）
@@ -294,7 +295,7 @@ async function openDocumentInternal(path: string, retryDepth: number, options: C
         return 'failed';
       }
 
-      // 建 Document 与 Tab 并激活（关键路径：到此即可编辑）
+      // 建 Document 与 Tab 并激活。
       useDocumentStore.getState().upsertFromPayload(payload);
       activateDocumentTab(payload.key, options, buildTab(payload.key, payload.displayName, payload.kind, payload.language));
 

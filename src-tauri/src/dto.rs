@@ -16,6 +16,7 @@ pub enum DocumentKind {
     Code,
     Board,
     Image,
+    Pdf,
     Mindmap,
     Drawio,
     // 多维表格格式 (.bitable / .table)
@@ -403,7 +404,7 @@ pub fn kind_from_path(path: &str) -> (DocumentKind, LanguageId) {
 pub fn save_policy_of(kind: DocumentKind) -> SavePolicy {
     match kind {
         DocumentKind::Markdown | DocumentKind::Noteboard | DocumentKind::Board | DocumentKind::Mindmap | DocumentKind::Drawio | DocumentKind::Bitable => SavePolicy::Auto,
-        DocumentKind::Code | DocumentKind::Image | DocumentKind::Unsupported => SavePolicy::Manual,
+        DocumentKind::Code | DocumentKind::Image | DocumentKind::Pdf | DocumentKind::Unsupported => SavePolicy::Manual,
     }
 }
 
@@ -469,6 +470,7 @@ pub enum PreparedDocument {
         size: u64,
         mtime: i64,
     },
+    Pdf { payload: DocumentPayload },
     #[serde(rename_all = "camelCase")]
     Text { payload: DocumentPayload },
     #[serde(rename_all = "camelCase")]

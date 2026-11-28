@@ -9,6 +9,7 @@ import { saveAs } from '../editor-code/orchestration/saveDocument';
 import { syncDocumentContent } from '../editor-code/orchestration/syncDocumentContent';
 import { discardStagedDocuments } from '../staging/stagingManager';
 import { showToast } from '../../stores/toastStore';
+import { isEditable } from '../../core/docKind';
 
 export function MissingFileDialog() {
   const activeKey = useWindowStore((state) => state.activeKey);
@@ -17,7 +18,7 @@ export function MissingFileDialog() {
   const [saving, setSaving] = useState(false);
 
   if (!activeKey || !activeTab?.isDetached || !document) return null;
-  const canSaveAs = document.kind !== 'image' && document.kind !== 'unsupported';
+  const canSaveAs = isEditable(document.kind);
 
   /** 从编辑器抓取最新内存内容后另存，成功时 saveAs 会迁移标签与文档 key。 */
   const handleSaveAs = async () => {

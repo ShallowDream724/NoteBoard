@@ -56,6 +56,7 @@ const manualSaves = new Map<string, { generation: number; revision: number; cont
 
 function requestSave(key: string, forceSaveAs: boolean, task: () => Promise<boolean>): Promise<boolean> {
   const doc = useDocumentStore.getState().getDocument(key);
+  if (doc?.kind === 'pdf' && doc.content == null) return Promise.resolve(false);
   const generation = getSessionGeneration(key), revision = getDocumentRevision(key);
   const content = getEditorCapabilities(key) ? undefined : doc?.content;
   const saveAsRequest = forceSaveAs || key.startsWith('untitled:') || doc?.externalStatus === 'deleted'

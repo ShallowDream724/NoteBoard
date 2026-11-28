@@ -97,7 +97,7 @@ pub async fn prepare_document(
     .await
     .map_err(|e| format!("prepare_error:{e}"));
 
-    // 5. 🔴 N05 预约生命周期：读盘完成且结果将被前端注册（Text/Image/Unsupported）→
+    // 5. 🔴 N05 预约生命周期：读盘完成且结果将被前端注册 →
     //    在途标记转为注册预约（保留 pending，等待 register_document 兑现）；失败
     //    （Failed/Directory/系统错误）释放。预约期间并发第二请求仍按 AlreadyOpen 激活；
     //    前端崩溃不注册由 TTL 惰性清理。
@@ -107,6 +107,7 @@ pub async fn prepare_document(
             prepared,
             Ok(Ok(PreparedDocument::Text { .. }))
                 | Ok(Ok(PreparedDocument::Image { .. }))
+                | Ok(Ok(PreparedDocument::Pdf { .. }))
                 | Ok(Ok(PreparedDocument::Unsupported { .. }))
         );
         if keep_reservation {
@@ -172,6 +173,17 @@ fn prepare_on_worker(
         })
         .unwrap_or(0);
 
+    // Image decoders and the PDF.js backing buffer can allocate from the full file size.
+    if matches!(kind, DocumentKind::Image | DocumentKind::Pdf)
+        && max_read_bytes.is_some_and(|limit| size > limit)
+    {
+        return Ok(PreparedDocument::ConfirmationRequired {
+            key: key.to_string(),
+            display_name,
+            size,
+        });
+    }
+
     match kind {
         DocumentKind::Unsupported => Ok(PreparedDocument::Unsupported {
             key: key.to_string(),
@@ -180,25 +192,29 @@ fn prepare_on_worker(
             language: "plaintext".to_string(),
             size,
         }),
-        // Images will be decoded through the asset protocol, so they also need
-        // confirmation. Known external formats return from metadata alone.
-        DocumentKind::Image => {
-            if max_read_bytes.is_some_and(|limit| size > limit) {
-                return Ok(PreparedDocument::ConfirmationRequired {
-                    key: key.to_string(),
-                    display_name,
-                    size,
-                });
-            }
-            Ok(PreparedDocument::Image {
+        DocumentKind::Image => Ok(PreparedDocument::Image {
+            key: key.to_string(),
+            display_name,
+            dir_path,
+            language: "plaintext".to_string(),
+            size,
+            mtime,
+        }),
+        DocumentKind::Pdf => Ok(PreparedDocument::Pdf {
+            payload: DocumentPayload {
                 key: key.to_string(),
                 display_name,
                 dir_path,
-                language: "plaintext".to_string(),
+                kind,
+                language,
+                content: None,
+                encoding: crate::dto::Encoding::Utf8,
+                eol: crate::dto::Eol::Lf,
                 size,
                 mtime,
-            })
-        }
+                readonly: true,
+            },
+        }),
         // 专有二进制（XMind/Excalidraw 场景文件等）走原 kind 映射：
         // board/drawio/bitable/mindmap 本身是文本或专有格式的按现有规则回退 unsupported
         _ => {
@@ -276,7 +292,7 @@ mod classification_tests {
     #[test]
     fn renamed_text_is_reclassified_by_the_shared_format_map() {
         let directory = tempfile::tempdir().unwrap();
-        for extension in ["docx", "PDF", "xlsx", "pptx", "zip", "mp4"] {
+        for extension in ["docx", "xlsx", "pptx", "zip", "mp4"] {
             let path = directory.path().join(format!("renamed.{extension}"));
             std::fs::write(&path, "plain text before rename").unwrap();
             let path = path.to_str().unwrap();
@@ -301,9 +317,25 @@ mod classification_tests {
     }
 
     #[test]
-    fn size_confirmation_precedes_text_read_and_image_decode() {
+    fn pdf_preparation_returns_readonly_metadata_without_loading_the_body() {
         let directory = tempfile::tempdir().unwrap();
-        for extension in ["md", "png"] {
+        let path = directory.path().join("paper.PDF");
+        let bytes = b"%PDF-1.7\nremaining data";
+        std::fs::write(&path, bytes).unwrap();
+        let path = path.to_str().unwrap();
+        let PreparedDocument::Pdf { payload } = prepare_on_worker(path, path, None).unwrap() else {
+            panic!("PDF should open as a readonly resource");
+        };
+        assert_eq!(payload.kind, DocumentKind::Pdf);
+        assert_eq!(payload.size, bytes.len() as u64);
+        assert!(payload.readonly);
+        assert!(payload.content.is_none());
+    }
+
+    #[test]
+    fn size_confirmation_precedes_text_read_and_resource_decode() {
+        let directory = tempfile::tempdir().unwrap();
+        for extension in ["md", "png", "pdf"] {
             let path = directory.path().join(format!("large.{extension}"));
             std::fs::write(&path, "content larger than limit").unwrap();
             let path = path.to_str().unwrap();

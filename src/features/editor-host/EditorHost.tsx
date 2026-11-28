@@ -12,6 +12,7 @@
 import React, { Component, useState, useCallback, useEffect, useRef, useMemo, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react';
 import type { Editor } from '@tiptap/core';
 import { useWindowStore, type Tab } from '../../stores/windowStore';
+import { useEditorActive } from '../../core/editor/EditorActivityContext';
 import {
   resolveEditorKind,
   subscribeEditorResource,
@@ -232,6 +233,7 @@ export function EditorHost({
 }: EditorHostProps): ReactNode {
   const [retryGeneration, setRetryGeneration] = useState(0);
   const kind = resolveEditorKind(tab);
+  const pdfActive = useEditorActive() && kind === 'pdf';
 
   // 🔴 P0-1b：资源状态经 useSyncExternalStore 订阅——ready 时直接同步渲染缓存
   //    组件（零 Suspense、零 fallback 提交）；loading 渲染加载占位（不进入
@@ -258,9 +260,10 @@ export function EditorHost({
     switch (kind) {
       case 'markdown': return <LoadedEditor docKey={tab.key} onEditorReady={onEditorReady} />;
       case 'image': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} fileSize={fileSize ?? 0} />;
+      case 'pdf': return <LoadedEditor docKey={tab.key} filePath={tab.path ?? tab.key} fileName={tab.displayName} active={pdfActive} />;
       default: return <LoadedEditor docKey={tab.key} />;
     }
-  }, [resource.component, kind, tab.key, tab.path, tab.displayName, fileSize, onEditorReady]);
+  }, [resource.component, kind, tab.key, tab.path, tab.displayName, fileSize, onEditorReady, pdfActive]);
 
   if (kind === 'unsupported') {
     return unsupportedView;

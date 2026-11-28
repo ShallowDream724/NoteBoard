@@ -89,6 +89,8 @@ pub fn run() {
             fsio::commands::probe_document,
             // 🔴 S07：统一文件准备（读盘前归属查询 + 在途去重 + blocking 读取）
             fsio::prepare::prepare_document,
+            fsio::local_pdf::local_pdf_metadata,
+            fsio::local_pdf::read_local_pdf_range,
             fsio::commands::write_document,
             fsio::native_documents::save_native_bundle,
             fsio::native_documents::read_native_headers,

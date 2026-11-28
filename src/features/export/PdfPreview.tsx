@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type PDFDocumentLoadingTask } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { PDFDocumentProxy, PDFDocumentLoadingTask } from 'pdfjs-dist';
+import { getDocument } from '../../core/pdf/pdfRuntime';
 import type { ItemLocation, PdfReceipt } from './model';
 import { NativePdfRange } from './nativePdfRange';
-GlobalWorkerOptions.workerSrc = workerUrl;
 
 function Page({ pdf, index, width, locations, selected, onSelect, issues }: {
   pdf: PDFDocumentProxy; index: number; width: number; locations: ItemLocation[]; selected?: string; onSelect?: (id: string) => void; issues?: ReadonlySet<string>;
