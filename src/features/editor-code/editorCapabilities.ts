@@ -4,7 +4,7 @@
 
 import type { EditorView } from '@codemirror/view';
 import { foldState, toggleFold, unfoldAll } from '@codemirror/language';
-import { gotoLine } from '@codemirror/search';
+import { toggleGoToLine } from './toggleGoToLine';
 import type {
   CodeOpsCapabilities,
   EditorCapabilities,
@@ -140,7 +140,7 @@ export function createCodeEditorCapabilities(
         subscribe: reading.subscribe,
         toggle: () => reading.toggle(getLanguage()),
       } : undefined,
-      goToLine: () => { gotoLine(view); },
+      goToLine: () => { toggleGoToLine(view); },
       toggleFold: () => { toggleFold(view); view.focus(); },
       unfoldAll: () => { unfoldAll(view); view.focus(); },
     },

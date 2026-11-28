@@ -9,7 +9,7 @@ import {
   historyKeymap,
   indentWithTab,
 } from '@codemirror/commands';
-import { search, highlightSelectionMatches, gotoLine } from '@codemirror/search';
+import { search, highlightSelectionMatches } from '@codemirror/search';
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -36,6 +36,7 @@ import {
 } from '@codemirror/view';
 import { nbSyntaxHighlighting } from './highlightStyle';
 import { nbEditorTheme } from './theme';
+import { toggleGoToLine } from './toggleGoToLine';
 import { createDisclosureTriangle } from '../../components/DisclosureTriangle';
 
 // ── 热重配 Compartment ──
@@ -263,7 +264,7 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
     typographyCompartment.of([]),
     // 键映射
     keymap.of([
-      { key: 'Mod-Alt-g', run: gotoLine },
+      { key: 'Mod-Alt-g', run: toggleGoToLine },
       ...defaultKeymap,
       ...historyKeymap,
       ...foldKeymap,

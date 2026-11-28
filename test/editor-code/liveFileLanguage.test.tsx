@@ -92,6 +92,12 @@ describe('file syntax and preview lifecycle', () => {
     await act(async () => position().click());
     expect(first.dom.querySelector('input[name="line"]')).toBeNull();
     expect(second.dom.querySelector('input[name="line"]')).toBeTruthy();
+    await act(async () => { position().focus(); position().click(); });
+    expect(second.dom.querySelector('input[name="line"]')).toBeNull();
+    expect(second.hasFocus).toBe(true);
+    expect(second.state.selection.main.head).toBe(3);
+    await act(async () => position().click());
+    expect(second.dom.querySelectorAll('input[name="line"]')).toHaveLength(1);
   });
 
   it('keeps line numbers on a recognized code file despite the plain-text setting', async () => {
