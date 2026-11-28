@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, ExternalLink, FolderOpen, Save, SaveAll } from 'lucide-react';
+import { Copy, Globe, FolderOpen, Save, SaveAll } from 'lucide-react';
 import { openWithDefaultApp, revealInExplorer } from '../../core/ipc/commands';
 import { useDocumentStore } from '../../stores/documentStore';
 import { showToast } from '../../stores/toastStore';
@@ -26,7 +26,7 @@ export function HtmlFileActions({ docKey }: { docKey: string }) {
     showToast('已复制 HTML 源码', 'success');
   };
   return <>
-    <ToolbarButton icon={<ExternalLink size={15} />} label="浏览器打开" compactLabel
+    <ToolbarButton icon={<Globe size={15} />}
       title="用系统默认应用打开已保存的 HTML（通常为浏览器）" disabled={busy || !isFile}
       onClick={() => run(() => openWithDefaultApp(docKey))} />
     <ToolbarButton icon={<Save size={15} />} title="保存 HTML 源码" shortcut="Ctrl+S"

@@ -41,7 +41,7 @@ try {
   assert.equal(await page.locator('.cm-editor').count(), 0, 'preview retains a hidden CodeMirror');
   await frame.getByRole('button', { name: '下一张' }).click();
   assert.equal(await frame.locator('.export-image-slot[data-current]').locator('img').getAttribute('alt'), '乙');
-  await page.getByRole('button', { name: '源码' }).click();
+  await page.getByRole('button', { name: '查看 HTML 源码' }).click();
   assert.equal(await page.locator('.cm-editor').count(), 1);
   assert.equal(await page.locator('iframe').count(), 0);
   await page.evaluate(() => window.gc?.());
@@ -60,7 +60,7 @@ try {
   assert.equal(coexistence.editors, 1);
   assert.equal(coexistence.frames, 1);
   await page.evaluate(() => document.querySelector('#coexistence-baseline')?.remove());
-  await page.getByRole('button', { name: '预览' }).click();
+  await page.getByRole('button', { name: '预览 HTML' }).click();
   await frame.locator('.export-carousel-controls').waitFor();
   await page.evaluate(() => window.gc?.());
   const previewState = await page.evaluate(() => ({ heap: performance.memory?.usedJSHeapSize, editors: document.querySelectorAll('.cm-editor').length }));

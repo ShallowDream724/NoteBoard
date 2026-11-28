@@ -3,7 +3,7 @@ import { customCodeMirrorShortcuts } from '../../core/editor/customShortcuts';
 // 裸 CM6（new EditorView / EditorState.create），挂载到 DOM
 // 详见 docs/09-开发路线图.md 4.1
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   EditorView,
   keymap,
@@ -48,7 +48,7 @@ import { FileTextPreview } from './FileTextPreview';
 import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
 import { getFileFormat } from '../../core/fileFormats';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
-import { saveViewState } from '../session/editorSuspension';
+import { switchFilePreviewMode, useFilePreviewMode } from './filePreviewMode';
 import {
   initializeDocumentHistory,
   getCurrentDocumentHistoryContent,
@@ -80,21 +80,12 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
   const doc = useDocumentStore((s) => s.documents.get(docKey));
   const format = getFileFormat(docKey);
   const hasPreview = format.preview === 'html' || format.preview === 'delimited';
-  const [fileMode, setFileMode] = useState<'preview' | 'source'>(() =>
-    useWindowStore.getState().tabs.find(tab => tab.key === docKey)?.viewMode === 'source' ? 'source' : 'preview');
+  const fileMode = useFilePreviewMode(docKey);
   const setTabDirty = useWindowStore((s) => s.setTabDirty);
   const typography = useSettingsStore((s) => s.settings.typography);
 
   const showFileMode = (mode: 'preview' | 'source') => {
-    if (mode === fileMode) return;
-    // Store owns the preview snapshot before CodeMirror is released. This also
-    // resolves a pending 500 ms edit debounce without holding another HTML copy.
-    if (mode === 'preview' && viewRef.current) {
-      const state = getEditorCapabilities(docKey)?.captureViewState?.();
-      if (state) saveViewState(docKey, state);
-    }
-    setFileMode(mode);
-    useWindowStore.getState().setTabViewMode(docKey, mode === 'source' ? 'source' : 'visual');
+    switchFilePreviewMode(docKey, mode);
   };
 
   // 监听排版字体与字号变化并热重配 CM6，并刷新字符度量
@@ -498,11 +489,11 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
 
   return <div style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--editor-bg)' }}>
     <ExternalChangeBanner docKey={docKey} />
-    {hasPreview && <div role="group" aria-label={`${format.preview === 'html' ? 'HTML' : format.id.toUpperCase()} 视图`} style={{ display: 'flex', gap: 2, flex: 'none', padding: '7px 12px', borderBottom: '1px solid var(--editor-border, #e2e8f0)' }}>
+    {format.preview === 'delimited' && <div role="group" aria-label={`${format.id.toUpperCase()} 视图`} style={{ display: 'flex', gap: 2, flex: 'none', padding: '7px 12px', borderBottom: '1px solid var(--editor-border, #e2e8f0)' }}>
       {(['preview', 'source'] as const).map(mode => <button key={mode} type="button" aria-pressed={fileMode === mode}
         onClick={() => showFileMode(mode)}
         style={{ border: 0, borderRadius: 6, padding: '5px 13px', font: '12px var(--ui-font-family, sans-serif)', cursor: 'pointer', background: fileMode === mode ? 'var(--toolbar-hover, #e8edf5)' : 'transparent', color: 'var(--editor-text, #334155)' }}>
-        {mode === 'preview' ? format.preview === 'delimited' ? '表格' : '预览' : '源码'}
+        {mode === 'preview' ? '表格' : '源码'}
       </button>)}
     </div>}
     {hasPreview && fileMode === 'preview' && <FileTextPreview format={format} text={doc.content ?? ''} title={doc.displayName} directory={doc.dirPath} onShowSource={() => showFileMode('source')} />}

@@ -6,6 +6,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { standaloneHtml } from '../../src/features/export/standaloneHtml';
 import { useDocumentStore } from '../../src/stores/documentStore';
+import { useWindowStore } from '../../src/stores/windowStore';
+import { HtmlViewToggle } from '../../src/components/titlebar/HtmlViewToggle';
+import { TooltipProvider } from '../../src/components/Tooltip';
 import { undoDocumentHistory } from '../../src/features/history/documentHistory';
 
 const path = 'C:\\notes\\page.html';
@@ -18,6 +21,9 @@ beforeEach(() => {
   Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect() });
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
   useDocumentStore.setState({ documents: new Map() });
+  useWindowStore.setState({ tabs: [], activeKey: null });
+  useWindowStore.getState().openTab({ key: path, path, displayName: 'page.html', kind: 'code', language: 'html',
+    isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
   useDocumentStore.getState().upsertFromPayload({ key: path, displayName: 'page.html', dirPath: 'C:\\notes', kind: 'code', language: 'html', content: '<h1>原文</h1>', encoding: 'utf8', eol: 'lf', size: 12, mtime: 1, readonly: false });
   host = document.createElement('div'); document.body.append(host); root = createRoot(host);
 });
@@ -25,20 +31,21 @@ beforeEach(() => {
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 
 it('opens an isolated reading preview and refreshes it from unsaved source edits', async () => {
-  await act(async () => root.render(<CodeEditor docKey={path} />));
+  await act(async () => root.render(<TooltipProvider><HtmlViewToggle docKey={path} /><CodeEditor docKey={path} /></TooltipProvider>));
+  await act(() => vi.dynamicImportSettled());
   const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
   expect(frame.getAttribute('sandbox')).toBe('');
   expect(frame.srcdoc).toContain('原文');
   expect(host.querySelector('.cm-editor')).toBeNull();
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="查看 HTML 源码"]')!.click());
   const view = EditorView.findFromDOM(host.querySelector('.cm-editor')!);
   expect(view).not.toBeNull();
   await act(async () => view!.dispatch({ changes: { from: 0, to: view!.state.doc.length, insert: '<h1>新稿</h1>' } }));
   await act(async () => view!.dispatch({ selection: { anchor: 4 } }));
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="预览 HTML"]')!.click());
   expect(host.querySelector<HTMLIFrameElement>('iframe')!.srcdoc).toContain('新稿');
   expect(host.querySelector('.cm-editor')).toBeNull();
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')!.click());
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="查看 HTML 源码"]')!.click());
   const restored = EditorView.findFromDOM(host.querySelector('.cm-editor')!);
   expect(restored?.state.selection.main.anchor).toBe(4);
   await act(async () => { undoDocumentHistory(path); });
@@ -48,6 +55,7 @@ it('opens an isolated reading preview and refreshes it from unsaved source edits
 it('runs only the reviewed export enhancement inside an isolated preview', async () => {
   useDocumentStore.getState().setContent(path, await standaloneHtml('<article><h1>正文</h1></article>', '文件名'));
   await act(async () => root.render(<CodeEditor docKey={path} />));
+  await act(() => vi.dynamicImportSettled());
   const frame = host.querySelector<HTMLIFrameElement>('iframe')!;
   const source = frame.srcdoc;
   expect(frame.getAttribute('sandbox')).toBe('allow-scripts');

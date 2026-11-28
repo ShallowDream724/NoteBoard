@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeEditor } from '../../src/features/editor-code/CodeEditor';
 import { useDocumentStore } from '../../src/stores/documentStore';
+import { useWindowStore } from '../../src/stores/windowStore';
 import { getEditorCapabilities, resetEditorRegistryForTest } from '../../src/core/editor/editorRegistry';
 
 vi.mock('../../src/core/ipc/commands', () => ({ setDocumentDirty: vi.fn().mockResolvedValue(undefined) }));
@@ -54,6 +55,8 @@ describe('file syntax and preview lifecycle', () => {
 
   it('flushes pending source edits before opening a CSV table and restores source selection', async () => {
     const csv = 'C:\\test\\sample.csv'; seed(csv);
+    useWindowStore.getState().openTab({ key: csv, path: csv, displayName: 'sample.csv', kind: 'code', language: 'plaintext',
+      isDirty: false, isPreview: false, viewMode: 'visual', externalStatus: null, isDetached: false });
     await act(async () => root.render(<CodeEditor docKey={csv} />));
     expect(host.querySelector('[data-test-table]')?.textContent).toBe('hello');
     const clickMode = async (label: string) => { await act(async () => [...host.querySelectorAll('button')].find(button => button.textContent === label)!.click()); };
