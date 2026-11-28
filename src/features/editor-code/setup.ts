@@ -110,11 +110,21 @@ export function createIndentationExtensions(options: BaseExtensionsOptions = {})
     ...(options.showIndentGuides ? [indentGuidesExtension] : [])];
 }
 
+const lineNumberExtensions = [lineNumbers(), highlightActiveLineGutter()];
+
+function lineNumberDisplay(enabled = true): Extension {
+  return enabled ? lineNumberExtensions : [];
+}
+
+export function editorLineNumberEffect(enabled?: boolean) {
+  return lineNumberCompartment.reconfigure(lineNumberDisplay(enabled));
+}
+
 export function editorDisplayEffects(options: BaseExtensionsOptions) {
   return [
     whitespaceCompartment.reconfigure(options.showWhitespace ? highlightWhitespace() : []),
     lineEndingCompartment.reconfigure(options.showLineEndings ? showLineEndingsExtension : []),
-    lineNumberCompartment.reconfigure(options.showLineNumbers !== false ? [lineNumbers(), highlightActiveLineGutter()] : []),
+    editorLineNumberEffect(options.showLineNumbers),
     wrapCompartment.reconfigure(options.softWrap ? EditorView.lineWrapping : []),
     indentationCompartment.reconfigure(createIndentationExtensions(options)),
   ];
@@ -210,9 +220,7 @@ export function createBaseExtensions(options?: BaseExtensionsOptions): Extension
     // 编辑历史：缩短合并窗口并扩大容量，减少单次回退过多，同时保留更长的前后变化链
     historyCompartment.of(editorHistory),
     // 行号（通过 compartment 切换）
-    lineNumberCompartment.of(
-      options?.showLineNumbers !== false ? [lineNumbers(), highlightActiveLineGutter()] : [],
-    ),
+    lineNumberCompartment.of(lineNumberDisplay(options?.showLineNumbers)),
     // 活动行高亮
     highlightActiveLine(),
     // 特殊字符高亮

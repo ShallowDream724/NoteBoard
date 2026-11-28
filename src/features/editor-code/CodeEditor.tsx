@@ -13,11 +13,12 @@ import { undoDepth as cmUndoDepth } from '@codemirror/commands';
 import {
   createBaseExtensions,
   editorHistory,
+  editorLineNumberEffect,
   historyCompartment,
   languageCompartment,
   typographyCompartment,
 } from './setup';
-import { liveEditorSettings } from './editorSettingsBinding';
+import { bindLiveEditorSettings } from './editorSettingsBinding';
 import { loadLanguageExtension } from './languages';
 import { getLinterForLanguage } from './lint';
 import { getAnalysisOwner } from './textAnalysisLifecycle';
@@ -47,7 +48,7 @@ import { codeJumpHistory } from './codeNavigation';
 import { createCodeSnapshot } from './codeSnapshot';
 import { FileTextPreview } from './FileTextPreview';
 import { ExternalChangeBanner } from '../external/ExternalChangeBanner';
-import { getFileFormat } from '../../core/fileFormats';
+import { getFileFormat, isCodeSourceFile } from '../../core/fileFormats';
 import { getEditorCapabilities } from '../../core/editor/editorRegistry';
 import { registerShortcut } from '../../core/shortcuts';
 import { switchFilePreviewMode, toggleFilePreviewMode, useFilePreviewMode } from './filePreviewMode';
@@ -74,6 +75,11 @@ const replaceFromDiskTransaction = Annotation.define<boolean>();
 
 interface CodeEditorProps {
   docKey: string;
+}
+
+function readFileEditorSettings(docKey: string, language: LanguageId) {
+  const settings = useSettingsStore.getState().settings.editor;
+  return { ...settings, showLineNumbers: isCodeSourceFile(docKey, language) || settings.showLineNumbers };
 }
 
 export function CodeEditor({ docKey }: CodeEditorProps) {
@@ -157,7 +163,8 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     if (!containerRef.current || !currentDoc) return;
     const container = containerRef.current;
     const lang = currentDoc.language;
-    const initialEditorSettings = useSettingsStore.getState().settings.editor;
+    const currentLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
+    const readEditorSettings = () => readFileEditorSettings(docKey, currentLanguage());
     initializeDocumentHistory(docKey, currentDoc.content ?? '', 'code');
     const instanceId = `cm-${(nextEditorInstanceId += 1)}`;
     const sessionGeneration = getSessionGeneration(docKey);
@@ -240,7 +247,6 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     });
 
     // JSON 与代码操作快捷键（展开、压缩、校验）
-    const currentLanguage = () => useDocumentStore.getState().getDocument(docKey)?.language ?? lang;
     const formatCurrent = (view: EditorView) => handleExpandJson(view, { lang: currentLanguage() });
     const minifyCurrent = (view: EditorView) => currentLanguage() === 'json' && handleMinifyJson(view, { lang: currentLanguage() });
     const validateCurrent = (view: EditorView) => validateTextLanguage(view, currentLanguage());
@@ -352,9 +358,9 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
         customCodeMirrorShortcuts('code'),
         codeJumpHistory,
         unifiedHistoryKeymap,
-        ...createBaseExtensions(initialEditorSettings),
+        ...createBaseExtensions(readEditorSettings()),
         textAnalysisLifecycle,
-        liveEditorSettings,
+        bindLiveEditorSettings(readEditorSettings),
         updateListener,
         jsonOperationsKeymap,
       ],
@@ -502,6 +508,7 @@ export function CodeEditor({ docKey }: CodeEditorProps) {
     const view = viewRef.current;
     if (!view || !doc) return;
     getAnalysisOwner(view).cancel();
+    view.dispatch({ effects: editorLineNumberEffect(readFileEditorSettings(docKey, doc.language).showLineNumbers) });
     let current = true;
     loadLanguageExtension(doc.language).then(extension => {
       if (!current || viewRef.current !== view) return;

@@ -46,6 +46,12 @@ export function getFileFormat(path: string): FileFormat {
     ?? getFileFormatByExtension(fileExtension(name));
 }
 
+export function isCodeSourceFile(path: string, language: LanguageId = 'plaintext'): boolean {
+  const format = getFileFormat(path);
+  return format.kind === 'code'
+    && (format.language !== 'plaintext' || format.preview === 'delimited' || language !== 'plaintext');
+}
+
 // Retain the old public maps for callers; all are now derived from one catalog.
 export const KIND_BY_EXT: Readonly<Record<string, DocumentKind>> = Object.freeze(Object.fromEntries(
   [...byExtension].map(([ext, format]) => [ext, format.kind]),

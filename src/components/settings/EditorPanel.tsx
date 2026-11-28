@@ -18,7 +18,7 @@ export function EditorPanel() {
       <SettingRow label="列宽拖动" description="表格最外侧边缘始终调整整表宽度。"><select value={editor.tableColumnResizeMode ?? 'grow'} onChange={event => setEditor({ tableColumnResizeMode: event.target.value as 'grow' | 'adjacent' })} style={{ ...inputStyle, width: '13em' }}><option value="grow">随列宽调整整表</option><option value="adjacent">调整相邻列</option></select></SettingRow>
     </SettingsSection>
     <SettingsSection title="代码与纯文本显示">
-      <SettingRow label="显示行号" description="显示代码行号与当前行高亮。"><input type="checkbox" checked={editor.showLineNumbers} onChange={event => setEditor({ showLineNumbers: event.target.checked })}/></SettingRow>
+      <SettingRow label="显示行号" description="适用于纯文本、笔记源码和文本比较。独立代码文件始终显示行号。"><input type="checkbox" checked={editor.showLineNumbers} onChange={event => setEditor({ showLineNumbers: event.target.checked })}/></SettingRow>
       <SettingRow label="自动折行" description="文本超出编辑区宽度时折行。"><input type="checkbox" checked={editor.softWrap} onChange={event => setEditor({ softWrap: event.target.checked })}/></SettingRow>
       <SettingRow label="显示空格与制表符" description="空格显示为圆点，制表符显示为箭头。"><input type="checkbox" checked={editor.showWhitespace ?? false} onChange={event => setEditor({ showWhitespace: event.target.checked })}/></SettingRow>
       <SettingRow label="显示换行符" description="在行末显示 ↵ 标记。"><input type="checkbox" checked={editor.showLineEndings ?? false} onChange={event => setEditor({ showLineEndings: event.target.checked })}/></SettingRow>
