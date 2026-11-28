@@ -4,7 +4,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { nbHighlightStyle, SPEC } from '../../src/features/editor-code/highlightStyle';
-import { tags as t } from '@lezer/highlight';
+import { highlightTree, tags as t } from '@lezer/highlight';
+import { htmlLanguage } from '@codemirror/lang-html';
+import { cssSyntaxHighlighter } from '../../src/core/cssSyntaxHighlight';
 
 describe('highlightStyle', () => {
   it('nbHighlightStyle 应已定义', () => {
@@ -98,5 +100,20 @@ describe('highlightStyle', () => {
 
   it('SPEC 总条目数 > 15', () => {
     expect(SPEC.length).toBeGreaterThan(15);
+  });
+
+  it('separates HTML tag names, their punctuation, and embedded CSS roles', () => {
+    const source = '<style>.note { display: inline-flex; }</style>';
+    const highlights = new Map<string, string>();
+    highlightTree(htmlLanguage.parser.parse(source), [nbHighlightStyle, cssSyntaxHighlighter], (from, to, classes) => {
+      highlights.set(source.slice(from, to), classes);
+    });
+
+    expect(highlights.get('style')).toBe(nbHighlightStyle.style([t.tagName]));
+    expect(highlights.get('<')).toBe(nbHighlightStyle.style([t.angleBracket]));
+    expect(highlights.get('<')).not.toBe(highlights.get('style'));
+    expect(highlights.get('note')).toContain('hljs-selector-class');
+    expect(highlights.get('display')).toContain('hljs-css-property');
+    expect(highlights.get('inline-flex')).toContain('hljs-css-value');
   });
 });

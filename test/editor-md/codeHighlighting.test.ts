@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { highlightCode } from '../../src/features/editor-md/codeHighlighting';
 import { codeTokensToHTML } from '../../src/features/editor-md/codeTokens';
-import { tokenizeCode } from '../../src/features/editor-md/codeHighlightEngine';
+import { tokenizeCode, tokenizeEditorCode } from '../../src/features/editor-md/codeHighlightEngine';
 import { CODE_LANGUAGES, normalizeLanguage, searchCodeLanguages } from '../../src/features/editor-md/codeLanguages';
 import { loadCodeLanguage } from '../../src/features/editor-md/codeLanguageLoader';
 
@@ -12,6 +12,23 @@ it('代码高亮保留源码字符，已知语言着色，未知语言不猜测'
   expect(element.textContent).toBe(source);
   expect(element.querySelector('.hljs-keyword')?.textContent).toBe('const');
   expect(await highlightCode(source, 'not-a-language')).toEqual([]);
+});
+
+it('colors CSS selectors, properties, variable declarations and references, and values independently', async () => {
+  const source = '.ProseMirror #editor { --accent: #6fb7f0; color: var(--accent); display: inline-flex; }';
+  const tokens = await tokenizeEditorCode(source, 'css');
+  const code = document.createElement('code');
+  code.innerHTML = codeTokensToHTML(source, tokens);
+  const textOf = (role: string) => Array.from(code.querySelectorAll(`.${role}`), token => token.textContent);
+
+  expect(code.textContent).toBe(source);
+  expect(textOf('hljs-selector-class')).toEqual(['ProseMirror']);
+  expect(textOf('hljs-selector-id')).toEqual(['editor']);
+  expect(textOf('hljs-css-property')).toEqual(['color', 'display']);
+  expect(textOf('hljs-variable')).toEqual(['--accent', '--accent']);
+  expect(textOf('hljs-css-value')).toEqual(['inline-flex']);
+  expect(textOf('hljs-number')).toEqual(['#6fb7f0']);
+  expect(textOf('hljs-punctuation')).toContain('{');
 });
 
 it.each([

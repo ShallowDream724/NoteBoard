@@ -25,12 +25,12 @@
      collapses that line in Chromium and places its number on the prior row. */
   display: inline-block; position: relative; width: 0; height: 1.5em;
   vertical-align: top; user-select: none; -webkit-user-select: none; white-space: nowrap;
-  color: var(--editor-text-muted); font-family: var(--mono-font-family); font-weight: 400;
+  color: var(--cm-gutter-text); font-family: var(--mono-font-family); font-weight: 400;
 }
 .nb-code-block .nb-code-line-number {
   position: absolute; right: 22px; top: 50%; transform: translateY(-50%);
   width: max-content; white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important;
-  line-height: 1; opacity: .55; font-size: .85em; font-variant-numeric: tabular-nums;
+  line-height: 1; font-size: .85em; font-variant-numeric: tabular-nums;
 }
 .nb-code-fold-toggle {
   position: absolute; right: 2px; top: 50%; width: 16px; height: 18px;

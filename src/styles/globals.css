@@ -208,24 +208,26 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --save-pending-text: #925200;
   --save-error-text: #c53535;
 
-  /* 语法高亮 */
-  --hljs-comment: #6a737d;
-  --hljs-keyword: #bf1f2e;
-  --hljs-string: #032f62;
-  --hljs-number: #005cc5;
-  --hljs-title: #6f42c1;
-  --hljs-function: #6f42c1;
+  /* 语法高亮：Winc 晴昼色相 */
+  --hljs-comment: #6b717d;
+  --hljs-keyword: #a43e3a;
+  --hljs-string: #1d691a;
+  --hljs-number: #58309d;
+  --hljs-title: #0a59ca;
+  --hljs-function: #0a59ca;
   --hljs-params: #24292e;
-  --hljs-variable: #b04300;
-  --hljs-class: #005cc5;
-  --hljs-meta: #24292e;
-  --hljs-addition: #137333;
-  --hljs-deletion: #bf1f2e;
-  --hljs-regexp: #032f62;
-  --hljs-selector-class: #6f42c1;
-  --hljs-selector-id: #005cc5;
-  --hljs-link: #032f62;
-  --hljs-attr: #032f62;
+  --hljs-variable: #574504;
+  --hljs-class: #156686;
+  --hljs-meta: #574504;
+  --hljs-addition: #16805f;
+  --hljs-deletion: #a43e3a;
+  --hljs-regexp: #1d691a;
+  --hljs-selector-class: #0a59ca;
+  --hljs-selector-id: #0a59ca;
+  --hljs-link: #0a59ca;
+  --hljs-attr: #7e2166;
+  --hljs-punctuation: #626c7b;
+  --hljs-css-value: #156686;
 
   /* 组件层 */
   --titlebar-bg: #ffffff;
@@ -267,7 +269,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 
   /* CodeMirror */
   --cm-gutter-bg: #ffffff;
-  --cm-gutter-text: #7d8b9e;
+  --cm-gutter-text: #6a7381;
   --cm-gutter-active-text: #1e293b;
   --cm-active-line-bg: rgba(59,130,246,0.05);
   --cm-selection-bg: rgba(59,130,246,0.18);
@@ -349,24 +351,26 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --save-pending-text: #925128;
   --save-error-text: #ae3737;
 
-  /* Claude Code Docs' GitHub Light roles, tuned for our warm gray surface. */
-  --hljs-comment: #626A73;
-  --hljs-keyword: #CF222E;
-  --hljs-string: #0A3069;
-  --hljs-number: #0550AE;
-  --hljs-title: #7B46D1;
-  --hljs-function: #7B46D1;
-  --hljs-params: #24292F;
-  --hljs-variable: #953800;
-  --hljs-class: #116329;
-  --hljs-meta: #0550AE;
-  --hljs-addition: #116329;
-  --hljs-deletion: #CF222E;
-  --hljs-regexp: #116329;
-  --hljs-selector-class: #7B46D1;
-  --hljs-selector-id: #0550AE;
-  --hljs-link: #0A3069;
-  --hljs-attr: #116329;
+  /* 语法高亮：Winc 宣纸色相 */
+  --hljs-comment: #6a665e;
+  --hljs-keyword: #9c3934;
+  --hljs-string: #1b6318;
+  --hljs-number: #542d96;
+  --hljs-title: #0954c0;
+  --hljs-function: #0954c0;
+  --hljs-params: #2a2824;
+  --hljs-variable: #524000;
+  --hljs-class: #12607e;
+  --hljs-meta: #524000;
+  --hljs-addition: #157a5a;
+  --hljs-deletion: #9c3934;
+  --hljs-regexp: #1b6318;
+  --hljs-selector-class: #0954c0;
+  --hljs-selector-id: #0954c0;
+  --hljs-link: #0954c0;
+  --hljs-attr: #781e5f;
+  --hljs-punctuation: #67625a;
+  --hljs-css-value: #12607e;
 
   /* 组件层 */
   --titlebar-bg: #FAF9F5;
@@ -408,7 +412,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 
   /* CodeMirror */
   --cm-gutter-bg: #FAF9F5;
-  --cm-gutter-text: #8E8A80;
+  --cm-gutter-text: #706a60;
   --cm-gutter-active-text: #141413;
   --cm-active-line-bg: rgba(217,119,87,0.06);
   --cm-selection-bg: rgba(217,119,87,0.20);
@@ -490,24 +494,26 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   --save-pending-text: #e2b872;
   --save-error-text: #efa2a2;
 
-  /* Dark+ hue roles keep syntax distinct without changing the reading canvas. */
-  --hljs-comment: #719E5E;
-  --hljs-keyword: #C586C0;
-  --hljs-string: #CE9178;
-  --hljs-number: #B5CEA8;
-  --hljs-title: #D7CA8B;
-  --hljs-function: #D7CA8B;
-  --hljs-params: #C6CFDD;
-  --hljs-variable: #9CDCFE;
-  --hljs-class: #4EC9B0;
-  --hljs-meta: #569CD6;
-  --hljs-addition: #91C58B;
-  --hljs-deletion: #E99A9A;
-  --hljs-regexp: #D7BA7D;
-  --hljs-selector-class: #D7CA8B;
-  --hljs-selector-id: #9CDCFE;
-  --hljs-link: #9CDCFE;
-  --hljs-attr: #9CDCFE;
+  /* 语法高亮：Winc 夜航色相 */
+  --hljs-comment: #8b95a5;
+  --hljs-keyword: #d7915c;
+  --hljs-string: #75b18b;
+  --hljs-number: #c28ec4;
+  --hljs-title: #6fb7f0;
+  --hljs-function: #6fb7f0;
+  --hljs-params: #c6cfdd;
+  --hljs-variable: #e4cf7a;
+  --hljs-class: #6ddad6;
+  --hljs-meta: #e4cf7a;
+  --hljs-addition: #5fbfa0;
+  --hljs-deletion: #f07f7f;
+  --hljs-regexp: #75b18b;
+  --hljs-selector-class: #6fb7f0;
+  --hljs-selector-id: #6fb7f0;
+  --hljs-link: #6fb7f0;
+  --hljs-attr: #f9aeb9;
+  --hljs-punctuation: #949fb0;
+  --hljs-css-value: #6ddad6;
 
   /* 组件层 */
   --titlebar-bg: #1e293b;
@@ -549,7 +555,7 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
 
   /* CodeMirror */
   --cm-gutter-bg: #0f172a;
-  --cm-gutter-text: #7688a0;
+  --cm-gutter-text: #8b95a5;
   --cm-gutter-active-text: #c6cfdd;
   --cm-active-line-bg: rgba(96,165,250,0.08);
   --cm-selection-bg: rgba(96,165,250,0.25);
@@ -1187,23 +1193,32 @@ input[type="checkbox"]:not(.nb-raw-checkbox):focus-visible {
   font-family: inherit;
 }
 
-/* 语法高亮 token */
-.ProseMirror .hljs-comment, .ProseMirror .hljs-quote { color: var(--hljs-comment); font-style: italic; }
-.ProseMirror .hljs-keyword, .ProseMirror .hljs-selector-tag { color: var(--hljs-keyword); }
+/* CSS 语法类由独立编辑器和文档代码块共享。 */
+:is(.ProseMirror, .cm-editor) .hljs-comment, .ProseMirror .hljs-quote { color: var(--hljs-comment); font-style: italic; }
+:is(.ProseMirror, .cm-editor) :is(.hljs-keyword, .hljs-selector-tag) { color: var(--hljs-keyword); }
+:is(.ProseMirror, .cm-editor) .hljs-string, .ProseMirror .hljs-template-variable { color: var(--hljs-string); }
+:is(.ProseMirror, .cm-editor) .hljs-number, .ProseMirror .hljs-literal { color: var(--hljs-number); }
+:is(.ProseMirror, .cm-editor) .hljs-meta, .ProseMirror .hljs-subst { color: var(--hljs-meta); }
+:is(.ProseMirror, .cm-editor) .hljs-variable { color: var(--hljs-variable); }
+:is(.ProseMirror, .cm-editor) :is(.hljs-selector-class, .hljs-selector-pseudo) { color: var(--hljs-selector-class); }
+:is(.ProseMirror, .cm-editor) .hljs-selector-id { color: var(--hljs-selector-id); }
+:is(.ProseMirror, .cm-editor) .hljs-css-property { color: var(--hljs-attr); }
+:is(.ProseMirror, .cm-editor) .hljs-css-value { color: var(--hljs-css-value); }
+:is(.ProseMirror, .cm-editor) .hljs-punctuation { color: var(--hljs-punctuation); }
+
+/* Lowlight 以平铺类表示标签内部的名字、属性和值。 */
+.ProseMirror .hljs-tag { color: var(--hljs-punctuation); }
+.ProseMirror .hljs-tag.hljs-name { color: var(--hljs-keyword); }
+.ProseMirror :is(.hljs-attr, .hljs-attribute, .hljs-selector-attr) { color: var(--hljs-attr); }
+.ProseMirror .hljs-tag.hljs-string, .ProseMirror .hljs-selector-attr.hljs-string { color: var(--hljs-string); }
 .ProseMirror .hljs-addition { color: var(--hljs-addition); }
 .ProseMirror .hljs-deletion { color: var(--hljs-deletion); }
-.ProseMirror .hljs-string, .ProseMirror .hljs-template-variable { color: var(--hljs-string); }
-.ProseMirror .hljs-attr { color: var(--hljs-attr); }
-.ProseMirror .hljs-number, .ProseMirror .hljs-literal, .ProseMirror .hljs-type, .ProseMirror .hljs-built_in { color: var(--hljs-number); }
+.ProseMirror :is(.hljs-type, .hljs-built_in, .hljs-symbol, .hljs-bullet) { color: var(--hljs-class); }
 .ProseMirror .hljs-title, .ProseMirror .hljs-section, .ProseMirror .hljs-name { color: var(--hljs-title); }
-.ProseMirror .hljs-function { color: var(--hljs-function); }
+.ProseMirror .hljs-function, .ProseMirror .hljs-title.function_ { color: var(--hljs-function); }
 .ProseMirror .hljs-params { color: var(--hljs-params); }
-.ProseMirror .hljs-variable { color: var(--hljs-variable); }
-.ProseMirror .hljs-class .hljs-title, .ProseMirror .hljs-symbol, .ProseMirror .hljs-bullet { color: var(--hljs-class); }
-.ProseMirror .hljs-meta, .ProseMirror .hljs-subst { color: var(--hljs-meta); }
-.ProseMirror .hljs-regexp, .ProseMirror .hljs-attribute { color: var(--hljs-regexp); }
-.ProseMirror .hljs-selector-class { color: var(--hljs-selector-class); }
-.ProseMirror .hljs-selector-id { color: var(--hljs-selector-id); }
+.ProseMirror .hljs-class.hljs-title, .ProseMirror .hljs-title.class_ { color: var(--hljs-class); }
+.ProseMirror .hljs-regexp { color: var(--hljs-regexp); }
 .ProseMirror .hljs-link { color: var(--hljs-link); }
 .ProseMirror .hljs-emphasis { font-style: italic; }
 .ProseMirror .hljs-strong { font-weight: bold; }

@@ -8,6 +8,14 @@ import type { ThemeId } from '../ipc/types';
 
 export const THEME_IDS: readonly ThemeId[] = ['chen-guang', 'hu-po', 'mo-ye'] as const;
 
+const SYNTAX_TOKENS = [
+  '--hljs-comment', '--hljs-keyword', '--hljs-string', '--hljs-number',
+  '--hljs-title', '--hljs-function', '--hljs-params', '--hljs-variable',
+  '--hljs-class', '--hljs-meta', '--hljs-addition', '--hljs-deletion',
+  '--hljs-regexp', '--hljs-selector-class', '--hljs-selector-id',
+  '--hljs-link', '--hljs-attr', '--hljs-punctuation', '--hljs-css-value',
+] as const;
+
 // ── 必需 Token 清单 ──
 // 三套主题的 Token 键集合必须完全一致，缺一个即 CI 失败
 
@@ -32,12 +40,7 @@ export const REQUIRED_TOKENS: readonly string[] = [
   '--code-block-bg', '--code-block-container-bg', '--code-block-text',
   '--code-language-text', '--save-pending-text', '--save-error-text',
 
-  // 语法高亮（17 个）
-  '--hljs-comment', '--hljs-keyword', '--hljs-string', '--hljs-number',
-  '--hljs-title', '--hljs-function', '--hljs-params', '--hljs-variable',
-  '--hljs-class', '--hljs-meta', '--hljs-addition', '--hljs-deletion',
-  '--hljs-regexp', '--hljs-selector-class', '--hljs-selector-id',
-  '--hljs-link', '--hljs-attr',
+  ...SYNTAX_TOKENS,
 
   // 组件层
   '--titlebar-bg', '--toolbar-hover', '--toolbar-active',
@@ -83,33 +86,12 @@ export const TEXT_PAIRS: readonly [string, string][] = [
   ['--code-language-text', '--editor-surface'],
   ['--save-pending-text', '--statusbar-bg'],
   ['--save-error-text', '--statusbar-bg'],
-  // 17 个 hljs token on code-block-bg
-  ['--hljs-comment', '--code-block-bg'],
-  ['--hljs-keyword', '--code-block-bg'],
-  ['--hljs-string', '--code-block-bg'],
-  ['--hljs-number', '--code-block-bg'],
-  ['--hljs-title', '--code-block-bg'],
-  ['--hljs-function', '--code-block-bg'],
-  ['--hljs-params', '--code-block-bg'],
-  ['--hljs-variable', '--code-block-bg'],
-  ['--hljs-class', '--code-block-bg'],
-  ['--hljs-meta', '--code-block-bg'],
-  ['--hljs-addition', '--code-block-bg'],
-  ['--hljs-deletion', '--code-block-bg'],
-  ['--hljs-regexp', '--code-block-bg'],
-  ['--hljs-selector-class', '--code-block-bg'],
-  ['--hljs-selector-id', '--code-block-bg'],
-  ['--hljs-link', '--code-block-bg'],
-  ['--hljs-attr', '--code-block-bg'],
-  // 代码文件场景（on editor-bg，不是 code-block-bg）
-  ['--hljs-comment', '--editor-bg'],
-  ['--hljs-keyword', '--editor-bg'],
-  ['--hljs-string', '--editor-bg'],
-  ['--hljs-number', '--editor-bg'],
-  ['--hljs-title', '--editor-bg'],
-  ['--hljs-variable', '--editor-bg'],
-  ['--hljs-function', '--editor-bg'],
-  ['--hljs-meta', '--editor-bg'],
+  ['--cm-gutter-text', '--cm-gutter-bg'],
+  ['--cm-gutter-text', '--code-block-bg'],
+  ...SYNTAX_TOKENS.flatMap<[string, string]>(token => [
+    [token, '--code-block-bg'],
+    [token, '--editor-bg'],
+  ]),
 ] as const;
 
 // 指示器类 Token（≥ 3:1）—— [indicator, bg]
@@ -117,7 +99,6 @@ export const UI_PAIRS: readonly [string, string][] = [
   ['--accent-strong', '--editor-bg'],
   ['--tab-dirty-dot', '--tab-inactive-bg'],
   ['--tab-active-indicator', '--tab-bg'],
-  ['--cm-gutter-text', '--cm-gutter-bg'],
   ['--cm-lint-error', '--editor-bg'],
   ['--cm-lint-warning', '--editor-bg'],
   ['--editor-border-focus', '--editor-bg'],

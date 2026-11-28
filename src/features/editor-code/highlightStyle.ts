@@ -1,18 +1,16 @@
 // NoteBoard CodeMirror 6 高亮样式
 // @lezer/highlight tag → --hljs-* CSS 变量映射
-// 详见 docs/06-主题与设计规范.md §6.4
-// 这是让「同一套颜色驱动两个内核（CM6 + lowlight）」的关键
+// 详见 docs/architecture/code-visibility.md
 
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t, type Tag } from '@lezer/highlight';
+import { cssSyntaxHighlighter } from '../../core/cssSyntaxHighlight';
 
 // ── 辅助：从 CSS 变量取色 ──
 
 function cssVar(name: string): string {
   return `var(${name})`;
 }
-
-// ── tag → Token 映射表（照 docs/06-主题与设计规范.md §6.4 逐行抄）──
 
 interface TagStyleSpec {
   tag: Tag | Tag[];
@@ -50,17 +48,17 @@ export const SPEC: TagStyleSpec[] = [
     tag: [t.number, t.integer, t.float, t.bool, t.null],
     color: cssVar('--hljs-number'),
   },
-  // typeName → --hljs-number (与 hljs 的 type→number 一致)
+  // 类型名称和内置符号使用同一色系。
   {
-    tag: [t.typeName, t.standard(t.typeName)],
-    color: cssVar('--hljs-number'),
+    tag: [t.typeName, t.standard(t.typeName), t.standard(t.variableName)],
+    color: cssVar('--hljs-class'),
   },
   // className → --hljs-class
   { tag: t.className, color: cssVar('--hljs-class') },
-  // propertyName / definition(propertyName) → --hljs-title (JSON 的键走这里)
+  // JSON 等语言的属性名。
   {
     tag: [t.propertyName, t.definition(t.propertyName)],
-    color: cssVar('--hljs-title'),
+    color: cssVar('--hljs-attr'),
   },
   // variableName / local(variableName) → --hljs-variable
   {
@@ -72,8 +70,8 @@ export const SPEC: TagStyleSpec[] = [
     tag: [t.function(t.variableName), t.function(t.propertyName)],
     color: cssVar('--hljs-function'),
   },
-  // tagName → --hljs-title (XML/HTML 标签名)
-  { tag: t.tagName, color: cssVar('--hljs-title') },
+  // XML/HTML 标签名与尖括号分色。
+  { tag: t.tagName, color: cssVar('--hljs-keyword') },
   // attributeName → --hljs-attr (XML 属性名)
   { tag: t.attributeName, color: cssVar('--hljs-attr') },
   // attributeValue → --hljs-string
@@ -104,6 +102,7 @@ export const SPEC: TagStyleSpec[] = [
     tag: [t.operator, t.punctuation, t.separator, t.bracket],
     color: cssVar('--editor-text-secondary'),
   },
+  { tag: [t.angleBracket, t.definitionOperator], color: cssVar('--hljs-punctuation') },
   // heading → --editor-heading + bold (Markdown source 模式)
   {
     tag: t.heading,
@@ -134,4 +133,7 @@ export const nbHighlightStyle = HighlightStyle.define(styleSpec);
 
 // ── 便捷导出：高亮扩展 ──
 
-export const nbSyntaxHighlighting = syntaxHighlighting(nbHighlightStyle);
+export const nbSyntaxHighlighting = [
+  syntaxHighlighting(nbHighlightStyle),
+  syntaxHighlighting(cssSyntaxHighlighter),
+];
