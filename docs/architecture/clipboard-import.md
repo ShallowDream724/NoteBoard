@@ -28,7 +28,7 @@ HTML 正文中的成对公式标记由 `clipboard/htmlMath.ts` 复用 `mathSynta
 
 解析器共享的 `documentExtensions` 只依赖语法层；文字颜色与块样式定义位于 `documentStyleSchema.ts`，交互命令留在 `documentStyles.ts`。文档级表格样式的修改命令位于 `documentPresentationCommands.ts`，不由语法模块反向导出。语法层不引入格式转换入口、编辑器视图或 Worker 客户端，避免剪贴板 Worker 与导出 Worker 循环打包。两种 Worker 共用 `workerDocumentDom` 的片段 DOM 适配，先安装再加载语法，保证大段 Markdown 中的 HTML 与主线程解析一致。
 
-MD 源码模式使用 CodeMirror 的文字粘贴，保留 Markdown 原文；切回可视模式先提交源码快照，再通过同一文档解析器渲染。源码粘贴不采用 HTML 备选格式，也不自动添加 Markdown 转义。NB 原生 JSON 源码不增加 Markdown 自动识别。
+MD 和 NB 的声明式源码模式使用 CodeMirror 的文字粘贴。切回可视模式先提交源码快照，再通过共享文档解析器渲染。源码粘贴按剪贴板文字原样插入，缺少文字时由编辑器继续处理默认粘贴。原始记录修复视图按 v1 帧解析。
 
 24,000 字符以内的片段走同步快路径。更大的 HTML 由独立 Worker 使用现有 `linkedom` 解析和规范化；较大的结构化文档/表格片段、Markdown、TSV 推断及纯文本同样在 Worker 转换，包含表格单元格内的粘贴。主线程按约 8ms 时间片自底向上构造 schema 节点，包括单个大表格内部。构造游标按树深度保留栈帧，避免先为全部兄弟节点分配工作项。等待提示随事务映射并浮在正文上方，保留正文高度和行宽；等待时可用 Esc 或撤销键取消，也可用下一次粘贴替换。切换、关闭及目标失效仍由插入租约取消。成功插入是一笔独立的撤销操作。
 
