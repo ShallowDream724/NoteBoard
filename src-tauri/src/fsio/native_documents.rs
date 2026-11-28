@@ -186,6 +186,21 @@ fn read_header(path: &Path) -> io::Result<String> {
     }
     let meta_start = bytes.len();
     reader.read_until(b'\n', &mut bytes)?;
+    // The editor writes the optional, potentially large authoring namespace
+    // last. Directory discovery needs the small metadata preceding it.
+    const MARKER: &[u8] = b",\"authoring\":{\"version\":1,\"source\":";
+    let meta = &bytes[meta_start..];
+    if let Some(start) = meta
+        .strip_prefix(b"@meta ")
+        .and_then(|json| json.windows(MARKER.len()).position(|part| part == MARKER))
+    {
+        let end = meta_start + b"@meta ".len() + start;
+        let mut prefix = bytes[..end].to_vec();
+        prefix.extend_from_slice(b"}\n");
+        if serde_json::from_slice::<serde_json::Value>(&prefix[meta_start + b"@meta ".len()..]).is_ok() {
+            return Ok(String::from_utf8(prefix).unwrap_or_default());
+        }
+    }
     if bytes.len() as u64 > HEADER_LIMIT || !bytes[meta_start..].starts_with(b"@meta ") {
         return Ok(String::new());
     }
@@ -1152,5 +1167,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(read_header(&path).unwrap(), "");
+    }
+
+    #[test]
+    fn authored_source_does_not_hide_link_metadata_from_bounded_readers() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("authored.nb");
+        let markdown = r#"{"path":"a.md","baselineHash":"base","projectionVersion":1}"#;
+        let prefix = format!("#!noteboard 1\n@meta {{\"markdown\":{markdown}");
+        let source = serde_json::to_string(&"中文正文\n".repeat(20_000)).unwrap();
+        fs::write(&path, format!("{prefix},\"authoring\":{{\"version\":1,\"source\":{source}}}}}\n@block {{\"type\":\"paragraph\"}}\n")).unwrap();
+        assert_eq!(read_header(&path).unwrap(), format!("{prefix}}}\n"));
     }
 }

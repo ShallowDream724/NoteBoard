@@ -10,6 +10,7 @@ export interface NativeNode {
 }
 export interface NativeMetadata {
   markdown?: { path: string; baselineHash: string; projectionVersion: number };
+  authoring?: Record<string, unknown>;
   /** Unknown namespaces are preserved; each must be a JSON object. */
   [namespace: string]: unknown;
 }
@@ -40,6 +41,11 @@ function metadataValue(value: unknown): NativeMetadata {
     || !Number.isInteger(link.projectionVersion) || Number(link.projectionVersion) < 1)) throw new Error('Markdown 关联元数据不完整。');
   return value as NativeMetadata;
 }
+/** Put the optional source last so bounded readers can read the small header. */
+export function nativeMetadataRecord(metadata: NativeMetadata): string {
+  const { authoring, ...rest } = metadata;
+  return `@meta ${JSON.stringify(authoring === undefined ? rest : { ...rest, authoring })}`;
+}
 function* lines(source: string): Generator<{ raw: string; line: number; start: number; end: number }> {
   let start = 0, line = 1;
   while (start < source.length) {
@@ -61,7 +67,7 @@ export function readNativeMetadata(source: string): NativeMetadata {
 /** Change only the metadata record. Body bytes (including invalid frames) survive. */
 export function replaceNativeMetadata(source: string, metadata: NativeMetadata): string {
   metadataValue(metadata);
-  const record = `@meta ${JSON.stringify(metadata)}`;
+  const record = nativeMetadataRecord(metadata);
   for (const { raw, line, start, end } of lines(source)) {
     if (line === 1) {
       if (raw.replace(/^\uFEFF/, '') !== NATIVE_DOCUMENT_HEADER) throw new Error('无法更新缺少有效 NB 文档头的元数据。');
@@ -133,7 +139,7 @@ export function decodeNativeFile(source: string): { document: NativeNode; metada
 export function decodeNativeDocument(source: string): NativeNode { return decodeNativeFile(source).document; }
 export function encodeNativeDocument(document: NativeNode, metadata: NativeMetadata = {}): string {
   const records = [NATIVE_DOCUMENT_HEADER];
-  if (Object.keys(metadata).length) { metadataValue(metadata); records.push(`@meta ${JSON.stringify(metadata)}`); }
+  if (Object.keys(metadata).length) { metadataValue(metadata); records.push(nativeMetadataRecord(metadata)); }
   for (const block of document.content ?? []) {
     const raw = nativeErrorRecord(block);
     if (raw !== undefined) { records.push(raw); continue; }

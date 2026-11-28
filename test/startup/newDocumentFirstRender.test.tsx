@@ -13,7 +13,7 @@ import { getMdTipTapEditor, getMdSourceView } from '@/features/editor-md/editorI
 import { resetEditorRegistryForTest } from '@/core/editor/editorRegistry';
 import { clearAllDocumentHistories, undoDocumentHistory } from '@/features/history/documentHistory';
 import { encodeNativeDocument, decodeNativeDocument } from '@/core/nativeDocument';
-import { flushPendingVisualSnapshot } from '@/features/editor-md/visualSnapshot';
+import { flushPendingSourceSnapshot, flushPendingVisualSnapshot } from '@/features/editor-md/visualSnapshot';
 import { emit } from '@/core/emitter';
 import { sourceStylesField } from '@/features/document-style/sourceStyleTracking';
 vi.mock('@/features/editor-md/extensions', async () => {
@@ -87,6 +87,14 @@ describe('🔴 P0-1 新建 MD 首次挂载即显示', () => {
       expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('source');
       expect(getMdSourceView(key)).toBe(retainedSource);
       expect(retainedSource.state.doc.toString()).toBe('\\b{红色文字}');
+      await act(async () => {
+        retainedSource.dispatch({ changes: { from: 0, to: retainedSource.state.doc.length, insert: '\\bold{红色文字}' } });
+        flushPendingSourceSnapshot(key);
+      });
+      expect(useDocumentStore.getState().getDocument(key)?.isDirty).toBe(true);
+      await act(async () => { undoDocumentHistory(key); });
+      expect(retainedSource.state.doc.toString()).toBe('\\b{红色文字}');
+      expect(useDocumentStore.getState().getDocument(key)?.isDirty).toBe(false);
       await act(async () => { retainedSource.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', ctrlKey: true, bubbles: true, cancelable: true })); });
       expect(useWindowStore.getState().getTab(key)?.viewMode).toBe('visual');
       expect(getMdTipTapEditor(key)).toBe(retainedVisual);

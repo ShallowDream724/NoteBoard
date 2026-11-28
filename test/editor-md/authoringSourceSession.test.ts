@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { EditorState, Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { documentParser } from '@/features/editor-md/documentExtensions';
-import { encodeNativeDocument } from '@/core/nativeDocument';
-import { parseNativeNode } from '@/features/editor-md/editorDocumentCodec';
-import { serializeAuthoring } from '@/features/declarative/authoring';
-import { AuthoringSourceSession, captureAuthoringSelection, authoringToVisual, visualToAuthoring, authoringBookmarkSelection } from '@/features/editor-md/authoringSourceSession';
+import { encodeNativeDocument, readNativeMetadata } from '@/core/nativeDocument';
+import { parseNativeNode, serializeNativeNode } from '@/features/editor-md/editorDocumentCodec';
+import { parseAuthoring, inheritAuthoringSource, serializeAuthoring } from '@/features/declarative/authoring';
+import { AuthoringSourceSession, captureAuthoringSelection, authoringToVisual, visualToAuthoring, authoringBookmarkSelection, authoringMathSelection } from '@/features/editor-md/authoringSourceSession';
 import { readSourceDocument, setSourceDocumentAdapter } from '@/features/editor-md/sourceDocumentAdapter';
 import { setSourceNativeMetadata, replaceSourceDocument } from '@/features/editor-md/sourceDocumentSync';
 import { stagePendingSourceSnapshot, flushPendingSourceSnapshot, hasPendingSourceSnapshot, discardPendingSourceSnapshot } from '@/features/editor-md/visualSnapshot';
@@ -35,18 +38,72 @@ describe('declarative source authority', () => {
       const stored = readSourceDocument(view);
       expect(stored.startsWith('#!noteboard 1\n')).toBe(true);
       expect(parseNativeNode(stored, schema).textContent).toBe('changed');
-      const visualDoc = parseNativeNode(stored, schema);
-      session.transferAuthoredSource(visualDoc);
+      const visualDoc = parseNativeNode(stored, schema, '');
       expect(serializeAuthoring(visualDoc).text).toBe(authored);
       setSourceNativeMetadata(view, { markdown: { path: 'a.md', baselineHash: 'base', projectionVersion: 1 } });
       expect(view.state.doc.toString()).toBe(authored);
       expect(readSourceDocument(view)).toContain('@meta ');
       replaceSourceDocument(view, stored.replace('"changed"', '"edited"'));
-      expect(view.state.doc.toString()).toBe('\\bold{edited}');
+      expect(view.state.doc.toString()).toBe('\\b{edited}');
       replaceSourceDocument(view, original);
       expect(view.state.doc.toString()).toBe(text);
       expect(readSourceDocument(view)).toBe(original);
     } finally { setSourceDocumentAdapter(view, null); view.destroy(); }
+  });
+
+  it('saves semantic-equivalent source edits and restores them from disk in a new session', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'nb-authored-'));
+    const path = join(folder, 'notes.nb');
+    const schema = documentParser().schema;
+    const original = encodeNativeDocument({ type: 'doc', content: [paragraph('正文')] });
+    const authored = '<!-- 待整理 -->\n\n\\bold{正文}\n';
+    const view = new EditorView({ state: EditorState.create({ doc: '正文' }) });
+    let reopened: EditorView | undefined;
+    try {
+      const session = new AuthoringSourceSession(view, schema, folder, original);
+      session.bind();
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: authored } });
+      const stored = session.materialize(view.state.doc);
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: authored.replace('待整理', '整理后') } });
+      const commentOnly = session.materialize(view.state.doc);
+      expect(commentOnly).not.toBe(stored);
+      expect(parseNativeNode(commentOnly, schema, folder).eq(parseNativeNode(stored, schema, folder))).toBe(true);
+      session.replace(stored);
+      expect(view.state.doc.toString()).toBe(authored);
+      await writeFile(path, stored);
+      view.destroy();
+
+      const onDisk = await readFile(path, 'utf8');
+      const parsed = parseNativeNode(onDisk, schema, folder);
+      reopened = new EditorView({ state: EditorState.create({ doc: serializeAuthoring(parsed).text }) });
+      const restored = new AuthoringSourceSession(reopened, schema, folder, onDisk);
+      restored.bind();
+      expect(restored.text).toBe(authored);
+      expect(restored.materialize(reopened.state.doc)).toBe(onDisk);
+      const index = [...Array(parsed.childCount).keys()].find(i => parsed.child(i).textContent === '正文')!;
+      const edited = parsed.copy(parsed.content.replaceChild(index, schema.node('paragraph', null, schema.text('新增', [schema.mark('bold')]))));
+      inheritAuthoringSource(parsed, edited);
+      const visualSave = serializeNativeNode(edited, folder, readNativeMetadata(onDisk));
+      const source = serializeAuthoring(parseNativeNode(visualSave, schema, folder)).text;
+      expect(source).toBe(authored.replace('正文', '新增'));
+    } finally { view.destroy(); reopened?.destroy(); await rm(folder, { recursive: true, force: true }); }
+  });
+
+  it('validates relative references in the current directory and ignores unknown authored versions', () => {
+    const { schema } = documentParser();
+    const original = encodeNativeDocument({ type: 'doc', content: [paragraph('正文')] });
+    const source = '正文 [资料](./reading.md)';
+    const view = new EditorView({ state: EditorState.create({ doc: '正文' }) });
+    try {
+      const session = new AuthoringSourceSession(view, schema, 'C:/notebook', original);
+      session.bind();
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: source } });
+      const stored = session.materialize(view.state.doc);
+      expect(serializeAuthoring(parseNativeNode(stored, schema, 'C:/notebook')).text).toBe(source);
+      expect(serializeAuthoring(parseNativeNode(stored, schema, 'C:/moved')).text).toContain('C:/notebook/reading.md');
+      const future = stored.replace('"version":1,"source"', '"version":7,"source"');
+      expect(serializeAuthoring(parseNativeNode(future, schema, 'C:/notebook')).text).toContain('C:/notebook/reading.md');
+    } finally { view.destroy(); }
   });
 
   it('uses paths for repeated text in containers and preserves reversed selections', () => {
@@ -75,5 +132,24 @@ describe('declarative source authority', () => {
     const bookmark = captureAuthoringSelection(spans, { anchor: 11, head: 15 });
     expect(bookmark.anchor.offset).toBe(1); expect(bookmark.head.offset).toBe(3);
     expect(authoringBookmarkSelection(spans, bookmark)).toEqual({ anchor: 11, head: 15 });
+  });
+
+  it('restores precise source endpoints between blocks and before an escaped character', () => {
+    const source = '正文 \\{字面\\}\n\n后文';
+    const parsed = parseAuthoring(source);
+    const selection = { anchor: source.indexOf('\n') + 1, head: source.indexOf('\\') };
+    const bookmark = captureAuthoringSelection(parsed.spans, selection);
+    expect(authoringBookmarkSelection(parsed.spans, bookmark)).toEqual(selection);
+  });
+
+  it('opens a formula editor only for selections within one formula payload', () => {
+    const source = '正文 $abc$ 后文 $xyz$';
+    const parsed = parseAuthoring(source);
+    const doc = documentParser().schema.nodeFromJSON(parsed.document);
+    const find = (anchor: number, head: number) => authoringMathSelection(doc, captureAuthoringSelection(parsed.spans, { anchor, head }));
+    const first = source.indexOf('abc'), second = source.indexOf('xyz');
+    expect(find(first + 2, first + 1)).toEqual({ position: 4, anchor: 2, head: 1 });
+    expect(find(1, first + 1)).toBeNull();
+    expect(find(second + 2, first + 1)).toBeNull();
   });
 });

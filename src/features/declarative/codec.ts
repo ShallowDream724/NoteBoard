@@ -6,20 +6,22 @@ import { writeAuthoring, type WrittenAuthoring } from './write';
 import type { AuthoringParseResult } from './types';
 import { maskAuthoringInline } from './syntax';
 import { rememberParsedAuthoring, serializeBoundAuthoring } from './sourceCache';
-export { rememberAuthoringSource, inheritAuthoringSource, hasAuthoringSource, serializeBoundAuthoring } from './sourceCache';
+export { rememberAuthoringSource, inheritAuthoringSource, forgetAuthoringSource, replaceAuthoringSource, hasAuthoringSource, hasSyntheticAuthoringTail, serializeBoundAuthoring } from './sourceCache';
 
 export interface AuthoringManager { parse(source: string): JSONContent; serialize?(document: JSONContent): string; instance?: import('marked').Marked | typeof import('marked').marked }
 const originals = new WeakMap<object, (source: string) => JSONContent>();
 const hooked = new WeakSet<object>();
-export function parseAuthoringWith(source: string, manager: AuthoringManager, schema?: Schema): AuthoringParseResult {
+type TransformAuthoringResult = (result: AuthoringParseResult) => AuthoringParseResult;
+export function parseAuthoringWith(source: string, manager: AuthoringManager, schema?: Schema, transform?: TransformAuthoringResult): AuthoringParseResult {
   if (manager.instance && !hooked.has(manager.instance)) { manager.instance.use({ hooks: { emStrongMask: maskAuthoringInline } }); hooked.add(manager.instance); }
   const parse = originals.get(manager) ?? manager.parse.bind(manager);
   const parsed = parse(source), resolved = resolveAuthoring(source, parsed, schema);
   let document = resolved.document;
   if (schema) { try { document = schema.nodeFromJSON(document).toJSON() as JSONContent; } catch { /* Recovery diagnostics retain the editable source. */ } }
   const spans = manager.instance ? normalizeAuthoringSpanPaths(resolved.document, document, authoringSpans(resolved, parsed, source, manager.instance as typeof import('marked').marked, parse)) : [];
-  const result = { document, diagnostics: resolved.diagnostics, spans };
-  rememberParsedAuthoring(result, source, next => parseAuthoringWith(next, manager, schema));
+  const parsedResult = { document, diagnostics: resolved.diagnostics, spans };
+  const result = transform ? transform(parsedResult) : parsedResult;
+  rememberParsedAuthoring(result, source, next => parseAuthoringWith(next, manager, schema, transform), !transform);
   return result;
 }
 const authoredNodes = new Set(['imageCollection', 'disclosure', 'annotationStore', 'authoringRaw']);

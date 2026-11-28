@@ -1,11 +1,13 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node, Schema } from '@tiptap/pm/model';
-import { decodeNativeFile, nativeNodeSource, nativeError, nativeErrorChild, NATIVE_CHILD_CONTAINERS, NATIVE_DOCUMENT_HEADER, readNativeMetadata, replaceNativeMetadata, type NativeMetadata, type NativeNode, visitNativeDocument } from '../../core/nativeDocument';
+import { decodeNativeFile, nativeNodeSource, nativeError, nativeErrorChild, nativeMetadataRecord, NATIVE_CHILD_CONTAINERS, NATIVE_DOCUMENT_HEADER, readNativeMetadata, replaceNativeMetadata, type NativeMetadata, type NativeNode, visitNativeDocument } from '../../core/nativeDocument';
 import { hasMarkdownContentChanged, initializeMarkdownContent, parseMarkdown, rememberMarkdownSource, serializeMarkdown, withEditableTail } from './serialize';
-import { resolveRelativeDocPath } from '../../core/documentPath';
+import { rebaseDocumentReference } from '../../core/documentReferences';
 import { normalizeNativeStructure } from '../../core/nativeDocumentStructure';
 import { reconcileDocumentHistory } from './documentReconciliation';
 import { markDocumentReplacement } from './documentReplacement';
+import { forgetAuthoringSource, hasAuthoringSource, hasSyntheticAuthoringTail, replaceAuthoringSource, serializeAuthoring } from '../declarative/codec';
+import { restoreNativeAuthoring, storedNativeAuthoring } from './nativeAuthoringSource';
 
 export type RichDocumentFormat = 'markdown' | 'noteboard';
 const formats = new WeakMap<Editor, RichDocumentFormat>();
@@ -30,6 +32,7 @@ export function setEditorNativeMetadata(editor: Editor, metadata: NativeMetadata
 export function rememberEditorDocumentSource(editor: Editor, content: string): void {
   if (editorDocumentFormat(editor) === 'markdown') { rememberMarkdownSource(editor, content); return; }
   const metadata = readNativeMetadata(content);
+  if (!restoreNativeAuthoring(editor.state.doc, metadata, editorDocumentDirectory(editor), editor.schema)) forgetAuthoringSource(editor.state.doc);
   metadataByEditor.set(editor, metadata);
   originalSources.set(editor.state.doc, { content, metadata });
   encoded.delete(editor.state.doc);
@@ -40,8 +43,7 @@ function compactAttrs(attrs: Record<string, unknown>, defaults: Record<string, {
   return Object.keys(result).length ? result : undefined;
 }
 function nodeJson(node: Node, directory: string, skeleton = false): string {
-  const resolve = (value: unknown) => typeof value === 'string' && value && !/^(?:[a-z][a-z0-9+.-]*:|[\\/#])/i.test(value)
-    ? resolveRelativeDocPath(directory, value).replace(/\\/g, '/') : value;
+  const resolve = (value: unknown) => rebaseDocumentReference(value, directory);
   const attrs = compactAttrs(node.attrs, node.type.spec.attrs);
   if (directory && node.type.name === 'image' && attrs?.src) attrs.src = resolve(attrs.src);
   if (directory && Array.isArray(attrs?.captionContent)) attrs.captionContent = attrs.captionContent.map(item => ({ ...item,
@@ -85,7 +87,15 @@ export function serializeNativeNode(doc: Node, directory = '', metadata?: Native
     encoded.set(doc, { directory, metadata, content }); return content;
   }
   const records = [NATIVE_DOCUMENT_HEADER];
-  if (Object.keys(metadata).length) records.push(`@meta ${JSON.stringify(metadata)}`);
+  let persistedMetadata = metadata;
+  if (hasAuthoringSource(doc)) persistedMetadata = { ...metadata, authoring: {
+    version: 1, source: serializeAuthoring(doc).text, ...(hasSyntheticAuthoringTail(doc) ? { syntheticTail: true } : {}),
+  } };
+  else if (storedNativeAuthoring(metadata) !== undefined) {
+    const { authoring: _stale, ...remaining } = metadata;
+    persistedMetadata = remaining;
+  }
+  if (Object.keys(persistedMetadata).length) records.push(nativeMetadataRecord(persistedMetadata));
   doc.forEach(block => {
     const raw = errorRecord(block);
     if (raw !== undefined) { records.push(raw); return; }
@@ -98,7 +108,8 @@ export function serializeNativeNode(doc: Node, directory = '', metadata?: Native
   encoded.set(doc, { directory, metadata, content });
   return content;
 }
-export function parseNativeNode(content: string, schema: Schema): Node {
+/** Pass a directory when the consumer needs the editable source projection. */
+export function parseNativeNode(content: string, schema: Schema, directory?: string): Node {
   const decoded = decodeNativeFile(content), json = decoded.document;
   const validate = (value: JSONContent, mark = false) => {
     const spec = mark ? schema.marks[value.type ?? ''] : schema.nodes[value.type ?? ''];
@@ -141,6 +152,7 @@ export function parseNativeNode(content: string, schema: Schema): Node {
   }
   const doc = schema.nodeFromJSON(json);
   doc.check();
+  if (directory !== undefined) restoreNativeAuthoring(doc, decoded.metadata, directory, schema);
   originalSources.set(doc, { content, metadata: decoded.metadata });
   return doc;
 }
@@ -154,9 +166,10 @@ export function initializeEditorDocument(editor: Editor, content: string, format
   directories.set(editor, directory);
   if (docKey) keys.set(editor, docKey);
   if (format === 'markdown') { initializeMarkdownContent(editor, content); return; }
-  const parsed = parseNativeNode(content, editor.schema), original = originalSources.get(parsed)!;
+  const parsed = parseNativeNode(content, editor.schema, directory), original = originalSources.get(parsed)!;
   setEditorNativeMetadata(editor, original.metadata);
   const doc = withEditableTail(editor, parsed);
+  replaceAuthoringSource(parsed, doc);
   originalSources.set(doc, original);
   editor.options.content = doc as unknown as Editor['options']['content'];
 }
@@ -171,7 +184,7 @@ export function hasEditorDocumentChanged(editor: Editor, content: string): boole
 export function parseEditorDocument(editor: Editor, content: string, origin: 'sync' | 'history' = 'sync'): void {
   if (editorDocumentFormat(editor) === 'markdown') { parseMarkdown(editor, content, origin); return; }
   if (!hasEditorDocumentChanged(editor, content)) return;
-  const doc = parseNativeNode(content, editor.schema);
+  const doc = parseNativeNode(content, editor.schema, editorDocumentDirectory(editor));
   const original = originalSources.get(doc)!;
   if (!doc.eq(editor.state.doc)) {
     if (origin === 'history') reconcileDocumentHistory(editor, doc);
@@ -180,6 +193,7 @@ export function parseEditorDocument(editor: Editor, content: string, origin: 'sy
       return true;
     }).run();
   }
+  replaceAuthoringSource(doc, editor.state.doc);
   setEditorNativeMetadata(editor, original.metadata);
   originalSources.set(editor.state.doc, original);
 }

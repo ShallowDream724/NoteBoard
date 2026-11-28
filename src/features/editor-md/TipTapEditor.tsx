@@ -17,7 +17,7 @@ import { mapNativeDocumentSelection } from './nativeSourcePosition';
 import { embeddedEditingPosition } from './embeddedEditor';
 import { readSourceSelection } from './nativeSourceDom';
 import { requestMathEditing } from './mathEditingRequest';
-import { AuthoringSourceSession, captureAuthoringSelection, authoringBookmarkSelection, authoringToVisual, visualToAuthoring, authoringNodePosition, authoringSourceOffset, type AuthoringSelectionBookmark } from './authoringSourceSession';
+import { AuthoringSourceSession, captureAuthoringSelection, authoringBookmarkSelection, authoringToVisual, visualToAuthoring, authoringMathSelection, authoringNodePosition, authoringSourceOffset, type AuthoringSelectionBookmark } from './authoringSourceSession';
 import { readSourceDocument, setSourceDocumentAdapter, sourceDocumentAdapter } from './sourceDocumentAdapter';
 import { parseNativeNode } from './editorDocumentCodec';
 import { serializeAuthoring } from '../declarative/authoring';
@@ -377,6 +377,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     const nativeAuthoring = nativeDocument && !rawRepairRef.current;
     const currentEditor = tipTapEditorRef.current;
     const schema = nativeAuthoring ? currentEditor?.schema ?? documentParser().schema : null;
+    const directory = schema ? useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '' : '';
 
     // 已创建的源码编辑器必须复用；模式同步只更新视图，不得写入文件级或原生历史
     if (sourceViewRef.current) {
@@ -384,7 +385,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       if (schema) {
         if (!authoringSessionRef.current) {
           const authoredDocument = currentEditor && !hasMarkdownContentChanged(currentEditor, content) ? currentEditor.state.doc : undefined;
-          const session = new AuthoringSourceSession(view, schema, useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '', content, undefined, authoredDocument);
+          const session = new AuthoringSourceSession(view, schema, directory, content, undefined, authoredDocument);
           authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.replace(content);
         } else if (readSourceDocument(view) !== content) authoringSessionRef.current.replace(content);
         sourceContentRef.current = null;
@@ -456,7 +457,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       }, 800);
     });
 
-    const authoredDocument = schema ? currentEditor && !hasMarkdownContentChanged(currentEditor, content) ? currentEditor.state.doc : parseNativeNode(content, schema) : undefined;
+    const authoredDocument = schema ? currentEditor && !hasMarkdownContentChanged(currentEditor, content) ? currentEditor.state.doc : parseNativeNode(content, schema, directory) : undefined;
     const serializedSource = authoredDocument ? serializeAuthoring(authoredDocument) : null;
     const displayContent = serializedSource?.text ?? content;
     const state = EditorState.create({
@@ -531,7 +532,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
 
     sourceViewRef.current = view;
     if (schema) {
-      const session = new AuthoringSourceSession(view, schema, useDocumentStore.getState().getDocument(docKey)?.dirPath ?? '', content, serializedSource!, authoredDocument);
+      const session = new AuthoringSourceSession(view, schema, directory, content, serializedSource!, authoredDocument);
       authoringSessionRef.current = session; setSourceDocumentAdapter(view, session); session.bind();
     }
     sourceContentRef.current = { text: view.state.doc, markdown: normalizeDocumentEol(displayContent) };
@@ -688,7 +689,6 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
     isInitializingRef.current = true;
     try {
       parseEditorDocument(editor, content);
-      authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
     } finally {
       // 同步作用域结束即解锁：真实输入立即生效
       isInitializingRef.current = false;
@@ -702,8 +702,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const selection = bookmark ? authoringToVisual(editor.state.doc, bookmark) : nativeDocument ? mapNativeDocumentSelection(editor.state.doc, content, 'visual', pendingSourceSelectionRef.current, editor) : mapModeSelection(editor, content, 'visual', pendingSourceSelectionRef.current);
       if (bookmark) {
         authoringBookmarkRef.current = { bookmark, visual: selection, document: editor.state.doc };
-        const position = authoringNodePosition(editor.state.doc, bookmark.head), node = position === undefined ? null : editor.state.doc.nodeAt(position);
-        if (position !== undefined && bookmark.head.kind === 'attribute' && node && ['mathInline', 'mathBlock'].includes(node.type.name)) pendingMathSelectionRef.current = { position, anchor: bookmark.anchor.offset, head: bookmark.head.offset };
+        pendingMathSelectionRef.current = authoringMathSelection(editor.state.doc, bookmark);
       } else if (!nativeDocument) pendingMathSelectionRef.current = markdownMathSelection(editor, content, pendingSourceSelectionRef.current, selection);
       pendingAuthoringBookmarkRef.current = null;
       pendingSourceSelectionRef.current = null;
@@ -803,13 +802,10 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
         try {
           // 只同步目标视图，明确不加入 TipTap 局部历史
           parseEditorDocument(editor, md);
-          authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
         } finally {
           isInitializingRef.current = false;
         }
       }
-
-      if (!hasCrossModeChanges) authoringSessionRef.current?.transferAuthoredSource(editor.state.doc);
 
       markDocumentHistoryModeBoundary(docKey);
       viewModeRef.current = 'visual';
@@ -819,11 +815,7 @@ export function TipTapEditor({ docKey, onEditorReady }: TipTapEditorProps) {
       const visualSelection = authoringBookmark ? authoringToVisual(editor.state.doc, authoringBookmark) : nativeDocument ? mapNativeDocumentSelection(editor.state.doc, md, 'visual', sourceSelection, editor) : mapModeSelection(editor, md, 'visual', sourceSelection);
       if (authoringBookmark) {
         authoringBookmarkRef.current = { bookmark: authoringBookmark, visual: visualSelection, document: editor.state.doc };
-        const nodePosition = authoringNodePosition(editor.state.doc, authoringBookmark.head);
-        const node = nodePosition === undefined ? null : editor.state.doc.nodeAt(nodePosition);
-        if (nodePosition !== undefined && authoringBookmark.head.kind === 'attribute' && node && ['mathInline', 'mathBlock'].includes(node.type.name)) {
-          pendingMathSelectionRef.current = { position: nodePosition, anchor: authoringBookmark.anchor.offset, head: authoringBookmark.head.offset };
-        }
+        pendingMathSelectionRef.current = authoringMathSelection(editor.state.doc, authoringBookmark);
       } else if (!nativeDocument) pendingMathSelectionRef.current = markdownMathSelection(editor, md, sourceSelection, visualSelection);
       scheduleModeSelection('visual', visualSelection);
     }

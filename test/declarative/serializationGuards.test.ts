@@ -104,6 +104,9 @@ describe('declarative serialization preservation guards', () => {
   it('keeps literal text from becoming block syntax, formulas or HTML entities', () => {
     for (const value of ['# 标题', '- 列表', '1. 顺序', '::: tip', '$x$', '&amp;', '    四个空格', '甲  \n乙', '甲\n\n乙']) preserves([paragraph(value)]);
   });
+  it.each([' ', '\t', ' \t ', ' \n '])('preserves a paragraph containing only whitespace %j', value => {
+    preserves([paragraph('正文'), paragraph(value), paragraph('后文')]);
+  });
   it('preserves a final hardBreak and annotation ids that match alignment aliases', () => {
     preserves([{ type: 'paragraph', content: [{ type: 'text', text: 'a' }, { type: 'hardBreak' }] }]);
     for (const id of ['left', 'center', 'right', 'L', 'M', 'R', 'middle', 'centre']) {

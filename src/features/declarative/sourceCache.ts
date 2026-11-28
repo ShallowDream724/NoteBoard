@@ -12,8 +12,9 @@ const bindings = new WeakMap<PMNode, { projection: AuthoringProjection; baseline
 // It is keyed by exact source bytes, never by another document's semantic content.
 const recent = new Map<string, { projection: AuthoringProjection; bytes: number }>(); let recentBytes = 0;
 const MAX_BRIDGE_BYTES = 4 * 1024 * 1024;
-export function rememberParsedAuthoring(result: AuthoringParseResult, source: string, reparse?: AuthoringProjection['reparse']) {
+export function rememberParsedAuthoring(result: AuthoringParseResult, source: string, reparse?: AuthoringProjection['reparse'], bridge = true) {
   const projection = { source, document: result.document, spans: result.spans, reparse }; projections.set(result.document, projection);
+  if (!bridge) return;
   const existing = recent.get(source); if (existing) { recentBytes -= existing.bytes; recent.delete(source); }
   const bytes = source.length * 2 + JSON.stringify(result.document).length * 2 + result.spans.reduce((total, span) => total + 64 + span.path.length * 8 + (span.offsets?.length ?? 0) * 8, 0);
   if (bytes > MAX_BRIDGE_BYTES) return;
@@ -30,7 +31,22 @@ export function rememberAuthoringSource(doc: PMNode, result: AuthoringParseResul
   }
 }
 export function inheritAuthoringSource(previous: PMNode, next: PMNode) { const binding = bindings.get(previous); if (binding) bindings.set(next, binding); }
+export function forgetAuthoringSource(doc: PMNode) { bindings.delete(doc); }
+/** A storage replacement supersedes any source inherited by the transaction. */
+export function replaceAuthoringSource(previous: PMNode, next: PMNode) {
+  const binding = bindings.get(previous);
+  if (!binding) { forgetAuthoringSource(next); return; }
+  const tail = next.lastChild;
+  if (tail?.type.name === 'paragraph' && !tail.content.size && next.childCount === previous.childCount + 1
+    && next.content.cut(0, next.content.size - tail.nodeSize).eq(previous.content)) {
+    bindings.set(next, { projection: { ...binding.projection, document: next.toJSON(), syntheticTail: true }, baseline: next });
+  } else bindings.set(next, binding);
+}
 export function hasAuthoringSource(doc: PMNode) { return bindings.has(doc); }
+export function hasSyntheticAuthoringTail(doc: PMNode) {
+  const tail = doc.lastChild;
+  return !!bindings.get(doc)?.projection.syntheticTail && tail?.type.name === 'paragraph' && tail.eq(tail.type.create());
+}
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const pathKey = (path: number[]) => path.join('.');
 export function serializeBoundAuthoring(doc: PMNode, writeChanged?: (block: JSONContent) => string): WrittenAuthoring | null {
@@ -136,7 +152,7 @@ export function serializeBoundAuthoring(doc: PMNode, writeChanged?: (block: JSON
     return true;
   }
   const oldCount = baseline.childCount - (projection.syntheticTail ? 1 : 0);
-  const hasTail = projection.syntheticTail && doc.lastChild?.type.name === 'paragraph' && !doc.lastChild.content.size;
+  const hasTail = hasSyntheticAuthoringTail(doc);
   const newCount = doc.childCount - (hasTail ? 1 : 0);
   const changes = changedBlockRuns(baseline, doc, oldCount, newCount);
   const separator = eol + eol;

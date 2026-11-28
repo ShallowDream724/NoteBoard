@@ -1,4 +1,4 @@
-import { visitNativeDocument, type NativeNode } from '../../core/nativeDocument';
+import { nativeMetadataRecord, readNativeMetadata, visitNativeDocument, type NativeNode } from '../../core/nativeDocument';
 import { isInlineImageSource, isTransientImageSource } from './imageAssetReferences';
 
 export interface ImageSourceChange { from: number; to: number; insert: string }
@@ -66,6 +66,11 @@ export async function prepareImageSources(source: string, format: 'noteboard' | 
       let changed = false;
       for (const child of nodes) { const before = child.attrs!.src as string, after = await image(before); if (before !== after) { child.attrs!.src = after; changed = true; } }
       if (changed) changes.push({ from: match.index + 7, to: match.index + match[0].length, insert: JSON.stringify(node) + (match[1].endsWith('\r') ? '\r' : '') });
+    }
+    if (changes.length) {
+      const { authoring, ...metadata } = readNativeMetadata(source);
+      const header = authoring?.version === 1 ? /^@meta [^\r\n]*/m.exec(source) : null;
+      if (header) changes.unshift({ from: header.index, to: header.index + header[0].length, insert: nativeMetadataRecord(metadata) });
     }
   } else {
     const { markdownLanguage } = await import('@codemirror/lang-markdown');

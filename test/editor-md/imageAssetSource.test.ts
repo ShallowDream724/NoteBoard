@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { prepareImageSources } from '@/features/editor-md/imageAssetSource';
+import { readNativeMetadata } from '@/core/nativeDocument';
 const data = 'data:image/png;base64,YQ==';
 const transient = `C:/recovery/.noteboard-assets/${'a'.repeat(64)}.png`;
 describe('image source materialization', () => {
@@ -27,6 +28,13 @@ describe('image source materialization', () => {
     expect(result.content).toContain(`\`\`\`html\n<img src="${data}"/>\n\`\`\``);
     expect(result.content).toContain(`[text](${data})`);
     expect(result.content.startsWith('# Heading  \n\n')).toBe(true);
+  });
+  it('discards the obsolete authored projection when an embedded NB image becomes a file asset', async () => {
+    const source = `#!noteboard 1\n@meta ${JSON.stringify({ custom: { version: 2 }, authoring: { version: 1, source: `![photo](${data})` } })}\n@block ${JSON.stringify({ type: 'image', attrs: { src: data } })}\n`;
+    const result = await prepareImageSources(source, 'noteboard', async () => './assets/photo.png');
+    expect(readNativeMetadata(result.content)).toEqual({ custom: { version: 2 } });
+    expect(result.content).toContain('./assets/photo.png');
+    expect(result.content).not.toContain(data);
   });
   it('leaves existing local, missing, remote and error-frame images untouched', async () => {
     const source = '#!noteboard 1\n' + ['./img/missing.png', 'C:/elsewhere/image.png', 'https://example.test/image.png', `./.noteboard-assets/${'a'.repeat(64)}.png`].map(src => `@block ${JSON.stringify({ type: 'image', attrs: { src } })}\n`).join('');

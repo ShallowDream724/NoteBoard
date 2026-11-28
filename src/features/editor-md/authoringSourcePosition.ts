@@ -2,7 +2,7 @@ import type { Node as DocumentNode } from '@tiptap/pm/model';
 import type { AuthoringSpan } from '../declarative/types';
 
 export interface AuthoringPoint { path: number[]; offset: number; kind: 'text' | 'node' | 'attribute'; source: number }
-export interface AuthoringSelectionBookmark { anchor: AuthoringPoint; head: AuthoringPoint }
+export interface AuthoringSelectionBookmark { anchor: AuthoringPoint; head: AuthoringPoint; spans: readonly AuthoringSpan[] }
 type Selection = { anchor: number; head: number };
 const nodeLocations = new WeakMap<DocumentNode, Map<string, { node: DocumentNode; position: number }>>();
 function nodeLocation(doc: DocumentNode, path: readonly number[]) {
@@ -42,10 +42,11 @@ export function captureAuthoringSelection(spans: readonly AuthoringSpan[], selec
     const span = sourceSpan(spans, source);
     return { path: span?.path ?? [], offset: span ? decodedOffset(span, source) : 0, kind: span?.kind ?? 'node', source };
   };
-  return { anchor: point(selection.anchor), head: point(selection.head) };
+  return { anchor: point(selection.anchor), head: point(selection.head), spans };
 }
 export function authoringBookmarkSelection(spans: readonly AuthoringSpan[], bookmark: AuthoringSelectionBookmark): Selection {
   const point = (value: AuthoringPoint) => {
+    if (spans === bookmark.spans) return value.source;
     const span = spans.find(span => span.kind === value.kind && samePath(span.path, value.path));
     return span ? authoringSourceOffset(span, value.offset) : value.source;
   };
@@ -75,3 +76,10 @@ export function visualToAuthoring(doc: DocumentNode, spans: readonly AuthoringSp
   return { anchor: point(selection.anchor), head: point(selection.head) };
 }
 export function authoringNodePosition(doc: DocumentNode, point: AuthoringPoint) { return nodeLocation(doc, point.path)?.position; }
+
+export function authoringMathSelection(doc: DocumentNode, { anchor, head }: AuthoringSelectionBookmark) {
+  if (anchor.kind !== 'attribute' || head.kind !== 'attribute' || !samePath(anchor.path, head.path)) return null;
+  const found = nodeLocation(doc, head.path);
+  if (!found || !['mathInline', 'mathBlock'].includes(found.node.type.name)) return null;
+  return { position: found.position, anchor: anchor.offset, head: head.offset };
+}

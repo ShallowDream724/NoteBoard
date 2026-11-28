@@ -122,6 +122,9 @@ export function writeAuthoring(document: JSONContent, schema?: Schema): WrittenA
       annotationStore: [], annotationBody: ['id'], authoringRaw: [],
     };
     if (!allowed[type] || unexpected(node, allowed[type]) || node.marks?.length) { native(node, path); return; }
+    // Markdown interprets whitespace-only lines as block separators. Keep an
+    // actual whitespace text node distinct from an empty paragraph.
+    if (type === 'paragraph' && node.content?.length && node.content.every(child => child.type === 'text' && /^[\t \r\n]+$/.test(child.text ?? ''))) { native(node, path); return; }
     // ATX headings end at a physical newline. Rich editing can produce a
     // single heading containing several lines, which must remain one node.
     if (type === 'heading' && node.content?.some(child => child.type === 'hardBreak' || /[\r\n]/.test(child.text ?? ''))) { native(node, path); return; }
