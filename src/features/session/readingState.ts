@@ -11,7 +11,11 @@ function nonnegative(value: unknown): number {
 export function readingState(value: unknown): ReadingState | undefined {
   if (!record(value)) return;
   if (value.kind === 'pdf') return { kind: 'pdf', page: Math.max(1, Math.floor(nonnegative(value.page))),
-    zoom: nonnegative(value.zoom) || 1, scrollTop: nonnegative(value.scrollTop), scrollLeft: nonnegative(value.scrollLeft) };
+    zoom: nonnegative(value.zoom) || 1, scrollTop: nonnegative(value.scrollTop), scrollLeft: nonnegative(value.scrollLeft),
+    ...(typeof value.verticalRatio === 'number' && Number.isFinite(value.verticalRatio)
+      ? { verticalRatio: nonnegative(value.verticalRatio) } : {}),
+    ...(typeof value.horizontalRatio === 'number' && Number.isFinite(value.horizontalRatio)
+      ? { horizontalRatio: Math.min(1, nonnegative(value.horizontalRatio)) } : {}) };
   if (value.kind !== 'code' && value.kind !== 'markdown') return;
   const selection = record(value.selection) ? {
     anchor: Math.floor(nonnegative(value.selection.anchor)), head: Math.floor(nonnegative(value.selection.head)),

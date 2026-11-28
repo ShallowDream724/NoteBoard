@@ -24,8 +24,9 @@
 .nb-pdf-toolbar {
   flex: 0 0 auto;
   flex-wrap: wrap;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--editor-border);
+  justify-content: flex-end;
+  padding: 4px 10px;
+  border-top: 1px solid var(--editor-border);
   background: var(--editor-bg);
 }
 
@@ -58,7 +59,7 @@
 }
 
 .nb-pdf-toolbar input {
-  width: 5ch;
+  width: 6ch;
   padding: 0 3px;
   border: 1px solid var(--editor-border);
   background: var(--editor-bg);
@@ -83,22 +84,19 @@
 }
 
 .nb-pdf-stage {
-  display: flex;
-  box-sizing: border-box;
-  width: max-content;
-  min-width: 100%;
-  justify-content: center;
-  padding: 16px;
+  position: relative;
+  overflow: clip;
 }
 
 .nb-pdf-sheet {
-  position: relative;
-  flex: none;
+  position: absolute;
   background: white;
-  box-shadow: 0 2px 10px rgb(0 0 0 / 16%);
+  box-shadow: 0 0 0 1px var(--editor-border), 0 2px 10px rgb(0 0 0 / 16%);
 }
 
 .nb-pdf-sheet canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -166,10 +164,6 @@
   padding: 16px;
   text-align: center;
   overflow-wrap: anywhere;
-}
-
-.nb-pdf-stage > .nb-pdf-status {
-  max-width: 240px;
 }
 
 .nb-pdf-status-actions {
