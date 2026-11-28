@@ -1,6 +1,6 @@
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { loadHtmlPreviewAssets, planHtmlPreviewAssets } from '../../src/features/editor-code/htmlPreviewAssets';
+import { loadHtmlPreviewAssets, planHtmlPreview } from '../../src/features/editor-code/htmlPreviewAssets';
 
 vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: vi.fn((path: string) => `http://asset.localhost/${encodeURIComponent(path)}`) }));
 const image = 'data:image/png;base64,AA==';
@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 async function preview(source: string, directory: string, name: string): Promise<string> {
-  const plan = planHtmlPreviewAssets(source, directory, name);
+  const plan = planHtmlPreview(source, directory, name).assets;
   return plan ? loadHtmlPreviewAssets(plan, new AbortController().signal) : source;
 }
 
@@ -101,7 +101,7 @@ it('bounds concurrent reads and stops starting resources when preview is cancell
     options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true });
   }));
   const source = Array.from({ length: 8 }, (_, index) => `<img src="${index}.png">`).join('');
-  const plan = planHtmlPreviewAssets(source, 'C:/notes', 'test.html')!;
+  const plan = planHtmlPreview(source, 'C:/notes', 'test.html').assets!;
   const result = loadHtmlPreviewAssets(plan, controller.signal);
   expect(fetchAsset).toHaveBeenCalledTimes(4);
   controller.abort();

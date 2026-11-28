@@ -1,0 +1,28 @@
+.nb-html-preview-message {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--editor-border);
+  background: var(--editor-surface);
+  color: var(--editor-text-secondary);
+  font: 12px/1.5 var(--ui-font-family, sans-serif);
+}
+
+.nb-html-preview-message p { margin: 0; }
+
+.nb-html-preview-message button {
+  padding: 4px 9px;
+  border: 1px solid var(--editor-border);
+  border-radius: 5px;
+  background: var(--toolbar-hover);
+  color: var(--editor-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.nb-html-preview-message button:hover:not(:disabled) { background: var(--toolbar-active); }
+.nb-html-preview-message button:focus-visible { outline: 2px solid var(--editor-border-focus); outline-offset: 1px; }
+.nb-html-preview-message button:disabled { opacity: .55; cursor: default; }

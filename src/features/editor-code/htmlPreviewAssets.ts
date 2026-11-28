@@ -7,7 +7,25 @@ type Edit = { startOffset: number; endOffset: number; render: Render };
 type PlanUrl = (reference: string, allowFont?: boolean) => Render | undefined;
 
 interface AssetFile { path: string; mime: string }
-interface HtmlPreviewPlan { source: string; edits: Edit[]; files: Map<string, AssetFile> }
+interface HtmlPreviewAssetPlan { source: string; edits: Edit[]; files: Map<string, AssetFile> }
+interface HtmlPreviewPlan { assets?: HtmlPreviewAssetPlan; hasScripts: boolean; hasCanvas: boolean }
+
+const htmlNamespace = 'http://www.w3.org/1999/xhtml';
+const svgNamespace = 'http://www.w3.org/2000/svg';
+const javascriptTypes = new Set([
+  'application/ecmascript', 'application/javascript', 'application/x-ecmascript', 'application/x-javascript',
+  'text/ecmascript', 'text/javascript', 'text/javascript1.0', 'text/javascript1.1', 'text/javascript1.2',
+  'text/javascript1.3', 'text/javascript1.4', 'text/javascript1.5', 'text/jscript', 'text/livescript',
+  'text/x-ecmascript', 'text/x-javascript',
+]);
+
+function isJavaScript(element: Element): boolean {
+  if (element.namespaceURI === svgNamespace) return true;
+  const type = element.attrs.find(attr => attr.name === 'type')?.value.toLowerCase();
+  const language = element.attrs.find(attr => attr.name === 'language')?.value.toLowerCase();
+  const scriptType = type ?? (language ? `text/${language}` : '');
+  return scriptType === '' || scriptType === 'module' || javascriptTypes.has(scriptType.trim());
+}
 
 const imageTypes: Readonly<Record<string, string>> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
@@ -163,17 +181,19 @@ function planAttribute(element: Element, name: string, plan: PlanUrl, edits: Edi
 }
 
 /** Collect source ranges without giving the parsed document a browsing context. */
-export function planHtmlPreviewAssets(html: string, directory: string, fileName: string, scriptingEnabled = false): HtmlPreviewPlan | undefined {
+export function planHtmlPreview(html: string, directory: string, fileName: string, scriptingEnabled = false): HtmlPreviewPlan {
   const documentBase = localDocumentBase(directory, fileName);
-  if (!documentBase) return;
   const parsed = parse(html, { scriptingEnabled, sourceCodeLocationInfo: true });
   const pending: DefaultTreeAdapterTypes.Node[] = [parsed];
   const elements: Element[] = [];
+  const preview = { hasScripts: false, hasCanvas: false };
   let baseHref: string | undefined;
   while (pending.length) {
     const node = pending.pop()!;
     if ('tagName' in node) {
-      if (node.tagName === 'base' && node.namespaceURI === 'http://www.w3.org/1999/xhtml') {
+      if (!scriptingEnabled && !preview.hasScripts && node.tagName === 'script' && isJavaScript(node)) preview.hasScripts = true;
+      if (node.tagName === 'canvas' && node.namespaceURI === htmlNamespace) preview.hasCanvas = true;
+      if (node.tagName === 'base' && node.namespaceURI === htmlNamespace) {
         baseHref ??= node.attrs.find(attr => attr.name === 'href')?.value;
       }
       if (node.sourceCodeLocation) elements.push(node);
@@ -182,6 +202,7 @@ export function planHtmlPreviewAssets(html: string, directory: string, fileName:
       for (let i = node.childNodes.length - 1; i >= 0; i--) pending.push(node.childNodes[i]);
     }
   }
+  if (!documentBase) return preview;
   let base = documentBase;
   if (baseHref !== undefined) {
     try {
@@ -189,7 +210,7 @@ export function planHtmlPreviewAssets(html: string, directory: string, fileName:
       if (candidate.protocol !== 'data:' && candidate.protocol !== 'javascript:') base = candidate;
     } catch { /* A malformed base falls back to the document. */ }
   }
-  if (!localDriveUrl(base, documentBase)) return;
+  if (!localDriveUrl(base, documentBase)) return preview;
 
   const edits: Edit[] = [];
   const files = new Map<string, AssetFile>();
@@ -203,7 +224,7 @@ export function planHtmlPreviewAssets(html: string, directory: string, fileName:
       planAttribute(element, 'srcset', value => planSrcset(value, plan), edits);
     }
     if (tag === 'video') planAttribute(element, 'poster', plan, edits);
-    if (tag === 'image' && element.namespaceURI === 'http://www.w3.org/2000/svg') {
+    if (tag === 'image' && element.namespaceURI === svgNamespace) {
       planAttribute(element, 'href', plan, edits);
       planAttribute(element, 'xlink:href', plan, edits);
     }
@@ -216,7 +237,7 @@ export function planHtmlPreviewAssets(html: string, directory: string, fileName:
       if (render) edits.push({ startOffset, endOffset, render });
     }
   }
-  if (files.size) return { source: html, edits, files };
+  return { ...preview, assets: files.size ? { source: html, edits, files } : undefined };
 }
 
 function matchesMime(actual: string | undefined, expected: string): boolean {
@@ -243,7 +264,7 @@ function readDataUrl(blob: Blob, signal: AbortSignal): Promise<string> {
 }
 
 /** Read in the app origin. An opaque srcDoc may be unable to reach Tauri's asset origin. */
-export async function loadHtmlPreviewAssets(plan: HtmlPreviewPlan, signal: AbortSignal): Promise<string> {
+export async function loadHtmlPreviewAssets(plan: HtmlPreviewAssetPlan, signal: AbortSignal): Promise<string> {
   const loaded = new Map<string, string>();
   const files = plan.files.entries();
   const worker = async () => {
